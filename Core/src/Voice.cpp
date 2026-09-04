@@ -12,6 +12,15 @@ inline void phasorFromPhase(double phase01, float& c, float& s)
     double q = phase01 + 0.25; if (q >= 1.0) q -= 1.0;
     c = sin01(q);
 }
+
+// log2 of the harmonic numbers, so the presence bell needs one log2 per strand, not per partial.
+struct Log2Harmonics {
+    float v[kMaxPartials + 1];
+    Log2Harmonics() { v[0] = 0.0f; for (int h = 1; h <= kMaxPartials; ++h) v[h] = std::log2(static_cast<float>(h)); }
+};
+const Log2Harmonics kLog2H;
+constexpr float kPresenceCentreLog2 = 11.64386f;   // log2(3200 Hz): the bell spans about 1.8-5.6 kHz
+constexpr float kPresenceHalfWidth  = 0.8f;        // octaves to the bell's zero
 }
 
 void Voice::prepare(double sampleRate, uint64_t seed)
@@ -33,6 +42,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     filterDrift_.init(rng_);
     airDrift_.init(rng_);
     panCenter_.init(rng_);
+    breath_.init(rng_);
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -51,6 +61,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
     distance_ = clampv(distance, 0.0f, 1.0f);
+    distEff_  = distance_;
     gNear_  = std::cos(distance_ * 0.5f * kPi);
     gFar_   = std::sin(distance_ * 0.5f * kPi);
     gLevel_ = 1.0f - 0.5f * distance_;
@@ -80,6 +91,19 @@ void Voice::control(int blockLen, const VoiceParams& p)
 {
     const float dt = static_cast<float>(blockLen / sr_);
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
+
+    // Breath: the voice's plane itself wanders slowly (Rich's "the room breathes"): everything
+    // that hangs on the distance -- dry/wet balance, level, air absorption, presence -- moves
+    // with it, continuously (Drifter = smoothstep curves, no steps).
+    const float bd = breath_.update(dt, p.breathRate, rng_);
+    distEff_ = clampv(distance_ + 0.35f * p.breath * bd, 0.0f, 1.0f);
+    gNear_  = std::cos(distEff_ * 0.5f * kPi);
+    gFar_   = std::sin(distEff_ * 0.5f * kPi);
+    gLevel_ = 1.0f - 0.5f * distEff_;
+    // Presence: a broad bell in the 2-5 kHz articulation band, only on the near plane. Applied
+    // in the additive domain (per partial), so it costs nothing per sample.
+    const float presLin = p.presence > 0.0f ? std::pow(10.0f, p.presence * (1.0f - distEff_) / 20.0f) - 1.0f : 0.0f;
+    const float lowCut = p.lowCut;
 
     // Bloom: the spectrum opens over bloomTime seconds (smoothstep, so the start is gentle).
     bloomT_ += dt;
@@ -135,6 +159,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         float target[kMaxPartials];
         float sumSq = 0.0f;
         int H = 0;
+        const float lf0 = std::log2(static_cast<float>(f)) - kPresenceCentreLog2;
         for (int h = 1; h <= partials; ++h) {
             const double fh = f * h * stretchCache_[h - 1];
             if (fh >= nyq) break;
@@ -145,7 +170,15 @@ void Voice::control(int blockLen, const VoiceParams& p)
             const float fix = 1.5f - 0.5f * r2;
             s.pc[h - 1] *= fix; s.ps[h - 1] *= fix;
             const float d = s.shimmer[h - 1].update(dt, p.shimmerRate, rng_);
-            const float a = base[h] * (1.0f + 0.9f * p.shimmer * d);
+            float a = base[h] * (1.0f + 0.9f * p.shimmer * d);
+            if (presLin > 0.0f) {
+                const float x = (lf0 + kLog2H.v[h]) / kPresenceHalfWidth;
+                if (x > -1.0f && x < 1.0f) a *= 1.0f + presLin * (1.0f - x * x);
+            }
+            if (lowCut > 0.0f && fh < lowCut) {
+                const float r = static_cast<float>(fh) / lowCut;
+                a *= r * r;   // 12 dB/oct below the cut
+            }
             target[h - 1] = a;
             sumSq += a * a;
             H = h;
@@ -180,7 +213,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float octaves = p.keyTrack * static_cast<float>(note_ - 60) / 12.0f
                         + p.filterEnv * 4.0f * env_.level()
                         + p.filterDrift * 2.0f * fd
-                        - 2.5f * distance_;
+                        - 2.5f * distEff_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filtL_.set(cut, p.resonance, static_cast<float>(sr_));
     filtR_.copyCoefficients(filtL_);

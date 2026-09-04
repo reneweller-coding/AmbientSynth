@@ -28,6 +28,10 @@ struct VoiceParams {
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
     float panDrift = 0.4f, itd = 0.6f;
+    // Rich's foreground/background carving inside the voice (see concept.md):
+    float presence = 0.0f;      // dB bell at 2-5 kHz, full on the near plane, gone on the far plane
+    float breath = 0.0f, breathRate = 0.03f;   // slow wandering of the distance itself (+-0.35 at 1)
+    float lowCut = 0.0f;        // Hz; partials below fall 12 dB/oct, keeping the pads out of the sub's register
 };
 
 class Voice {
@@ -43,7 +47,8 @@ public:
     float level() const      { return env_.level(); }
     int  note() const        { return note_; }
     int  owner() const       { return owner_; }
-    float distance() const   { return distance_; }
+    float distance() const   { return distEff_; }   // where the voice is right now (breath included)
+    double frequency() const { return freq_; }
     uint64_t order = 0;      // allocation order for voice stealing
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses.
@@ -69,12 +74,13 @@ private:
     Envelope env_;
     Svf      filtL_, filtR_;
     Svf      airL_, airR_;
-    Drifter  filterDrift_, airDrift_, panCenter_;
+    Drifter  filterDrift_, airDrift_, panCenter_, breath_;
     Rng      rng_;
     double   sr_ = 48000.0;
     double   freq_ = 220.0;
     float    velocity_ = 1.0f;
-    float    distance_ = 0.0f;
+    float    distance_ = 0.0f;   // the plane the note was placed on
+    float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
     float    bloomT_ = 0.0f;     // seconds since note start, for Bloom

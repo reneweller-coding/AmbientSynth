@@ -83,6 +83,33 @@ parameters instead of waveform switches.
 * Measured on the default patch, 180 s: stereo correlation 0.11 (was 0.36
   before the spatial model), no sample jump above 0.06, level −21 … −28 dBFS.
 
+### Carving the planes inside the voice
+
+Rich lays the depth in the sound design, not in the mix: the background is
+dark (air absorption), the foreground carries a presence lift and stays
+dry, wide pads give up the sub register to one mono bass, and a very slow
+modulation lets the room breathe. All four live inside the voice, in the
+additive domain where they cost nothing per sample:
+
+* **Presence** (Space, 0–6 dB): a parabolic bell in log frequency centred
+  on 3.2 kHz, zero at ±0.8 octave (about 1.8–5.6 kHz), multiplied into the
+  partial targets and scaled by `1 − d`, so a note at the ear gets the full
+  lift and a note on the far plane none. Measured with a 32-partial C4 at
+  +6 dB: the 2–5 kHz band gains a factor > 1.8 against partials 1–4 on the
+  near plane and is unchanged on the far plane.
+* **Pad Low Cut** (Foundation, 0–300 Hz): partials below the cut fall by
+  `(f/fc)²` (12 dB/oct). The pads leave the bottom to the Foundation sub,
+  which is mono anyway. Measured: a C3 with a 300 Hz cut loses more than
+  80 % of its fundamental relative to its third partial.
+* **Breath** and **Breath Rate** (Space): every voice's distance wanders by
+  up to ±0.35 (at Breath 1) on its own `Drifter` at Breath Rate (default
+  0.03 Hz, half a minute per swing). Everything hanging on the distance
+  moves with it: dry/wet balance, level, filter, presence. `noteDistance`
+  reports the breathing value, so the picture in VR breathes too. Measured:
+  spread > 0.1 over 15 s at 0.2 Hz, no step above 0.05 per 100 ms.
+* **Source = Difference** (Foundation): see the Foundation section — the
+  sub follows the combination tone instead of the root.
+
 Every partial is a rotating phasor: a (cos, sin) pair turned once per
 sample by its own rotation (cos, sin of 2π·f_h/sr, refreshed at control
 rate), renormalised once per control block so it stays on the unit circle.
@@ -97,7 +124,11 @@ dead ends on the way, kept here so they are not tried again: caching the
 control-rate spectrum shape and doubling the control block gained nothing
 (the inner loop dominated), and a single angle-addition recurrence per
 strand was latency-bound; four interleaved chains helped (median 30×) but
-the independent phasors beat them and are simpler.
+the independent phasors beat them and are simpler. The presence bell, the
+pad low cut and the breathing distance (below) were added afterwards in
+the control-rate part of the voice; a re-run of the bench on an idle
+machine gave a median of 43× and a slowest preset of 27×, so they are
+free.
 
 ## Tuning
 
@@ -147,6 +178,16 @@ remaining), a root note, a timer.
   constant *Glide*, level rises over 2 s, ears offset by ±*Binaural*/2 Hz.
   Measured: root A3 gives 110 Hz an octave below; with 6 Hz binaural the
   left ear sits at 107 Hz and the right at 113 Hz.
+  *Source = Difference* makes the sub follow the **ghost tone** instead: in
+  just intonation two voices produce a combination tone `f2 − f1` in the
+  ear itself (a fifth 3:2 gives f/2, a fourth 4:3 gives f/3, a major third
+  5:4 gives f/4). Rich reports these tones between 55 and 440 Hz carrying so
+  much energy that he tames them in mastering; here the Foundation doubles
+  the one the two lowest sounding voices make, folded into the octave the
+  root mode would use (so the register never changes), gliding as usual.
+  With fewer than two distinct pitches it falls back to the root. Measured:
+  A3 + D4 (4:3, 220 + 293.3 Hz) put the sub at 146.7 Hz, one voice left
+  returns it to 110 Hz.
 * **Bloom** (per voice): brightness = brightness × (1 − bloom × (1 −
   smoothstep(t / bloomTime))). Measured: with bloom 1 the first second
   carries less than a fifth of the high-partial energy of the opened state.

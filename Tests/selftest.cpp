@@ -315,6 +315,106 @@ double goertzel(const float* x, int n, double hz, double sr)
     return s1 * s1 + s2 * s2 - c * s1 * s2;
 }
 
+// Rich's foreground/background carving inside the voice: presence bell, pad low cut,
+// breathing distance, and the ghost-tone source of the foundation.
+void testRichCarving()
+{
+    const int sr = 48000;
+    auto pureVoice = [](Engine& e) {
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Attack, 0.2f);
+        e.setParam(ParamId::Brightness, 1.0f); e.setParam(ParamId::Tilt, 0.3f); e.setParam(ParamId::Partials, 32.0f);
+        e.setParam(ParamId::Cutoff, 18000.0f); e.setParam(ParamId::Resonance, 0.0f);
+        e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 0.0f);   // 12-TET, C
+        e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Shimmer, 0.0f);
+        e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+        e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+        e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f);
+    };
+    auto bandPower = [&](Engine& e, int note, double f0, int hFrom, int hTo) {
+        e.prepare(sr, 256);
+        e.noteOn(note, 0.8f);
+        std::vector<float> cap;
+        render(e, 2.0, &cap);
+        std::vector<float> mono(sr);
+        for (int i = 0; i < sr; ++i) mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((sr + i) * 2)];
+        double p = 0; for (int h = hFrom; h <= hTo; ++h) p += goertzel(mono.data(), sr, f0 * h, sr);
+        return p;
+    };
+    {   // Presence: +6 dB bell lifts the 2-5 kHz partials of a near voice against its low ones.
+        const double f0 = 261.6256;   // key 60
+        Engine flat; pureVoice(flat);
+        const double flatRatio = bandPower(flat, 60, f0, 8, 20) / bandPower(flat, 60, f0, 1, 4);
+        Engine pres; pureVoice(pres); pres.setParam(ParamId::Presence, 6.0f);
+        const double presRatio = bandPower(pres, 60, f0, 8, 20) / bandPower(pres, 60, f0, 1, 4);
+        CHECK(presRatio > 1.8 * flatRatio, "presence lifts the 2-5 kHz band of a near voice");
+        Engine farV; pureVoice(farV); farV.setParam(ParamId::Presence, 6.0f); farV.setParam(ParamId::KeysDepth, 1.0f);
+        farV.setParam(ParamId::Cutoff, 18000.0f);
+        Engine farFlat; pureVoice(farFlat); farFlat.setParam(ParamId::KeysDepth, 1.0f);
+        const double farRatio = bandPower(farV, 60, f0, 8, 20) / bandPower(farV, 60, f0, 1, 4);
+        const double farFlatRatio = bandPower(farFlat, 60, f0, 8, 20) / bandPower(farFlat, 60, f0, 1, 4);
+        CHECK(farRatio < 1.15 * farFlatRatio, "presence does nothing on the far plane");
+    }
+    {   // Pad low cut: the fundamental of a C3 falls away below a 300 Hz cut, the third partial does not.
+        const double f0 = 130.8128;   // key 48
+        Engine full; pureVoice(full);
+        const double fullRatio = bandPower(full, 48, f0, 1, 1) / bandPower(full, 48, f0, 3, 3);
+        Engine cut; pureVoice(cut); cut.setParam(ParamId::PadLowCut, 300.0f);
+        const double cutRatio = bandPower(cut, 48, f0, 1, 1) / bandPower(cut, 48, f0, 3, 3);
+        CHECK(cutRatio < 0.2 * fullRatio, "pad low cut removes the fundamental below the cut (12 dB/oct)");
+    }
+    {   // Breath: the distance wanders, continuously; without breath it stands still.
+        auto sweep = [&](float breath, float& spread, float& maxStep) {
+            Engine e; pureVoice(e);
+            e.setParam(ParamId::KeysDepth, 0.5f);
+            e.setParam(ParamId::Breath, breath); e.setParam(ParamId::BreathRate, 0.2f);
+            e.prepare(sr, 256);
+            e.noteOn(60, 0.8f);
+            float lo = 2.0f, hi = -1.0f, prev = -1.0f; maxStep = 0.0f;
+            for (int k = 0; k < 150; ++k) {
+                render(e, 0.1);
+                const float d = e.noteDistance(60);
+                lo = std::min(lo, d); hi = std::max(hi, d);
+                if (prev >= 0.0f) maxStep = std::max(maxStep, std::fabs(d - prev));
+                prev = d;
+            }
+            spread = hi - lo;
+        };
+        float spread = 0.0f, step = 0.0f;
+        sweep(0.0f, spread, step);
+        CHECK(spread < 1e-6f, "without breath the distance is fixed");
+        sweep(1.0f, spread, step);
+        CHECK(spread > 0.1f, "breath moves the voice's distance");
+        CHECK(step < 0.05f, "breathing is continuous (no jump per 100 ms)");
+    }
+    {   // Ghost tone: with Source = Difference the sub doubles f2 - f1 of the two lowest voices,
+        // folded into the root sub's octave. A3 (220) and D4 (4:3 = 293.33): 73.33 Hz -> 146.67 Hz.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::SubLevel, 0.8f); e.setParam(ParamId::SubBinaural, 0.0f); e.setParam(ParamId::SubGlide, 0.1f);
+        e.setParam(ParamId::SubSource, 1.0f);
+        e.setParam(ParamId::RootNote, 9.0f);   // A
+        e.setParam(ParamId::Scale, 1.0f);      // JI Major (Ptolemy)
+        e.setParam(ParamId::Air, 0.0f);
+        e.prepare(sr, 256);
+        e.noteOn(57, 0.6f); e.noteOn(62, 0.6f);
+        std::vector<float> cap;
+        render(e, 4.0, &cap);
+        std::vector<float> L(sr);
+        for (int i = 0; i < sr; ++i) L[static_cast<size_t>(i)] = cap[static_cast<size_t>((3 * sr + i) * 2)];
+        const double pGhost = goertzel(L.data(), sr, 146.667, sr), pRoot = goertzel(L.data(), sr, 110.0, sr), pDiff = goertzel(L.data(), sr, 73.333, sr);
+        CHECK(pGhost > 10.0 * pRoot && pGhost > 10.0 * pDiff, "foundation follows the folded difference tone of the two lowest voices");
+        e.noteOff(62);
+        e.setParam(ParamId::Release, 0.1f);
+        cap.clear();
+        render(e, 4.0, &cap);
+        for (int i = 0; i < sr; ++i) L[static_cast<size_t>(i)] = cap[static_cast<size_t>((3 * sr + i) * 2)];
+        const double pGhost2 = goertzel(L.data(), sr, 146.667, sr), pRoot2 = goertzel(L.data(), sr, 110.0, sr);
+        CHECK(pRoot2 > 10.0 * pGhost2, "with one voice left the foundation falls back to the root");
+    }
+}
+
 void testCosmos()
 {
     const int sr = 48000;
@@ -841,6 +941,7 @@ int main()
     testMidSide();
     testPresets();
     testSpace();
+    testRichCarving();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

@@ -143,6 +143,7 @@ void GestureLayer::setDefaultMappings()
     addMapping({ GestureInput::Custom3, ParamId::Brightness,   0.3f,   1.0f,    0.3f, 0.002f, none, false });   // D "Bloom"
     addMapping({ GestureInput::Custom3, ParamId::Air,          0.0f,   0.5f,    0.3f, 0.002f, none, false });
     addMapping({ GestureInput::Custom3, ParamId::Cutoff,       800.0f, 8000.0f, 0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom3, ParamId::Presence,     0.0f,   3.0f,    0.3f, 0.002f, none, false });   // the near plane steps forward
 }
 
 bool GestureLayer::parseMappings(const char* text)

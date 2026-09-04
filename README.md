@@ -114,7 +114,11 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Foundation** — a dry sub voice that follows the brain's root one or two
   octaves down and glides between roots (*Glide*); *Binaural* runs the two
   ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends
-  sine into triangle.
+  sine into triangle. *Source = Difference* lets the sub follow the ghost
+  tone instead — the combination tone `f2 − f1` that just intonation makes
+  in the ear from the two lowest sounding voices. *Pad Low Cut* rolls the
+  pads' partials off below the sub's register (12 dB/oct), so the bottom
+  stays with one mono bass.
 * **Air** — a band-passed noise layer per voice around a drifting multiple of
   the fundamental: breath, flute air, glass hiss.
 * **Envelope** — attack up to 60 s, release up to 120 s.
@@ -124,6 +128,10 @@ Sections of the GUI (all parameters are automatable in a DAW):
   Drift*: slow wandering of each voice's centre; *Time Width*: interaural time
   difference rendered per voice (true time-based width, mono-compatible);
   *Arc*: an hour-scale drift of density, brightness and depth with its period.
+  *Presence*: a 2–5 kHz lift for notes on the near plane only (nothing on the
+  far plane), the articulation that makes the room behind it feel deep.
+  *Breath* and *Breath Rate*: each voice's distance wanders slowly, so a
+  note drifts forward and sinks back on its own — the room breathes.
 * **Ensemble** — three-tap modulated chorus.
 * **Delay** — stereo delay with independent L/R times (asymmetric by default),
   feedback, cross-feed, damping, mix, and *To Far*: how much of the echoes

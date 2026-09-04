@@ -22,6 +22,7 @@ const char* const kRootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", 
 const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" };
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
+const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const float kShimmerPitchSemitones[kNumShimmerPitches] = { 12.0f, 7.0f, 5.0f, 19.0f, -12.0f, 24.0f };
 
 namespace {
@@ -61,6 +62,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::SubGlide,    "sub_glide",    "Glide",         "Foundation", 0.1f,  30.f,   8.f,   0.4f, "s"),
     F(ParamId::SubBinaural, "sub_binaural", "Binaural",      "Foundation", 0.f,   12.f,   0.f,   0.6f, "Hz"),
     F(ParamId::SubTone,     "sub_tone",     "Tone",          "Foundation", 0.f,   1.f,    0.2f,  1.f,  ""),
+    C(ParamId::SubSource,   "sub_source",   "Source",        "Foundation", kSubSourceNames, 2, 0),
+    F(ParamId::PadLowCut,   "pad_low_cut",  "Pad Low Cut",   "Foundation", 0.f,   300.f,  0.f,   0.6f, "Hz"),
 
     F(ParamId::Air,         "air",          "Air",           "Air",        0.f,   1.f,    0.15f, 1.f,  ""),
     F(ParamId::AirColor,    "air_color",    "Color",         "Air",        1.f,   16.f,   3.f,   0.5f, "x f0"),
@@ -83,6 +86,9 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Itd,         "itd",          "Time Width",    "Space",      0.f,   1.f,    0.6f,  1.f,  ""),
     F(ParamId::ArcAmount,   "arc",          "Arc",           "Space",      0.f,   1.f,    0.3f,  1.f,  ""),
     F(ParamId::ArcPeriod,   "arc_period",   "Arc Period",    "Space",      2.f,   240.f,  40.f,  0.4f, "min"),
+    F(ParamId::Presence,    "presence",     "Presence",      "Space",      0.f,   6.f,    0.f,   1.f,  "dB"),
+    F(ParamId::Breath,      "breath",       "Breath",        "Space",      0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::BreathRate,  "breath_rate",  "Breath Rate",   "Space",      0.005f, 0.2f,  0.03f, 0.5f, "Hz"),
 
     F(ParamId::EnsembleMix,   "ens_mix",   "Mix",   "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),
     F(ParamId::EnsembleDepth, "ens_depth", "Depth", "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),

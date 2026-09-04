@@ -12,7 +12,8 @@ const Preset kPresets[] = {
     { "Init", "" },
     { "Sleep Concert",
       "brain_density=6;brain_rate=35;brain_hold_min=60;brain_hold_max=240;depth=0.85;far_decay=35;far_highcut=2500;"
-      "air=0.2;arc=0.5;arc_period=60;brightness=0.6;attack=10;release=25;sub_level=0.35;sub_binaural=4;bloom=0.5;bloom_time=90" },
+      "air=0.2;arc=0.5;arc_period=60;brightness=0.6;attack=10;release=25;sub_level=0.35;sub_binaural=4;bloom=0.5;bloom_time=90;"
+      "sub_source=Difference;breath=0.3;pad_low_cut=90" },
     { "Glass Cathedral",
       "partials=24;tilt=0.8;brightness=0.95;inharmonic=0.15;cutoff=6000;far_size=3;far_decay=45;far_highcut=7000;"
       "far_damp=0.3;ens_mix=0.6;shimmer=0.6;depth=0.6;scale=Harmonic 8-16;root=E" },
@@ -34,10 +35,10 @@ const Preset kPresets[] = {
       "strands=5;detune=20;master_gain=-9" },
     { "Dry Foreground Keys",
       "brain_on=off;keys_depth=0;near_mix=0.25;near_decay=1.5;far_level=0.3;dly_mix=0.2;ens_mix=0.5;attack=1.5;release=6;"
-      "air=0.25;depth=0" },
+      "air=0.25;depth=0;presence=3" },
     { "Sleep Concert II",
       "scale=JI Minor;root=A;brain_density=5;brain_rate=45;brain_hold_min=90;brain_hold_max=300;depth=0.9;far_decay=40;"
-      "far_highcut=2000;arc=0.6;arc_period=90;attack=12;release=30" },
+      "far_highcut=2000;arc=0.6;arc_period=90;attack=12;release=30;sub_level=0.3;sub_source=Difference;breath=0.35;breath_rate=0.02" },
 
     // ---------------------------------------------------------------- 10..19 sleep / night
     { "Midnight Pentatonic",
@@ -54,23 +55,24 @@ const Preset kPresets[] = {
       "arc=1;arc_period=30;brain_density=6;brain_rate=20;brain_hold_min=40;brain_hold_max=160;depth=0.8;far_decay=30" },
     { "Hypnos",
       "attack=30;release=60;brain_hold_min=120;brain_hold_max=400;brain_rate=60;brain_density=7;far_decay=60;far_highcut=1800;"
-      "depth=0.9;sub_level=0.4;sub_binaural=6;bloom=0.8;bloom_time=180" },
+      "depth=0.9;sub_level=0.4;sub_binaural=6;bloom=0.8;bloom_time=180;breath=0.5;breath_rate=0.015" },
     { "Warm Blanket",
-      "tilt=1.6;brightness=0.5;cutoff=1200;air=0.1;scale=JI Major (Ptolemy);root=G;near_mix=0.35;far_level=0.5;depth=0.4" },
+      "tilt=1.6;brightness=0.5;cutoff=1200;air=0.1;scale=JI Major (Ptolemy);root=G;near_mix=0.35;far_level=0.5;depth=0.4;breath=0.4" },
     { "Somnus Harmonics",
       "scale=Harmonic 8-16;root=C;brain_low=48;brain_high=84;partials=12;shimmer=0.6;depth=0.7;far_decay=30" },
     { "Breathing Dark",
       "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200" },
     { "Velvet Hours",
       "tilt=1.5;brightness=0.55;cutoff=1500;strands=4;detune=6;air=0.12;brain_density=5;brain_rate=40;brain_hold_min=80;"
-      "brain_hold_max=260;far_decay=38;far_highcut=2400;depth=0.8;arc=0.4;arc_period=75" },
+      "brain_hold_max=260;far_decay=38;far_highcut=2400;depth=0.8;arc=0.4;arc_period=75;pad_low_cut=100;sub_level=0.25;sub_source=Difference" },
 
     // ---------------------------------------------------------------- 20..29 cathedral / glass
     { "Ice Cathedral",
       "partials=32;tilt=0.7;brightness=1;inharmonic=0.25;cutoff=9000;far_size=3;far_decay=60;far_highcut=9000;far_damp=0.2;"
       "brain_density=5;brain_low=55;brain_high=96" },
     { "Glass Choir",
-      "partials=20;air=0.3;air_color=4;air_q=20;ens_mix=0.7;far_decay=30;far_highcut=6000;scale=JI Major (Ptolemy);root=A" },
+      "partials=20;air=0.3;air_color=4;air_q=20;ens_mix=0.7;far_decay=30;far_highcut=6000;scale=JI Major (Ptolemy);root=A;"
+      "pad_low_cut=120;presence=2" },
     { "Crystal Bells",
       "inharmonic=0.5;partials=24;tilt=0.9;attack=0.5;decay=20;sustain=0.3;release=20;brain_rate=8;brain_hold_min=5;"
       "brain_hold_max=20;brain_density=6;far_decay=25;far_highcut=8000" },

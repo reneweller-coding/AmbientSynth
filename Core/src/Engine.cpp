@@ -232,6 +232,8 @@ void Engine::readParams()
     subGlide_       = g(ParamId::SubGlide);
     subBinaural_    = g(ParamId::SubBinaural);
     subTone_        = g(ParamId::SubTone);
+    subGhost_       = std::lround(g(ParamId::SubSource)) == 1;
+    vp_.lowCut      = g(ParamId::PadLowCut);
     const bool hold = g(ParamId::Hold) >= 0.5f;
     if (hold_ && !hold) { for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { midiHeld_[i] = false; stopNote(i, OwnerMidi); } }
     hold_ = hold;
@@ -249,6 +251,9 @@ void Engine::readParams()
     vp_.keyTrack    = g(ParamId::KeyTrack);
     vp_.panDrift    = g(ParamId::PanDrift);
     vp_.itd         = g(ParamId::Itd);
+    vp_.presence    = g(ParamId::Presence);
+    vp_.breath      = g(ParamId::Breath);
+    vp_.breathRate  = g(ParamId::BreathRate);
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
@@ -500,7 +505,29 @@ void Engine::renderChunk(float* L, float* R, int n)
     float* subL = wl; float* subR = wr;   // the delay scratch buffers are free by now
     const bool subOn = subLevel_ > 0.0f || subLevelCur_ > 1e-4f;
     if (subOn) {
-        const double target = std::log(std::max(frequencyOf(brain_.root()) / (subOctave_ == 1 ? 2.0 : 4.0), 10.0));
+        const double rootHz = frequencyOf(brain_.root());
+        double subHz = rootHz / (subOctave_ == 1 ? 2.0 : 4.0);
+        if (subGhost_) {
+            // Ghost tone (Rich's combination tones): the difference between the two lowest sounding
+            // voices is the tone the ear makes by itself in just intonation (3:2 -> f/2, 5:4 -> f/4,
+            // 4:3 -> f/3). The sub doubles it, folded into the register the root mode would use,
+            // so switching the source never changes the sub's range. With fewer than two distinct
+            // pitches it falls back to the root.
+            double f1 = 0.0, f2 = 0.0;
+            for (const auto& v : voices_)
+                if (v.isActive() && (f1 <= 0.0 || v.frequency() < f1)) f1 = v.frequency();
+            if (f1 > 0.0)
+                for (const auto& v : voices_)
+                    if (v.isActive() && v.frequency() / f1 > 1.003 && (f2 <= 0.0 || v.frequency() < f2)) f2 = v.frequency();
+            if (f1 > 0.0 && f2 > 0.0) {
+                double ghost = f2 - f1;
+                const double lo = subHz * 0.75, hi = lo * 2.0;   // the octave around the root sub
+                while (ghost >= hi) ghost *= 0.5;
+                while (ghost < lo) ghost *= 2.0;
+                subHz = ghost;
+            }
+        }
+        const double target = std::log(std::max(subHz, 10.0));
         if (subFreqCur_ <= 0.0) subFreqCur_ = target;
         const double glideC = 1.0 - std::exp(-1.0 / (std::max(subGlide_, 0.05f) * sr_));
         const float levelC = 1.0f - std::exp(-1.0f / (2.0f * static_cast<float>(sr_)));

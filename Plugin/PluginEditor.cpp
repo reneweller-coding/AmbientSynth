@@ -144,7 +144,7 @@ void AmbientSynthEditor::buildCells()
         if (sec == nullptr) {
             Section s; s.name = d.section;
             if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
-            if (s.name == "Morph") s.maxUnits = 9;
+            if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
                     for (auto& n : row) if (n == s.name) s.group = gi;

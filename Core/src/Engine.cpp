@@ -737,18 +737,24 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float x2 = x * x;
             return x * (27.0f + x2) / (27.0f + 9.0f * x2);
         };
+        // DC blocker in the loop: a saturating loop with a DC gain above one locks onto a DC
+        // operating point (Feedback Hiss sat at +0.11 before this), so nothing below 10 Hz circulates.
+        const float hpc = 1.0f - kTwoPi * 10.0f / static_cast<float>(sr_);
         for (int i = 0; i < n; ++i) {
             fbLpL_ += lpc * (L[i] - fbLpL_);
             fbLpR_ += lpc * (R[i] - fbLpR_);
+            const float xl = fbLpL_ - fbHpXL_ + hpc * fbHpYL_; fbHpXL_ = fbLpL_; fbHpYL_ = xl;
+            const float xr = fbLpR_ - fbHpXR_ + hpc * fbHpYR_; fbHpXR_ = fbLpR_; fbHpYR_ = xr;
             const float mag = 0.5f * (std::fabs(L[i]) + std::fabs(R[i]));
             fbEnv_ += envC * (mag - fbEnv_);
             const int idx = (fbW_ + i) & fbMask_;
-            fbRingL_[static_cast<size_t>(idx)] = sat(fbLpL_ * drive) * comp;
-            fbRingR_[static_cast<size_t>(idx)] = sat(fbLpR_ * drive) * comp;
+            fbRingL_[static_cast<size_t>(idx)] = sat(xl * drive) * comp;
+            fbRingR_[static_cast<size_t>(idx)] = sat(xr * drive) * comp;
         }
         fbW_ = (fbW_ + n) & fbMask_;
     } else {
         fbLpL_ = fbLpR_ = fbEnv_ = 0.0f;
+        fbHpXL_ = fbHpXR_ = fbHpYL_ = fbHpYR_ = 0.0f;
         fbReg_ = 1.0f;
     }
 

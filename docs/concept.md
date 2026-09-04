@@ -522,6 +522,34 @@ preset parses and round-trips through text, a two-point route reaches the
 smoothstep midpoint half-way through its travel, and at speed 2 the engine
 walks a 12-second route in 6 seconds and switches itself off.
 
+## Sets as timelines, and the automatic sound test
+
+**Set recording.** `SetTimeline` (`Core/include/ambient/Timeline.h`) holds
+every parameter change and every note with its time. The plugin's Perform
+page has *Record set*: the starting state goes in at t = 0, then every
+block logs the parameters that changed (hands, knobs, OSC, MIDI, macros,
+routes — all of it ends up as parameter changes) and the notes; *Stop*
+saves a `.ambientset` text file (`12.500 param far_decay 42`, `13.02 on 57
+0.8`, `40 off 57`). *Play set…* replays one through the host parameters,
+and `ambient_render --set-file set.ambientset` renders it again offline
+at any sample rate, with the set's length plus 20 s of tail by default. A
+good evening becomes reproducible, and can be rendered in higher quality
+than it was played.
+
+**Sound test.** `Tools/preset_check.py` renders every preset for 10 s
+(held chord plus a busy brain) and fails a preset that is louder than
+−12 dBFS in its second half, peaks above 0.98, jumps more than 0.3 between
+samples, carries more than 0.02 DC or goes non-finite; exit code 1 when
+anything fails, `--json` for a report. Its first run found four: Alto
+Voices too loud (−11.4 dBFS, master trimmed) and three presets with DC of
+0.03–0.11 — every preset that uses the feedback's phase modulation. A
+partial that modulates its own phase carries a DC term (J1 of the index,
+the same mechanism as an FM pair at ratio 1), so the voice now blocks DC
+after the bank whenever the FM path is on; and a saturating feedback loop
+whose DC gain exceeds one locks onto a DC operating point (Feedback Hiss
+sat at +0.11), so the loop now blocks everything below 10 Hz before the
+saturation. The measurement caught what listening had not.
+
 ## Morph (the performance control)
 
 Two full parameter snapshots live in the engine (`slotA_`, `slotB_`, atomics

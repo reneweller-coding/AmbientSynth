@@ -93,6 +93,11 @@ private:
         juce::Slider morph;
         juce::ToggleButton morphActive;
         juce::Label morphLabel, aLabel, bLabel;
+        // set timeline: record everything that moves, play a set back
+        juce::TextButton setRec{ "Record set" }, setPlay{ "Play set..." }, setStop{ "Stop set" };
+        juce::Label setInfo;
+        std::unique_ptr<juce::FileChooser> chooser;
+        void updateSetInfo();
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> morphAttach;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> morphActiveAttach;
     };

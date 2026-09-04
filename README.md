@@ -85,6 +85,14 @@ twelve route presets (20–40 minute sets) or build your own from the
 cursor, press *Play route*, and the set plays; *Speed* and *Loop* as you
 like. `ambient_render --route "Night Descent"` renders one offline.
 
+**Sets.** *Record set* on the Perform page logs every knob, gesture,
+macro, route step and note with its time; stop to save a `.ambientset`
+file, *Play set…* replays it, and `ambient_render --set-file` renders it
+again offline, so a good evening can be reproduced and rendered in higher
+quality than it was played. `Tools/preset_check.py` is the automatic sound
+test: every preset rendered and flagged for level, clipping, clicks, DC or
+silence.
+
 **Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
 until its key is pressed again, and switching Hold off releases everything.
 The eight **macros** (Space, Alien, Motion, Bloom, Density, Distance,

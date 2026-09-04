@@ -155,6 +155,39 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
+    // Set timeline: playback feeds parameters (through the host) and notes; recording logs what
+    // changed since the last block plus the notes, at the block's time.
+    const double blockSeconds = buffer.getNumSamples() / getSampleRate();
+    if (setPlaying_.load()) {
+        const double t0 = setClock_, t1 = setClock_ + blockSeconds;
+        setPlay_.step(t0, t1, [this](const TimelineEvent& e) {
+            switch (e.type) {
+            case TimelineEvent::Type::Param:
+                if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(e.a)].key)) p->setValueNotifyingHost(p->convertTo0to1(e.v));
+                engine_.setParam(static_cast<ParamId>(e.a), e.v);
+                break;
+            case TimelineEvent::Type::NoteOn:  engine_.noteOn(e.a, e.v); break;
+            case TimelineEvent::Type::NoteOff: engine_.noteOff(e.a); break;
+            }
+        });
+        setClock_ = t1;
+        setTime_.store(setClock_);
+        if (setPlay_.finished() && setClock_ > setPlay_.length() + 1.0) setPlaying_.store(false);
+    }
+    if (setRecording_.load()) {
+        for (int i = 0; i < kNumParams; ++i) {
+            const float v = raw_[static_cast<size_t>(i)]->load();
+            if (v != setLast_[i]) { setRec_.add({ setClock_, TimelineEvent::Type::Param, i, v }); setLast_[i] = v; }
+        }
+        for (const auto meta : midi) {
+            const auto m = meta.getMessage();
+            if (m.isNoteOn()) setRec_.add({ setClock_ + meta.samplePosition / getSampleRate(), TimelineEvent::Type::NoteOn, m.getNoteNumber(), m.getFloatVelocity() });
+            else if (m.isNoteOff()) setRec_.add({ setClock_ + meta.samplePosition / getSampleRate(), TimelineEvent::Type::NoteOff, m.getNoteNumber(), 0.0f });
+        }
+        setClock_ += blockSeconds;
+        setTime_.store(setClock_);
+    }
+
     for (const auto meta : midi) {
         const auto m = meta.getMessage();
         if (m.isNoteOn())            engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity());
@@ -337,6 +370,40 @@ bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
     if (!readMono(file, mono, rate)) return false;
     if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
     wavetableFile_ = file;
+    return true;
+}
+
+void AmbientSynthProcessor::startSetRecording()
+{
+    setPlaying_.store(false);
+    setRec_.clear();
+    // The starting state goes in at t = 0 so playback begins from the same sound.
+    for (int i = 0; i < kNumParams; ++i) {
+        const float v = raw_[static_cast<size_t>(i)]->load();
+        setLast_[i] = v;
+        setRec_.add({ 0.0, TimelineEvent::Type::Param, i, v });
+    }
+    setClock_ = 0.0;
+    setTime_.store(0.0);
+    setRecording_.store(true);
+}
+
+bool AmbientSynthProcessor::stopSetRecording(const juce::File& saveTo)
+{
+    setRecording_.store(false);
+    if (saveTo == juce::File()) return true;
+    return setRec_.save(saveTo.getFullPathName().toRawUTF8());
+}
+
+bool AmbientSynthProcessor::playSetFile(const juce::File& file)
+{
+    setPlaying_.store(false);
+    setRecording_.store(false);
+    if (!setPlay_.load(file.getFullPathName().toRawUTF8())) return false;
+    setPlay_.seek(0.0);
+    setClock_ = 0.0;
+    setTime_.store(0.0);
+    setPlaying_.store(true);
     return true;
 }
 

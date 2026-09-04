@@ -16,6 +16,7 @@ add_library(AmbientCore STATIC
     src/Convolution.cpp
     src/Route.cpp
     src/ZPlane.cpp
+    src/Timeline.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

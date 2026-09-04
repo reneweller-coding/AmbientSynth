@@ -281,6 +281,8 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
 {
     const bool doFm = fm != nullptr && p.fmAmount > 0.0f;
     const float fmScale = p.fmAmount * 3.0f;   // radians at the fundamental per unit of feedback signal
+    fmHpCoef_ = 1.0f - kTwoPi * 10.0f / static_cast<float>(sr_);
+    if (!doFm) { fmHpXL_ = fmHpXR_ = fmHpYL_ = fmHpYR_ = 0.0f; }
     int pos = 0;
     while (pos < n && env_.isActive()) {
         const int len = std::min(kControlBlock, n - pos);
@@ -361,6 +363,10 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             const float g = e * velocity_ * gLevel_;
             outL *= g;
             outR *= g;
+            if (doFm) {   // self-modulation of a partial by its own output carries a DC term (J1 of the index): block it
+                const float yl = outL - fmHpXL_ + fmHpCoef_ * fmHpYL_; fmHpXL_ = outL; fmHpYL_ = yl; outL = yl;
+                const float yr = outR - fmHpXR_ + fmHpCoef_ * fmHpYR_; fmHpXR_ = outR; fmHpYR_ = yr; outR = yr;
+            }
             // Interaural time difference.
             itdL_ += (itdLTarget_ - itdL_) * 0.002f;
             itdR_ += (itdRTarget_ - itdR_) * 0.002f;

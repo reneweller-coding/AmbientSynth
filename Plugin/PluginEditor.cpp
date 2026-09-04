@@ -32,7 +32,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setLookAndFeel(&laf_);
 
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Z-Plane", "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Z-Plane" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
@@ -947,6 +947,48 @@ AmbientSynthEditor::PerformView::PerformView(AmbientSynthProcessor& p) : proc(p)
     morphLabel.setJustificationType(juce::Justification::centred);
     aLabel.setJustificationType(juce::Justification::centredRight);
     bLabel.setJustificationType(juce::Justification::centredLeft);
+
+    // Set timeline
+    setRec.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffb03030));
+    setRec.onClick = [this] {
+        if (proc.isRecordingSet()) {
+            chooser = std::make_unique<juce::FileChooser>("Save the set", juce::File(), "*.ambientset");
+            chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                [this](const juce::FileChooser& fc) {
+                    auto file = fc.getResult();
+                    if (file != juce::File() && !file.hasFileExtension("ambientset")) file = file.withFileExtension("ambientset");
+                    if (!proc.stopSetRecording(file) && file != juce::File())
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Set", "Could not write the set file.");
+                    updateSetInfo();
+                });
+        } else { proc.startSetRecording(); updateSetInfo(); }
+    };
+    setPlay.onClick = [this] {
+        chooser = std::make_unique<juce::FileChooser>("Play a set", juce::File(), "*.ambientset");
+        chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& fc) {
+                const auto file = fc.getResult();
+                if (!file.existsAsFile()) return;
+                if (!proc.playSetFile(file)) juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Set", "This is not a readable set file.");
+                updateSetInfo();
+            });
+    };
+    setStop.onClick = [this] { proc.stopSetPlayback(); if (proc.isRecordingSet()) proc.stopSetRecording(juce::File()); updateSetInfo(); };
+    for (auto* b : { &setRec, &setPlay, &setStop }) addAndMakeVisible(*b);
+    setInfo.setFont(juce::FontOptions(12.0f)); setInfo.setColour(juce::Label::textColourId, kDim);
+    addAndMakeVisible(setInfo);
+    updateSetInfo();
+}
+
+void AmbientSynthEditor::PerformView::updateSetInfo()
+{
+    setRec.setToggleState(proc.isRecordingSet(), juce::dontSendNotification);
+    const int t = static_cast<int>(proc.setTime());
+    juce::String text;
+    if (proc.isRecordingSet()) text = juce::String::formatted("recording set  %d:%02d", t / 60, t % 60);
+    else if (proc.isPlayingSet()) text = juce::String::formatted("playing set  %d:%02d", t / 60, t % 60);
+    else text = "a set = every knob, gesture and note with its time; Record, play a while, stop to save; render it again with ambient_render --set-file";
+    setInfo.setText(text, juce::dontSendNotification);
 }
 
 void AmbientSynthEditor::PerformView::paint(juce::Graphics& g)
@@ -960,12 +1002,20 @@ void AmbientSynthEditor::PerformView::paint(juce::Graphics& g)
                getLocalBounds().reduced(24).removeFromTop(24), juce::Justification::centredLeft);
     aLabel.setText("A: " + proc.morphSlotName(0), juce::dontSendNotification);
     bLabel.setText("B: " + proc.morphSlotName(1), juce::dontSendNotification);
+    updateSetInfo();
 }
 
 void AmbientSynthEditor::PerformView::resized()
 {
     auto area = getLocalBounds().reduced(24);
-    area.removeFromTop(32);
+    auto top = area.removeFromTop(32);
+    {   // set controls on the right of the title line
+        auto s = top.removeFromRight(juce::jmin(720, top.getWidth() - 620));
+        setStop.setBounds(s.removeFromRight(90).reduced(0, 4)); s.removeFromRight(6);
+        setPlay.setBounds(s.removeFromRight(100).reduced(0, 4)); s.removeFromRight(6);
+        setRec.setBounds(s.removeFromRight(100).reduced(0, 4)); s.removeFromRight(10);
+        setInfo.setBounds(s);
+    }
     auto morphArea = area.removeFromBottom(90);
     const int cols = 4, rows = 2;
     const int cellW = area.getWidth() / cols, cellH = area.getHeight() / rows;

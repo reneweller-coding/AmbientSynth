@@ -18,6 +18,7 @@
 #include "ambient/Convolution.h"
 #include "ambient/Route.h"
 #include "ambient/ZPlane.h"
+#include "ambient/Timeline.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -436,6 +437,31 @@ void testSources()
         CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
         std::remove(path);
     }
+}
+
+// Set timeline: record, write, parse, play back in order.
+void testTimeline()
+{
+    SetTimeline t;
+    t.add({ 2.0, TimelineEvent::Type::Param, static_cast<int>(ParamId::FarDecay), 42.0f });
+    t.add({ 0.5, TimelineEvent::Type::NoteOn, 57, 0.8f });      // out of order on purpose
+    t.add({ 30.0, TimelineEvent::Type::NoteOff, 57, 0.0f });
+    t.add({ 2.0, TimelineEvent::Type::Param, static_cast<int>(ParamId::Depth), 0.9f });
+    CHECK(t.size() == 4 && t.event(0).type == TimelineEvent::Type::NoteOn && std::fabs(t.length() - 30.0) < 1e-9, "events are kept sorted by time");
+    const std::vector<char> text = t.write();
+    SetTimeline u;
+    CHECK(u.parse(text.data()) && u.size() == 4, "timeline text round-trips");
+    CHECK(u.event(1).type == TimelineEvent::Type::Param && u.event(1).a == static_cast<int>(ParamId::FarDecay) && std::fabs(u.event(1).v - 42.0f) < 1e-4f, "parameter event survives by key");
+    int got = 0; double lastT = -1.0;
+    u.seek(0.0);
+    u.step(0.0, 1.0, [&](const TimelineEvent& e) { ++got; lastT = e.t; });
+    CHECK(got == 1 && std::fabs(lastT - 0.5) < 1e-9, "step emits only the events in the window");
+    u.step(1.0, 3.0, [&](const TimelineEvent& e) { ++got; lastT = e.t; });
+    CHECK(got == 3 && !u.finished(), "the two events at 2.0 s follow");
+    u.step(3.0, 60.0, [&](const TimelineEvent& e) { ++got; lastT = e.t; });
+    CHECK(got == 4 && u.finished(), "the note-off ends the set");
+    CHECK(!u.parse("1.0 param no_such_key 3\n"), "unknown parameter key is rejected");
+    CHECK(u.parse("# comment\n0.0 on 60 0.5\n\n1.5 off 60\n") && u.size() == 2, "comments and blank lines are skipped");
 }
 
 // Z-plane filter: the corners of the Vowels shape move the formants, replace mode bypasses the SVF.
@@ -1378,6 +1404,7 @@ int main()
     testRoom();
     testRoute();
     testZPlane();
+    testTimeline();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

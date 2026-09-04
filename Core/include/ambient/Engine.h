@@ -151,6 +151,7 @@ private:
     int           fbW_ = 0, fbMask_ = 0;
     float         fbBus_ = 0.0f, fbFm_ = 0.0f, fbTone_ = 1500.0f, fbDrive_ = 0.5f;
     float         fbLpL_ = 0.0f, fbLpR_ = 0.0f, fbEnv_ = 0.0f, fbReg_ = 1.0f;
+    float         fbHpXL_ = 0.0f, fbHpXR_ = 0.0f, fbHpYL_ = 0.0f, fbHpYR_ = 0.0f;   // loop DC blocker
     VoiceParams  vp_;
     BrainParams  bp_;
     Drifter      arc_;

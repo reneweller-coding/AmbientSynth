@@ -93,6 +93,7 @@ private:
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;
     Resonator zL_[kZPeaks], zR_[kZPeaks];
+    float    fmHpXL_ = 0.0f, fmHpXR_ = 0.0f, fmHpYL_ = 0.0f, fmHpYR_ = 0.0f, fmHpCoef_ = 0.9987f;   // DC blocker for feedback FM
     float    zWet_ = 0.0f, zDry_ = 1.0f, zGain_ = 0.5f;
     int      zModeCur_ = 0;
     Rng      rng_;

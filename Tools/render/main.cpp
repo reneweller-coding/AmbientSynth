@@ -9,12 +9,14 @@
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
 //                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
 //                  [--route "name or text" [speed]] (walk a route over the map; --list-routes)
+//                  [--set-file set.ambientset] (replay a recorded set; length = set + 20 s unless --seconds)
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
 #include "ambient/WavFile.h"
 #include "ambient/Sources.h"
 #include "ambient/PresetMap.h"
+#include "ambient/Timeline.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -56,6 +58,7 @@ int main(int argc, char** argv)
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
+    SetTimeline setFile; bool haveSet = false; bool secondsGiven = false;
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
@@ -64,7 +67,7 @@ int main(int argc, char** argv)
         std::string a = argv[i];
         auto next = [&]() -> std::string { return (i + 1 < argc) ? argv[++i] : ""; };
         if (a == "--out") out = next();
-        else if (a == "--seconds") seconds = std::atof(next().c_str());
+        else if (a == "--seconds") { seconds = std::atof(next().c_str()); secondsGiven = true; }
         else if (a == "--sr") sr = std::atoi(next().c_str());
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
@@ -92,6 +95,12 @@ int main(int argc, char** argv)
             routeText = found >= 0 ? routePreset(found).points : spec;
             if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) routeSpeed = std::atof(argv[++i]);
             std::printf("route: %s (speed %g)\n", found >= 0 ? routePreset(found).name : "custom", routeSpeed);
+        }
+        else if (a == "--set-file") {   // play a recorded set (.ambientset) while rendering; length defaults to the set's
+            const std::string path = next();
+            if (!setFile.load(path.c_str())) { std::fprintf(stderr, "cannot read set %s\n", path.c_str()); return 2; }
+            haveSet = true;
+            std::printf("set: %s (%zu events, %.1f s)\n", path.c_str(), setFile.size(), setFile.length());
         }
         else if (a == "--ir") {   // impulse response for the Room (mono or stereo WAV)
             const std::string path = next();
@@ -230,6 +239,7 @@ int main(int argc, char** argv)
         engine.setParam(ParamId::MorphGlide, 20.0f);
     }
 
+    if (haveSet) { if (!secondsGiven) seconds = setFile.length() + 20.0; setFile.seek(0.0); }
     const long total = static_cast<long>(seconds * sr);
     std::vector<float> L(static_cast<size_t>(block)), R(static_cast<size_t>(block));
     std::vector<float> wav; wav.reserve(static_cast<size_t>(total) * 2);
@@ -242,6 +252,16 @@ int main(int argc, char** argv)
     for (long done = 0; done < total; done += block) {
         const int n = static_cast<int>(std::min<long>(block, total - done));
         if (!routeText.empty()) { float rx, ry, rr; engine.routeStep(static_cast<double>(n) / sr, rx, ry, rr); }
+        if (haveSet) {
+            const double t0 = static_cast<double>(done) / sr, t1 = static_cast<double>(done + n) / sr;
+            setFile.step(t0, t1, [&](const TimelineEvent& e) {
+                switch (e.type) {
+                case TimelineEvent::Type::Param:   engine.setParam(static_cast<ParamId>(e.a), e.v); break;
+                case TimelineEvent::Type::NoteOn:  engine.noteOn(e.a, e.v); break;
+                case TimelineEvent::Type::NoteOff: engine.noteOff(e.a); break;
+                }
+            });
+        }
         engine.process(L.data(), R.data(), n);
         for (int i = 0; i < n; ++i) {
             const float l = L[static_cast<size_t>(i)], r = R[static_cast<size_t>(i)];

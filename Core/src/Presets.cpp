@@ -135,7 +135,7 @@ const Preset kPresets[] = {
       "air=0.6;air_color=5;air_q=5;partials=6;brain_low=55;brain_high=84;dly_mix=0.35;dly_feedback=0.5;far_decay=20;master_gain=-8" },
     { "Alto Voices",
       "air=0.3;air_color=3;air_q=14;cosmos_send=0.5;cosmos_vowel=0.8;cosmos_vowel_rate=0.03;cosmos_return=0.8;cosmos_to_far=0.3;"
-      "brain_low=50;brain_high=76;partials=14;scale=JI Major (Ptolemy);root=F" },
+      "brain_low=50;brain_high=76;partials=14;scale=JI Major (Ptolemy);root=F;master_gain=-10" },
     { "Boys Choir",
       "cosmos_send=0.6;cosmos_vowel=0.9;cosmos_vowel_rate=0.08;cosmos_return=0.9;cosmos_to_far=0.5;brain_low=60;brain_high=88;"
       "partials=12;tilt=1.4;scale=JI Major (Ptolemy);root=C;brain_density=6" },

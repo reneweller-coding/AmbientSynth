@@ -5,6 +5,7 @@
 #include "ambient/Presets.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
+#include "ambient/Timeline.h"
 #include <array>
 #include <atomic>
 
@@ -85,6 +86,14 @@ public:
     int  learnTarget() const { return learnTarget_.load(); }
     juce::String userScaleName() const { return userScaleName_; }
 
+    // Set timeline: record every parameter change and note with its time, play a set back.
+    void startSetRecording();
+    bool stopSetRecording(const juce::File& saveTo);   // false if the file could not be written
+    bool isRecordingSet() const { return setRecording_.load(); }
+    bool playSetFile(const juce::File& file);
+    void stopSetPlayback() { setPlaying_.store(false); }
+    bool isPlayingSet() const { return setPlaying_.load(); }
+    double setTime() const { return setTime_.load(); }
     // Route over the map (text form, see ambient/Route.h), kept in the plugin state.
     bool setRouteText(const juce::String& text) { const juce::ScopedLock sl(routeLock_); if (!engine_.route().parse(text.toRawUTF8())) return false; routeText_ = text; return true; }
     juce::String routeText() const { return routeText_; }
@@ -108,6 +117,12 @@ private:
     juce::BigInteger favourites_;
     juce::String routeText_;
     juce::CriticalSection routeLock_;
+    // set timeline (recording appends on the audio thread; save/load on the message thread while stopped)
+    ambient::SetTimeline setRec_, setPlay_;
+    std::atomic<bool> setRecording_{ false }, setPlaying_{ false };
+    std::atomic<double> setTime_{ 0.0 };
+    float setLast_[ambient::kNumParams] = {};
+    double setClock_ = 0.0;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;

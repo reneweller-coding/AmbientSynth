@@ -351,10 +351,63 @@ void testCosmos()
     }
 }
 
+void testCloudAndLayers()
+{
+    const int sr = 48000;
+    {
+        // pitch = 0: grains keep the pitch; pitch = 1: octaves/fifths appear.
+        auto energy = [&](float pitch, double hz) {
+            GrainCloud c; c.prepare(sr, 3);
+            c.set(20.0f, 200.0f, pitch, 0.5f, 1.0f);
+            std::vector<float> L(2 * sr), R(2 * sr), oL(2 * sr, 0.0f), oR(2 * sr, 0.0f);
+            for (int i = 0; i < 2 * sr; ++i) { L[static_cast<size_t>(i)] = 0.5f * std::sin(kTwoPi * 440.0f * i / sr); R[static_cast<size_t>(i)] = L[static_cast<size_t>(i)]; }
+            c.process(L.data(), R.data(), oL.data(), oR.data(), 2 * sr);
+            for (int i = 0; i < 2 * sr; ++i) CHECK(std::isfinite(oL[static_cast<size_t>(i)]), "cloud finite");
+            return goertzel(oL.data() + sr, sr, hz, sr);
+        };
+        const double p440 = energy(0.0f, 440.0), p880 = energy(0.0f, 880.0);
+        CHECK(p440 > 0.0 && p440 > 20.0 * p880, "cloud without pitch keeps 440 Hz");
+        const double q880 = energy(1.0f, 880.0), q440 = energy(1.0f, 440.0);
+        CHECK(q880 > 0.2 * q440, "cloud with pitch adds the octave");
+    }
+    {
+        // Independent layers: a sound preset must not touch Cosmos, and vice versa.
+        Engine e;
+        e.setParam(ParamId::CosmosSend, 0.9f);
+        e.setParam(ParamId::Partials, 4.0f);
+        CHECK(e.applySoundPreset(1), "sound preset applies");
+        CHECK(e.getParam(ParamId::CosmosSend) == 0.9f, "sound preset leaves the Cosmos layer alone");
+        CHECK(e.getParam(ParamId::Partials) == 16.0f, "sound preset resets sound parameters to the preset");
+        CHECK(numCosmosPresets() >= 16, "cosmos bank exists");
+        for (int p = 0; p < numCosmosPresets(); ++p) {
+            bool onlyCosmos = true;
+            const bool ok = applyPreset(cosmosPreset(p), [&](ParamId id, float) { if (!isCosmosParam(id)) onlyCosmos = false; }, PresetScope::Cosmos);
+            CHECK(ok && onlyCosmos, "cosmos preset parses and stays in its layer");
+        }
+        e.setParam(ParamId::Attack, 33.0f);
+        CHECK(e.applyCosmosPreset(3), "cosmos preset applies");
+        CHECK(e.getParam(ParamId::Attack) == 33.0f, "cosmos preset leaves the sound layer alone");
+        CHECK(e.getParam(ParamId::CosmosSend) == 1.0f, "cosmos preset sets its own parameters");
+        e.applyCosmosPreset(0);
+        CHECK(e.getParam(ParamId::CosmosSend) == 0.0f && e.getParam(ParamId::CosmosShimmer) == 0.0f, "Cosmos Off resets the layer");
+    }
+    {
+        Engine e;
+        e.setParam(ParamId::Delay2Mix, 0.5f);
+        e.setParam(ParamId::CloudSend, 1.0f);
+        e.setParam(ParamId::BrainRate, 2.0f);
+        e.setParam(ParamId::Attack, 0.5f);
+        e.prepare(sr, 256);
+        Stats s = render(e, 12.0);
+        CHECK(s.nonFinite == 0 && s.rms > 0.01 && s.peak <= 1.0f, "delay 2 + cloud render finite and audible");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    testCloudAndLayers();
     testCosmos();
     testParams();
     testTuning();

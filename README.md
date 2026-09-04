@@ -45,11 +45,14 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 ## Using it
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
-within a few seconds. Pick one of the 128 presets from the box in the header
-(they are also the plugin's programs in a DAW); *Save…* / *Load…* store the
-whole state as an `.ambientsynth` file. Play MIDI notes to add your own
-voices; they sit in the foreground (see *Keys Depth*) and the lowest held key
-becomes the brain's root.
+within a few seconds. Presets come in two independent layers that combine
+freely: the **Sound** box (128 presets: voices, space, delays, reverbs, brain,
+tuning) and the **Cosmos** box (32 presets for the Cosmos section only).
+Loading one layer never touches the other. In a DAW the 128 full presets are
+the plugin's programs (both layers at once). *Save…* / *Load…* store the whole
+state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
+they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
+the brain's root.
 
 Preset families: sleep and night pieces, cathedral and glass, deep and sub,
 breath and voice, exotic tunings, shimmer and delay, thirty Cosmos
@@ -74,6 +77,12 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Delay** — stereo delay with independent L/R times (asymmetric by default),
   feedback, cross-feed, damping, mix, and *To Far*: how much of the echoes
   recede into the background reverb.
+* **Delay 2** — a second stereo delay in series after the first, so echoes of
+  echoes form long, rhythm-free chains; same controls.
+* **Cloud** — a granular cloud on the far plane: grains of the recent
+  foreground (*Grain* length, *Density* per second) scattered back in time
+  (*Spray*), optionally transposed by octaves and fifths (*Pitch*), spread
+  across the stereo field and dropped into the far reverb.
 * **Near Reverb** — small room for the foreground plane.
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*

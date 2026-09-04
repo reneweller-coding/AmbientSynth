@@ -97,14 +97,35 @@ const juce::String AmbientSynthProcessor::getProgramName(int index)
     return (index >= 0 && index < numPresets()) ? juce::String(preset(index).name) : juce::String();
 }
 
+void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
+{
+    applyPreset(pr, [this](ParamId id, float v) {
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+            p->setValueNotifyingHost(p->convertTo0to1(v));
+    }, scope);
+}
+
 void AmbientSynthProcessor::setCurrentProgram(int index)
 {
     if (index < 0 || index >= numPresets()) return;
     currentProgram_ = index;
-    applyPreset(preset(index), [this](ParamId id, float v) {
-        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
-            p->setValueNotifyingHost(p->convertTo0to1(v));
-    });
+    soundIndex_ = index;
+    cosmosIndex_ = -1;   // the program brought its own Cosmos layer
+    applyScoped(preset(index), PresetScope::Full);
+}
+
+void AmbientSynthProcessor::applySoundPreset(int index)
+{
+    if (index < 0 || index >= numPresets()) return;
+    soundIndex_ = index;
+    applyScoped(preset(index), PresetScope::Sound);
+}
+
+void AmbientSynthProcessor::applyCosmosPreset(int index)
+{
+    if (index < 0 || index >= numCosmosPresets()) return;
+    cosmosIndex_ = index;
+    applyScoped(cosmosPreset(index), PresetScope::Cosmos);
 }
 
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()

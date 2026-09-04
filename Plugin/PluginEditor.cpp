@@ -94,14 +94,25 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         cells_.push_back(std::move(c));
     }
 
-    presetBox_ = std::make_unique<juce::ComboBox>();
-    for (int i = 0; i < numPresets(); ++i) presetBox_->addItem(preset(i).name, i + 1);
-    presetBox_->setSelectedId(proc_.getCurrentProgram() + 1, juce::dontSendNotification);
-    presetBox_->onChange = [this] {
-        const int idx = presetBox_->getSelectedId() - 1;
-        if (idx >= 0 && idx != proc_.getCurrentProgram()) proc_.setCurrentProgram(idx);
+    // Two independent preset layers: the sound chain and the Cosmos chain.
+    soundBox_ = std::make_unique<juce::ComboBox>();
+    soundBox_->setTextWhenNothingSelected("Sound preset");
+    for (int i = 0; i < numPresets(); ++i) soundBox_->addItem(preset(i).name, i + 1);
+    soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
+    soundBox_->onChange = [this] {
+        const int idx = soundBox_->getSelectedId() - 1;
+        if (idx >= 0 && idx != proc_.soundPresetIndex()) proc_.applySoundPreset(idx);
     };
-    addAndMakeVisible(*presetBox_);
+    addAndMakeVisible(*soundBox_);
+    cosmosBox_ = std::make_unique<juce::ComboBox>();
+    cosmosBox_->setTextWhenNothingSelected("Cosmos preset");
+    for (int i = 0; i < numCosmosPresets(); ++i) cosmosBox_->addItem(cosmosPreset(i).name, i + 1);
+    cosmosBox_->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
+    cosmosBox_->onChange = [this] {
+        const int idx = cosmosBox_->getSelectedId() - 1;
+        if (idx >= 0 && idx != proc_.cosmosPresetIndex()) proc_.applyCosmosPreset(idx);
+    };
+    addAndMakeVisible(*cosmosBox_);
 
     saveButton_ = std::make_unique<juce::TextButton>("Save...");
     saveButton_->onClick = [this] {
@@ -131,7 +142,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*loadButton_);
 
     setResizable(true, true);
-    setSize(1280, 860);
+    setSize(1400, 850);
     startTimerHz(12);
 }
 
@@ -143,8 +154,10 @@ AmbientSynthEditor::~AmbientSynthEditor()
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
-    if (presetBox_ && presetBox_->getSelectedId() != proc_.getCurrentProgram() + 1)
-        presetBox_->setSelectedId(proc_.getCurrentProgram() + 1, juce::dontSendNotification);
+    if (soundBox_ && soundBox_->getSelectedId() != proc_.soundPresetIndex() + 1)
+        soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
+    if (cosmosBox_ && cosmosBox_->getSelectedId() != proc_.cosmosPresetIndex() + 1)
+        cosmosBox_->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
     repaint(header_);
 }
 
@@ -165,9 +178,10 @@ void AmbientSynthEditor::resized()
 {
     header_ = getLocalBounds().removeFromTop(kHeaderH);
     if (master_) master_->setBounds(getWidth() - 84, 4, 76, kHeaderH - 6);
-    if (presetBox_) presetBox_->setBounds(200, 8, 190, 24);
-    if (saveButton_) saveButton_->setBounds(398, 8, 64, 24);
-    if (loadButton_) loadButton_->setBounds(468, 8, 64, 24);
+    if (soundBox_) soundBox_->setBounds(200, 8, 180, 24);
+    if (cosmosBox_) cosmosBox_->setBounds(388, 8, 160, 24);
+    if (saveButton_) saveButton_->setBounds(556, 8, 64, 24);
+    if (loadButton_) loadButton_->setBounds(626, 8, 64, 24);
 
     int x = kPad, y = kHeaderH + kPad, rowH = 0;
     for (auto& s : sections_) {
@@ -234,7 +248,7 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
 
     // Keyboard strip: notes 24..108; near notes bright, far notes dim (the front-to-back planes).
     const int first = 24, last = 108;
-    const int stripX = 590, stripW = getWidth() - 590 - 100;
+    const int stripX = 720, stripW = getWidth() - 720 - 100;
     const float keyW = static_cast<float>(stripW) / static_cast<float>(last - first + 1);
     for (int n = first; n <= last; ++n) {
         const float kx = stripX + (n - first) * keyW;

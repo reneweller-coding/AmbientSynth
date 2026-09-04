@@ -29,7 +29,9 @@ public:
 
     void  setParam(ParamId id, float v) { params_[static_cast<int>(id)].store(v, std::memory_order_relaxed); }
     float getParam(ParamId id) const    { return params_[static_cast<int>(id)].load(std::memory_order_relaxed); }
-    bool  applyPreset(int index);       // any thread; sets every parameter
+    bool  applyPreset(int index);       // any thread; sets every parameter (full preset)
+    bool  applySoundPreset(int index);  // sound layer only: everything except the Cosmos section
+    bool  applyCosmosPreset(int index); // Cosmos layer only, from the Cosmos preset bank
 
     // MIDI, audio thread only.
     void noteOn(int note, float velocity);
@@ -66,7 +68,9 @@ private:
     Voice        voices_[kMaxVoices];
     ClusterBrain brain_;
     Ensemble     ensemble_;
-    StereoDelay  delay_;
+    StereoDelay  delay_, delay2_;
+    GrainCloud   cloud_;
+    float        delay2Mix_ = 0.0f, delay2ToFar_ = 0.5f, cloudSend_ = 0.0f;
     Reverb       nearReverb_, farReverb_;
     MidSide      midSide_;
     // Cosmos path (parallel send from the near bus) and the shimmer loop around the far reverb.

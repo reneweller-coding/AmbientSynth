@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ambient/Engine.h"
+#include "ambient/Presets.h"
 #include <array>
 #include <atomic>
 
@@ -39,6 +40,12 @@ public:
     // User presets as files (full state including a loaded Scala scale).
     bool savePresetFile(const juce::File& file);
     bool loadPresetFile(const juce::File& file);
+
+    // Independent layers: the sound chain (everything but Cosmos) and the Cosmos chain.
+    void applySoundPreset(int index);
+    void applyCosmosPreset(int index);
+    int  soundPresetIndex() const  { return soundIndex_; }
+    int  cosmosPresetIndex() const { return cosmosIndex_; }
     juce::String userScaleName() const { return userScaleName_; }
 
     juce::AudioProcessorValueTreeState apvts;
@@ -52,6 +59,8 @@ private:
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
     int currentProgram_ = 0;
+    int soundIndex_ = 0, cosmosIndex_ = 0;
+    void applyScoped(const ambient::Preset& p, ambient::PresetScope scope);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthProcessor)
 };

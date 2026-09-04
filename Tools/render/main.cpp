@@ -83,8 +83,22 @@ int main(int argc, char** argv)
                 std::printf("%-18s %-14s [%g .. %g] default %g %s\n", d.key, d.section, d.min, d.max, d.def, d.unit);
             return 0;
         }
+        else if (a == "--sound-preset" || a == "--cosmos-preset") {
+            const bool cosmos = (a == "--cosmos-preset");
+            const std::string name = next();
+            const int count = cosmos ? numCosmosPresets() : numPresets();
+            int found = -1;
+            for (int p = 0; p < count; ++p) if (name == (cosmos ? cosmosPreset(p) : preset(p)).name) found = p;
+            if (found < 0) { std::fprintf(stderr, "unknown %s preset '%s'\n", cosmos ? "cosmos" : "sound", name.c_str()); return 2; }
+            if (cosmos) engine.applyCosmosPreset(found); else engine.applySoundPreset(found);
+            std::printf("%s preset: %s\n", cosmos ? "cosmos" : "sound", name.c_str());
+        }
         else if (a == "--list-presets") {
             for (int p = 0; p < numPresets(); ++p) std::printf("%s\n", preset(p).name);
+            return 0;
+        }
+        else if (a == "--list-cosmos-presets") {
+            for (int p = 0; p < numCosmosPresets(); ++p) std::printf("%s\n", cosmosPreset(p).name);
             return 0;
         }
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }

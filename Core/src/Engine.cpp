@@ -37,6 +37,8 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     shiftDrift_.init(rng_);
     ensemble_.prepare(sr_);
     delay_.prepare(sr_);
+    delay2_.prepare(sr_);
+    cloud_.prepare(sr_, rng_.fork());
     nearReverb_.prepare(sr_);
     farReverb_.prepare(sr_);
     midSide_.prepare(sr_);
@@ -65,6 +67,18 @@ bool Engine::applyPreset(int index)
 {
     if (index < 0 || index >= numPresets()) return false;
     return ambient::applyPreset(preset(index), [this](ParamId id, float v) { setParam(id, v); });
+}
+
+bool Engine::applySoundPreset(int index)
+{
+    if (index < 0 || index >= numPresets()) return false;
+    return ambient::applyPreset(preset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Sound);
+}
+
+bool Engine::applyCosmosPreset(int index)
+{
+    if (index < 0 || index >= numCosmosPresets()) return false;
+    return ambient::applyPreset(cosmosPreset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Cosmos);
 }
 
 void Engine::setUserScale(const FixedScale& s)
@@ -195,6 +209,11 @@ void Engine::readParams()
     delay_.set(g(ParamId::DelayTimeL), g(ParamId::DelayTimeR), g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp));
     delayMix_   = g(ParamId::DelayMix);
     delayToFar_ = g(ParamId::DelayToFar);
+    delay2_.set(g(ParamId::Delay2TimeL), g(ParamId::Delay2TimeR), g(ParamId::Delay2Feedback), g(ParamId::Delay2Cross), g(ParamId::Delay2Damp));
+    delay2Mix_   = g(ParamId::Delay2Mix);
+    delay2ToFar_ = g(ParamId::Delay2ToFar);
+    cloud_.set(g(ParamId::CloudDensity), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
+    cloudSend_ = g(ParamId::CloudSend);
     nearReverb_.setSpace(0.3f, 20000.0f);
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
     farReverb_.setSpace(g(ParamId::FarAsym), g(ParamId::FarHighcut));
@@ -323,6 +342,19 @@ void Engine::renderChunk(float* L, float* R, int n)
     for (int i = 0; i < n; ++i) {
         nl[i] += wl[i] * delayMix_;  nr[i] += wr[i] * delayMix_;
         fl[i] += wl[i] * delayToFar_; fr[i] += wr[i] * delayToFar_;
+    }
+    // Second delay in series: it hears the first delay's echoes and spins longer chains.
+    delay2_.process(nl, nr, wl, wr, n);
+    for (int i = 0; i < n; ++i) {
+        nl[i] += wl[i] * delay2Mix_;   nr[i] += wr[i] * delay2Mix_;
+        fl[i] += wl[i] * delay2ToFar_; fr[i] += wr[i] * delay2ToFar_;
+    }
+    // Granular cloud on the far plane: grains of the foreground, scattered and transposed,
+    // dropped into the far reverb.
+    if (cloudSend_ > 0.0f) {
+        float* cl = cosL_.data(); float* cr = cosR_.data();
+        for (int i = 0; i < n; ++i) { cl[i] = nl[i] * cloudSend_; cr[i] = nr[i] * cloudSend_; }
+        cloud_.process(cl, cr, fl, fr, n);
     }
 
     // Cosmos: a parallel send off the near bus, returned to both planes; the dry path is untouched.

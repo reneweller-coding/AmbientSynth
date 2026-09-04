@@ -40,7 +40,7 @@ private:
     std::unique_ptr<juce::Slider> master_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttach_;
     std::unique_ptr<juce::TextButton> scalaButton_;
-    std::unique_ptr<juce::ComboBox> presetBox_;
+    std::unique_ptr<juce::ComboBox> soundBox_, cosmosBox_;
     std::unique_ptr<juce::TextButton> saveButton_, loadButton_;
     std::unique_ptr<juce::FileChooser> chooser_;
     juce::Rectangle<int> header_;

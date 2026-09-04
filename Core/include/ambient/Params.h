@@ -25,6 +25,8 @@ enum class ParamId : int {
     EnsembleMix, EnsembleDepth, EnsembleRate,
     // Stereo delay (asymmetric L/R)
     DelayTimeL, DelayTimeR, DelayFeedback, DelayCross, DelayDamp, DelayMix, DelayToFar,
+    // Second stereo delay, in series after the first
+    Delay2TimeL, Delay2TimeR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Mix, Delay2ToFar,
     // Near reverb (foreground room)
     NearMix, NearDecay, NearDamp,
     // Far reverb (the infinite background)
@@ -33,6 +35,8 @@ enum class ParamId : int {
     CosmosSend, CosmosShift, CosmosShiftDrift, CosmosRes, CosmosResPitch, CosmosResFeedback,
     CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,
     CosmosReturn, CosmosToFar,
+    // Granular cloud on the far plane
+    CloudSend, CloudDensity, CloudSize, CloudPitch, CloudSpray, CloudLevel,
     // Mid/side master stage
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)

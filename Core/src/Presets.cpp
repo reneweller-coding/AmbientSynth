@@ -103,7 +103,7 @@ const Preset kPresets[] = {
       "root=D;far_highcut=2500" },
     { "Cave Water",
       "air=0.5;air_color=8;air_q=4;partials=6;cutoff=900;near_mix=0.5;near_decay=4;far_decay=25;brain_density=3;brain_low=30;"
-      "brain_high=60;master_gain=-8" },
+      "brain_high=60;master_gain=-8;cloud_send=0.4;cloud_pitch=0;cloud_size=400;cloud_spray=1.5" },
     { "Undertow",
       "scale=Subharmonic 16-8;root=A;brain_density=5;brain_consonance=0.5;tilt=1.5;cutoff=1000;far_size=3;far_decay=50;"
       "far_highcut=1500" },
@@ -187,7 +187,7 @@ const Preset kPresets[] = {
       "cosmos_shimmer=0.5;cosmos_shimmer_pitch=-12;far_decay=30;far_highcut=2000;brain_low=48;brain_high=84;brain_density=4" },
     { "Echo Canyon",
       "dly_time_l=1.5;dly_time_r=2.25;dly_feedback=0.75;dly_cross=0.5;dly_damp=0.6;dly_mix=0.45;dly_to_far=0.6;attack=0.5;"
-      "brain_rate=10;brain_hold_min=8;brain_hold_max=30;brain_density=4;far_decay=12" },
+      "brain_rate=10;brain_hold_min=8;brain_hold_max=30;brain_density=4;far_decay=12;dly2_mix=0.3;dly2_feedback=0.5" },
     { "Ping Pong Drift",
       "dly_time_l=0.33;dly_time_r=0.5;dly_cross=1;dly_feedback=0.7;dly_mix=0.4;attack=0.3;decay=3;sustain=0.5;release=6;"
       "brain_rate=4;brain_hold_min=3;brain_hold_max=10;brain_density=5" },
@@ -206,7 +206,8 @@ const Preset kPresets[] = {
 
     // ---------------------------------------------------------------- 70..99 cosmos / science fiction
     { "Nebula Drift",
-      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5;far_decay=30;brain_density=5" },
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5;far_decay=30;brain_density=5;"
+      "cloud_send=0.6;cloud_pitch=0.4" },
     { "Frozen Nebula",
       "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.98;cosmos_return=0.8;cosmos_to_far=0.6;far_decay=20;brain_density=4" },
     { "Alien Choir",
@@ -263,7 +264,7 @@ const Preset kPresets[] = {
       "cosmos_to_far=0.2;dly_mix=0.4;dly_feedback=0.7;dly_damp=0.8;air=0.4;air_color=12;air_q=8;brain_density=3;brain_rate=30" },
     { "Stellar Nursery",
       "cosmos_send=0.6;cosmos_nebula=1;cosmos_smear=0.9;cosmos_shimmer=0.4;cosmos_shimmer_pitch=+7;cosmos_return=0.6;cosmos_to_far=0.8;"
-      "scale=JI Major (Ptolemy);root=E;far_decay=45;brain_density=6;depth=0.9" },
+      "scale=JI Major (Ptolemy);root=E;far_decay=45;brain_density=6;depth=0.9;cloud_send=0.8;cloud_pitch=0.6;cloud_density=8" },
     { "Xenomorph Hive",
       "cosmos_send=1;cosmos_vowel=0.8;cosmos_vowel_rate=0.5;cosmos_shift=-80;cosmos_shift_drift=1;cosmos_res=0.5;cosmos_res_pitch=0.5;"
       "cosmos_res_fb=0.9;cosmos_return=0.8;cosmos_to_far=0.5;scale=12-TET;brain_consonance=0.1;brain_density=7;brain_low=30;"
@@ -337,7 +338,8 @@ const Preset kPresets[] = {
     { "REM Drift",
       "arc=0.7;arc_period=45;brain_density=6;brain_consonance=0.5;brain_wander=0.6;far_decay=35;depth=0.9" },
     { "Dream Corridor",
-      "arc=0.6;arc_period=60;dly_mix=0.25;dly_time_l=2;dly_time_r=3;dly_feedback=0.7;dly_to_far=0.8;far_decay=45;brain_density=5" },
+      "arc=0.6;arc_period=60;dly_mix=0.25;dly_time_l=2;dly_time_r=3;dly_feedback=0.7;dly_to_far=0.8;far_decay=45;brain_density=5;"
+      "dly2_mix=0.35;dly2_feedback=0.6;dly2_time_l=3.1;dly2_time_r=3.7" },
     { "Deep Night Harmonics",
       "arc=0.9;arc_period=150;scale=Harmonic 8-16;root=C;brain_low=40;brain_high=88;brain_density=6;far_decay=40;far_highcut=2500" },
     { "Long Otonal Night",
@@ -358,13 +360,14 @@ const Preset kPresets[] = {
       "brain_consonance=0.05;brain_density=8;brain_low=60;brain_high=72;far_decay=30;partials=8;scale=12-TET" },
     { "Rising Swarm",
       "cosmos_shimmer=0.8;cosmos_shimmer_pitch=+12;brain_consonance=0.2;brain_density=9;brain_rate=5;brain_hold_min=8;"
-      "brain_hold_max=30;far_decay=25" },
+      "brain_hold_max=30;far_decay=25;cloud_send=0.7;cloud_pitch=0.8;cloud_density=20" },
     { "Thunder Head",
       "brain_low=24;brain_high=60;brain_density=8;brain_consonance=0.3;tilt=1.8;cutoff=900;resonance=0.4;far_decay=30;air=0.3;"
       "air_color=6;air_q=3" },
     { "Granular Sky",
       "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.5;cosmos_return=1;cosmos_to_far=0.5;attack=0.1;decay=2;sustain=0.3;release=4;"
-      "brain_rate=2;brain_hold_min=2;brain_hold_max=6;brain_density=10;scale=JI Pentatonic;root=D" },
+      "brain_rate=2;brain_hold_min=2;brain_hold_max=6;brain_density=10;scale=JI Pentatonic;root=D;cloud_send=1;cloud_density=30;"
+      "cloud_size=120;cloud_pitch=0.5" },
     { "Inharmonic Field",
       "inharmonic=1;partials=32;tilt=1;brain_density=6;brain_consonance=0.4;far_decay=35;far_highcut=5000" },
     { "Dissonant Cathedral",
@@ -373,6 +376,63 @@ const Preset kPresets[] = {
       "air=1;air_color=8;air_q=2;partials=2;brain_density=8;brain_consonance=0;master_gain=-10;far_decay=30;dly_mix=0.3;"
       "dly_feedback=0.7;scale=12-TET" },
 };
+}
+
+namespace {
+// Cosmos-only bank: loadable on top of any sound preset.
+const Preset kCosmosPresets[] = {
+    { "Cosmos Off", "" },
+    { "Gentle Shift",     "cosmos_send=0.6;cosmos_shift=6;cosmos_shift_drift=1;cosmos_return=0.6;cosmos_to_far=0.4" },
+    { "Slow Beating",     "cosmos_send=0.8;cosmos_shift=40;cosmos_shift_drift=0.5;cosmos_return=0.7;cosmos_to_far=0.5" },
+    { "Metallic Shift",   "cosmos_send=1;cosmos_shift=150;cosmos_shift_drift=0.3;cosmos_return=0.6;cosmos_to_far=0.6" },
+    { "Downward Shift",   "cosmos_send=1;cosmos_shift=-120;cosmos_shift_drift=0.6;cosmos_return=0.7;cosmos_to_far=0.5" },
+    { "Root Resonator",   "cosmos_send=1;cosmos_res=0.7;cosmos_res_pitch=1;cosmos_res_fb=0.93;cosmos_return=0.7" },
+    { "Fifth Resonator",  "cosmos_send=1;cosmos_res=0.6;cosmos_res_pitch=1.5;cosmos_res_fb=0.92;cosmos_return=0.7" },
+    { "High Resonator",   "cosmos_send=1;cosmos_res=0.5;cosmos_res_pitch=6;cosmos_res_fb=0.9;cosmos_return=0.6;cosmos_to_far=0.6" },
+    { "Hull",             "cosmos_send=1;cosmos_res=0.9;cosmos_res_pitch=0.5;cosmos_res_fb=0.96;cosmos_return=0.8" },
+    { "Alien Choir",      "cosmos_send=0.8;cosmos_vowel=1;cosmos_vowel_rate=0.02;cosmos_shift=3;cosmos_return=0.8;cosmos_to_far=0.6" },
+    { "Fast Vowels",      "cosmos_send=0.9;cosmos_vowel=0.9;cosmos_vowel_rate=0.3;cosmos_return=0.9" },
+    { "Deep Throat",      "cosmos_send=0.7;cosmos_vowel=0.7;cosmos_vowel_rate=0.01;cosmos_shift=-10;cosmos_return=0.7" },
+    { "Nebula Drift",     "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5" },
+    { "Frozen Nebula",    "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.98;cosmos_return=0.8;cosmos_to_far=0.6" },
+    { "Soft Smear",       "cosmos_send=0.7;cosmos_nebula=0.6;cosmos_smear=0.6;cosmos_return=0.6;cosmos_to_far=0.5" },
+    { "Shimmer +12",      "cosmos_shimmer=0.7;cosmos_shimmer_pitch=+12" },
+    { "Shimmer +7",       "cosmos_shimmer=0.6;cosmos_shimmer_pitch=+7" },
+    { "Shimmer +19",      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=+19" },
+    { "Shimmer -12",      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=-12" },
+    { "Shimmer +24",      "cosmos_shimmer=0.6;cosmos_shimmer_pitch=+24" },
+    { "Forbidden Planet", "cosmos_send=1;cosmos_shift=120;cosmos_shift_drift=1;cosmos_res=0.6;cosmos_res_pitch=1.5;cosmos_res_fb=0.9;"
+                          "cosmos_return=0.7;cosmos_to_far=0.5" },
+    { "Event Horizon",    "cosmos_send=1;cosmos_shift=-40;cosmos_shift_drift=0.5;cosmos_nebula=0.8;cosmos_smear=0.9;cosmos_shimmer=0.5;"
+                          "cosmos_shimmer_pitch=-12;cosmos_return=0.5;cosmos_to_far=1" },
+    { "Telepathy",        "cosmos_send=0.9;cosmos_vowel=0.9;cosmos_vowel_rate=0.2;cosmos_shift=8;cosmos_shift_drift=1;cosmos_nebula=0.4;"
+                          "cosmos_smear=0.5;cosmos_return=0.8" },
+    { "Warp Core",        "cosmos_send=1;cosmos_shift=-200;cosmos_shift_drift=0.3;cosmos_res=0.7;cosmos_res_pitch=0.25;cosmos_res_fb=0.96;"
+                          "cosmos_return=0.8;cosmos_to_far=0.4" },
+    { "Comet Tail",       "cosmos_send=1;cosmos_shimmer=0.9;cosmos_shimmer_pitch=+24;cosmos_nebula=0.6;cosmos_smear=0.8;cosmos_return=0.4;"
+                          "cosmos_to_far=1" },
+    { "Xenomorph Hive",   "cosmos_send=1;cosmos_vowel=0.8;cosmos_vowel_rate=0.5;cosmos_shift=-80;cosmos_shift_drift=1;cosmos_res=0.5;"
+                          "cosmos_res_pitch=0.5;cosmos_res_fb=0.9;cosmos_return=0.8;cosmos_to_far=0.5" },
+    { "Quasar",           "cosmos_send=1;cosmos_shift=280;cosmos_shift_drift=1;cosmos_shimmer=0.7;cosmos_shimmer_pitch=+19;cosmos_return=0.5;"
+                          "cosmos_to_far=0.8" },
+    { "Dark Matter",      "cosmos_send=1;cosmos_shift=-300;cosmos_nebula=0.9;cosmos_smear=0.9;cosmos_return=0.7;cosmos_to_far=0.7" },
+    { "Plasma Sea",       "cosmos_send=1;cosmos_nebula=0.7;cosmos_smear=0.6;cosmos_shift=12;cosmos_shift_drift=1;cosmos_res=0.3;"
+                          "cosmos_res_pitch=5;cosmos_res_fb=0.8;cosmos_return=0.8;cosmos_to_far=0.6" },
+    { "Void Whisper",     "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.95;cosmos_return=0.5;cosmos_to_far=0.9" },
+    { "Lost Transmission","cosmos_send=1;cosmos_shift=150;cosmos_shift_drift=1;cosmos_vowel=0.5;cosmos_vowel_rate=0.4;cosmos_nebula=0.3;"
+                          "cosmos_return=0.9;cosmos_to_far=0.2" },
+    { "Full Cosmos",      "cosmos_send=1;cosmos_shift=25;cosmos_shift_drift=1;cosmos_res=0.4;cosmos_res_pitch=2;cosmos_res_fb=0.9;"
+                          "cosmos_vowel=0.4;cosmos_vowel_rate=0.05;cosmos_nebula=0.5;cosmos_smear=0.7;cosmos_shimmer=0.5;"
+                          "cosmos_shimmer_pitch=+12;cosmos_return=0.7;cosmos_to_far=0.7" },
+};
+}
+
+int numCosmosPresets() { return static_cast<int>(sizeof(kCosmosPresets) / sizeof(kCosmosPresets[0])); }
+const Preset& cosmosPreset(int index)
+{
+    const int n = numCosmosPresets();
+    if (index < 0 || index >= n) index = 0;
+    return kCosmosPresets[index];
 }
 
 int numPresets() { return static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0])); }

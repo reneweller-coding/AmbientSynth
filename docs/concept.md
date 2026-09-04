@@ -50,8 +50,11 @@ Voice (×16) = Strand (×1..6) = additive bank of ≤32 partials
       │  → interaural time difference from the centre pan (≤ 0.65 ms, the far ear later)
       │  → near gain cos(d·π/2) → NEAR bus ; far gain sin(d·π/2) → FAR bus
       ▼
-NEAR: Ensemble → StereoDelay (asymmetric L/R, cross-feed, damping) ─┬─ mix → + Near reverb (small room)
-                                                                     └─ "to far" ─┐
+NEAR: Ensemble → StereoDelay (asymmetric L/R, cross-feed, damping) → Delay 2 (in series)
+      ─┬─ mix → + Near reverb (small room)
+       ├─ "to far" (both delays) ─┐
+       └─ Cloud send → GrainCloud (grains of the recent foreground, sprayed back in
+          time, octave/fifth transposed, stereo-scattered) ──► FAR ◄──────┘
 FAR:  (+ delay echoes) → Far reverb: 8-line FDN, 4 input all-passes, per-line   │
       damping, slow length modulation, right group 8 % longer + right output   ◄┘
       delayed ≤ 10 ms (asymmetry), tail low-pass, freeze; 100 % wet · level
@@ -161,6 +164,26 @@ families; all 128 render finite with a held chord, levels −29 … −11 dBFS.
 User presets are saved by the plugin as `.ambientsynth` XML files (full
 state including a loaded Scala scale).
 
+Two layers, loadable independently and combinable (`PresetScope`):
+*Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
+section. Applying a preset in one scope resets only that scope's parameters
+to their defaults and then to the preset's values; the other layer is
+untouched. The 128 full presets serve as the Sound bank (their sound layer)
+and as DAW programs (both layers); a separate 32-entry Cosmos bank ("Cosmos
+Off", shifters, resonators, vowels, nebulae, shimmers, the sci-fi
+combinations) serves the Cosmos box. All 160 render finite.
+
+### GrainCloud
+
+History ring of 4 s fed from the near bus × *Send*. Grains are spawned at
+exponentially distributed intervals around *Density*; each has a Hann window
+of *Grain* × (0.7 … 1.3), a start point up to *Spray* seconds back, a random
+pan, and a playback rate of 1 ± 2 % or, with probability *Pitch*, ×2, ×½
+(70 %) or ×1.5, ×4 (30 %). Up to 32 grains overlap; the output gain is
+normalised by √(density · grain length) so density does not change loudness.
+The cloud is added to the far bus only: it exists in the background and the
+far reverb smears it.
+
 ## Plugin shell
 
 * `AudioProcessorValueTreeState` built from the parameter table; the raw
@@ -177,8 +200,10 @@ state including a loaded Scala scale).
 
 1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow
    low-pass on the far ear (20 kHz → 3 kHz at full lateral position, scaled
-   by *Time Width*), user preset files. Open: a second delay in series, a
-   granular cloud on the far plane, per-preset random seeds.
+   by *Time Width*), user preset files, a second delay in series, the
+   granular cloud, independent Sound/Cosmos preset layers. Open: per-preset
+   random seeds, a "morph" between two full presets over minutes, MIDI
+   learn for the standalone.
 2. **Performance** — Chebyshev sine recurrence when inharmonicity is 0, SIMD
    across partials, voice rendering in parallel on desktop.
 3. **Quest** — CMake toolchain for the Android NDK (arm64-v8a), Oboe for

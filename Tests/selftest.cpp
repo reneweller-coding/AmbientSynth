@@ -17,6 +17,7 @@
 #include "ambient/PresetMeta.h"
 #include "ambient/Convolution.h"
 #include "ambient/Route.h"
+#include "ambient/ZPlane.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -435,6 +436,50 @@ void testSources()
         CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
         std::remove(path);
     }
+}
+
+// Z-plane filter: the corners of the Vowels shape move the formants, replace mode bypasses the SVF.
+void testZPlane()
+{
+    const int sr = 48000;
+    {   // interpolation: corners reproduce the frames, the centre lies between in log frequency
+        const ZFrame a = zInterpolate(0, 0.0f, 0.0f), d = zInterpolate(0, 1.0f, 1.0f), m = zInterpolate(0, 0.5f, 0.5f);
+        CHECK(std::fabs(a.p[0].hz - 700.0f) < 0.5f && std::fabs(d.p[0].hz - 300.0f) < 0.5f, "corner frames come back exactly");
+        CHECK(m.p[0].hz > 300.0f && m.p[0].hz < 700.0f, "the centre point lies between the corners");
+        Resonator r; r.set(1000.0f, 50.0f, 1.0f, sr);
+        std::vector<float> x(sr), y(sr);
+        for (int i = 0; i < sr; ++i) { x[static_cast<size_t>(i)] = std::sin(kTwoPi * 1000.0f * i / sr); y[static_cast<size_t>(i)] = r.tick(x[static_cast<size_t>(i)]); }
+        double ex = 0, ey = 0; for (int i = sr / 2; i < sr; ++i) { ex += x[static_cast<size_t>(i)] * x[static_cast<size_t>(i)]; ey += y[static_cast<size_t>(i)] * y[static_cast<size_t>(i)]; }
+        CHECK(std::fabs(std::sqrt(ey / ex) - 1.0) < 0.1, "resonator has unity gain at its peak");
+    }
+    auto bandRatio = [&](float zx, float zy, int mode) {
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Attack, 0.2f);
+        e.setParam(ParamId::Brightness, 1.0f); e.setParam(ParamId::Tilt, 0.3f); e.setParam(ParamId::Partials, 32.0f);
+        e.setParam(ParamId::Cutoff, 18000.0f); e.setParam(ParamId::Resonance, 0.0f);
+        e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 0.0f);
+        e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Shimmer, 0.0f);
+        e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+        e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+        e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f);
+        e.setParam(ParamId::ZMode, static_cast<float>(mode)); e.setParam(ParamId::ZShape, 0.0f);   // Vowels
+        e.setParam(ParamId::ZX, zx); e.setParam(ParamId::ZY, zy); e.setParam(ParamId::ZDepth, 0.0f); e.setParam(ParamId::ZMix, 1.0f); e.setParam(ParamId::ZResonance, 0.5f);
+        e.prepare(sr, 256);
+        e.noteOn(45, 0.8f);   // A2 = 110 Hz: partials every 110 Hz cover the formant bands
+        std::vector<float> cap;
+        render(e, 2.0, &cap);
+        std::vector<float> mono(sr);
+        for (int i = 0; i < sr; ++i) mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((sr + i) * 2)];
+        double low = 0, high = 0;   // 600-800 Hz (the "a" first formant) vs 2200-2500 Hz (the "i" second formant)
+        for (int h = 6; h <= 7; ++h) low += goertzel(mono.data(), sr, 110.0 * h, sr);
+        for (int h = 20; h <= 23; ++h) high += goertzel(mono.data(), sr, 110.0 * h, sr);
+        return low / (high + 1e-12);
+    };
+    const double aRatio = bandRatio(0.0f, 0.0f, 2), iRatio = bandRatio(1.0f, 1.0f, 2), offRatio = bandRatio(0.0f, 0.0f, 0);
+    CHECK(aRatio > 3.0 * iRatio, "vowel corner a favours 700 Hz, corner i favours 2300 Hz");
+    CHECK(aRatio > 2.0 * offRatio, "replace mode shapes the spectrum against the plain bank");
 }
 
 // Route over the map: parsing, timing, and the engine walking it.
@@ -1332,6 +1377,7 @@ int main()
     testPresetMap();
     testRoom();
     testRoute();
+    testZPlane();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

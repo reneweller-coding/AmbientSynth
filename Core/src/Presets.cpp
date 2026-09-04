@@ -62,7 +62,8 @@ const Preset kPresets[] = {
       "scale=Harmonic 8-16;root=C;brain_low=48;brain_high=84;partials=12;shimmer=0.6;depth=0.7;far_decay=30;"
       "strands=4;stack=Harmonics;detune=0;drift=1;brain_density=3" },
     { "Breathing Dark",
-      "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200" },
+      "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200;"
+      "z_mode=Series;z_shape=Dark Hall;z_rate=0.015;z_depth=1;z_mix=0.5" },
     { "Velvet Hours",
       "tilt=1.5;brightness=0.55;cutoff=1500;strands=4;detune=6;air=0.12;brain_density=5;brain_rate=40;brain_hold_min=80;"
       "brain_hold_max=260;far_decay=38;far_highcut=2400;depth=0.8;arc=0.4;arc_period=75;pad_low_cut=100;sub_level=0.25;sub_source=Difference" },
@@ -384,7 +385,8 @@ const Preset kPresets[] = {
     { "Vocal Morph Choir",
       "src2_type=Wavetable;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
       "src3_type=Wavetable;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;src3_octave=-1;"
-      "osc_level=0.5;partials=8;brain_density=4;far_decay=30;far_highcut=4000;scale=JI Major (Ptolemy);root=A" },
+      "osc_level=0.5;partials=8;brain_density=4;far_decay=30;far_highcut=4000;scale=JI Major (Ptolemy);root=A;"
+      "z_mode=Series;z_shape=Vowels;z_rate=0.03;z_depth=1;z_mix=0.5" },
     { "Glass Table Drift",
       "src2_type=Wavetable;src2_table=Glass;src2_pos=0.3;src2_pos_drift=0.8;src2_level=0.7;src2_octave=1;"
       "osc_level=0.4;partials=6;tilt=1.5;far_size=3;far_decay=45;far_highcut=8000;brain_low=48;brain_high=88;attack=8;release=20" },
@@ -395,7 +397,8 @@ const Preset kPresets[] = {
     { "Metal Field",
       "src2_type=Wavetable;src2_table=Metal;src2_pos=0.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.5;"
       "src3_type=Wavetable;src3_table=Metal;src3_pos=0.1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.5;src3_ratio=7/4;src3_octave=-1;"
-      "osc_level=0.3;inharmonic=0.4;partials=12;cutoff=1800;far_decay=40;far_highcut=3000;brain_consonance=0.3;brain_density=5;fb_fm=0.3" },
+      "osc_level=0.3;inharmonic=0.4;partials=12;cutoff=1800;far_decay=40;far_highcut=3000;brain_consonance=0.3;brain_density=5;fb_fm=0.3;"
+      "z_mode=Series;z_shape=Metal;z_rate=0.02;z_depth=0.8;z_res=0.7;z_mix=0.4" },
     { "FM Bell Drone",
       "src2_type=FM;src2_fm_ratio=3.5;src2_fm_index=2.5;src2_pos_drift=0.8;src2_level=0.5;src2_octave=1;"
       "osc_level=0.5;partials=6;attack=2;decay=20;sustain=0.4;release=25;far_decay=35;far_highcut=6000;brain_rate=15;brain_hold_min=10;brain_hold_max=60;"

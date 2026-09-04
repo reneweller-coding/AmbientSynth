@@ -386,6 +386,15 @@ void Engine::readParams()
     vp_.filterEnv   = g(ParamId::FilterEnv);
     vp_.filterDrift = g(ParamId::FilterDrift);
     vp_.keyTrack    = g(ParamId::KeyTrack);
+    vp_.zMode       = static_cast<int>(std::lround(g(ParamId::ZMode)));
+    vp_.zShape      = static_cast<int>(std::lround(g(ParamId::ZShape)));
+    vp_.zX          = g(ParamId::ZX);
+    vp_.zY          = g(ParamId::ZY);
+    vp_.zRate       = g(ParamId::ZRate);
+    vp_.zDepth      = g(ParamId::ZDepth);
+    vp_.zRes        = g(ParamId::ZResonance);
+    vp_.zKeyTrack   = g(ParamId::ZKeyTrack);
+    vp_.zMix        = g(ParamId::ZMix);
     vp_.panDrift    = g(ParamId::PanDrift);
     vp_.itd         = g(ParamId::Itd);
     vp_.presence    = g(ParamId::Presence);

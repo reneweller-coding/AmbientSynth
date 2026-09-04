@@ -30,6 +30,8 @@ enum class ParamId : int {
     Attack, Decay, Sustain, Release,
     // Filter
     Cutoff, Resonance, FilterEnv, FilterDrift, KeyTrack,
+    // Z-plane filter: four frames on a square, the point (X, Y) interpolates their poles and wanders
+    ZMode, ZShape, ZX, ZY, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,
     // presence bell for the near plane, slow breathing of every voice's distance
     Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, Presence, Breath, BreathRate,

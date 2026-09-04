@@ -1,5 +1,6 @@
 #include "ambient/Params.h"
 #include "ambient/Sources.h"   // choice names of the source slots
+#include "ambient/ZPlane.h"    // choice names of the z-plane filter
 #include <cstring>
 
 namespace ambient {
@@ -124,6 +125,16 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FilterEnv,   "filter_env",   "Env Amount",    "Filter",     -1.f,  1.f,    0.3f,  1.f,  ""),
     F(ParamId::FilterDrift, "filter_drift", "Drift",         "Filter",     0.f,   1.f,    0.3f,  1.f,  ""),
     F(ParamId::KeyTrack,    "keytrack",     "Key Track",     "Filter",     0.f,   1.f,    0.5f,  1.f,  ""),
+
+    C(ParamId::ZMode,       "z_mode",       "Mode",          "Z-Plane",    kZModeNames, 3, 0),
+    C(ParamId::ZShape,      "z_shape",      "Shape",         "Z-Plane",    kZShapeNames, kZShapes, 0),
+    F(ParamId::ZX,          "z_x",          "X",             "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
+    F(ParamId::ZY,          "z_y",          "Y",             "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
+    F(ParamId::ZRate,       "z_rate",       "Rate",          "Z-Plane",    0.005f, 1.f,   0.05f, 0.4f, "Hz"),
+    F(ParamId::ZDepth,      "z_depth",      "Depth",         "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
+    F(ParamId::ZResonance,  "z_res",        "Resonance",     "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
+    F(ParamId::ZKeyTrack,   "z_keytrack",   "Key Track",     "Z-Plane",    0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::ZMix,        "z_mix",        "Mix",           "Z-Plane",    0.f,   1.f,    0.7f,  1.f,  ""),
 
     F(ParamId::Depth,       "depth",        "Depth",         "Space",      0.f,   1.f,    0.7f,  1.f,  ""),
     F(ParamId::KeysDepth,   "keys_depth",   "Keys Depth",    "Space",      0.f,   1.f,    0.f,   1.f,  ""),

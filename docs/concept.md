@@ -174,6 +174,26 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+### Z-plane filter
+
+After the Rossum / E-mu Morpheus idea: four filter frames sit on the
+corners of a square, and a point (X, Y) inside it is a filter whose poles
+are interpolated between the corners — move the point and the whole
+resonant structure glides. `Core/include/ambient/ZPlane.h`: a frame is
+three resonators (centre frequency, bandwidth, gain) in parallel; the
+interpolation is bilinear in log frequency and log bandwidth on the *pole
+parameters*, never on coefficients, so every point inside the square is a
+stable filter. Six shapes: Vowels (a, e, o, i on the corners), Metal
+(sharp inharmonic clusters), Bells (very narrow, ringing), Comb, Dark Hall
+(low and broad), Sweep (four octaves of travel). Per voice, *Mode* Series
+(after the state-variable filter) or Replace (instead of it), *X* / *Y*,
+*Rate* and *Depth* (two Drifters move the point around X/Y — the "LFO",
+in this synth's continuous, non-repeating form), *Resonance* (halves or
+doubles the bandwidths), *Key Track* (the frame follows the note),
+*Mix*. Measured on a 32-partial A2: the Vowels corner a favours 700 Hz
+over 2300 Hz more than three times as strongly as corner i; a resonator
+has unity gain at its peak.
+
 ### Stack and Rate Wander
 
 * **Stack** (Oscillator): instead of detuned copies, the strands sit at

@@ -32,7 +32,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setLookAndFeel(&laf_);
 
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Z-Plane", "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
@@ -172,6 +172,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
             if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
             if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 10;
+            if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
                     for (auto& n : row) if (n == s.name) s.group = gi;

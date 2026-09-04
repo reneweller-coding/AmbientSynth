@@ -9,6 +9,7 @@
 #pragma once
 #include "Dsp.h"
 #include "Sources.h"
+#include "ZPlane.h"
 #include <cstdint>
 
 namespace ambient {
@@ -31,6 +32,9 @@ struct VoiceParams {
     float air = 0.15f, airColor = 3.0f, airQ = 10.0f;
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
+    // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
+    int   zMode = 0, zShape = 0;
+    float zX = 0.5f, zY = 0.5f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
     float panDrift = 0.4f, itd = 0.6f;
     // Rich's foreground/background carving inside the voice (see concept.md):
     float presence = 0.0f;      // dB bell at 2-5 kHz, full on the near plane, gone on the far plane
@@ -87,6 +91,10 @@ private:
     Svf      filtL_, filtR_;
     Svf      airL_, airR_;
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
+    Drifter  zDriftX_, zDriftY_;
+    Resonator zL_[kZPeaks], zR_[kZPeaks];
+    float    zWet_ = 0.0f, zDry_ = 1.0f, zGain_ = 0.5f;
+    int      zModeCur_ = 0;
     Rng      rng_;
     double   sr_ = 48000.0;
     double   freq_ = 220.0;

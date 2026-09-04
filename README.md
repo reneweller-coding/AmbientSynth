@@ -159,6 +159,10 @@ Sections of the GUI (all parameters are automatable in a DAW):
   the fundamental: breath, flute air, glass hiss.
 * **Envelope** — attack up to 60 s, release up to 120 s.
 * **Filter** — state-variable low-pass with key tracking, envelope amount and slow drift.
+* **Z-Plane** — a Morpheus-style filter: four resonant frames on the corners
+  of a square, a point between them is a filter interpolated from all four,
+  and the point wanders on its own (*Rate*, *Depth*). Shapes: Vowels, Metal,
+  Bells, Comb, Dark Hall, Sweep. In series after the filter or instead of it.
 * **Space** — *Depth*: how far back the brain places its notes (most go deep,
   some stay intimately close); *Keys Depth*: the plane of MIDI notes; *Pan
   Drift*: slow wandering of each voice's centre; *Time Width*: interaural time

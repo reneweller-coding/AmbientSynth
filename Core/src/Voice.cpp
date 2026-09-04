@@ -53,6 +53,8 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     panCenter_.init(rng_);
     breath_.init(rng_);
     rateWander_.init(rng_);
+    zDriftX_.init(rng_); zDriftY_.init(rng_);
+    for (auto& r : zL_) r.reset(); for (auto& r : zR_) r.reset();
     for (auto& s : slots_) s.prepare(sr_, rng_.fork());
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
@@ -240,6 +242,26 @@ void Voice::control(int blockLen, const VoiceParams& p)
     filtL_.set(cut, p.resonance, static_cast<float>(sr_));
     filtR_.copyCoefficients(filtL_);
 
+    // Z-plane: the point wanders around (X, Y) on two Drifters, the frame is interpolated from
+    // the shape's corners, resonance narrows the bandwidths, key tracking moves the frame with
+    // the note. Mode changes ramp the wet/dry gains so switching never clicks.
+    zModeCur_ = clampv(p.zMode, 0, 2);
+    if (zModeCur_ != 0) {
+        const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
+        const float x = clampv(p.zX + 0.5f * p.zDepth * dx, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy, 0.0f, 1.0f);
+        ZFrame f = zInterpolate(p.zShape, x, y);
+        const float track = std::pow(static_cast<float>(freq_) / 261.6256f, p.zKeyTrack);
+        const float bwScale = std::pow(2.0f, 2.0f * (0.5f - p.zRes));   // resonance 1 -> quarter bandwidth, 0 -> double
+        for (int i = 0; i < kZPeaks; ++i) {
+            zL_[i].set(f.p[i].hz * track, f.p[i].bw * bwScale, f.p[i].gain, static_cast<float>(sr_));
+            zR_[i].b0 = zL_[i].b0; zR_[i].a1 = zL_[i].a1; zR_[i].a2 = zL_[i].a2;
+        }
+        zWet_ = p.zMix; zDry_ = 1.0f - p.zMix;
+        zGain_ = 0.6f;   // three parallel resonators at unity peak: keep the sum in the same league as the dry
+    } else {
+        zWet_ = 0.0f; zDry_ = 1.0f;
+    }
+
     // Air: band-passed noise around a drifting multiple of the fundamental.
     if (p.air > 0.0f) {
         const float ad = airDrift_.update(dt, driftRate * 0.7f, rng_);
@@ -315,8 +337,22 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;
             }
-            float outL = filtL_.lp(accL);
-            float outR = filtR_.lp(accR);
+            float outL, outR;
+            if (zModeCur_ == 2) {   // Replace: the z-plane frame is the filter
+                const float zl = (zL_[0].tick(accL) + zL_[1].tick(accL) + zL_[2].tick(accL)) * zGain_;
+                const float zr = (zR_[0].tick(accR) + zR_[1].tick(accR) + zR_[2].tick(accR)) * zGain_;
+                outL = accL * zDry_ + zl * zWet_;
+                outR = accR * zDry_ + zr * zWet_;
+            } else {
+                outL = filtL_.lp(accL);
+                outR = filtR_.lp(accR);
+                if (zModeCur_ == 1) {   // Series: after the state-variable filter
+                    const float zl = (zL_[0].tick(outL) + zL_[1].tick(outL) + zL_[2].tick(outL)) * zGain_;
+                    const float zr = (zR_[0].tick(outR) + zR_[1].tick(outR) + zR_[2].tick(outR)) * zGain_;
+                    outL = outL * zDry_ + zl * zWet_;
+                    outR = outR * zDry_ + zr * zWet_;
+                }
+            }
             if (air) {
                 float lp, bp, hp;
                 airL_.tick(rng_.bipolar(), lp, bp, hp); outL += airGain_ * bp;

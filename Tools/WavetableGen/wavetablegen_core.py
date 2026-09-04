@@ -180,6 +180,42 @@ RECIPES = {
     "Glass thinning": lambda h, t, r: np.where(np.isin(h, [1, 3, 7, 12, 19, 27, 36, 47]), 1.0 / h ** (0.3 + 0.7 * t), 0.02 / h),
     "Odd breathing": lambda h, t, r: (1.0 / h) * np.where(h % 2 == 1, 1.0, 0.2 + 0.8 * (0.5 + 0.5 * np.sin(2 * np.pi * t))),
     "Random walk":   None,   # handled below: smooth random spectra
+
+    # --- drone shapes added for the preset library -------------------------------------------
+    # Drawbar organ: the classic 1 2 3 4 6 8 12 16 set, upper drawbars pulled out across t.
+    "Organ drawbars": lambda h, t, r: np.where(np.isin(h, [1, 2, 3, 4, 6, 8, 12, 16]),
+                                               np.where(h <= 4, 1.0, 0.15 + 0.85 * t) / np.sqrt(h), 0.01 / h),
+    # Two formants walking apart: a -> i, the vowel most drones sit in.
+    "Vowel choir":   lambda h, t, r: (1.0 / np.sqrt(h)) * (0.06
+                                     + 0.9 * np.exp(-((h - (3 + 2 * t)) / 1.6) ** 2)
+                                     + 0.7 * np.exp(-((h - (9 + 16 * t)) / 3.5) ** 2)
+                                     + 0.3 * np.exp(-((h - (22 + 10 * t)) / 5.0) ** 2)),
+    # Bell-ish sparse partials: struck metal keeps only a handful of widely spaced ones.
+    "Bell partials": lambda h, t, r: np.where(np.isin(h, [1, 2, 5, 9, 14, 20, 27, 35]),
+                                              h ** -(0.4 + 0.9 * t), 0.015 / h),
+    # Square-law spacing: the stiff bar, gongs and plates.
+    "Metal bar":     lambda h, t, r: np.where(np.isin(h, [1, 4, 9, 16, 25, 36]),
+                                              h ** -(0.2 + 0.8 * t), 0.02 / h),
+    # Primes fading in: an inharmonic-sounding but perfectly periodic shimmer.
+    "Prime sieve":   lambda h, t, r: (1.0 / h) * np.where(
+                                              np.isin(h, [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]),
+                                              0.1 + 0.9 * t, np.where(h == 1, 1.0, 0.05)),
+    # A brick wall in the spectrum opening upwards: a filter sweep baked into the table.
+    "Harmonic gate": lambda h, t, r: (1.0 / h ** 0.8) / (1.0 + (h / (1.5 + 44.0 * t ** 2)) ** 6),
+    # Reed instruments: 1/h with a resonant bump that walks up the series.
+    "Reed":          lambda h, t, r: (1.0 / h) * (1.0 + 2.5 * np.exp(-((h - (4 + 12 * t)) / 3.0) ** 2))
+                                     * np.where(h % 2 == 1, 1.0, 0.55),
+    # Plucked string: 1/h^2 with the plucking point (a comb notch) moving along the string.
+    "Pluck point":   lambda h, t, r: (1.0 / h ** 1.6) * np.abs(np.sin(np.pi * h * (0.08 + 0.34 * t))),
+    # Stacked fifths (1 3 9 27) melting into stacked octaves (1 2 4 8 16).
+    "Fifth stack":   lambda h, t, r: (np.where(np.isin(h, [1, 3, 9, 27]), 1.0 - t, 0.0)
+                                      + np.where(np.isin(h, [1, 2, 4, 8, 16]), t, 0.0) + 0.02) / np.sqrt(h),
+    # Two combs multiplied: ring-modulation-like clusters that never repeat over t.
+    "Ring cluster":  lambda h, t, r: (1.0 / np.sqrt(h)) * np.abs(np.cos(h * 0.55) * np.cos(h * (0.11 + 0.9 * t))),
+    # Breath: everything present, a broad band walking upwards, high partials dominant.
+    "Breath band":   lambda h, t, r: (h ** -0.25) * (0.08 + np.exp(-((np.log(h) - np.log(2 + 30 * t)) / 0.55) ** 2)),
+    # Sub fold: an almost pure fundamental that grows a second and a third.
+    "Sub fold":      lambda h, t, r: np.where(h == 1, 1.0, np.where(h <= 3, 0.05 + 0.55 * t, 0.02 / h)),
 }
 
 

@@ -28,10 +28,17 @@ struct PresetMeta {
     uint32_t tags;              // PresetTag bits
 };
 
+// Public view: the built-in table followed by the loaded packs (see Presets.h).
 int               numPresetMeta();          // equals numPresets() once generated, 0 for the stub
 const PresetMeta& presetMeta(int index);
-int               numPresetFamilies();
+int               numPresetFamilies();      // built-in families plus one per pack
 const char*       presetFamilyName(int family);
 const char*       presetTagName(int bit);   // 0 .. kNumPresetTags-1
+
+// The generated table alone (Core/src/PresetMeta.cpp, written by Tools/preset_map.py).
+int               builtinPresetMetaCount();
+const PresetMeta& builtinPresetMeta(int index);
+int               builtinPresetFamilyCount();
+const char*       builtinPresetFamilyName(int family);
 
 } // namespace ambient

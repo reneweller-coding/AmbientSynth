@@ -100,8 +100,9 @@ public:
     void clearRoute() { engine_.route().clear(); routeText_.clear(); }
     bool addRoutePoint(const ambient::Waypoint& w) { if (!engine_.route().add(w)) return false; char buf[4096]; engine_.route().write(buf, sizeof(buf)); routeText_ = buf; return true; }
     // Favourite presets (browser stars), kept in the plugin state.
-    bool isFavourite(int preset) const { return preset >= 0 && preset < 1024 && favourites_[preset]; }
-    void setFavourite(int preset, bool on) { if (preset >= 0 && preset < 1024) favourites_.setBit(preset, on); }
+    // juce::BigInteger grows on demand, so the library's size is not a limit here.
+    bool isFavourite(int preset) const { return preset >= 0 && favourites_[preset]; }
+    void setFavourite(int preset, bool on) { if (preset >= 0) favourites_.setBit(preset, on); }
 
     juce::AudioProcessorValueTreeState apvts;
     ambient::Engine& engine() { return engine_; }
@@ -127,6 +128,7 @@ private:
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;
     void applyScoped(const ambient::Preset& p, ambient::PresetScope scope);
+    void loadPresetFiles(int index);   // a pack preset's own sample and wavetable
     std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none
     std::atomic<int> learnTarget_{ -1 };
     juce::String slotName_[2] = { "Init", "Init" };

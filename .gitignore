@@ -12,3 +12,7 @@ Tools/TextureGen/.venv/
 __pycache__/
 Wavetables/
 Impulses/
+Library/Textures/
+Library/Wavetables/
+Library/*.log
+Tools/library/texture_jobs.json

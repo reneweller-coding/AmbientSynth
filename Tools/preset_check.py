@@ -14,8 +14,10 @@ Limits (a preset fails if any is exceeded):
 Exit code 1 when anything fails.
 """
 import argparse
+import concurrent.futures
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -32,10 +34,14 @@ from analyze import read_wav  # noqa: E402
 LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": -60.0}
 
 
-def check_preset(name, seconds):
+def check_preset(name, seconds, packs=None):
     with tempfile.TemporaryDirectory() as td:
         wav = os.path.join(td, "p.wav")
-        res = subprocess.run([RENDER, "--preset", name, "--seconds", str(seconds), "--notes", "45,52,59", "--set", "brain_rate=6", "--out", wav],
+        cmd = [RENDER]
+        if packs:
+            cmd += ["--packs", packs]
+        cmd += ["--preset", name, "--seconds", str(seconds), "--notes", "45,52,59", "--set", "brain_rate=6", "--out", wav]
+        res = subprocess.run(cmd,
                              capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res.returncode != 0 or not os.path.isfile(wav):
             return {"name": name, "error": (res.stderr or res.stdout).strip()[-200:], "fail": ["render"]}
@@ -63,21 +69,34 @@ def main():
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--json", default=None)
     ap.add_argument("--only", default=None, help="substring of preset names to check")
+    ap.add_argument("--packs", default=None, help="also load the preset packs in this directory")
+    ap.add_argument("--sample", type=int, default=0, help="check a random N of the presets instead of all")
+    ap.add_argument("--seed", type=int, default=1, help="which random sample")
+    ap.add_argument("--jobs", type=int, default=1, help="renders in parallel; keep it below the core count")
     a = ap.parse_args()
-    names = [n for n in subprocess.run([RENDER, "--list-presets"], capture_output=True, text=True, encoding="utf-8").stdout.splitlines() if n.strip()]
+    listcmd = [RENDER] + (["--packs", a.packs] if a.packs else []) + ["--list-presets"]
+    names = [n for n in subprocess.run(listcmd, capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+             if n.strip() and not n.startswith("packs: ")]
     if a.only:
         names = [n for n in names if a.only.lower() in n.lower()]
+    if a.sample and a.sample < len(names):
+        names = sorted(random.Random(a.seed).sample(names, a.sample))
     results = []
     failed = 0
-    for i, name in enumerate(names):
-        r = check_preset(name, a.seconds)
+    if a.jobs > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
+            done = list(ex.map(lambda n: check_preset(n, a.seconds, a.packs), names))
+    else:
+        done = (check_preset(n, a.seconds, a.packs) for n in names)
+    for i, r in enumerate(done):
+        name = r["name"]
         results.append(r)
         status = "FAIL " + ", ".join(r["fail"]) if r["fail"] else "ok"
         if r["fail"]: failed += 1
         if "error" in r:
-            print(f"{i:3d} {name:28s} {status}: {r['error']}")
-        else:
-            print(f"{i:3d} {name:28s} rms {r['rms_db']:6.1f}  peak {r['peak']:.2f}  jump {r['jump']:.3f}  dc {r['dc']:.4f}  {status}")
+            print(f"{i:4d} {name:28s} {status}: {r['error']}")
+        elif r["fail"] or a.jobs == 1:
+            print(f"{i:4d} {name:28s} rms {r['rms_db']:6.1f}  peak {r['peak']:.2f}  jump {r['jump']:.3f}  dc {r['dc']:.4f}  {status}")
     print(f"\n{len(names) - failed} of {len(names)} presets pass" + (f", {failed} FAIL" if failed else ""))
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:

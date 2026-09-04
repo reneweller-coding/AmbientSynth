@@ -175,10 +175,10 @@ const PresetMeta kMeta[] = {
 };
 }
 
-int numPresetMeta() { return static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0])); }
-const PresetMeta& presetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 }; return (index >= 0 && index < numPresetMeta()) ? kMeta[index] : none; }
-int numPresetFamilies() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }
-const char* presetFamilyName(int family) { return (family >= 0 && family < numPresetFamilies()) ? kFamilies[family] : ""; }
+int builtinPresetMetaCount() { return static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0])); }
+const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 }; return (index >= 0 && index < builtinPresetMetaCount()) ? kMeta[index] : none; }
+int builtinPresetFamilyCount() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }
+const char* builtinPresetFamilyName(int family) { return (family >= 0 && family < builtinPresetFamilyCount()) ? kFamilies[family] : ""; }
 const char* presetTagName(int bit) { return (bit >= 0 && bit < kNumPresetTags) ? kTagNames[bit] : ""; }
 
 } // namespace ambient

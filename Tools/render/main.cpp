@@ -59,6 +59,8 @@ int main(int argc, char** argv)
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
     SetTimeline setFile; bool haveSet = false; bool secondsGiven = false;
+    int presetIndex = -1;
+    loadDefaultPresetPacks();   // $AMBIENT_PACKS or ~/Documents/AmbientSynth/Packs; --packs adds more
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
@@ -96,6 +98,13 @@ int main(int argc, char** argv)
             if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) routeSpeed = std::atof(argv[++i]);
             std::printf("route: %s (speed %g)\n", found >= 0 ? routePreset(found).name : "custom", routeSpeed);
         }
+        else if (a == "--packs") { const std::string dir = next(); std::printf("packs: %d loaded from %s\n", loadPresetPacksIn(dir.c_str()), dir.c_str()); }
+        else if (a == "--list-packs") {
+            loadDefaultPresetPacks();
+            for (int k = 0; k < numPresetPacks(); ++k) std::printf("%s\n", presetPackName(k));
+            std::printf("%d presets total (%d built in)\n", numPresets(), builtinPresetCount());
+            return 0;
+        }
         else if (a == "--set-file") {   // play a recorded set (.ambientset) while rendering; length defaults to the set's
             const std::string path = next();
             if (!setFile.load(path.c_str())) { std::fprintf(stderr, "cannot read set %s\n", path.c_str()); return 2; }
@@ -125,6 +134,7 @@ int main(int argc, char** argv)
             for (int p = 0; p < numPresets(); ++p) if (name == preset(p).name) found = p;
             if (found < 0) { std::fprintf(stderr, "unknown preset '%s' (see --list-presets)\n", name.c_str()); return 2; }
             engine.applyPreset(found);
+            presetIndex = found;
             std::printf("preset: %s\n", preset(found).name);
         }
         else if (a == "--set") {
@@ -220,6 +230,25 @@ int main(int argc, char** argv)
             if (d.kind == ParamKind::Choice) std::printf("param %s = %s\n", d.key, d.choices[clampv(static_cast<int>(std::lround(v)), 0, d.numChoices - 1)]);
             else if (d.kind == ParamKind::Bool) std::printf("param %s = %s\n", d.key, v >= 0.5f ? "on" : "off");
             else std::printf("param %s = %g\n", d.key, v);
+        }
+    }
+
+    // A pack preset may name a sample and a wavetable of its own; load them before rendering.
+    if (presetIndex >= 0) {
+        const char* tex = presetFilePath(presetIndex, 0);
+        const char* tab = presetFilePath(presetIndex, 1);
+        std::vector<float> mono; int rate = 0;
+        if (tex && *tex) {
+            if (readWavMono(tex, mono, rate)) {
+                double base = baseHzFromName(tex); if (base <= 0.0) base = 261.6256;
+                engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base);
+                std::printf("preset texture: %s\n", tex);
+            } else std::fprintf(stderr, "preset texture missing: %s\n", tex);
+        }
+        if (tab && *tab) {
+            if (readWavMono(tab, mono, rate) && engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
+                std::printf("preset wavetable: %s (%d frames)\n", tab, engine.userWavetableFrames());
+            else std::fprintf(stderr, "preset wavetable missing or unusable: %s\n", tab);
         }
     }
 

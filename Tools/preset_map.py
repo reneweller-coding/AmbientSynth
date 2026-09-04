@@ -148,11 +148,11 @@ def write_cpp(rows, fams, stub=False):
         lines.append("    { %.4ff, %.4ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %d, 0x%xu },   // %s" %
                      (r["x"], r["y"], r["bright"], r["motion"], r["width"], r["noisy"], r["bass"], r["density"], r["family"], r["tags"], r["name"]))
     lines += ["};", "}", "",
-              "int numPresetMeta() { return %s; }" % ("0" if stub else "static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0]))"),
-              "const PresetMeta& presetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };"
-              " return (index >= 0 && index < numPresetMeta()) ? kMeta[index] : none; }",
-              "int numPresetFamilies() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }",
-              "const char* presetFamilyName(int family) { return (family >= 0 && family < numPresetFamilies()) ? kFamilies[family] : \"\"; }",
+              "int builtinPresetMetaCount() { return %s; }" % ("0" if stub else "static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0]))"),
+              "const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };"
+              " return (index >= 0 && index < builtinPresetMetaCount()) ? kMeta[index] : none; }",
+              "int builtinPresetFamilyCount() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }",
+              "const char* builtinPresetFamilyName(int family) { return (family >= 0 && family < builtinPresetFamilyCount()) ? kFamilies[family] : \"\"; }",
               "const char* presetTagName(int bit) { return (bit >= 0 && bit < kNumPresetTags) ? kTagNames[bit] : \"\"; }",
               "", "} // namespace ambient", ""]
     with open(OUT_CPP, "w", encoding="utf-8") as f:

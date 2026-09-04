@@ -47,10 +47,19 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in two independent layers that combine
-freely: the **Sound** box (148 presets: voices, space, delays, reverbs, brain,
-tuning) and the **Cosmos** box (32 presets for the Cosmos section only).
-Loading one layer never touches the other. In a DAW the 148 full presets are
-the plugin's programs (both layers at once). *Save…* / *Load…* store the whole
+freely: the **Sound** box (148 built-in presets: voices, space, delays,
+reverbs, brain, tuning) and the **Cosmos** box (32 presets for the Cosmos
+section only). Loading one layer never touches the other. In a DAW the full
+presets are the plugin's programs (both layers at once).
+
+**Preset packs.** Beyond the built-in presets the synth loads packs at
+runtime: plain text files, one preset per line, that may also name a sample
+and a wavetable of their own. They appear everywhere the built-in presets do
+-- programs, browser, map, routes -- each pack as its own family. Drop
+`*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
+`AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
+library of 5000 presets in 25 packs with the 1200 samples and 608 wavetables
+they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.

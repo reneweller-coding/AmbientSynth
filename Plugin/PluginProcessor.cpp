@@ -48,6 +48,8 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     for (int i = 0; i < kNumParams; ++i)
         raw_[static_cast<size_t>(i)] = apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key);
     for (auto& c : ccMap_) c.store(-1);
+    // Preset packs (thousands of presets as text files) before anything reads the preset list.
+    loadDefaultPresetPacks();
     // OSC on 9000; a second instance in a DAW simply reports the port as taken.
     osc_.start(9000, *this, gestures_);
 }
@@ -268,6 +270,15 @@ const juce::String AmbientSynthProcessor::getProgramName(int index)
     return (index >= 0 && index < numPresets()) ? juce::String(preset(index).name) : juce::String();
 }
 
+void AmbientSynthProcessor::loadPresetFiles(int index)
+{
+    // A pack preset can bring its own sample and wavetable; the paths are relative to the pack.
+    const juce::String tex(juce::CharPointer_UTF8(presetFilePath(index, 0)));
+    const juce::String tab(juce::CharPointer_UTF8(presetFilePath(index, 1)));
+    if (tex.isNotEmpty() && juce::File(tex).existsAsFile()) loadTextureFile(juce::File(tex));
+    if (tab.isNotEmpty() && juce::File(tab).existsAsFile()) loadWavetableFile(juce::File(tab));
+}
+
 void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
 {
     applyPreset(pr, [this](ParamId id, float v) {
@@ -283,6 +294,7 @@ void AmbientSynthProcessor::setCurrentProgram(int index)
     soundIndex_ = index;
     cosmosIndex_ = -1;   // the program brought its own Cosmos layer
     applyScoped(preset(index), PresetScope::Full);
+    loadPresetFiles(index);
 }
 
 void AmbientSynthProcessor::applySoundPreset(int index)
@@ -290,6 +302,7 @@ void AmbientSynthProcessor::applySoundPreset(int index)
     if (index < 0 || index >= numPresets()) return;
     soundIndex_ = index;
     applyScoped(preset(index), PresetScope::Sound);
+    loadPresetFiles(index);
 }
 
 void AmbientSynthProcessor::applyCosmosPreset(int index)

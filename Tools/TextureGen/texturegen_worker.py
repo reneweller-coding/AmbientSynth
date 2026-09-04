@@ -245,6 +245,17 @@ def load_batch(path, defaults):
     return jobs
 
 
+def already_done(job):
+    """True when this job's file is already on disk. The name carries model and seed; only the
+    detected note is unknown beforehand, so the stem is matched with a wildcard."""
+    import glob
+    name = job.get("name") or slugify(job["prompt"])
+    stem = f"{name}_{job['model']}_{int(job.get('seed', 0))}"
+    out_dir = job.get("out_dir", "Textures")
+    return bool(glob.glob(os.path.join(glob.escape(out_dir), glob.escape(stem) + ".wav"))
+                or glob.glob(os.path.join(glob.escape(out_dir), glob.escape(stem) + "_*.wav")))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--serve", action="store_true", help="read jobs from stdin (used by the GUI)")
@@ -259,6 +270,9 @@ def main():
     ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--out-dir", default="Textures")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--resume", action="store_true", help="skip jobs whose output file is already there")
+    ap.add_argument("--max-minutes", type=float, default=0.0, help="stop cleanly after this long (0 = no limit)")
+    ap.add_argument("--nice", action="store_true", help="run below normal priority so the machine stays usable")
     a = ap.parse_args()
     if a.list:
         for k, (label, hub, sr, mx, note) in MODELS.items():
@@ -274,20 +288,34 @@ def main():
         jobs = [dict(defaults, prompt=a.prompt)]
     else:
         ap.error("--prompt or --batch is required")
+    if a.nice:
+        try:      # a batch of thousands must not make the machine unusable
+            import psutil
+            psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 10)
+        except Exception:
+            if os.name != "nt":
+                os.nice(10)
     g = Generator()
     # Group by model so each model is loaded once even when the batch mixes them.
     order = sorted(range(len(jobs)), key=lambda i: (list(MODELS).index(jobs[i]["model"]) if jobs[i]["model"] in MODELS else 99, i))
-    done = failed = 0
+    done = failed = skipped = 0
+    deadline = time.time() + a.max_minutes * 60.0 if a.max_minutes > 0 else None
     for i in order:
         job = jobs[i]
         for v in range(a.count):
             j = dict(job); j["seed"] = int(job.get("seed", a.seed)) + v
+            if a.resume and already_done(j):
+                skipped += 1
+                continue
+            if deadline is not None and time.time() > deadline:
+                emit(event="status", text=f"time limit reached: {done} files, {skipped} skipped, {failed} failed -- rerun with --resume")
+                return
             try:
                 g.generate(j); done += 1
             except Exception as e:
                 failed += 1
                 emit(event="error", text=f"{type(e).__name__}: {e}  [{job.get('prompt', '')[:50]}]")
-    emit(event="status", text=f"batch finished: {done} files, {failed} failed")
+    emit(event="status", text=f"batch finished: {done} files, {skipped} skipped, {failed} failed")
 
 
 if __name__ == "__main__":

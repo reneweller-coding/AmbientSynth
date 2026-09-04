@@ -4,19 +4,21 @@
 #include "ambient/Dsp.h"
 #include <vector>
 #include <cmath>
-#include <mutex>
 
 namespace ambient {
 
 namespace {
 std::vector<float> g_values;   // numPresets * kNumParams
 bool g_ready = false;
-std::once_flag g_once;
 }
 
 void PresetMap::warmup()
 {
-    std::call_once(g_once, [] {
+    // Rebuilds when the preset list has grown (a pack was loaded); message thread only.
+    static int built = -1;
+    if (built == numPresets()) return;
+    built = numPresets();
+    {
         const int n = numPresets();
         g_values.assign(static_cast<size_t>(n) * kNumParams, 0.0f);
         for (int p = 0; p < n; ++p) {
@@ -25,7 +27,7 @@ void PresetMap::warmup()
             applyPreset(preset(p), [&](ParamId id, float val) { v[static_cast<int>(id)] = val; });
         }
         g_ready = true;
-    });
+    }
 }
 
 bool PresetMap::ready() { return g_ready; }

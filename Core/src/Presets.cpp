@@ -513,10 +513,10 @@ const Preset& cosmosPreset(int index)
     return kCosmosPresets[index];
 }
 
-int numPresets() { return static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0])); }
-const Preset& preset(int index)
+int builtinPresetCount() { return static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0])); }
+const Preset& builtinPreset(int index)
 {
-    const int n = numPresets();
+    const int n = builtinPresetCount();
     if (index < 0 || index >= n) index = 0;
     return kPresets[index];
 }

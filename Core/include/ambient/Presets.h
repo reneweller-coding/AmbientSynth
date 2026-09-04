@@ -14,13 +14,19 @@ namespace ambient {
 
 struct Preset {
     const char* name;
-    const char* settings;   // "key=value;key=value", choice values may be given by name
+    const char* settings;             // "key=value;key=value", choice values may be given by name
+    const char* texture = nullptr;    // file the host should load into the Texture slots (pack presets)
+    const char* wavetable = nullptr;  // file the host should load into the User wavetable
 };
 
 enum class PresetScope { Full, Sound, Cosmos };
 
-int numPresets();                         // full presets (148)
+// The preset list is the 148 built-in presets followed by every loaded pack, so everything that
+// walks presets by index (DAW programs, the map, routes, the browser) sees packs automatically.
+int numPresets();
 const Preset& preset(int index);
+int builtinPresetCount();                 // the compiled-in presets (the first ones)
+const Preset& builtinPreset(int index);
 int numCosmosPresets();                   // Cosmos-only bank
 const Preset& cosmosPreset(int index);
 
@@ -36,6 +42,27 @@ inline bool inScope(ParamId id, PresetScope scope)
     if (isPerformanceParam(id)) return false;
     return scope == PresetScope::Full || (scope == PresetScope::Cosmos) == isCosmosParam(id);
 }
+
+// ---------------------------------------------------------------- preset packs
+//
+// A pack is a UTF-8 text file (.ambientpack) of presets, loaded at runtime instead of compiled
+// in, so a library of thousands does not live in the binary:
+//
+//   # comment
+//   pack <pack name>
+//   <name>|<settings>|<x y bright motion width noisy bass density tagbits>|<texture>|<wavetable>
+//
+// Everything after the settings is optional. The metadata field feeds the browser and the map
+// (see PresetMeta.h); the file fields name a sample and a wavetable relative to the pack file,
+// which the host loads when the preset is applied. Message thread only.
+bool loadPresetPack(const char* path);      // false if the file is missing or a line is malformed
+int  loadPresetPacksIn(const char* dir);    // every *.ambientpack in a directory; returns how many loaded
+int  loadDefaultPresetPacks();              // $AMBIENT_PACKS (';'-separated), else ~/Documents/AmbientSynth/Packs
+void clearPresetPacks();
+int  numPresetPacks();
+const char* presetPackName(int pack);
+// Absolute path of the file a pack preset names, or an empty string. `which`: 0 texture, 1 wavetable.
+const char* presetFilePath(int presetIndex, int which);
 
 // Parse a value for `d` from text: numbers, "on"/"off", or a choice name.
 float paramValueFromText(const ParamDesc& d, const char* text);

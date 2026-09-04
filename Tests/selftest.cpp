@@ -38,6 +38,9 @@
 #endif
 #include <cstdio>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <vector>
 #include <cstring>
 
@@ -273,7 +276,8 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(numPresets() == 148, "exactly 148 presets");
+    CHECK(builtinPresetCount() == 148, "exactly 148 built-in presets");
+    CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
     for (int p = 0; p < numPresets(); ++p) {
@@ -1587,6 +1591,72 @@ void testCalibrationMenuRecorder()
 
 } // namespace
 
+void testPresetPacks()
+{
+    // A pack is a text file loaded at runtime; the preset list must grow by exactly its entries,
+    // the metadata must come back, and the sample paths must resolve next to the pack file.
+    const int base = numPresets();
+    const int baseFamilies = numPresetFamilies();
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "ambientsynth_packtest";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path file = dir / "Test.ambientpack";
+    {
+        std::ofstream f(file);
+        f << "# a comment line\n";
+        f << "pack Pack Under Test\n";
+        f << "\n";
+        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav\n";
+        f << "Pack Beta|sub_level=0.5\n";
+    }
+    CHECK(loadPresetPack(file.string().c_str()), "pack file loads");
+    CHECK(numPresets() == base + 2, "two presets added");
+    CHECK(numPresetPacks() == 1, "one pack registered");
+    CHECK(std::strcmp(presetPackName(0), "Pack Under Test") == 0, "pack name from the 'pack' line");
+    CHECK(std::strcmp(preset(base).name, "Pack Alpha") == 0, "first pack preset by index");
+    CHECK(std::strcmp(preset(base + 1).name, "Pack Beta") == 0, "second pack preset by index");
+
+    Engine e;
+    CHECK(e.applyPreset(base), "apply a pack preset");
+    CHECK(e.getParam(ParamId::BrainDensity) == 9.0f, "pack preset sets density");
+    CHECK(std::fabs(e.getParam(ParamId::Cutoff) - 440.0f) < 0.01f, "pack preset sets cutoff");
+    CHECK(e.getParam(ParamId::Scale) == 2.0f, "pack preset resolves a choice by name");
+    CHECK(e.getParam(ParamId::SubLevel) == 0.0f, "a pack preset resets what it does not name");
+
+    const std::string tex = presetFilePath(base, 0);
+    const std::string tab = presetFilePath(base, 1);
+    CHECK(tex.find("a.wav") != std::string::npos && std::filesystem::path(tex).is_absolute(),
+          "texture path resolved against the pack folder");
+    CHECK(tab.find("b.wav") != std::string::npos, "wavetable path resolved");
+    CHECK(std::string(presetFilePath(base + 1, 0)).empty(), "a preset without files reports none");
+    CHECK(std::string(presetFilePath(0, 0)).empty(), "built-in presets carry no pack files");
+
+    CHECK(numPresetFamilies() == baseFamilies + 1, "the pack adds one family");
+    if (numPresetMeta() > 0) {
+        const PresetMeta& m = presetMeta(base);
+        CHECK(std::fabs(m.x - 0.25f) < 1e-4f && std::fabs(m.y - 0.75f) < 1e-4f, "map position read from the pack");
+        CHECK(m.tags == 5u, "tag bits read from the pack");
+        CHECK(m.family == baseFamilies, "pack preset lands in the pack's family");
+        CHECK(std::strcmp(presetFamilyName(m.family), "Pack Under Test") == 0, "family name is the pack name");
+    }
+    // The map has to notice that the list grew.
+    PresetMap::warmup();
+    CHECK(PresetMap::presetValues(base) != nullptr, "the map picked the pack up");
+
+    // A malformed line is rejected as a whole file, and nothing is left behind.
+    const std::filesystem::path bad = dir / "Bad.ambientpack";
+    { std::ofstream f(bad); f << "pack Broken\nno separator here\n"; }
+    CHECK(!loadPresetPack(bad.string().c_str()), "a line without a settings field is rejected");
+    CHECK(!loadPresetPack((dir / "missing.ambientpack").string().c_str()), "a missing file is rejected");
+
+    clearPresetPacks();
+    CHECK(numPresets() == base, "clearPresetPacks restores the built-in list");
+    CHECK(numPresetFamilies() == baseFamilies, "and the built-in families");
+    PresetMap::warmup();
+    std::filesystem::remove_all(dir, ec);
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -1605,6 +1675,7 @@ int main()
     testDelay();
     testMidSide();
     testPresets();
+    testPresetPacks();
     testSpace();
     testRichCarving();
     testFeedback();

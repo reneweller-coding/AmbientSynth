@@ -8,6 +8,24 @@
 using namespace ambient;
 
 namespace {
+// The library runs to thousands of presets, so a flat list is unreadable: group the box by
+// family (the built-in families first, then one heading per loaded pack).
+void fillPresetBox(juce::ComboBox& box)
+{
+    const bool grouped = numPresetMeta() >= numPresets() && numPresetFamilies() > 1;
+    int lastFamily = -1;
+    for (int i = 0; i < numPresets(); ++i) {
+        if (grouped) {
+            const int fam = presetMeta(i).family;
+            if (fam != lastFamily) { box.addSectionHeading(presetFamilyName(fam)); lastFamily = fam; }
+        }
+        box.addItem(preset(i).name, i + 1);
+    }
+}
+} // namespace
+
+
+namespace {
 constexpr int kCellW = 60, kCellH = 70, kPad = 8, kTitleH = 18, kGroupTitleH = 22, kHeaderH = 114;
 const juce::Colour kBg(0xff121418), kGroupFill(0xff1a1d23), kSectionFill(0xff21252c), kAccent(0xff7fb3d5),
                    kText(0xffd8dbe0), kDim(0xff7c8290);
@@ -93,7 +111,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
     soundBox_->setTextWhenNothingSelected("Sound preset");
-    for (int i = 0; i < numPresets(); ++i) soundBox_->addItem(preset(i).name, i + 1);
+    fillPresetBox(*soundBox_);
     soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
     soundBox_->onChange = [this] {
         const int idx = soundBox_->getSelectedId() - 1;
@@ -238,13 +256,13 @@ void AmbientSynthEditor::buildCells()
 
     auto boxA = std::make_unique<juce::ComboBox>();
     boxA->setTextWhenNothingSelected("A: preset");
-    for (int i = 0; i < numPresets(); ++i) boxA->addItem(preset(i).name, i + 1);
+    fillPresetBox(*boxA);
     morphABox_ = boxA.get();
     boxA->onChange = [this] { if (morphABox_->getSelectedId() > 0) proc_.setMorphSlotFromPreset(0, morphABox_->getSelectedId() - 1); };
     addExtraCell("Morph", std::move(boxA), "A", 2);
     auto boxB = std::make_unique<juce::ComboBox>();
     boxB->setTextWhenNothingSelected("B: preset");
-    for (int i = 0; i < numPresets(); ++i) boxB->addItem(preset(i).name, i + 1);
+    fillPresetBox(*boxB);
     morphBBox_ = boxB.get();
     boxB->onChange = [this] { if (morphBBox_->getSelectedId() > 0) proc_.setMorphSlotFromPreset(1, morphBBox_->getSelectedId() - 1); };
     addExtraCell("Morph", std::move(boxB), "B", 2);

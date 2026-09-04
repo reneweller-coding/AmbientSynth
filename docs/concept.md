@@ -244,23 +244,49 @@ remaining), a root note, a timer.
 
 ### Z-plane filter
 
-After the Rossum / E-mu Morpheus idea: four filter frames sit on the
-corners of a square, and a point (X, Y) inside it is a filter whose poles
-are interpolated between the corners — move the point and the whole
-resonant structure glides. `Core/include/ambient/ZPlane.h`: a frame is
-three resonators (centre frequency, bandwidth, gain) in parallel; the
-interpolation is bilinear in log frequency and log bandwidth on the *pole
-parameters*, never on coefficients, so every point inside the square is a
-stable filter. Six shapes: Vowels (a, e, o, i on the corners), Metal
-(sharp inharmonic clusters), Bells (very narrow, ringing), Comb, Dark Hall
-(low and broad), Sweep (four octaves of travel). Per voice, *Mode* Series
-(after the state-variable filter) or Replace (instead of it), *X* / *Y*,
-*Rate* and *Depth* (two Drifters move the point around X/Y — the "LFO",
-in this synth's continuous, non-repeating form), *Resonance* (halves or
-doubles the bandwidths), *Key Track* (the frame follows the note),
-*Mix*. Measured on a 32-partial A2: the Vowels corner a favours 700 Hz
-over 2300 Hz more than three times as strongly as corner i; a resonator
-has unity gain at its peak.
+After the idea Dave Rossum built into the E-mu Morpheus: four filter
+frames sit on the corners of a square, and a point (X, Y) inside it is a
+filter whose poles *and zeros* are interpolated between the corners — move
+the point and the whole resonant structure glides, always through stable
+filters. The patent (US 5,170,369) expired long ago and the manuals
+describe what the filters do, but the coefficient tables in the original
+firmware are proprietary data; this bank is our own, built in the same
+architecture. `Core/include/ambient/ZPlane.h`:
+
+* A frame is up to **six cascaded two-pole/two-zero sections** — a 12-pole
+  filter, the order the Morpheus used. Interpolation is bilinear in log
+  centre frequency and log bandwidth on the *pole and zero parameters*,
+  never on coefficients, so every point inside the square is stable by
+  construction.
+* Sections come in two flavours, and the difference matters: a **bell**
+  (zero on the pole, wider) boosts its frequency and leaves the rest at
+  unity, so six of them in series shape a spectrum; a **resonator** (no
+  zero, or a zero elsewhere) passes only its band, so a few in series take
+  the sound over completely. A first attempt made every cluster shape a
+  cascade of narrow resonators — six of those cancel each other out, and
+  the self test found them at −120 dBFS.
+* Normalisation happens twice per control block, from one pass over a
+  probe grid (16 fixed logarithmic points plus every pole and zero angle of
+  the frame — a fixed grid alone walks straight past a needle-sharp
+  resonance). Each section is scaled to its geometric mean over the grid,
+  which is what keeps a bell's background at unity, capped at 30 dB of
+  boost; then the finished cascade is scaled so its loudest point is unity.
+  A shape can therefore be extremely resonant without being loud.
+
+Sixteen shapes in six families: Vowel Morph, Choir, Nasal · Low Sweep,
+High Sweep, Band Sweep · Phaser, Comb, Flanger, Notch Cluster · Strings,
+Metal Bars, Wood, Glass · Peaks · Infinite (two poles a hair apart at the
+stability limit). Per voice: *Mode* Series (after the state-variable
+filter) or Replace (instead of it), *X* / *Y*, *Rate* and *Depth* (two
+Drifters move the point — the "LFO", in this synth's continuous,
+non-repeating form), *Resonance* (quarters or doubles the bandwidths),
+*Key Track* (the frame follows the note), *Mix*. Twelve presets
+(*Morphing Vowels* … *Endless Resonance*) show the families off. Measured:
+all sixteen shapes stay finite, audible and below a peak of 2 at their four
+corners and their centre; on a 32-partial A2 the Vowel corner a favours
+700 Hz over 2300 Hz more than three times as strongly as corner i; the six
+sections cost 14 % more render time than no filter at all on the heaviest
+preset (23× → 21× realtime).
 
 ### Stack and Rate Wander
 
@@ -490,7 +516,7 @@ the same thing. At 0.1 the loop thickens a drone without taking it over.
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
 parameter table (choices by name). The engine, the render tool (`--preset`)
-and the plugin's program list all use the same table. 136 presets in eleven
+and the plugin's program list all use the same table. 148 presets in twelve
 families; all render finite with a held chord, levels −29 … −11 dBFS.
 User presets are saved by the plugin as `.ambientsynth` XML files (full
 state including a loaded Scala scale).
@@ -499,7 +525,7 @@ Two layers, loadable independently and combinable (`PresetScope`):
 *Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
 section. Applying a preset in one scope resets only that scope's parameters
 to their defaults and then to the preset's values; the other layer is
-untouched. The 136 full presets serve as the Sound bank (their sound layer)
+untouched. The 148 full presets serve as the Sound bank (their sound layer)
 and as DAW programs (both layers); a separate 32-entry Cosmos bank ("Cosmos
 Off", shifters, resonators, vowels, nebulae, shimmers, the sci-fi
 combinations) serves the Cosmos box. All 160 render finite.

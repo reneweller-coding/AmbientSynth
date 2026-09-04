@@ -4,7 +4,7 @@
 // Two independent layers can be loaded and combined:
 //   Sound  = everything except the Cosmos section (voices, space, delays, reverbs, brain, tuning)
 //   Cosmos = the Cosmos section only
-// The 136 full presets carry both layers (they are the DAW programs); the Cosmos
+// The 148 full presets carry both layers (they are the DAW programs); the Cosmos
 // bank carries Cosmos-only settings.
 #pragma once
 #include "Params.h"
@@ -19,7 +19,7 @@ struct Preset {
 
 enum class PresetScope { Full, Sound, Cosmos };
 
-int numPresets();                         // full presets (136)
+int numPresets();                         // full presets (148)
 const Preset& preset(int index);
 int numCosmosPresets();                   // Cosmos-only bank
 const Preset& cosmosPreset(int index);

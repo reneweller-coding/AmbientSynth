@@ -103,9 +103,11 @@ private:
     Svf      airL_, airR_;
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;
-    Resonator zL_[kZPeaks], zR_[kZPeaks];
+    ZBiquad  zbL_[kZSections], zbR_[kZSections];
+    int      zUsed_ = 0;
+    float    zNorm_ = 1.0f;
     float    fmHpXL_ = 0.0f, fmHpXR_ = 0.0f, fmHpYL_ = 0.0f, fmHpYR_ = 0.0f, fmHpCoef_ = 0.9987f;   // DC blocker for feedback FM
-    float    zWet_ = 0.0f, zDry_ = 1.0f, zGain_ = 0.5f;
+    float    zWet_ = 0.0f, zDry_ = 1.0f;
     int      zModeCur_ = 0;
     Rng      rng_;
     double   sr_ = 48000.0;

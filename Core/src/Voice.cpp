@@ -55,7 +55,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     breath_.init(rng_);
     rateWander_.init(rng_);
     zDriftX_.init(rng_); zDriftY_.init(rng_);
-    for (auto& r : zL_) r.reset(); for (auto& r : zR_) r.reset();
+    for (auto& r : zbL_) r.reset(); for (auto& r : zbR_) r.reset();
     for (auto& s : slots_) s.prepare(sr_, rng_.fork());
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
@@ -284,17 +284,22 @@ void Voice::control(int blockLen, const VoiceParams& p)
     if (zModeCur_ != 0) {
         const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
         const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
-        ZFrame f = zInterpolate(p.zShape, x, y);
+        const ZFrame f = zInterpolate(p.zShape, x, y);
         const float track = std::pow(static_cast<float>(freq_) / 261.6256f, p.zKeyTrack);
         const float bwScale = std::pow(2.0f, 2.0f * (0.5f - p.zRes));   // resonance 1 -> quarter bandwidth, 0 -> double
-        for (int i = 0; i < kZPeaks; ++i) {
-            zL_[i].set(f.p[i].hz * track, f.p[i].bw * bwScale, f.p[i].gain, static_cast<float>(sr_));
-            zR_[i].b0 = zL_[i].b0; zR_[i].a1 = zL_[i].a1; zR_[i].a2 = zL_[i].a2;
+        const float sr = static_cast<float>(sr_);
+        ZFrame scaled = f;   // key tracking and resonance move the whole frame
+        for (int i = 0; i < scaled.used; ++i) {
+            ZSection& s = scaled.s[i];
+            s.poleHz *= track; s.poleBw = std::max(s.poleBw * bwScale * track, 0.5f);
+            if (s.zeroHz > 0.0f) { s.zeroHz *= track; s.zeroBw = std::max(s.zeroBw * track, 0.5f); }
         }
+        zUsed_ = scaled.used;
+        zNorm_ = zBuildCascade(scaled, zbL_, sr);
+        for (int i = 0; i < zUsed_; ++i) zbR_[i].copyCoefficients(zbL_[i]);
         zWet_ = p.zMix; zDry_ = 1.0f - p.zMix;
-        zGain_ = 0.6f;   // three parallel resonators at unity peak: keep the sum in the same league as the dry
     } else {
-        zWet_ = 0.0f; zDry_ = 1.0f;
+        zWet_ = 0.0f; zDry_ = 1.0f; zUsed_ = 0;
     }
 
     // Air: band-passed noise around a drifting multiple of the fundamental -- or, in Ghost mode,
@@ -393,19 +398,19 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 accR += sum * s.gainR;
             }
             float outL, outR;
-            if (zModeCur_ == 2) {   // Replace: the z-plane frame is the filter
-                const float zl = (zL_[0].tick(accL) + zL_[1].tick(accL) + zL_[2].tick(accL)) * zGain_;
-                const float zr = (zR_[0].tick(accR) + zR_[1].tick(accR) + zR_[2].tick(accR)) * zGain_;
-                outL = accL * zDry_ + zl * zWet_;
-                outR = accR * zDry_ + zr * zWet_;
+            if (zModeCur_ == 2) {   // Replace: the z-plane cascade is the filter
+                float zl = accL, zr = accR;
+                for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
+                outL = accL * zDry_ + zl * zNorm_ * zWet_;
+                outR = accR * zDry_ + zr * zNorm_ * zWet_;
             } else {
                 outL = filtL_.lp(accL);
                 outR = filtR_.lp(accR);
                 if (zModeCur_ == 1) {   // Series: after the state-variable filter
-                    const float zl = (zL_[0].tick(outL) + zL_[1].tick(outL) + zL_[2].tick(outL)) * zGain_;
-                    const float zr = (zR_[0].tick(outR) + zR_[1].tick(outR) + zR_[2].tick(outR)) * zGain_;
-                    outL = outL * zDry_ + zl * zWet_;
-                    outR = outR * zDry_ + zr * zWet_;
+                    float zl = outL, zr = outR;
+                    for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
+                    outL = outL * zDry_ + zl * zNorm_ * zWet_;
+                    outR = outR * zDry_ + zr * zNorm_ * zWet_;
                 }
             }
             if (air) {

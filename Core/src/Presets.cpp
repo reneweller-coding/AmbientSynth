@@ -5,7 +5,7 @@
 namespace ambient {
 
 namespace {
-// 136 presets in eleven families. Unspecified parameters keep their defaults
+// 148 presets in twelve families. Unspecified parameters keep their defaults
 // (see Params.cpp); the Cosmos send is off unless a preset turns it on.
 const Preset kPresets[] = {
     // ---------------------------------------------------------------- 0..9 originals
@@ -63,7 +63,7 @@ const Preset kPresets[] = {
       "strands=4;stack=Harmonics;detune=0;drift=1;brain_density=3" },
     { "Breathing Dark",
       "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200;"
-      "z_mode=Series;z_shape=Dark Hall;z_rate=0.015;z_depth=1;z_mix=0.5" },
+      "z_mode=Series;z_shape=Wood;z_rate=0.015;z_depth=1;z_mix=0.5" },
     { "Velvet Hours",
       "tilt=1.5;brightness=0.55;cutoff=1500;strands=4;detune=6;air=0.12;brain_density=5;brain_rate=40;brain_hold_min=80;"
       "brain_hold_max=260;far_decay=38;far_highcut=2400;depth=0.8;arc=0.4;arc_period=75;pad_low_cut=100;sub_level=0.25;sub_source=Difference" },
@@ -386,7 +386,7 @@ const Preset kPresets[] = {
       "src2_type=Wavetable;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
       "src3_type=Wavetable;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;src3_octave=-1;"
       "osc_level=0.5;partials=8;brain_density=4;far_decay=30;far_highcut=4000;scale=JI Major (Ptolemy);root=A;"
-      "z_mode=Series;z_shape=Vowels;z_rate=0.03;z_depth=1;z_mix=0.5" },
+      "z_mode=Series;z_shape=Vowel Morph;z_rate=0.03;z_depth=1;z_mix=0.5" },
     { "Glass Table Drift",
       "src2_type=Wavetable;src2_table=Glass;src2_pos=0.3;src2_pos_drift=0.8;src2_level=0.7;src2_octave=1;"
       "osc_level=0.4;partials=6;tilt=1.5;far_size=3;far_decay=45;far_highcut=8000;brain_low=48;brain_high=88;attack=8;release=20" },
@@ -398,7 +398,7 @@ const Preset kPresets[] = {
       "src2_type=Wavetable;src2_table=Metal;src2_pos=0.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.5;"
       "src3_type=Wavetable;src3_table=Metal;src3_pos=0.1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.5;src3_ratio=7/4;src3_octave=-1;"
       "osc_level=0.3;inharmonic=0.4;partials=12;cutoff=1800;far_decay=40;far_highcut=3000;brain_consonance=0.3;brain_density=5;fb_fm=0.3;"
-      "z_mode=Series;z_shape=Metal;z_rate=0.02;z_depth=0.8;z_res=0.7;z_mix=0.4" },
+      "z_mode=Series;z_shape=Metal Bars;z_rate=0.02;z_depth=0.8;z_res=0.7;z_mix=0.4" },
     { "FM Bell Drone",
       "src2_type=FM;src2_fm_ratio=3.5;src2_fm_index=2.5;src2_pos_drift=0.8;src2_level=0.5;src2_octave=1;"
       "osc_level=0.5;partials=6;attack=2;decay=20;sustain=0.4;release=25;far_decay=35;far_highcut=6000;brain_rate=15;brain_hold_min=10;brain_hold_max=60;"
@@ -415,6 +415,44 @@ const Preset kPresets[] = {
       "src2_type=Wavetable;src2_table=Classic;src2_pos=0.25;src2_level=0.4;src2_octave=-1;"
       "src3_type=FM;src3_fm_ratio=2;src3_fm_index=0.8;src3_level=0.3;src3_octave=1;src3_ratio=3/2;"
       "near_mix=0.3;far_level=0.4;attack=2;release=8;presence=2" },
+
+    // ---------------------------------------------------------------- 136..147 z-plane / morphing filter
+    { "Morphing Vowels",
+      "z_mode=Replace;z_shape=Vowel Morph;z_x=0.3;z_y=0.4;z_rate=0.02;z_depth=1;z_res=0.5;z_mix=1;z_keytrack=0.2;"
+      "partials=24;tilt=0.9;brightness=0.9;brain_density=4;brain_rate=30;far_decay=30;attack=8;release=20;scale=JI Major (Ptolemy);root=A" },
+    { "Choir Behind Glass",
+      "z_mode=Series;z_shape=Choir;z_x=0.5;z_y=0.5;z_rate=0.012;z_depth=1;z_res=0.6;z_mix=0.8;"
+      "partials=20;air=0.2;brain_density=5;far_decay=40;far_highcut=4000;depth=0.75;attack=10;release=25;scale=JI Minor;root=D" },
+    { "Nasal Drone",
+      "z_mode=Replace;z_shape=Nasal;z_x=0.2;z_y=0.7;z_rate=0.008;z_depth=0.8;z_res=0.7;z_mix=1;"
+      "partials=28;tilt=0.8;brain_density=3;brain_hold_min=60;brain_hold_max=200;far_decay=35;master_gain=-8" },
+    { "Filter Tide",
+      "z_mode=Replace;z_shape=Low Sweep;z_x=0.3;z_y=0.6;z_rate=0.01;z_depth=1;z_res=0.8;z_mix=1;z_keytrack=0.5;"
+      "partials=32;tilt=0.7;brightness=1;brain_density=5;far_decay=40;arc=0.6;arc_period=40;attack=12;release=30" },
+    { "Phase Field",
+      "z_mode=Series;z_shape=Phaser;z_x=0.4;z_y=0.5;z_rate=0.03;z_depth=1;z_res=0.4;z_mix=0.9;"
+      "partials=24;shimmer=0.5;brain_density=6;far_decay=35;dly_mix=0.25;dly_feedback=0.6;width=1.5" },
+    { "Comb Cathedral",
+      "z_mode=Series;z_shape=Comb;z_x=0.5;z_y=0.4;z_rate=0.006;z_depth=0.7;z_res=0.6;z_mix=0.7;z_keytrack=1;"
+      "partials=28;far_size=3;far_decay=50;far_highcut=6000;brain_density=4;attack=10;release=30;scale=Harmonic 8-16;root=C" },
+    { "Notch Winds",
+      "z_mode=Replace;z_shape=Notch Cluster;z_x=0.5;z_y=0.5;z_rate=0.02;z_depth=1;z_res=0.5;z_mix=1;"
+      "air=0.6;air_color=5;air_q=6;partials=10;brain_density=5;far_decay=30;master_gain=-8" },
+    { "String Body",
+      "z_mode=Replace;z_shape=Strings;z_x=0.4;z_y=0.5;z_rate=0.01;z_depth=0.6;z_res=0.7;z_mix=1;z_keytrack=0.8;"
+      "partials=20;attack=3;decay=15;sustain=0.5;release=18;brain_rate=15;brain_density=5;far_decay=25" },
+    { "Struck Bars",
+      "z_mode=Replace;z_shape=Metal Bars;z_x=0.3;z_y=0.4;z_rate=0.015;z_depth=0.8;z_res=0.8;z_mix=1;"
+      "partials=16;inharmonic=0.3;attack=1;decay=20;sustain=0.35;release=25;brain_rate=10;brain_hold_min=8;brain_hold_max=40;far_decay=35" },
+    { "Glass Needles",
+      "z_mode=Replace;z_shape=Glass;z_x=0.5;z_y=0.6;z_rate=0.02;z_depth=1;z_res=0.9;z_mix=1;"
+      "partials=24;brightness=1;brain_low=55;brain_high=92;brain_density=5;far_decay=40;far_highcut=9000;master_gain=-9" },
+    { "Harmonic Sieve",
+      "z_mode=Replace;z_shape=Peaks;z_x=0.4;z_y=0.5;z_rate=0.008;z_depth=0.6;z_res=0.8;z_mix=1;z_keytrack=1;"
+      "air=0.4;air_mode=Ghost;air_q=16;partials=20;brain_density=4;far_decay=45;scale=Otonality 1-11;root=F" },
+    { "Endless Resonance",
+      "z_mode=Series;z_shape=Infinite;z_x=0.4;z_y=0.3;z_rate=0.004;z_depth=1;z_res=0.6;z_mix=0.6;z_keytrack=0.5;"
+      "partials=12;tilt=1.4;brain_density=3;brain_hold_min=90;brain_hold_max=300;far_decay=60;far_highcut=3000;attack=15;release=40;master_gain=-9" },
 };
 }
 

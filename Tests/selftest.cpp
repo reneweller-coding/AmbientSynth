@@ -273,7 +273,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(numPresets() == 136, "exactly 136 presets");
+    CHECK(numPresets() == 148, "exactly 148 presets");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
     for (int p = 0; p < numPresets(); ++p) {
@@ -647,15 +647,46 @@ void testTimeline()
 void testZPlane()
 {
     const int sr = 48000;
-    {   // interpolation: corners reproduce the frames, the centre lies between in log frequency
+    {   // interpolation: corners reproduce their frames, the centre lies between in log frequency
         const ZFrame a = zInterpolate(0, 0.0f, 0.0f), d = zInterpolate(0, 1.0f, 1.0f), m = zInterpolate(0, 0.5f, 0.5f);
-        CHECK(std::fabs(a.p[0].hz - 700.0f) < 0.5f && std::fabs(d.p[0].hz - 300.0f) < 0.5f, "corner frames come back exactly");
-        CHECK(m.p[0].hz > 300.0f && m.p[0].hz < 700.0f, "the centre point lies between the corners");
+        CHECK(std::fabs(a.s[0].poleHz - 700.0f) < 0.5f && std::fabs(d.s[0].poleHz - 270.0f) < 0.5f, "corner frames come back exactly");
+        CHECK(m.s[0].poleHz > 270.0f && m.s[0].poleHz < 700.0f, "the centre point lies between the corners");
         Resonator r; r.set(1000.0f, 50.0f, 1.0f, sr);
         std::vector<float> x(sr), y(sr);
         for (int i = 0; i < sr; ++i) { x[static_cast<size_t>(i)] = std::sin(kTwoPi * 1000.0f * i / sr); y[static_cast<size_t>(i)] = r.tick(x[static_cast<size_t>(i)]); }
         double ex = 0, ey = 0; for (int i = sr / 2; i < sr; ++i) { ex += x[static_cast<size_t>(i)] * x[static_cast<size_t>(i)]; ey += y[static_cast<size_t>(i)] * y[static_cast<size_t>(i)]; }
         CHECK(std::fabs(std::sqrt(ey / ex) - 1.0) < 0.1, "resonator has unity gain at its peak");
+    }
+    {   // Every shape at its four corners and its centre: stable, audible, never loud.
+        Rng rng; rng.seed(7);
+        std::vector<float> noise(sr);
+        for (int i = 0; i < sr; ++i) noise[static_cast<size_t>(i)] = 0.25f * rng.bipolar();
+        const float pts[5][2] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 0.5f, 0.5f } };
+        int bad = 0, quiet = 0, loud = 0, mismatched = 0;
+        for (int shape = 0; shape < kZShapes; ++shape) {
+            for (int c = 1; c < 4; ++c) if (zFrameFromSpec(kZCorners[shape][c]).used != zFrameFromSpec(kZCorners[shape][0]).used) ++mismatched;
+            for (int p = 0; p < 5; ++p) {
+                const ZFrame f = zInterpolate(shape, pts[p][0], pts[p][1]);
+                ZBiquad ch[kZSections];
+                const float norm = zBuildCascade(f, ch, static_cast<float>(sr));
+                double sq = 0; float peak = 0.0f; bool finite = true;
+                for (int i = 0; i < sr; ++i) {
+                    float v = noise[static_cast<size_t>(i)];
+                    for (int k = 0; k < f.used; ++k) v = ch[k].tick(v);
+                    v *= norm;
+                    if (!std::isfinite(v)) { finite = false; break; }
+                    if (i > sr / 4) { sq += static_cast<double>(v) * v; peak = std::max(peak, std::fabs(v)); }
+                }
+                const double rms = finite ? std::sqrt(sq / (0.75 * sr)) : 0.0;
+                if (!finite) { ++bad; std::printf("  z-plane %s at (%.1f,%.1f): non-finite\n", kZShapeNames[shape], pts[p][0], pts[p][1]); }
+                else if (peak > 2.0f) { ++loud; std::printf("  z-plane %s at (%.1f,%.1f): peak %.2f\n", kZShapeNames[shape], pts[p][0], pts[p][1], peak); }
+                else if (rms < 1e-4) { ++quiet; std::printf("  z-plane %s at (%.1f,%.1f): rms %.2g\n", kZShapeNames[shape], pts[p][0], pts[p][1], rms); }
+            }
+        }
+        CHECK(mismatched == 0, "every corner of a shape uses the same number of sections");
+        CHECK(bad == 0, "all 16 shapes stay finite at their corners and centre");
+        CHECK(loud == 0, "the cascade normalisation keeps every shape below a peak of 2");
+        CHECK(quiet == 0, "no shape is silent");
     }
     auto bandRatio = [&](float zx, float zy, int mode) {
         Engine e;

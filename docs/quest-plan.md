@@ -85,12 +85,11 @@ measurement (`adb push build-android/Tools/render/ambient_render
 /data/local/tmp/ && adb shell /data/local/tmp/ambient_render --bench`).
 
 PC reference for that measurement (i9-12900K, one core, 48 kHz, 256-sample
-blocks, chord held plus brain): median 26× realtime after the angle-addition
-partial bank (22× before), slowest presets 13–16× (Inharmonic Field, Ice
-Cathedral, Cryo Chamber, Prism, Glass Cathedral: inharmonic spectra on the
-table path). A Quest 2 core is roughly a fifth of that, so the heavy presets
-land near 3× — playable; the first on-device bench decides whether the
-reverbs or the inharmonic path need work next.
+blocks, chord held plus brain): median 39× realtime with the rotating-phasor
+partial bank (22× before), slowest preset 16.5× (Slow Chorus Field: six
+strands). The effect chain alone is 1 % of a core. A Quest 2 core is
+roughly a fifth of that, so even the heavy presets should land above 3× —
+comfortable; the first on-device bench confirms it.
 
 ## Open
 

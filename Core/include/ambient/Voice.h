@@ -14,7 +14,7 @@ namespace ambient {
 
 constexpr int kMaxPartials  = 32;
 constexpr int kMaxStrands   = 6;
-constexpr int kControlBlock = 32;   // samples between control-rate updates
+constexpr int kControlBlock = 64;   // samples between control-rate updates (1.3 ms at 48 kHz)
 constexpr int kItdBuffer    = 256;  // >= 0.7 ms at 192 kHz
 
 struct VoiceParams {
@@ -51,13 +51,13 @@ public:
 
 private:
     struct Strand {
-        double phase[kMaxPartials] = {};      // per-partial phases (inharmonic path)
-        double inc[kMaxPartials] = {};
+        // Every partial is a rotating phasor (cos, sin) turned by its own per-sample rotation;
+        // independent across partials, so the loop pipelines and vectorises. Phasors are
+        // renormalised once per control block.
+        float  pc[kMaxPartials] = {}, ps[kMaxPartials] = {};
+        float  rc[kMaxPartials] = {}, rs[kMaxPartials] = {};
         float  amp[kMaxPartials] = {};
         float  ampStep[kMaxPartials] = {};
-        float  cosTheta[kMaxPartials] = {};   // fixed random phase offsets (harmonic path)
-        float  sinTheta[kMaxPartials] = {};
-        double basePhase = 0.0, baseInc = 0.0; // fundamental phase for the harmonic path
         Drifter shimmer[kMaxPartials];
         Drifter pitch;
         float  gainL = 0.7f, gainR = 0.7f;
@@ -78,7 +78,12 @@ private:
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
     float    bloomT_ = 0.0f;     // seconds since note start, for Bloom
-    bool     harmonicMode_ = true;   // inharmonic == 0: all partials from one phase by angle addition
+    // Control-rate caches: the spectral shape only changes when its parameters do.
+    float    tiltCache_[kMaxPartials + 1] = {};
+    float    cachedTilt_ = -1.0f, cachedOddEven_ = -9.0f;
+    int      cachedPartials_ = -1;
+    double   stretchCache_[kMaxPartials] = {};
+    float    cachedB_ = -1.0f;
     float    itdBufL_[kItdBuffer] = {}, itdBufR_[kItdBuffer] = {};
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;

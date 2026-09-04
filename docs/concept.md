@@ -83,15 +83,21 @@ parameters instead of waveform switches.
 * Measured on the default patch, 180 s: stereo correlation 0.11 (was 0.36
   before the spatial model), no sample jump above 0.06, level −21 … −28 dBFS.
 
-Cost at the defaults is ~3 % of one core (180 s in 5.8 s). Harmonic spectra
-(Inharmonic = 0, the common case) are generated from one phase per strand by
-angle addition — sin(hφ+θ_h) from sin φ, cos φ and the fixed random offsets
-θ_h — instead of one table lookup per partial; `ambient_render --bench`
-(all 128 presets, held chord plus brain, 48 kHz, 256-sample blocks, one core
-of an i9-12900K) went from a median of 22× realtime to 26×, and the slowest
-presets are now the inharmonic ones (13–16×, table path). When the spectrum
-switches between harmonic and inharmonic the phases are handed over, so the
-knob can be turned while a note sounds.
+Every partial is a rotating phasor: a (cos, sin) pair turned once per
+sample by its own rotation (cos, sin of 2π·f_h/sr, refreshed at control
+rate), renormalised once per control block so it stays on the unit circle.
+No table lookup and no phase accumulator in the inner loop, and the
+partials are independent of each other, so the loop pipelines and
+vectorises. Measured on one core of an i9-12900K, 48 kHz: the effect chain
+alone costs 1 % of a core; `ambient_render --bench` (all 128 presets, held
+chord plus brain, 256-sample blocks) went from a median of 22× realtime
+(table lookups) to 39×, the slowest preset from 11× to 16×; five voices with
+six strands of 32 partials run at 17× harmonic or inharmonic alike. Two
+dead ends on the way, kept here so they are not tried again: caching the
+control-rate spectrum shape and doubling the control block gained nothing
+(the inner loop dominated), and a single angle-addition recurrence per
+strand was latency-bound; four interleaved chains helped (median 30×) but
+the independent phasors beat them and are simpler.
 
 ## Tuning
 

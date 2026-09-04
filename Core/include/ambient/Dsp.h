@@ -133,6 +133,7 @@ struct Svf {
         setK(cutoffHz, 2.0f - 1.9f * clampv(resonance, 0.0f, 1.0f), sr);
     }
     void setQ(float cutoffHz, float q, float sr) { setK(cutoffHz, 1.0f / std::max(q, 0.05f), sr); }
+    void copyCoefficients(const Svf& o) { a1 = o.a1; a2 = o.a2; a3 = o.a3; k = o.k; }
     void setK(float cutoffHz, float damping, float sr)
     {
         const float fc = clampv(cutoffHz, 10.0f, sr * 0.45f);

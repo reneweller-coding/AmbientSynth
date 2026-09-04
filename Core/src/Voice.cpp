@@ -4,6 +4,16 @@
 
 namespace ambient {
 
+namespace {
+// Set a phasor from a phase in [0,1).
+inline void phasorFromPhase(double phase01, float& c, float& s)
+{
+    s = sin01(phase01);
+    double q = phase01 + 0.25; if (q >= 1.0) q -= 1.0;
+    c = sin01(q);
+}
+}
+
 void Voice::prepare(double sampleRate, uint64_t seed)
 {
     sr_ = sampleRate;
@@ -12,14 +22,12 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     for (auto& s : strands_) {
         for (int h = 0; h < kMaxPartials; ++h) {
             s.shimmer[h].init(rng_);
-            s.phase[h] = rng_.uniform();
-            s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(s.phase[h]));
-            s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(s.phase[h]));
+            phasorFromPhase(rng_.uniform(), s.pc[h], s.ps[h]);
+            s.rc[h] = 1.0f; s.rs[h] = 0.0f;
             s.amp[h] = 0.0f;
             s.ampStep[h] = 0.0f;
         }
         s.pitch.init(rng_);
-        s.basePhase = rng_.uniform();
         s.active = 0;
     }
     filterDrift_.init(rng_);
@@ -31,6 +39,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     std::memset(itdBufR_, 0, sizeof(itdBufR_));
     itdW_ = 0;
     itdL_ = itdR_ = itdLTarget_ = itdRTarget_ = 0.0f;
+    cachedTilt_ = -1.0f; cachedOddEven_ = -9.0f; cachedPartials_ = -1; cachedB_ = -1.0f;
     env_.kill();
     note_ = -1;
 }
@@ -50,14 +59,11 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         // Fresh start: random phases (no two voices share a waveform), silent partials.
         for (auto& s : strands_) {
             for (int h = 0; h < kMaxPartials; ++h) {
-                s.phase[h] = rng_.uniform(); s.amp[h] = 0.0f; s.ampStep[h] = 0.0f;
-                s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(s.phase[h]));
-                s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(s.phase[h]));
+                phasorFromPhase(rng_.uniform(), s.pc[h], s.ps[h]);
+                s.amp[h] = 0.0f; s.ampStep[h] = 0.0f;
             }
-            s.basePhase = rng_.uniform();
             s.active = 0;
         }
-        harmonicMode_ = true;
         filtL_.reset(); filtR_.reset();
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -81,14 +87,22 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float bloomOpen = bt * bt * (3.0f - 2.0f * bt);
     const float brightness = p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen));
 
-    // Base spectrum shared by all strands of this voice.
+    // Base spectrum shared by all strands of this voice. The tilt/odd-even shape is
+    // cached (pow is expensive); only the brightness window is applied per block.
     const int partials = clampv(p.partials, 1, kMaxPartials);
+    if (p.tilt != cachedTilt_ || p.oddEven != cachedOddEven_ || partials != cachedPartials_) {
+        for (int h = 1; h <= partials; ++h) {
+            float a = std::pow(static_cast<float>(h), -p.tilt);
+            if (p.oddEven > 0.0f && (h % 2) == 0) a *= 1.0f - p.oddEven;
+            if (p.oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0f + p.oddEven;
+            tiltCache_[h] = a;
+        }
+        cachedTilt_ = p.tilt; cachedOddEven_ = p.oddEven; cachedPartials_ = partials;
+    }
     const float hc = 1.0f + brightness * brightness * 31.0f;   // brightness -> last full-level harmonic
     float base[kMaxPartials + 1];
     for (int h = 1; h <= partials; ++h) {
-        float a = std::pow(static_cast<float>(h), -p.tilt);
-        if (p.oddEven > 0.0f && (h % 2) == 0) a *= 1.0f - p.oddEven;
-        if (p.oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0f + p.oddEven;
+        float a = tiltCache_[h];
         if (static_cast<float>(h) > hc) {
             const float x = std::min((static_cast<float>(h) - hc) / 6.0f, 1.0f);
             a *= 0.5f * (1.0f + std::cos(kPi * x));
@@ -96,6 +110,10 @@ void Voice::control(int blockLen, const VoiceParams& p)
         base[h] = a;
     }
     const float B = p.inharmonic * p.inharmonic * 0.02f;
+    if (B != cachedB_) {
+        for (int h = 1; h <= kMaxPartials; ++h) stretchCache_[h - 1] = B > 0.0f ? std::sqrt(1.0 + B * static_cast<double>(h * h)) : 1.0;
+        cachedB_ = B;
+    }
     const int unison = clampv(p.unison, 1, kMaxStrands);
     const float norm = 1.0f / std::sqrt(static_cast<float>(unison));
     const double nyq = 0.45 * sr_;
@@ -114,14 +132,18 @@ void Voice::control(int blockLen, const VoiceParams& p)
         s.gainL = std::cos(angle) * norm;
         s.gainR = std::sin(angle) * norm;
 
-        s.baseInc = f / sr_;
         float target[kMaxPartials];
         float sumSq = 0.0f;
         int H = 0;
         for (int h = 1; h <= partials; ++h) {
-            const double fh = f * h * std::sqrt(1.0 + B * static_cast<double>(h * h));
+            const double fh = f * h * stretchCache_[h - 1];
             if (fh >= nyq) break;
-            s.inc[h - 1] = fh / sr_;
+            // Rotation per sample for this partial, and keep the phasor on the unit circle.
+            const double inc = fh / sr_;
+            phasorFromPhase(inc, s.rc[h - 1], s.rs[h - 1]);
+            const float r2 = s.pc[h - 1] * s.pc[h - 1] + s.ps[h - 1] * s.ps[h - 1];
+            const float fix = 1.5f - 0.5f * r2;
+            s.pc[h - 1] *= fix; s.ps[h - 1] *= fix;
             const float d = s.shimmer[h - 1].update(dt, p.shimmerRate, rng_);
             const float a = base[h] * (1.0f + 0.9f * p.shimmer * d);
             target[h - 1] = a;
@@ -142,31 +164,6 @@ void Voice::control(int blockLen, const VoiceParams& p)
             for (int h = 0; h < kMaxPartials; ++h) { strands_[si].amp[h] = 0.0f; strands_[si].ampStep[h] = 0.0f; }
     lastUnison_ = unison;
 
-    // Harmonic spectra come from one phase per strand (angle addition); the inharmonic
-    // path keeps a phase per partial. Hand the phases over when the mode changes.
-    const bool harmonic = B <= 0.0f;
-    if (harmonic != harmonicMode_) {
-        for (int si = 0; si < kMaxStrands; ++si) {
-            Strand& s = strands_[si];
-            if (!harmonic) {
-                for (int h = 0; h < kMaxPartials; ++h) {
-                    const double th = std::atan2(static_cast<double>(s.sinTheta[h]), static_cast<double>(s.cosTheta[h])) / (2.0 * 3.14159265358979);
-                    double ph = (h + 1) * s.basePhase + th;
-                    ph -= std::floor(ph);
-                    s.phase[h] = ph;
-                }
-            } else {
-                for (int h = 0; h < kMaxPartials; ++h) {
-                    double th = s.phase[h] - (h + 1) * s.basePhase;
-                    th -= std::floor(th);
-                    s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(th));
-                    s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(th));
-                }
-            }
-        }
-        harmonicMode_ = harmonic;
-    }
-
     // Interaural time difference from the centre pan: the far ear hears it later.
     const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
     itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
@@ -186,7 +183,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
                         - 2.5f * distance_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filtL_.set(cut, p.resonance, static_cast<float>(sr_));
-    filtR_.set(cut, p.resonance, static_cast<float>(sr_));
+    filtR_.copyCoefficients(filtL_);
 
     // Air: band-passed noise around a drifting multiple of the fundamental.
     if (p.air > 0.0f) {
@@ -194,7 +191,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const float fc = clampv(static_cast<float>(freq_) * p.airColor * std::pow(2.0f, 0.5f * ad), 40.0f, static_cast<float>(nyq));
         const float q = clampv(p.airQ, 1.0f, 40.0f);
         airL_.setQ(fc, q, static_cast<float>(sr_));
-        airR_.setQ(fc, q, static_cast<float>(sr_));
+        airR_.copyCoefficients(airL_);
         // Normalise the expected band-passed noise level so `air` reads as a level.
         const float expectedRms = std::sqrt((1.0f / 3.0f) * kPi * fc / (q * static_cast<float>(sr_)));
         airGain_ = p.air * std::min(0.05f / std::max(expectedRms, 1e-4f), 40.0f);
@@ -218,28 +215,14 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 Strand& s = strands_[si];
                 float sum = 0.0f;
                 const int act = s.active;
-                if (harmonicMode_) {
-                    // One phase, all partials by angle addition: sin(h*phi + theta_h).
-                    double ph = s.basePhase + s.baseInc;
-                    if (ph >= 1.0) ph -= 1.0;
-                    s.basePhase = ph;
-                    const float s1 = sin01(ph);
-                    double phc = ph + 0.25; if (phc >= 1.0) phc -= 1.0;
-                    const float c1 = sin01(phc);
-                    float sh = s1, ch = c1;
-                    for (int h = 0; h < act; ++h) {
-                        if (h > 0) { const float ns = sh * c1 + ch * s1; ch = ch * c1 - sh * s1; sh = ns; }
-                        sum += s.amp[h] * (sh * s.cosTheta[h] + ch * s.sinTheta[h]);
-                        s.amp[h] += s.ampStep[h];
-                    }
-                } else {
-                    for (int h = 0; h < act; ++h) {
-                        double ph = s.phase[h] + s.inc[h];
-                        if (ph >= 1.0) ph -= 1.0;
-                        s.phase[h] = ph;
-                        sum += s.amp[h] * sin01(ph);
-                        s.amp[h] += s.ampStep[h];
-                    }
+                float* pc = s.pc; float* ps = s.ps; const float* rc = s.rc; const float* rs = s.rs;
+                float* amp = s.amp; const float* step = s.ampStep;
+                for (int h = 0; h < act; ++h) {
+                    sum += amp[h] * ps[h];
+                    const float nc = pc[h] * rc[h] - ps[h] * rs[h];
+                    ps[h] = ps[h] * rc[h] + pc[h] * rs[h];
+                    pc[h] = nc;
+                    amp[h] += step[h];
                 }
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;

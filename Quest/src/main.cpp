@@ -1,0 +1,730 @@
+// AmbientSynth for Meta Quest -- native OpenXR application.
+//
+//   hands (XR_EXT_hand_tracking) -> GestureLayer -> Engine parameters
+//   Oboe output stream           -> Engine::process
+//   GLES 3 scene                 <- Engine observers (sounding notes, distance, root, morph)
+//   optional bridge              -> OSC to a PC running the desktop plugin
+//
+// No game engine: NativeActivity + android_native_app_glue, EGL, OpenXR loader, Oboe, the core.
+// Config file (optional): <externalDataPath>/ambient.cfg with lines
+//   osc_host=192.168.1.20   osc_port=9000   audio=1   preset=Sleep Concert
+
+#include <android/log.h>
+#include <android_native_app_glue.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
+#include <jni.h>
+#include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
+#include <oboe/Oboe.h>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+#include <atomic>
+
+#include "ambient/Engine.h"
+#include "ambient/Gesture.h"
+#include "ambient/Presets.h"
+
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "AmbientSynth", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AmbientSynth", __VA_ARGS__)
+
+using namespace ambient;
+
+namespace {
+
+// ---------------------------------------------------------------- small math
+
+struct Mat4 { float m[16]; };
+
+Mat4 identity() { Mat4 r{}; r.m[0] = r.m[5] = r.m[10] = r.m[15] = 1.0f; return r; }
+
+Mat4 multiply(const Mat4& a, const Mat4& b)
+{
+    Mat4 r{};
+    for (int c = 0; c < 4; ++c)
+        for (int rr = 0; rr < 4; ++rr)
+            r.m[c * 4 + rr] = a.m[0 * 4 + rr] * b.m[c * 4 + 0] + a.m[1 * 4 + rr] * b.m[c * 4 + 1] + a.m[2 * 4 + rr] * b.m[c * 4 + 2] + a.m[3 * 4 + rr] * b.m[c * 4 + 3];
+    return r;
+}
+
+Mat4 projectionFromFov(const XrFovf& fov, float nearZ, float farZ)
+{
+    const float l = std::tan(fov.angleLeft), r = std::tan(fov.angleRight), u = std::tan(fov.angleUp), d = std::tan(fov.angleDown);
+    const float w = r - l, h = u - d;
+    Mat4 p{};
+    p.m[0] = 2.0f / w;  p.m[8] = (r + l) / w;
+    p.m[5] = 2.0f / h;  p.m[9] = (u + d) / h;
+    p.m[10] = -(farZ + nearZ) / (farZ - nearZ);
+    p.m[11] = -1.0f;
+    p.m[14] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+    return p;
+}
+
+Mat4 rotationFromQuat(const XrQuaternionf& q)
+{
+    const float x = q.x, y = q.y, z = q.z, w = q.w;
+    Mat4 r = identity();
+    r.m[0] = 1 - 2 * (y * y + z * z); r.m[4] = 2 * (x * y - z * w);     r.m[8] = 2 * (x * z + y * w);
+    r.m[1] = 2 * (x * y + z * w);     r.m[5] = 1 - 2 * (x * x + z * z); r.m[9] = 2 * (y * z - x * w);
+    r.m[2] = 2 * (x * z - y * w);     r.m[6] = 2 * (y * z + x * w);     r.m[10] = 1 - 2 * (x * x + y * y);
+    return r;
+}
+
+// View matrix = inverse of the pose: R^T * T(-p)
+Mat4 viewFromPose(const XrPosef& pose)
+{
+    Mat4 r = rotationFromQuat(pose.orientation);
+    Mat4 rt = identity();
+    for (int c = 0; c < 3; ++c) for (int rr = 0; rr < 3; ++rr) rt.m[c * 4 + rr] = r.m[rr * 4 + c];
+    Mat4 t = identity();
+    t.m[12] = -pose.position.x; t.m[13] = -pose.position.y; t.m[14] = -pose.position.z;
+    return multiply(rt, t);
+}
+
+void quatToEulerDeg(const XrQuaternionf& q, float& yaw, float& pitch, float& roll)
+{
+    // OpenXR: -Z forward, +Y up. yaw about Y, pitch about X, roll about Z.
+    const float sinp = 2.0f * (q.w * q.x - q.y * q.z);
+    pitch = std::asin(std::fmax(-1.0f, std::fmin(1.0f, sinp))) * 57.29578f;
+    yaw = std::atan2(2.0f * (q.w * q.y + q.x * q.z), 1.0f - 2.0f * (q.x * q.x + q.y * q.y)) * 57.29578f;
+    roll = std::atan2(2.0f * (q.w * q.z + q.x * q.y), 1.0f - 2.0f * (q.x * q.x + q.z * q.z)) * 57.29578f;
+}
+
+// ---------------------------------------------------------------- OSC sender (bridge mode)
+
+class OscOut {
+public:
+    bool open(const std::string& host, int port)
+    {
+        close();
+        sock_ = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock_ < 0) return false;
+        std::memset(&to_, 0, sizeof(to_));
+        to_.sin_family = AF_INET;
+        to_.sin_port = htons(static_cast<uint16_t>(port));
+        if (inet_pton(AF_INET, host.c_str(), &to_.sin_addr) != 1) { close(); return false; }
+        return true;
+    }
+    void close() { if (sock_ >= 0) ::close(sock_); sock_ = -1; }
+    bool ok() const { return sock_ >= 0; }
+    void send(const char* address, const float* args, int n)
+    {
+        if (sock_ < 0) return;
+        char buf[256]; size_t pos = 0;
+        auto putStr = [&](const char* s) { const size_t l = std::strlen(s) + 1; std::memcpy(buf + pos, s, l); pos += l; while (pos & 3) buf[pos++] = 0; };
+        putStr(address);
+        char tags[16]; tags[0] = ','; for (int i = 0; i < n; ++i) tags[1 + i] = 'f'; tags[1 + n] = 0;
+        putStr(tags);
+        for (int i = 0; i < n; ++i) { uint32_t u; std::memcpy(&u, &args[i], 4); buf[pos++] = static_cast<char>(u >> 24); buf[pos++] = static_cast<char>(u >> 16); buf[pos++] = static_cast<char>(u >> 8); buf[pos++] = static_cast<char>(u); }
+        ::sendto(sock_, buf, pos, 0, reinterpret_cast<sockaddr*>(&to_), sizeof(to_));
+    }
+private:
+    int sock_ = -1;
+    sockaddr_in to_{};
+};
+
+// ---------------------------------------------------------------- audio
+
+class Audio : public oboe::AudioStreamDataCallback {
+public:
+    explicit Audio(Engine& e) : engine_(e) {}
+    bool start()
+    {
+        oboe::AudioStreamBuilder b;
+        b.setDirection(oboe::Direction::Output)
+         ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
+         ->setSharingMode(oboe::SharingMode::Exclusive)
+         ->setFormat(oboe::AudioFormat::Float)
+         ->setChannelCount(2)
+         ->setSampleRate(48000)
+         ->setDataCallback(this);
+        if (b.openStream(stream_) != oboe::Result::OK) { LOGE("Oboe: cannot open stream"); return false; }
+        const int sr = stream_->getSampleRate();
+        const int burst = stream_->getFramesPerBurst();
+        stream_->setBufferSizeInFrames(burst * 2);
+        bufL_.assign(8192, 0.0f); bufR_.assign(8192, 0.0f);
+        engine_.prepare(sr, 1024);
+        LOGI("Oboe: %d Hz, burst %d", sr, burst);
+        return stream_->requestStart() == oboe::Result::OK;
+    }
+    void stop() { if (stream_) { stream_->requestStop(); stream_->close(); stream_.reset(); } }
+    oboe::DataCallbackResult onAudioReady(oboe::AudioStream*, void* data, int32_t frames) override
+    {
+        float* out = static_cast<float*>(data);
+        int done = 0;
+        while (done < frames) {
+            const int n = std::min(frames - done, 4096);
+            engine_.process(bufL_.data(), bufR_.data(), n);
+            for (int i = 0; i < n; ++i) { out[(done + i) * 2] = bufL_[static_cast<size_t>(i)]; out[(done + i) * 2 + 1] = bufR_[static_cast<size_t>(i)]; }
+            done += n;
+        }
+        return oboe::DataCallbackResult::Continue;
+    }
+private:
+    Engine& engine_;
+    std::shared_ptr<oboe::AudioStream> stream_;
+    std::vector<float> bufL_, bufR_;
+};
+
+// ---------------------------------------------------------------- config
+
+struct Config {
+    std::string oscHost;
+    int oscPort = 9000;
+    bool audio = true;
+    std::string preset;
+};
+
+Config readConfig(const char* dir)
+{
+    Config c;
+    if (dir == nullptr) return c;
+    const std::string path = std::string(dir) + "/ambient.cfg";
+    FILE* f = std::fopen(path.c_str(), "r");
+    if (f == nullptr) { LOGI("no config at %s", path.c_str()); return c; }
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        std::string s(line);
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+        const size_t eq = s.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string k = s.substr(0, eq), v = s.substr(eq + 1);
+        if (k == "osc_host") c.oscHost = v;
+        else if (k == "osc_port") c.oscPort = std::atoi(v.c_str());
+        else if (k == "audio") c.audio = v != "0";
+        else if (k == "preset") c.preset = v;
+    }
+    std::fclose(f);
+    return c;
+}
+
+// ---------------------------------------------------------------- GL scene
+
+const char* kVertexShader = R"(#version 300 es
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec4 aCol;
+layout(location = 2) in float aSize;
+uniform mat4 uVP;
+out vec4 vCol;
+void main() {
+    vec4 p = uVP * vec4(aPos, 1.0);
+    gl_Position = p;
+    gl_PointSize = aSize / max(p.w, 0.2);
+    vCol = aCol;
+})";
+
+const char* kFragmentShader = R"(#version 300 es
+precision mediump float;
+in vec4 vCol;
+out vec4 o;
+void main() {
+    vec2 d = gl_PointCoord - vec2(0.5);
+    float r = length(d) * 2.0;
+    float a = smoothstep(1.0, 0.15, r);
+    o = vec4(vCol.rgb * a * vCol.a, 1.0);
+})";
+
+struct Point { float x, y, z; float r, g, b, a; float size; };
+
+GLuint compile(GLenum type, const char* src)
+{
+    GLuint s = glCreateShader(type);
+    glShaderSource(s, 1, &src, nullptr);
+    glCompileShader(s);
+    GLint ok = 0; glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    if (!ok) { char log[1024]; glGetShaderInfoLog(s, sizeof(log), nullptr, log); LOGE("shader: %s", log); }
+    return s;
+}
+
+class Scene {
+public:
+    bool init()
+    {
+        program_ = glCreateProgram();
+        glAttachShader(program_, compile(GL_VERTEX_SHADER, kVertexShader));
+        glAttachShader(program_, compile(GL_FRAGMENT_SHADER, kFragmentShader));
+        glLinkProgram(program_);
+        GLint ok = 0; glGetProgramiv(program_, GL_LINK_STATUS, &ok);
+        if (!ok) { LOGE("program link failed"); return false; }
+        uVP_ = glGetUniformLocation(program_, "uVP");
+        glGenBuffers(1, &vbo_);
+        glGenVertexArrays(1, &vao_);
+        glBindVertexArray(vao_);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        glEnableVertexAttribArray(0); glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Point), reinterpret_cast<void*>(0));
+        glEnableVertexAttribArray(1); glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Point), reinterpret_cast<void*>(12));
+        glEnableVertexAttribArray(2); glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Point), reinterpret_cast<void*>(28));
+        glBindVertexArray(0);
+        return true;
+    }
+
+    // Build the picture from the engine's observers and the hands.
+    void update(Engine& engine, const GestureLayer& gestures, const XrVector3f* palms, const bool* palmsValid, const float* pinch)
+    {
+        points_.clear();
+        // Floor ring: a faint horizon around the listener.
+        for (int i = 0; i < 64; ++i) {
+            const float a = static_cast<float>(i) / 64.0f * 6.2831853f;
+            points_.push_back({ 2.5f * std::sin(a), 0.02f, -2.5f * std::cos(a), 0.25f, 0.3f, 0.4f, 0.35f, 40.0f });
+        }
+        // Sounding notes: pitch class around the listener, octave as height, distance as radius.
+        bool notes[128];
+        engine.soundingNotes(notes);
+        const int root = engine.brainRoot();
+        for (int n = 24; n < 108; ++n) {
+            if (!notes[n]) continue;
+            const float d = std::fmax(0.0f, engine.noteDistance(n));
+            const float ang = static_cast<float>(n % 12) / 12.0f * 6.2831853f;
+            const float radius = 1.2f + 4.0f * d;
+            const float y = 0.5f + (static_cast<float>(n / 12) - 3.0f) * 0.35f;
+            const float warm = 1.0f - d;
+            points_.push_back({ radius * std::sin(ang), y, -radius * std::cos(ang),
+                                0.5f + 0.5f * warm, 0.55f + 0.25f * warm, 1.0f - 0.5f * warm, 0.9f, 220.0f * (1.0f - 0.5f * d) });
+        }
+        // Root marker.
+        {
+            const float ang = static_cast<float>(root % 12) / 12.0f * 6.2831853f;
+            points_.push_back({ 1.0f * std::sin(ang), 0.1f, -1.0f * std::cos(ang), 1.0f, 0.6f, 0.2f, 0.8f, 120.0f });
+        }
+        // Hands: green, red while pinching; a bridge of dots between them shows the morph axis.
+        for (int h = 0; h < 2; ++h) {
+            if (!palmsValid[h]) continue;
+            const float p = pinch[h];
+            points_.push_back({ palms[h].x, palms[h].y, palms[h].z, 0.3f + 0.7f * p, 0.9f * (1.0f - p) + 0.2f, 0.4f * (1.0f - p), 0.95f, 90.0f });
+        }
+        if (palmsValid[0] && palmsValid[1]) {
+            const float m = engine.morphPosition();
+            for (int i = 1; i < 8; ++i) {
+                const float t = static_cast<float>(i) / 8.0f;
+                const float lit = (t <= m) ? 0.9f : 0.25f;
+                points_.push_back({ palms[0].x + (palms[1].x - palms[0].x) * t, palms[0].y + (palms[1].y - palms[0].y) * t, palms[0].z + (palms[1].z - palms[0].z) * t,
+                                    0.9f, 0.5f, 0.8f, lit, 35.0f });
+            }
+        }
+        (void)gestures;
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points_.size() * sizeof(Point)), points_.data(), GL_DYNAMIC_DRAW);
+    }
+
+    void draw(const Mat4& vp, int width, int height)
+    {
+        glViewport(0, 0, width, height);
+        glClearColor(0.02f, 0.02f, 0.04f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        glUseProgram(program_);
+        glUniformMatrix4fv(uVP_, 1, GL_FALSE, vp.m);
+        glBindVertexArray(vao_);
+        glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(points_.size()));
+        glBindVertexArray(0);
+    }
+private:
+    GLuint program_ = 0, vbo_ = 0, vao_ = 0;
+    GLint uVP_ = -1;
+    std::vector<Point> points_;
+};
+
+// ---------------------------------------------------------------- the app
+
+struct SwapchainTarget {
+    XrSwapchain swapchain = XR_NULL_HANDLE;
+    int width = 0, height = 0;
+    std::vector<XrSwapchainImageOpenGLESKHR> images;
+    GLuint fbo = 0, depth = 0;
+};
+
+class App {
+public:
+    explicit App(android_app* app) : app_(app) {}
+
+    bool init()
+    {
+        config_ = readConfig(app_->activity->externalDataPath);
+        if (!config_.preset.empty())
+            for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) engine_.applyPreset(i);
+        if (!config_.oscHost.empty()) {
+            if (osc_.open(config_.oscHost, config_.oscPort)) LOGI("bridge: OSC to %s:%d", config_.oscHost.c_str(), config_.oscPort);
+            else LOGE("bridge: bad host %s", config_.oscHost.c_str());
+        }
+        if (!initLoader()) return false;
+        if (!initInstance()) return false;
+        if (!initEgl()) return false;
+        if (!initSession()) return false;
+        if (!initHands()) LOGE("hand tracking unavailable");
+        if (!scene_.init()) return false;
+        if (config_.audio && !audio_.start()) LOGE("audio failed to start");
+        return true;
+    }
+
+    void run()
+    {
+        while (!app_->destroyRequested) {
+            // Android events
+            int events; android_poll_source* source;
+            const int timeout = (sessionRunning_ || app_->window == nullptr) ? 0 : -1;
+            while (ALooper_pollOnce(timeout, nullptr, &events, reinterpret_cast<void**>(&source)) >= 0) {
+                if (source) source->process(app_, source);
+                if (app_->destroyRequested) break;
+            }
+            pollXrEvents();
+            if (quit_) break;
+            if (sessionRunning_) frame();
+        }
+    }
+
+    void shutdown()
+    {
+        audio_.stop();
+        for (auto& t : targets_) { if (t.swapchain != XR_NULL_HANDLE) xrDestroySwapchain(t.swapchain); }
+        for (int h = 0; h < 2; ++h) if (handTracker_[h] != XR_NULL_HANDLE && pfnDestroyHandTracker_) pfnDestroyHandTracker_(handTracker_[h]);
+        if (viewSpace_ != XR_NULL_HANDLE) xrDestroySpace(viewSpace_);
+        if (stageSpace_ != XR_NULL_HANDLE) xrDestroySpace(stageSpace_);
+        if (session_ != XR_NULL_HANDLE) xrDestroySession(session_);
+        if (instance_ != XR_NULL_HANDLE) xrDestroyInstance(instance_);
+        osc_.close();
+    }
+
+private:
+    bool initLoader()
+    {
+        PFN_xrInitializeLoaderKHR initLoader = nullptr;
+        xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", reinterpret_cast<PFN_xrVoidFunction*>(&initLoader));
+        if (initLoader == nullptr) { LOGE("no xrInitializeLoaderKHR"); return false; }
+        XrLoaderInitInfoAndroidKHR li{ XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR };
+        li.applicationVM = app_->activity->vm;
+        li.applicationContext = app_->activity->clazz;
+        return XR_SUCCEEDED(initLoader(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&li)));
+    }
+
+    bool initInstance()
+    {
+        const char* exts[] = { XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME, XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME, XR_EXT_HAND_TRACKING_EXTENSION_NAME };
+        XrInstanceCreateInfoAndroidKHR android{ XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR };
+        android.applicationVM = app_->activity->vm;
+        android.applicationActivity = app_->activity->clazz;
+        XrInstanceCreateInfo ci{ XR_TYPE_INSTANCE_CREATE_INFO };
+        ci.next = &android;
+        std::strncpy(ci.applicationInfo.applicationName, "AmbientSynth", XR_MAX_APPLICATION_NAME_SIZE - 1);
+        ci.applicationInfo.applicationVersion = 1;
+        std::strncpy(ci.applicationInfo.engineName, "AmbientCore", XR_MAX_ENGINE_NAME_SIZE - 1);
+        ci.applicationInfo.apiVersion = XR_API_VERSION_1_0;
+        ci.enabledExtensionCount = 3;
+        ci.enabledExtensionNames = exts;
+        if (XR_FAILED(xrCreateInstance(&ci, &instance_))) { LOGE("xrCreateInstance failed"); return false; }
+
+        XrSystemGetInfo sgi{ XR_TYPE_SYSTEM_GET_INFO };
+        sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+        if (XR_FAILED(xrGetSystem(instance_, &sgi, &system_))) { LOGE("xrGetSystem failed"); return false; }
+        XrSystemHandTrackingPropertiesEXT ht{ XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT };
+        XrSystemProperties sp{ XR_TYPE_SYSTEM_PROPERTIES, &ht };
+        xrGetSystemProperties(instance_, system_, &sp);
+        handsSupported_ = ht.supportsHandTracking == XR_TRUE;
+        LOGI("system: %s, hand tracking %d", sp.systemName, handsSupported_ ? 1 : 0);
+        return true;
+    }
+
+    bool initEgl()
+    {
+        PFN_xrGetOpenGLESGraphicsRequirementsKHR getReq = nullptr;
+        xrGetInstanceProcAddr(instance_, "xrGetOpenGLESGraphicsRequirementsKHR", reinterpret_cast<PFN_xrVoidFunction*>(&getReq));
+        XrGraphicsRequirementsOpenGLESKHR req{ XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR };
+        if (getReq == nullptr || XR_FAILED(getReq(instance_, system_, &req))) { LOGE("GLES requirements failed"); return false; }
+
+        display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        EGLint major, minor;
+        if (!eglInitialize(display_, &major, &minor)) { LOGE("eglInitialize failed"); return false; }
+        const EGLint attribs[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+                                   EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_DEPTH_SIZE, 0, EGL_NONE };
+        EGLint count = 0;
+        if (!eglChooseConfig(display_, attribs, &config_egl_, 1, &count) || count == 0) { LOGE("eglChooseConfig failed"); return false; }
+        const EGLint pbuf[] = { EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE };
+        surface_ = eglCreatePbufferSurface(display_, config_egl_, pbuf);
+        const EGLint ctx[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
+        context_ = eglCreateContext(display_, config_egl_, EGL_NO_CONTEXT, ctx);
+        if (context_ == EGL_NO_CONTEXT || !eglMakeCurrent(display_, surface_, surface_, context_)) { LOGE("EGL context failed"); return false; }
+        LOGI("EGL %d.%d, GL %s", major, minor, glGetString(GL_VERSION));
+        return true;
+    }
+
+    bool initSession()
+    {
+        XrGraphicsBindingOpenGLESAndroidKHR gb{ XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR };
+        gb.display = display_; gb.config = config_egl_; gb.context = context_;
+        XrSessionCreateInfo sci{ XR_TYPE_SESSION_CREATE_INFO, &gb };
+        sci.systemId = system_;
+        if (XR_FAILED(xrCreateSession(instance_, &sci, &session_))) { LOGE("xrCreateSession failed"); return false; }
+
+        XrReferenceSpaceCreateInfo rs{ XR_TYPE_REFERENCE_SPACE_CREATE_INFO };
+        rs.poseInReferenceSpace.orientation.w = 1.0f;
+        rs.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+        if (XR_FAILED(xrCreateReferenceSpace(session_, &rs, &stageSpace_))) {
+            rs.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+            if (XR_FAILED(xrCreateReferenceSpace(session_, &rs, &stageSpace_))) { LOGE("no reference space"); return false; }
+        }
+        rs.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+        xrCreateReferenceSpace(session_, &rs, &viewSpace_);
+
+        uint32_t viewCount = 0;
+        xrEnumerateViewConfigurationViews(instance_, system_, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &viewCount, nullptr);
+        std::vector<XrViewConfigurationView> cfg(viewCount, { XR_TYPE_VIEW_CONFIGURATION_VIEW });
+        xrEnumerateViewConfigurationViews(instance_, system_, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, viewCount, &viewCount, cfg.data());
+        views_.assign(viewCount, { XR_TYPE_VIEW });
+
+        uint32_t fmtCount = 0;
+        xrEnumerateSwapchainFormats(session_, 0, &fmtCount, nullptr);
+        std::vector<int64_t> formats(fmtCount);
+        xrEnumerateSwapchainFormats(session_, fmtCount, &fmtCount, formats.data());
+        int64_t format = formats.empty() ? GL_RGBA8 : formats[0];
+        for (int64_t f : formats) if (f == GL_SRGB8_ALPHA8) { format = f; break; }
+
+        targets_.resize(viewCount);
+        for (uint32_t v = 0; v < viewCount; ++v) {
+            SwapchainTarget& t = targets_[v];
+            XrSwapchainCreateInfo sc{ XR_TYPE_SWAPCHAIN_CREATE_INFO };
+            sc.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+            sc.format = format;
+            sc.sampleCount = 1;
+            sc.width = cfg[v].recommendedImageRectWidth;
+            sc.height = cfg[v].recommendedImageRectHeight;
+            sc.faceCount = 1; sc.arraySize = 1; sc.mipCount = 1;
+            if (XR_FAILED(xrCreateSwapchain(session_, &sc, &t.swapchain))) { LOGE("xrCreateSwapchain failed"); return false; }
+            t.width = static_cast<int>(sc.width); t.height = static_cast<int>(sc.height);
+            uint32_t imgCount = 0;
+            xrEnumerateSwapchainImages(t.swapchain, 0, &imgCount, nullptr);
+            t.images.assign(imgCount, { XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR });
+            xrEnumerateSwapchainImages(t.swapchain, imgCount, &imgCount, reinterpret_cast<XrSwapchainImageBaseHeader*>(t.images.data()));
+            glGenFramebuffers(1, &t.fbo);
+            glGenRenderbuffers(1, &t.depth);
+            glBindRenderbuffer(GL_RENDERBUFFER, t.depth);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, t.width, t.height);
+            LOGI("view %u: %dx%d, %u images", v, t.width, t.height, imgCount);
+        }
+        return true;
+    }
+
+    bool initHands()
+    {
+        if (!handsSupported_) return false;
+        xrGetInstanceProcAddr(instance_, "xrCreateHandTrackerEXT", reinterpret_cast<PFN_xrVoidFunction*>(&pfnCreateHandTracker_));
+        xrGetInstanceProcAddr(instance_, "xrLocateHandJointsEXT", reinterpret_cast<PFN_xrVoidFunction*>(&pfnLocateHandJoints_));
+        xrGetInstanceProcAddr(instance_, "xrDestroyHandTrackerEXT", reinterpret_cast<PFN_xrVoidFunction*>(&pfnDestroyHandTracker_));
+        if (!pfnCreateHandTracker_ || !pfnLocateHandJoints_) return false;
+        for (int h = 0; h < 2; ++h) {
+            XrHandTrackerCreateInfoEXT hci{ XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT };
+            hci.hand = (h == 0) ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT;
+            hci.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+            if (XR_FAILED(pfnCreateHandTracker_(session_, &hci, &handTracker_[h]))) return false;
+        }
+        return true;
+    }
+
+    void pollXrEvents()
+    {
+        XrEventDataBuffer ev{ XR_TYPE_EVENT_DATA_BUFFER };
+        while (xrPollEvent(instance_, &ev) == XR_SUCCESS) {
+            if (ev.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+                const auto* sc = reinterpret_cast<const XrEventDataSessionStateChanged*>(&ev);
+                sessionState_ = sc->state;
+                switch (sessionState_) {
+                case XR_SESSION_STATE_READY: {
+                    XrSessionBeginInfo bi{ XR_TYPE_SESSION_BEGIN_INFO };
+                    bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                    if (XR_SUCCEEDED(xrBeginSession(session_, &bi))) sessionRunning_ = true;
+                    break;
+                }
+                case XR_SESSION_STATE_STOPPING:
+                    xrEndSession(session_);
+                    sessionRunning_ = false;
+                    break;
+                case XR_SESSION_STATE_EXITING:
+                case XR_SESSION_STATE_LOSS_PENDING:
+                    quit_ = true;
+                    break;
+                default: break;
+                }
+            } else if (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
+                quit_ = true;
+            }
+            ev = { XR_TYPE_EVENT_DATA_BUFFER };
+        }
+    }
+
+    void updateHands(XrTime time)
+    {
+        for (int h = 0; h < 2; ++h) {
+            palmValid_[h] = false;
+            if (handTracker_[h] == XR_NULL_HANDLE) continue;
+            XrHandJointLocationEXT joints[XR_HAND_JOINT_COUNT_EXT];
+            XrHandJointLocationsEXT locs{ XR_TYPE_HAND_JOINT_LOCATIONS_EXT };
+            locs.jointCount = XR_HAND_JOINT_COUNT_EXT;
+            locs.jointLocations = joints;
+            XrHandJointsLocateInfoEXT li{ XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT };
+            li.baseSpace = stageSpace_;
+            li.time = time;
+            if (XR_FAILED(pfnLocateHandJoints_(handTracker_[h], &li, &locs)) || !locs.isActive) continue;
+            const XrHandJointLocationEXT& palm = joints[XR_HAND_JOINT_PALM_EXT];
+            const XrHandJointLocationEXT& thumb = joints[XR_HAND_JOINT_THUMB_TIP_EXT];
+            const XrHandJointLocationEXT& index = joints[XR_HAND_JOINT_INDEX_TIP_EXT];
+            const XrSpaceLocationFlags need = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+            if ((palm.locationFlags & need) != need) continue;
+            const float dx = thumb.pose.position.x - index.pose.position.x, dy = thumb.pose.position.y - index.pose.position.y, dz = thumb.pose.position.z - index.pose.position.z;
+            const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+            const float pinch = std::fmax(0.0f, std::fmin(1.0f, 1.0f - (dist - 0.015f) / 0.035f));
+            // Palm roll: how far the palm's sideways axis points up.
+            const Mat4 r = rotationFromQuat(palm.pose.orientation);
+            const float tilt = std::fmax(-1.0f, std::fmin(1.0f, r.m[1]));   // world y of the local +x axis
+            palms_[h] = palm.pose.position;
+            palmValid_[h] = true;
+            pinch_[h] = pinch;
+            gestures_.setHand(h, palm.pose.position.x, palm.pose.position.y, palm.pose.position.z, pinch, tilt);
+            if (osc_.ok()) {
+                const float args[5] = { palm.pose.position.x, palm.pose.position.y, palm.pose.position.z, pinch, tilt };
+                osc_.send(h == 0 ? "/ambient/hand/L" : "/ambient/hand/R", args, 5);
+            }
+        }
+    }
+
+    void updateHead(XrTime time)
+    {
+        if (viewSpace_ == XR_NULL_HANDLE) return;
+        XrSpaceLocation loc{ XR_TYPE_SPACE_LOCATION };
+        if (XR_FAILED(xrLocateSpace(viewSpace_, stageSpace_, time, &loc))) return;
+        if (!(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) return;
+        float yaw, pitch, roll;
+        quatToEulerDeg(loc.pose.orientation, yaw, pitch, roll);
+        gestures_.setHead(yaw, pitch, roll);
+        if (osc_.ok()) { const float args[3] = { yaw, pitch, roll }; osc_.send("/ambient/head", args, 3); }
+    }
+
+    void frame()
+    {
+        XrFrameWaitInfo wi{ XR_TYPE_FRAME_WAIT_INFO };
+        XrFrameState fs{ XR_TYPE_FRAME_STATE };
+        if (XR_FAILED(xrWaitFrame(session_, &wi, &fs))) return;
+        XrFrameBeginInfo bi{ XR_TYPE_FRAME_BEGIN_INFO };
+        xrBeginFrame(session_, &bi);
+
+        const double dt = lastTime_ == 0 ? 1.0 / 72.0 : static_cast<double>(fs.predictedDisplayTime - lastTime_) * 1e-9;
+        lastTime_ = fs.predictedDisplayTime;
+        updateHands(fs.predictedDisplayTime);
+        updateHead(fs.predictedDisplayTime);
+        gestures_.update(dt, [this](ParamId id, float v) { engine_.setParam(id, v); });
+
+        std::vector<XrCompositionLayerProjectionView> projViews;
+        XrCompositionLayerProjection layer{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+        const XrCompositionLayerBaseHeader* layers[1] = { reinterpret_cast<XrCompositionLayerBaseHeader*>(&layer) };
+        uint32_t layerCount = 0;
+
+        if (fs.shouldRender) {
+            XrViewLocateInfo vli{ XR_TYPE_VIEW_LOCATE_INFO };
+            vli.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+            vli.displayTime = fs.predictedDisplayTime;
+            vli.space = stageSpace_;
+            XrViewState vs{ XR_TYPE_VIEW_STATE };
+            uint32_t viewCount = 0;
+            xrLocateViews(session_, &vli, &vs, static_cast<uint32_t>(views_.size()), &viewCount, views_.data());
+            if ((vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) && (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
+                scene_.update(engine_, gestures_, palms_, palmValid_, pinch_);
+                projViews.resize(viewCount, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW });
+                for (uint32_t v = 0; v < viewCount; ++v) {
+                    SwapchainTarget& t = targets_[v];
+                    XrSwapchainImageAcquireInfo ai{ XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+                    uint32_t index = 0;
+                    xrAcquireSwapchainImage(t.swapchain, &ai, &index);
+                    XrSwapchainImageWaitInfo wi2{ XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
+                    wi2.timeout = XR_INFINITE_DURATION;
+                    xrWaitSwapchainImage(t.swapchain, &wi2);
+
+                    glBindFramebuffer(GL_FRAMEBUFFER, t.fbo);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t.images[index].image, 0);
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, t.depth);
+                    const Mat4 proj = projectionFromFov(views_[v].fov, 0.05f, 100.0f);
+                    const Mat4 view = viewFromPose(views_[v].pose);
+                    scene_.draw(multiply(proj, view), t.width, t.height);
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+                    XrSwapchainImageReleaseInfo ri{ XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+                    xrReleaseSwapchainImage(t.swapchain, &ri);
+
+                    projViews[v].pose = views_[v].pose;
+                    projViews[v].fov = views_[v].fov;
+                    projViews[v].subImage.swapchain = t.swapchain;
+                    projViews[v].subImage.imageRect = { { 0, 0 }, { t.width, t.height } };
+                    projViews[v].subImage.imageArrayIndex = 0;
+                }
+                layer.space = stageSpace_;
+                layer.viewCount = viewCount;
+                layer.views = projViews.data();
+                layerCount = 1;
+            }
+        }
+
+        XrFrameEndInfo ei{ XR_TYPE_FRAME_END_INFO };
+        ei.displayTime = fs.predictedDisplayTime;
+        ei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+        ei.layerCount = layerCount;
+        ei.layers = layers;
+        xrEndFrame(session_, &ei);
+    }
+
+    android_app* app_;
+    Config config_;
+    Engine engine_;
+    GestureLayer gestures_;
+    Audio audio_{ engine_ };
+    OscOut osc_;
+    Scene scene_;
+
+    XrInstance instance_ = XR_NULL_HANDLE;
+    XrSystemId system_ = XR_NULL_SYSTEM_ID;
+    XrSession session_ = XR_NULL_HANDLE;
+    XrSpace stageSpace_ = XR_NULL_HANDLE, viewSpace_ = XR_NULL_HANDLE;
+    XrSessionState sessionState_ = XR_SESSION_STATE_UNKNOWN;
+    bool sessionRunning_ = false, quit_ = false, handsSupported_ = false;
+    std::vector<XrView> views_;
+    std::vector<SwapchainTarget> targets_;
+    XrTime lastTime_ = 0;
+
+    EGLDisplay display_ = EGL_NO_DISPLAY;
+    EGLConfig config_egl_ = nullptr;
+    EGLSurface surface_ = EGL_NO_SURFACE;
+    EGLContext context_ = EGL_NO_CONTEXT;
+
+    PFN_xrCreateHandTrackerEXT pfnCreateHandTracker_ = nullptr;
+    PFN_xrLocateHandJointsEXT pfnLocateHandJoints_ = nullptr;
+    PFN_xrDestroyHandTrackerEXT pfnDestroyHandTracker_ = nullptr;
+    XrHandTrackerEXT handTracker_[2] = { XR_NULL_HANDLE, XR_NULL_HANDLE };
+    XrVector3f palms_[2] = {};
+    bool palmValid_[2] = { false, false };
+    float pinch_[2] = { 0.0f, 0.0f };
+};
+
+void handleCmd(android_app*, int32_t) {}
+
+} // namespace
+
+void android_main(android_app* app)
+{
+    app->onAppCmd = handleCmd;
+    JNIEnv* env = nullptr;
+    app->activity->vm->AttachCurrentThread(&env, nullptr);
+    {
+        App a(app);
+        if (a.init()) a.run();
+        else LOGE("init failed");
+        a.shutdown();
+    }
+    app->activity->vm->DetachCurrentThread();
+}

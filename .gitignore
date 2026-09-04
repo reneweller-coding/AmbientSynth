@@ -5,3 +5,5 @@ out/
 *.user
 *.wav
 __pycache__/
+ThirdParty/
+*.keystore

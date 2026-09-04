@@ -23,6 +23,7 @@ Licence: AGPL-3.0 (see `LICENSE`).
 | `Tools/render/` | `ambient_render`: offline renderer to WAV with per-second measurements. | Core |
 | `Tools/analyze.py` | Measures a WAV (level, clicks, stereo correlation, spectral centroid, peaks). | numpy |
 | `Tests/` | `ambient_selftest`: tuning, envelope, engine, brain, delay, mid/side, presets, space, determinism. | Core |
+| `Quest/` | Native Meta Quest app: OpenXR + hand tracking → gesture layer → engine, Oboe audio, GLES scene, OSC bridge; Gradle-free APK build. Compiles and packages, not yet run on a headset. | NDK, OpenXR loader, Oboe (fetched by script) |
 | `docs/concept.md` | Sound-design and architecture notes, roadmap to the Quest. | |
 
 ## Build (Windows, Visual Studio 2026)

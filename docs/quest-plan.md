@@ -65,10 +65,23 @@ pinching clutch to the desktop synth over OSC; the header shows message count
 and clutch state. The self test covers the OSC parser, the dispatch table and
 the gesture mapping (clutch, dead-zone, smoothing, text round-trip).
 
+## Status 2026-09-04: the app exists and packages
+
+`Quest/` holds the native app (see `Quest/README.md`): `libambientquest.so`
+builds with NDK r27c against the Khronos OpenXR loader 1.1.63 (prefab AAR
+from Maven Central, since the Meta SDK zip no longer ships headers or
+loader) and Oboe from source; `build_apk.ps1` produces a signed
+`AmbientSynthQuest.apk` without Gradle (aapt2 → jar → zipalign → apksigner).
+Steps 1, 2, 3 and 5 of the plan above are implemented in `src/main.cpp`.
+Not yet run on a headset.
+
 ## Open
 
-* NDK sample integration (repo checkout, CMake glue for `libAmbientCore.a`,
-  Oboe as a prebuilt or via `find_package(oboe)` from the Maven artifact).
+* First run on a device: session state flow, swapchain format, hand-tracking
+  permission prompt, Oboe stream start, `adb logcat -s AmbientSynth`.
 * Pinch strength calibration per user; a two-second "hands apart / together"
   calibration gesture at start.
-* Visual design of the scene.
+* Visual design of the scene beyond the first soft-point version; the
+  Kaleidoscope rules apply (no camera motion driven by audio, everything
+  continuous).
+* Wrist menu for presets and morph slots; passthrough option.

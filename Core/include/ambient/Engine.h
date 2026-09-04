@@ -85,6 +85,7 @@ public:
     bool routeStep(double dt, float& x, float& y, float& radius);
     bool routeRunning() const { return route_.running(); }
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
+    float coherencePhase(int i) const { return kuraPhase_[i & 3]; }   // Kuramoto oscillator phases, for pictures
 
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
@@ -184,6 +185,14 @@ private:
     int               rootNote_ = 62;
     double            refPitch_ = 440.0;
     bool              snapKeys_ = true;
+    float             inertiaCur_[kNumParams] = {};
+    float             lastBlockSeconds_ = 0.005f;
+    float             kuraPhase_[4] = { 0.0f, 1.3f, 2.9f, 4.4f };   // Kuramoto bank phases
+    float             portamento_ = 0.0f, portaGravity_ = 0.5f;
+    double            lastKeyHz_ = 0.0;   // frequency of the last key pressed, for portamento
+    float             fbTape_ = 0.0f;
+    Drifter           tapeWow_;
+    double            tapeFlutterPhase_ = 0.0;
     double            purityCur_ = 1.0;   // Purity plus its drift, evaluated per block
     Drifter           purityDrift_;
     bool              retune_ = false;    // purity below 1 or drifting: sounding voices follow

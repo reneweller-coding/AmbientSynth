@@ -42,6 +42,10 @@ struct VoiceParams {
     float lowCut = 0.0f;        // Hz; partials below fall 12 dB/oct, keeping the pads out of the sub's register
     float fmAmount = 0.0f;      // phase modulation of every partial (h times the deviation) by the `fm` signal given to render()
     bool  freeze = false;       // hold the spectrum still: shimmer, pitch drift, breath and bloom stop moving
+    bool  airGhost = false;     // Air through six resonators on the note's harmonics 1 2 3 5 7 9 instead of one band
+    double rootHz = 130.81;     // the brain's root, for the portamento's consonance gravity
+    // Coherence offsets (from the engine's Kuramoto bank), added on top of the parameters
+    float cohBrightness = 0.0f, cohPan = 0.0f, cohZ = 0.0f;
     // Extra sources (Source 2 / 3) and the data they may need; pointers stay valid for the block.
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
@@ -65,6 +69,10 @@ public:
     double frequency() const { return freq_; }
     // Retune a sounding voice (tuning purity/drift): glides in the log domain, ~1 s time constant.
     void setTargetFrequency(double hz) { freqTarget_ = hz; }
+    // Portamento: start at fromHz and slide to the note's frequency over `seconds`, slowing near
+    // consonant ratios to the root by `gravity` (0 = an even log-domain glide).
+    void glideFrom(double fromHz, float seconds, float gravity);
+    bool gliding() const { return portaLeft_ > 0.0f; }
     uint64_t order = 0;      // allocation order for voice stealing
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
@@ -102,6 +110,9 @@ private:
     Rng      rng_;
     double   sr_ = 48000.0;
     double   freq_ = 220.0, freqTarget_ = 220.0;
+    double   portaFrom_ = 0.0; float portaLeft_ = 0.0f, portaSeconds_ = 0.0f, portaGravity_ = 0.0f;
+    Resonator ghostL_[6], ghostR_[6];
+    float    ghostGain_ = 0.0f;
     float    velocity_ = 1.0f;
     float    distance_ = 0.0f;   // the plane the note was placed on
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate

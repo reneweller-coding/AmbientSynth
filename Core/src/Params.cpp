@@ -26,6 +26,7 @@ const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", 
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
+const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kStackNames[kNumStacks] = { "Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics" };
 // Strand ratios, ordered so that fewer strands still make sense (2 = root + fifth, 3 = a triad...).
 const double kStackRatios[kNumStacks][6] = {
@@ -235,6 +236,13 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::TuneDrift,     "purity_drift", "Purity Drift", "Tuning",     0.f,    1.f,   0.f,   1.f,  ""),
     F(ParamId::TuneDriftRate, "purity_rate",  "Drift Rate",   "Tuning",     0.002f, 0.1f,  0.01f, 0.5f, "Hz"),
     B(ParamId::Freeze,        "freeze",       "Freeze",       "Oscillator", false),
+    C(ParamId::AirMode,       "air_mode",     "Mode",         "Air",        kAirModeNames, 2, 0),
+    F(ParamId::Portamento,    "portamento",   "Portamento",   "Tuning",     0.f,   20.f,  0.f,   0.4f, "s"),
+    F(ParamId::PortaGravity,  "porta_gravity","Gravity",      "Tuning",     0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::FeedbackTape,  "fb_tape",      "Tape",         "Feedback",   0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::Coherence,     "coherence",    "Coherence",    "Coherence",  0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::CoherenceDepth,"coherence_depth","Depth",      "Coherence",  0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::CoherenceRate, "coherence_rate","Rate",        "Coherence",  0.2f,  5.f,   1.f,   0.5f, "x"),
 
     B(ParamId::MorphActive, "morph_active", "Active",   "Morph", false),
     F(ParamId::MorphPos,    "morph",        "Position", "Morph", 0.f, 1.f,   0.f,  1.f,  ""),
@@ -248,6 +256,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::MacroF, "macro_f", "Distance",  "Macros", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::MacroG, "macro_g", "Evolution", "Macros", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::MacroH, "macro_h", "Air",       "Macros", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::Inertia, "inertia", "Inertia",  "Macros", 0.f, 5.f, 0.f, 0.5f, "s"),
 
     B(ParamId::MapActive, "map_active", "Active", "Map", false),
     F(ParamId::MapX,      "map_x",      "X",      "Map", 0.f,   1.f,  0.5f,  1.f, ""),

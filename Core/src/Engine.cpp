@@ -298,7 +298,12 @@ void Engine::startNote(int note, float velocity, int owner, float distance)
     if (note < 0 || note > 127) return;
     Voice* v = allocate(note, owner);
     v->order = ++order_;
-    v->noteOn(note, frequencyOf(note), velocity, owner, distance, vp_);
+    const double hz = frequencyOf(note);
+    v->noteOn(note, hz, velocity, owner, distance, vp_);
+    if (owner == OwnerMidi) {   // portamento: a key slides in from the previous key
+        if (portamento_ > 0.0f && lastKeyHz_ > 0.0 && std::fabs(lastKeyHz_ - hz) > 1e-6) v->glideFrom(lastKeyHz_, portamento_, portaGravity_);
+        lastKeyHz_ = hz;
+    }
 }
 
 void Engine::stopNote(int note, int owner)
@@ -336,7 +341,21 @@ void Engine::allNotesOff()
 
 void Engine::readParams()
 {
-    auto g = [this](ParamId id) { return effectiveParam(id); };
+    // Inertia: every float parameter glides to its effective value with the Inertia time
+    // constant (skew domain), the analogue slew that keeps even a torn-open knob slow.
+    const float inertia = getParam(ParamId::Inertia);
+    const float inertiaCoef = inertia > 0.005f ? 1.0f - std::exp(-lastBlockSeconds_ / inertia) : 1.0f;
+    auto g = [this, inertiaCoef](ParamId id) {
+        const float target = effectiveParam(id);
+        const int i = static_cast<int>(id);
+        const ParamDesc& d = paramDesc(id);
+        if (inertiaCoef >= 1.0f || d.kind != ParamKind::Float || isPerformanceParam(id)) { inertiaCur_[i] = target; return target; }
+        const float span = std::max(d.max - d.min, 1e-9f);
+        const float pc = std::pow(clampv((inertiaCur_[i] - d.min) / span, 0.0f, 1.0f), d.skew);
+        const float pt = std::pow(clampv((target - d.min) / span, 0.0f, 1.0f), d.skew);
+        inertiaCur_[i] = d.min + span * std::pow(pc + (pt - pc) * inertiaCoef, 1.0f / d.skew);
+        return inertiaCur_[i];
+    };
     vp_.level       = g(ParamId::OscLevel);
     vp_.partials    = static_cast<int>(std::lround(g(ParamId::Partials)));
     vp_.tilt        = g(ParamId::Tilt);
@@ -491,6 +510,19 @@ void Engine::readParams()
         retune_ = purityCur_ < 0.9999 || drift > 0.0f;
     }
     vp_.freeze = g(ParamId::Freeze) >= 0.5f;
+    vp_.airGhost = std::lround(g(ParamId::AirMode)) == 1;
+    vp_.rootHz = frequencyOf(brain_.root());
+    portamento_ = g(ParamId::Portamento);
+    portaGravity_ = g(ParamId::PortaGravity);
+    fbTape_ = g(ParamId::FeedbackTape);
+    {   // Coherence: four Kuramoto oscillators, coupled by K = Coherence; their sines become
+        // offsets on brightness, depth, pan and the z-plane point, scaled by Depth.
+        const float depth = g(ParamId::CoherenceDepth);
+        vp_.cohBrightness = 0.15f * depth * std::sin(kuraPhase_[0]);
+        depth_ = clampv(depth_ + 0.15f * depth * std::sin(kuraPhase_[1]), 0.0f, 1.0f);
+        vp_.cohPan = 0.4f * depth * std::sin(kuraPhase_[2]);
+        vp_.cohZ = 0.25f * depth * std::sin(kuraPhase_[3]);
+    }
     if (rootPc != lastRootPc_) {
         lastRootPc_ = rootPc;
         brain_.setRoot(48 + rootPc);
@@ -531,6 +563,21 @@ void Engine::process(float* L, float* R, int n)
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
     shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
     purityDrift_.update(static_cast<float>(n / sr_), getParam(ParamId::TuneDriftRate), rng_);
+    lastBlockSeconds_ = static_cast<float>(n / sr_);
+    {   // Kuramoto bank: dθ_i = ω_i + K/N Σ sin(θ_j − θ_i). Natural periods 23/31/41/53 s over Rate;
+        // K up to 0.6 rad/s locks them (the spread of ω is 0.15 rad/s), 0 leaves them independent.
+        const float rate = std::max(getParam(ParamId::CoherenceRate), 0.05f);
+        const float K = 0.6f * getParam(ParamId::Coherence) * rate;   // scales with the rate, so the lock is the same at every tempo
+        const float dt = static_cast<float>(n / sr_);
+        const float periods[4] = { 23.0f, 31.0f, 41.0f, 53.0f };
+        float dth[4];
+        for (int i = 0; i < 4; ++i) {
+            float coupling = 0.0f;
+            for (int j = 0; j < 4; ++j) coupling += std::sin(kuraPhase_[j] - kuraPhase_[i]);
+            dth[i] = kTwoPi * rate / periods[i] + K * coupling * 0.25f;
+        }
+        for (int i = 0; i < 4; ++i) { kuraPhase_[i] += dth[i] * dt; if (kuraPhase_[i] > kTwoPi) kuraPhase_[i] -= kTwoPi; if (kuraPhase_[i] < 0.0f) kuraPhase_[i] += kTwoPi; }
+    }
     {   // morph position glides toward its target at 1/glide per second (glide 0 = jump)
         const float target = clampv(getParam(ParamId::MorphPos), 0.0f, 1.0f);
         const float glide = getParam(ParamId::MorphGlide);
@@ -625,9 +672,24 @@ void Engine::renderChunk(float* L, float* R, int n)
         // gets the saturated signal unthrottled. The throttle ramps across the chunk.
         const float regTarget = clampv((0.1f - fbEnv_) / 0.1f, 0.0f, 1.0f);
         const float regStep = (regTarget - fbReg_) / static_cast<float>(n);
+        // Tape: wow (slow, irregular, up to 3 ms) and flutter (6 Hz, up to 0.3 ms) move the read
+        // position -- a fractional delay in the loop, so every pass through the loop smears a
+        // little more, the way a tape loop goes soft with each generation.
+        const float wowSamples = fbTape_ > 0.0f ? (0.003f * tapeWow_.update(static_cast<float>(n / sr_), 0.3f, rng_) * 0.5f + 0.0015f) * fbTape_ * static_cast<float>(sr_) : 0.0f;
+        const double flutterInc = 6.0 / sr_;
         for (int i = 0; i < n; ++i) {
-            const int idx = (fbW_ - n + i) & fbMask_;
-            const float l = fbRingL_[static_cast<size_t>(idx)], r = fbRingR_[static_cast<size_t>(idx)];
+            float l, r;
+            if (fbTape_ > 0.0f) {
+                tapeFlutterPhase_ += flutterInc; if (tapeFlutterPhase_ >= 1.0) tapeFlutterPhase_ -= 1.0;
+                const float delay = wowSamples + 0.0003f * fbTape_ * static_cast<float>(sr_) * (0.5f + 0.5f * sin01(tapeFlutterPhase_));
+                const int di = static_cast<int>(delay); const float fr = delay - static_cast<float>(di);
+                const int i0 = (fbW_ - n + i - di) & fbMask_, i1 = (i0 - 1) & fbMask_;
+                l = fbRingL_[static_cast<size_t>(i0)] + fr * (fbRingL_[static_cast<size_t>(i1)] - fbRingL_[static_cast<size_t>(i0)]);
+                r = fbRingR_[static_cast<size_t>(i0)] + fr * (fbRingR_[static_cast<size_t>(i1)] - fbRingR_[static_cast<size_t>(i0)]);
+            } else {
+                const int idx = (fbW_ - n + i) & fbMask_;
+                l = fbRingL_[static_cast<size_t>(idx)]; r = fbRingR_[static_cast<size_t>(idx)];
+            }
             const float reg = fbReg_ + regStep * static_cast<float>(i + 1);
             fbl[i] = l * reg;
             fbr[i] = r * reg;
@@ -792,8 +854,17 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float mag = 0.5f * (std::fabs(L[i]) + std::fabs(R[i]));
             fbEnv_ += envC * (mag - fbEnv_);
             const int idx = (fbW_ + i) & fbMask_;
-            fbRingL_[static_cast<size_t>(idx)] = sat(xl * drive) * comp;
-            fbRingR_[static_cast<size_t>(idx)] = sat(xr * drive) * comp;
+            if (fbTape_ > 0.0f) {
+                // Tape: asymmetric saturation (an even-order term the DC blocker cleans up on the
+                // next pass) and a noise floor that rises with the level in the loop.
+                const float asym = 0.2f * fbTape_;
+                const float noise = 0.02f * fbTape_ * fbEnv_;
+                fbRingL_[static_cast<size_t>(idx)] = sat((xl + asym * xl * xl) * drive) * comp + noise * rng_.bipolar();
+                fbRingR_[static_cast<size_t>(idx)] = sat((xr + asym * xr * xr) * drive) * comp + noise * rng_.bipolar();
+            } else {
+                fbRingL_[static_cast<size_t>(idx)] = sat(xl * drive) * comp;
+                fbRingR_[static_cast<size_t>(idx)] = sat(xr * drive) * comp;
+            }
         }
         fbW_ = (fbW_ + n) & fbMask_;
     } else {

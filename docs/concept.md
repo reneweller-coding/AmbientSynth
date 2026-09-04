@@ -167,6 +167,44 @@ filters and effects keep their own time: the spectrum stands still.
 Measured: the third partial of a frozen voice varies less than a quarter as
 much as with shimmer at 2 Hz.
 
+### Ghost, portamento with gravity, inertia, tape, coherence
+
+Five small mechanisms from a second round of suggestions, all inside the
+existing structure:
+
+* **Ghost** (Air → Mode): the Air noise goes through six sharp resonators
+  on the note's harmonics 1 2 3 5 7 9 instead of one band-pass, Q from
+  *Air Q* times eight — the harmony is filtered out of the chaos, Rich's
+  string and pipe resonances. Measured: with the partial bank silent,
+  harmonics 3 and 5 of an A3 carry eight times the energy of 4 and 6.
+* **Portamento** and **Gravity** (Tuning): a new key slides in from the
+  last one in the log domain over *Portamento* seconds; *Gravity* slows the
+  slide near consonant ratios to the root (unison, octave and fifth to about
+  15 % speed, `intervalConsonance`), so the glissando dwells on the harmonic
+  nodes and hurries across the dissonant stretches — the microtonal
+  portamento of a lap steel. Measured: half-way through an even 2-second
+  glide from A3 to E4 the pitch sits between the two, at the end it has
+  arrived; with gravity the pitch is still lower at the half-way mark.
+* **Inertia** (Macros, performance state): every float parameter the
+  engine reads glides to its value with this time constant in the skew
+  domain, the analogue slew — a knob torn open still arrives slowly.
+  0 (default) is bit-exact bypass.
+* **Tape** (Feedback): in the loop an asymmetric saturation (an even-order
+  term the DC blocker cleans up on the next pass), wow (an irregular
+  Drifter, up to 3 ms) and flutter (6 Hz, 0.3 ms) as a fractional read
+  position, and a noise floor that rises with the loop's level — every
+  generation through the loop goes a little softer and less stable, like a
+  forty-year-old tape. Measured: a full loop with tape stays bounded and
+  DC-free for 12 s.
+* **Coherence** (its own section): four Kuramoto oscillators with natural
+  periods 23, 31, 41 and 53 s over *Rate*, coupled by *Coherence*
+  (dθᵢ = ωᵢ + K/N Σ sin(θⱼ − θᵢ), K up to 0.6 rad/s times *Rate*, so the
+  lock is the same at every tempo), their sines added by
+  *Depth* to brightness, brain depth, pan and the z-plane point. Independent
+  at 0, pulsing as one unit at 1, and everything between. Measured with the
+  Kuramoto order parameter after 20 minutes of phase: above 0.9 when
+  coupled, below without.
+
 ### Sleep and the rest zone
 
 After two seconds with no voice and the output below −90 dBFS the engine

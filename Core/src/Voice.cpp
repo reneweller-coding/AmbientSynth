@@ -1,5 +1,6 @@
 #include "ambient/Voice.h"
 #include "ambient/Params.h"   // kStackRatios
+#include "ambient/Tuning.h"   // intervalConsonance for the portamento gravity
 #include <cmath>
 #include <cstring>
 
@@ -99,7 +100,14 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
 }
 
 void Voice::noteOff() { env_.noteOff(); }
-void Voice::kill()    { env_.kill(); note_ = -1; }
+void Voice::kill()    { env_.kill(); note_ = -1; portaLeft_ = 0.0f; }
+
+void Voice::glideFrom(double fromHz, float seconds, float gravity)
+{
+    if (fromHz <= 0.0 || seconds <= 0.0f) return;
+    portaFrom_ = fromHz; freq_ = fromHz;
+    portaSeconds_ = seconds; portaLeft_ = seconds; portaGravity_ = clampv(gravity, 0.0f, 1.0f);
+}
 
 void Voice::control(int blockLen, const VoiceParams& p)
 {
@@ -109,8 +117,25 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float dt = p.freeze ? 0.0f : dtReal;
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
 
+    // Portamento: slide in the log domain from portaFrom_ to the target; the speed drops near
+    // consonant ratios to the root (gravity), so the slide dwells on the harmonic nodes and
+    // hurries across the dissonant stretches. The nominal time is what an even slide takes.
+    if (portaLeft_ > 0.0f && dtReal > 0.0f) {
+        const double total = std::log(freqTarget_ / portaFrom_);
+        if (std::fabs(total) < 1e-9) { portaLeft_ = 0.0f; freq_ = freqTarget_; }
+        else {
+            const double c = intervalConsonance(freq_ / std::max(p.rootHz, 1.0));
+            const double slow = 1.0 - 0.85 * portaGravity_ * std::min(1.0, c * 3.5);   // unison/octave and fifth slow to ~15 %
+            const double step = total / portaSeconds_ * dtReal * slow;
+            double lf = std::log(freq_) + step;
+            const double lt = std::log(freqTarget_);
+            if ((total > 0 && lf >= lt) || (total < 0 && lf <= lt)) { lf = lt; portaLeft_ = 0.0f; }
+            freq_ = std::exp(lf);
+            portaLeft_ = portaLeft_ > 0.0f ? std::max(portaLeft_ - dtReal * static_cast<float>(slow), 1e-4f) : 0.0f;
+        }
+    }
     // Retune glide (tuning purity / drift): log-domain one-pole toward the target, ~1 s.
-    if (freqTarget_ != freq_) {
+    else if (freqTarget_ != freq_) {
         const double c = 1.0 - std::exp(-static_cast<double>(dtReal) / 1.0);
         freq_ = std::exp(std::log(freq_) + (std::log(freqTarget_) - std::log(freq_)) * c);
         if (std::fabs(freq_ - freqTarget_) < 1e-5 * freqTarget_) freq_ = freqTarget_;
@@ -140,7 +165,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     bloomT_ += dt;
     const float bt = clampv(bloomT_ / std::max(p.bloomTime, 1.0f), 0.0f, 1.0f);
     const float bloomOpen = bt * bt * (3.0f - 2.0f * bt);
-    const float brightness = p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen));
+    const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness, 0.0f, 1.0f);
 
     // Base spectrum shared by all strands of this voice. The tilt/odd-even shape is
     // cached (pow is expensive); only the brightness window is applied per block.
@@ -175,7 +200,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
     // The voice's centre wanders slowly; strands fan out around it.
-    const float centre = panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift;
+    const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan, -1.0f, 1.0f);
     const int stack = clampv(p.stack, 0, kNumStacks - 1);
 
     for (int si = 0; si < unison; ++si) {
@@ -258,7 +283,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     zModeCur_ = clampv(p.zMode, 0, 2);
     if (zModeCur_ != 0) {
         const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
-        const float x = clampv(p.zX + 0.5f * p.zDepth * dx, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy, 0.0f, 1.0f);
+        const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
         ZFrame f = zInterpolate(p.zShape, x, y);
         const float track = std::pow(static_cast<float>(freq_) / 261.6256f, p.zKeyTrack);
         const float bwScale = std::pow(2.0f, 2.0f * (0.5f - p.zRes));   // resonance 1 -> quarter bandwidth, 0 -> double
@@ -272,8 +297,25 @@ void Voice::control(int blockLen, const VoiceParams& p)
         zWet_ = 0.0f; zDry_ = 1.0f;
     }
 
-    // Air: band-passed noise around a drifting multiple of the fundamental.
-    if (p.air > 0.0f) {
+    // Air: band-passed noise around a drifting multiple of the fundamental -- or, in Ghost mode,
+    // noise through six sharp resonators on the note's harmonics 1 2 3 5 7 9: the harmony is
+    // filtered out of the chaos (Rich's string and pipe resonances). Q from Air Q, x8.
+    ghostGain_ = 0.0f;
+    if (p.air > 0.0f && p.airGhost) {
+        static const float hs[6] = { 1.0f, 2.0f, 3.0f, 5.0f, 7.0f, 9.0f };
+        const float q = clampv(p.airQ, 1.0f, 40.0f) * 8.0f;
+        float expected = 0.0f;
+        for (int i = 0; i < 6; ++i) {
+            const float fc = clampv(static_cast<float>(freq_) * hs[i], 30.0f, static_cast<float>(nyq));
+            const float bw = fc / q, gain = 1.0f / std::sqrt(hs[i]);
+            ghostL_[i].set(fc, bw, gain, static_cast<float>(sr_));
+            ghostR_[i].b0 = ghostL_[i].b0; ghostR_[i].a1 = ghostL_[i].a1; ghostR_[i].a2 = ghostL_[i].a2;
+            expected += gain * gain * kPi * bw / (2.0f * static_cast<float>(sr_));   // noise power through a resonator of bandwidth bw
+        }
+        const float expectedRms = std::sqrt(expected / 3.0f);   // bipolar noise has power 1/3
+        ghostGain_ = p.air * std::min(0.05f / std::max(expectedRms, 1e-4f), 60.0f);
+        airGain_ = 0.0f;
+    } else if (p.air > 0.0f) {
         const float ad = airDrift_.update(dt, driftRate * 0.7f, rng_);
         const float fc = clampv(static_cast<float>(freq_) * p.airColor * std::pow(2.0f, 0.5f * ad), 40.0f, static_cast<float>(nyq));
         const float q = clampv(p.airQ, 1.0f, 40.0f);
@@ -299,6 +341,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         control(len, p);
         const int unison = clampv(p.unison, 1, kMaxStrands);
         const bool air = airGain_ > 0.0f;
+        const bool ghost = ghostGain_ > 0.0f;
         // Extra sources render block-wise into their own buffers, then join the strands
         // before the filter (they share filter, envelope, distance and ITD with the bank).
         float slotL[kControlBlock], slotR[kControlBlock];
@@ -369,6 +412,11 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 float lp, bp, hp;
                 airL_.tick(rng_.bipolar(), lp, bp, hp); outL += airGain_ * bp;
                 airR_.tick(rng_.bipolar(), lp, bp, hp); outR += airGain_ * bp;
+            } else if (ghost) {
+                const float nl2 = rng_.bipolar(), nr2 = rng_.bipolar();
+                float gl = 0.0f, gr = 0.0f;
+                for (int k = 0; k < 6; ++k) { gl += ghostL_[k].tick(nl2); gr += ghostR_[k].tick(nr2); }
+                outL += ghostGain_ * gl; outR += ghostGain_ * gr;
             }
             const float g = e * velocity_ * gLevel_;
             outL *= g;

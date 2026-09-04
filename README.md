@@ -164,7 +164,12 @@ Sections of the GUI (all parameters are automatable in a DAW):
   pads' partials off below the sub's register (12 dB/oct), so the bottom
   stays with one mono bass.
 * **Air** — a band-passed noise layer per voice around a drifting multiple of
-  the fundamental: breath, flute air, glass hiss.
+  the fundamental: breath, flute air, glass hiss. *Mode Ghost* sends the
+  noise through six sharp resonators on the note's just harmonics instead:
+  a harmony filtered out of chaos.
+* **Coherence** — four slow coupled oscillators (the Kuramoto model of
+  fireflies falling into step) move brightness, depth, pan and the Z-plane
+  point; *Coherence* 0 leaves them independent, 1 locks them into one pulse.
 * **Envelope** — attack up to 60 s, release up to 120 s.
 * **Filter** — state-variable low-pass with key tracking, envelope amount and slow drift.
 * **Z-Plane** — a Morpheus-style filter: four resonant frames on the corners
@@ -204,7 +209,9 @@ Sections of the GUI (all parameters are automatable in a DAW):
   (*Tone*) and softly saturated (*Drive*), either into the foreground bus
   before the effects (*To Bus*) or as phase modulation of every partial (*To
   Pitch*). Throttled by its own level, so a hot loop hisses and holds instead
-  of running away.
+  of running away. *Tape* adds asymmetric saturation, wow and flutter and a
+  level-dependent noise floor inside the loop: every pass goes a little
+  softer, like an old tape loop.
 * **Cosmos** — a parallel science-fiction path fed from the foreground bus
   (*Send*) and mixed back in (*Return* to the foreground, *To Far* into the
   background reverb), so the original sound and the alien one blend freely:
@@ -225,7 +232,9 @@ Sections of the GUI (all parameters are automatable in a DAW):
   blends every note between 12-TET and the chosen scale, so you can hear the
   beating lock in; *Purity Drift* lets that come and go over minutes, with
   sounding notes gliding along. *Freeze* (Oscillator) holds every voice's
-  spectrum still.
+  spectrum still. *Portamento* slides a new key in from the last one;
+  *Gravity* makes the slide linger on consonant intervals to the root and
+  hurry across the dissonant stretches.
 
 ## Measuring instead of listening
 

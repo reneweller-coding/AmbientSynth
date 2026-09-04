@@ -68,11 +68,24 @@ enum class ParamId : int {
     // lets that blend wander so the beating locks in and loosens over minutes; Freeze holds every
     // voice's spectrum and pitch still (drifts, shimmer, bloom stop moving)
     TunePurity, TuneDrift, TuneDriftRate, Freeze,
+    // Ghost: the Air noise through a bank of sharp resonators on the note's just harmonics
+    AirMode,
+    // Portamento for keys: a new key glides from the last one; Gravity slows the glide near
+    // consonant ratios to the root, so the slide "clicks into" harmonic nodes on the way
+    Portamento, PortaGravity,
+    // Tape in the feedback loop: asymmetric saturation, wow and flutter, level-dependent noise floor
+    FeedbackTape,
+    // Coherence: four slow Kuramoto oscillators, coupled by Coherence, modulating brightness,
+    // depth, pan drift and the z-plane point by Depth
+    Coherence, CoherenceDepth, CoherenceRate,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
     // Macros: eight performance controls routed through the gesture layer (Custom0..7);
     // not part of presets. Named in Rich's vocabulary, not the engine's.
     MacroA, MacroB, MacroC, MacroD, MacroE, MacroF, MacroG, MacroH,
+    // Inertia: every float parameter glides to its value with this time constant (the analogue
+    // slew), so even a knob torn open arrives slowly; performance state, not in presets
+    Inertia,
     // Preset map: a cursor in the plane of all presets blends its neighbours (PresetMap.h);
     // performance state like the morph, never part of a preset
     MapActive, MapX, MapY, MapRadius,
@@ -114,6 +127,7 @@ extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to neares
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
+extern const char* const kAirModeNames[2];     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)
 constexpr int kNumStacks = 8;
 extern const char* const kStackNames[kNumStacks];   // Detune, Octaves, Fifths, Major, Minor, Seventh, Harmonics, Subharmonics
 extern const double kStackRatios[kNumStacks][6];    // ratio of strand 0..5 to the note (Detune = all 1)

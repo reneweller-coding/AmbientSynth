@@ -127,7 +127,9 @@ Sections of the GUI (all parameters are automatable in a DAW):
   loaded sample (field recording, flute air, metal) around a wandering
   position, free-running or pitched to the key. `Tools/TextureGen` makes
   such samples from a text prompt (Stable Audio Open, MusicGen, AudioLDM 2)
-  and writes the detected base pitch into the file name.
+  and writes the detected base pitch into the file name; `Tools/WavetableGen`
+  builds *User* wavetables from any audio, from a prompt, or from spectral
+  recipes, with a preview and export in the common 2048-frame layout.
 * **Foundation** — a dry sub voice that follows the brain's root one or two
   octaves down and glides between roots (*Glide*); *Binaural* runs the two
   ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends

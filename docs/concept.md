@@ -245,6 +245,23 @@ detects the base pitch by autocorrelation and appends the note to the
 file name only when the clip is clearly periodic, so rain stays unpitched
 and a bowed plate becomes `…_A3.wav`.
 
+**Where user wavetables come from: `Tools/WavetableGen`.** Same
+environment, own GUI. Three sources: *Audio* slices single cycles out of
+any WAV (pitch-tracked with the TextureGen rules, each frame the average
+of a few cycles, frames spread over the selection, phase-aligned by
+circular cross-correlation so morphing does not click); *Prompt* asks a
+TextureGen model for a sustained note and slices that; *Procedural* walks
+spectral recipes over the table position (saw → square, tilt, formant
+sweep, comb, glass, odd breathing, random walk) with optional per-partial
+random walk and phase scatter, and can morph the current table into a
+recipe. A frame/spectral-image view, a preview sweep at a chosen note, and
+export in the 2048-frame layout. Measured: a 220 Hz saw-to-square sweep
+comes back with the second partial at 0.5 in the first frame and gone in
+the last; the MusicGen C2 drone yields a 32-frame table the render tool
+loads and plays. A learned latent space (WaveSpace-style) was considered
+and left out: the tables are spectra already, and the three sources cover
+the space from sound, language and rules without a checkpoint.
+
 ## Foundation, Bloom, Hold, Macros
 
 * **Foundation** (`Engine::renderChunk`, after the mid/side stage so the

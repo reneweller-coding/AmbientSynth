@@ -97,6 +97,12 @@ private:
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;
     float         cosmosShimmer_ = 0.0f, shimmerLpL_ = 0.0f, shimmerLpR_ = 0.0f, shimmerEnv_ = 0.0f;
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
+    // Feedback loop: the previous chunk's output mix, low-passed, saturated and throttled,
+    // kept in a ring so any chunk length reads back exactly the samples just written.
+    std::vector<float> fbRingL_, fbRingR_, fbInL_, fbInR_, fbMono_;
+    int           fbW_ = 0, fbMask_ = 0;
+    float         fbBus_ = 0.0f, fbFm_ = 0.0f, fbTone_ = 1500.0f, fbDrive_ = 0.5f;
+    float         fbLpL_ = 0.0f, fbLpR_ = 0.0f, fbEnv_ = 0.0f, fbReg_ = 1.0f;
     VoiceParams  vp_;
     BrainParams  bp_;
     Drifter      arc_;

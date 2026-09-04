@@ -41,7 +41,8 @@ MIDI / Cluster Brain
       │ note on/off + distance (0 = at the ear, 1 = infinite background)
       ▼
 Voice (×16) = Strand (×1..6) = additive bank of ≤32 partials
-      │  each partial: own phase, own slow amplitude drift ("Shimmer")
+      │  each partial: own phase, own slow amplitude drift ("Shimmer"),
+      │  optionally phase-modulated by the feedback loop (h·θ per partial)
       │  strand: detune offset + slow pitch drift, pan around a wandering voice centre
       │  spectrum: h^-tilt · odd/even weight · brightness window · inharmonic stretch
       │  + Air: band-passed noise around a drifting multiple of f0
@@ -61,6 +62,9 @@ FAR:  (+ delay echoes) → Far reverb: 8-line FDN, 4 input all-passes, per-line 
       ▼
 Mid/Side: side high-passed at Bass Mono (low end centred), broad +N dB bell at
 3 kHz on the side, width → master gain → cubic soft clip (no compressor)
+      │
+      └─ Feedback: the mix before mid/side → low-pass, saturation, level throttle →
+         next chunk: into the NEAR bus (To Bus) and/or into the partials (To Pitch)
 ```
 
 Why additive: partials above Nyquist are simply not generated, so there is no
@@ -224,6 +228,41 @@ the background. Chain, in order:
    throttled by the reverb's own level (feedback → 0 at a mean level of
    0.12), so it blooms and then holds; measured: stable at 1.0 for 20 s with
    the resonator at 0.97 feedback in the same patch.
+
+## Feedback loop (the sound feeds itself)
+
+Rich's drones are not a chain but a circle: what comes out of the reverb
+goes back in front of the filter or into the oscillators. `Engine::renderChunk`
+keeps the previous chunk's output mix (before mid/side, sub and master) in a
+ring, low-passed at *Tone*, driven into a gain-compensated rational tanh
+(*Drive* 0 → unity, 1 → ×10 into the curve). The next chunk reads it back
+two ways:
+
+* **To Bus** adds it to the near bus after the voices, i.e. before
+  ensemble, both delays, the cloud and cosmos sends and the near reverb —
+  the "after the reverb, back before the filter" loop through the whole
+  foreground and background chain. This path adds energy, so it is
+  throttled by the mix's own mean level (feedback → 0 at 0.1, about
+  −20 dBFS, 50 ms follower, ramped across the chunk).
+* **To Pitch** phase-modulates every partial of every voice by h·θ, θ =
+  3·amount·feedback radians. In the phasor bank that is one extra
+  small-angle rotation per partial (tan clamped to ±0.4, then two Newton
+  steps of 1/√ so the phasor stays on the unit circle to 1e-4 per sample);
+  the clamp makes deep modulation saturate softly on the high partials
+  instead of tearing. Phase modulation moves energy between partials
+  without adding any, so this path is not throttled — a loud drone keeps
+  its modulation. Only the FM path pays: a four-note Slow Chorus Field
+  renders at 27× realtime without and 15× with it.
+
+The loop is one chunk late (≤ 512 samples, ~10 ms), which is nothing in a
+loop that runs through a 25-second reverb. Silence stays silence (nothing
+in, nothing to feed back). Measured: To Bus 1.0 with Drive 1.0 on a held
+A3 stays below a peak of 0.95 for 20 s and is louder than the dry note;
+To Pitch 1.0 moves more than 30 % of a C4's energy away from its exact
+harmonics. The throttle ceiling was first 0.25: Distant Storm then climbed
+10 dB and collapsed to a stereo correlation of 0.6, because a loop near
+unity gain circulates through the delay's cross-feed until both ears carry
+the same thing. At 0.1 the loop thickens a drone without taking it over.
 
 ## Presets
 

@@ -32,6 +32,7 @@ struct VoiceParams {
     float presence = 0.0f;      // dB bell at 2-5 kHz, full on the near plane, gone on the far plane
     float breath = 0.0f, breathRate = 0.03f;   // slow wandering of the distance itself (+-0.35 at 1)
     float lowCut = 0.0f;        // Hz; partials below fall 12 dB/oct, keeping the pads out of the sub's register
+    float fmAmount = 0.0f;      // phase modulation of every partial (h times the deviation) by the `fm` signal given to render()
 };
 
 class Voice {
@@ -51,8 +52,9 @@ public:
     double frequency() const { return freq_; }
     uint64_t order = 0;      // allocation order for voice stealing
 
-    // Adds `n` samples into the near (dry plane) and far (reverb send) buses.
-    void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p);
+    // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
+    // may be null) phase-modulates the partials when p.fmAmount > 0 (the feedback loop).
+    void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p, const float* fm = nullptr);
 
 private:
     struct Strand {

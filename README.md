@@ -146,6 +146,11 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*
   (low-pass on the tail: distance darkens), *Freeze*.
+* **Feedback** — the sound feeds itself: the output mix returns, low-passed
+  (*Tone*) and softly saturated (*Drive*), either into the foreground bus
+  before the effects (*To Bus*) or as phase modulation of every partial (*To
+  Pitch*). Throttled by its own level, so a hot loop hisses and holds instead
+  of running away.
 * **Cosmos** — a parallel science-fiction path fed from the foreground bus
   (*Send*) and mixed back in (*Return* to the foreground, *To Far* into the
   background reverb), so the original sound and the alien one blend freely:

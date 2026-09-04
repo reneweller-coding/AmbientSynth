@@ -34,8 +34,15 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
 {
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
-    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_ })
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);
+    {
+        int ring = 1; while (ring < 2 * maxBlock_) ring <<= 1;
+        fbRingL_.assign(static_cast<size_t>(ring), 0.0f);
+        fbRingR_.assign(static_cast<size_t>(ring), 0.0f);
+        fbMask_ = ring - 1; fbW_ = 0;
+        fbLpL_ = fbLpR_ = fbEnv_ = 0.0f;
+    }
     seed_ = static_cast<int>(getParam(ParamId::Seed));
     rng_.seed(static_cast<uint64_t>(seed_) + 1);
     for (auto& v : voices_) v.prepare(sr_, rng_.fork());
@@ -291,6 +298,11 @@ void Engine::readParams()
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
+    fbBus_   = g(ParamId::FeedbackBus);
+    fbFm_    = g(ParamId::FeedbackFm);
+    fbTone_  = g(ParamId::FeedbackTone);
+    fbDrive_ = g(ParamId::FeedbackDrive);
+    vp_.fmAmount = fbFm_;
 
     // Cosmos
     cosmosSend_   = g(ParamId::CosmosSend);
@@ -416,11 +428,36 @@ void Engine::renderChunk(float* L, float* R, int n)
         }
     };
 
+    // Feedback loop, input side: what the previous chunk wrote into the ring comes back as
+    // phase modulation of the partials and/or as signal into the near bus (before ensemble,
+    // delays and reverbs -- "after the reverb back before the filter").
+    const bool fbOn = fbBus_ > 0.0f || fbFm_ > 0.0f;
+    float* fbl = fbInL_.data(); float* fbr = fbInR_.data(); float* fbm = fbMono_.data();
+    if (fbOn) {
+        // The level throttle applies to the bus path only (that one adds energy and can run
+        // away); phase modulation moves energy between partials without adding any, so it
+        // gets the saturated signal unthrottled. The throttle ramps across the chunk.
+        const float regTarget = clampv((0.1f - fbEnv_) / 0.1f, 0.0f, 1.0f);
+        const float regStep = (regTarget - fbReg_) / static_cast<float>(n);
+        for (int i = 0; i < n; ++i) {
+            const int idx = (fbW_ - n + i) & fbMask_;
+            const float l = fbRingL_[static_cast<size_t>(idx)], r = fbRingR_[static_cast<size_t>(idx)];
+            const float reg = fbReg_ + regStep * static_cast<float>(i + 1);
+            fbl[i] = l * reg;
+            fbr[i] = r * reg;
+            fbm[i] = 0.5f * (l + r);
+        }
+        fbReg_ = regTarget;
+    }
+
     for (int p = 0; p < n; p += kControlBlock) {
         const int len = std::min(kControlBlock, n - p);
         brain_.update(len / sr_, bp_, anchor, freqOf, emit);
-        for (auto& v : voices_) if (v.isActive()) v.render(nl + p, nr + p, fl + p, fr + p, len, vp_);
+        const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
+        for (auto& v : voices_) if (v.isActive()) v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm);
     }
+    if (fbOn && fbBus_ > 0.0f)
+        for (int i = 0; i < n; ++i) { nl[i] += fbl[i] * fbBus_; nr[i] += fbr[i] * fbBus_; }
 
     // Foreground plane: ensemble, asymmetric delay (echoes partly recede into the far plane), small room.
     ensemble_.process(nl, nr, n);
@@ -497,6 +534,37 @@ void Engine::renderChunk(float* L, float* R, int n)
     for (int i = 0; i < n; ++i) {
         L[i] = nl[i] + fl[i] * farLevel_;
         R[i] = nr[i] + fr[i] * farLevel_;
+    }
+
+    // Feedback loop, output side: the mix (before mid/side, sub and master) goes into the ring,
+    // low-passed at Tone, driven into a soft saturation (tanh-like, gain-compensated), and
+    // throttled by its own mean level like the shimmer loop: feedback -> 0 at a mean level of
+    // 0.1 (about -20 dBFS), so a hot loop hisses and holds where a naked one would run into
+    // the clipper -- and the loop can thicken a drone without taking it over (a higher
+    // ceiling let Distant Storm climb 10 dB and collapse to a correlation of 0.6).
+    if (fbOn) {
+        const float lpc  = 1.0f - std::exp(-kTwoPi * fbTone_ / static_cast<float>(sr_));
+        const float envC = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));
+        const float drive = 1.0f + 9.0f * fbDrive_;
+        const float comp  = 1.0f / std::sqrt(drive);
+        auto sat = [](float x) {   // rational tanh, exact to 1e-3 up to |x| = 3
+            x = clampv(x, -3.0f, 3.0f);
+            const float x2 = x * x;
+            return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+        };
+        for (int i = 0; i < n; ++i) {
+            fbLpL_ += lpc * (L[i] - fbLpL_);
+            fbLpR_ += lpc * (R[i] - fbLpR_);
+            const float mag = 0.5f * (std::fabs(L[i]) + std::fabs(R[i]));
+            fbEnv_ += envC * (mag - fbEnv_);
+            const int idx = (fbW_ + i) & fbMask_;
+            fbRingL_[static_cast<size_t>(idx)] = sat(fbLpL_ * drive) * comp;
+            fbRingR_[static_cast<size_t>(idx)] = sat(fbLpR_ * drive) * comp;
+        }
+        fbW_ = (fbW_ + n) & fbMask_;
+    } else {
+        fbLpL_ = fbLpR_ = fbEnv_ = 0.0f;
+        fbReg_ = 1.0f;
     }
 
     // Foundation: a dry sub voice on the brain's root, gliding between roots; the two ears

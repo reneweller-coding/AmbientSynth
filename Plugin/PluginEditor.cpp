@@ -31,7 +31,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     groups_ = {
         { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" } }, {}, 0 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
         { "MORPH",      kMorph,     { { "Morph" }, { "Macros" } }, {}, 1 },
@@ -483,6 +483,15 @@ void AmbientSynthEditor::paintRoutingMap(juce::Graphics& g, juce::Rectangle<int>
     arrow(bottom(nodes[1].r, 0.7f), top(nodes[6].r, 0.1f), kVoice);                     // far send of the voices
     arrow(right(nodes[4].r), left(nodes[6].r), kCosmos);                                // cosmos to far
     arrow(right(nodes[6].r), juce::Point<float>(nodes[3].r.getCentreX(), nodes[3].r.getBottom()), kBack);   // far -> out
+    {   // feedback: the mix returns to the voices (bus and phase modulation), drawn between the rows
+        const float yf = y0 + h + 6.0f;
+        const juce::Point<float> a(nodes[3].r.getX() + 8.0f, yf), b(nodes[1].r.getCentreX() + 12.0f, yf);
+        g.setColour(kBack.withAlpha(0.6f));
+        g.drawLine(juce::Line<float>(nodes[3].r.getX() + 8.0f, nodes[3].r.getBottom(), a.x, a.y), 1.0f);
+        arrow(a, b, kBack.withAlpha(0.7f));
+        g.setFont(juce::FontOptions(9.0f));
+        g.drawText("feedback", static_cast<int>(b.x) + 30, static_cast<int>(yf) - 6, 60, 12, juce::Justification::centredLeft);
+    }
     for (auto& n : nodes) {
         g.setColour(n.col.withAlpha(0.18f));
         g.fillRoundedRectangle(n.r, 4.0f);

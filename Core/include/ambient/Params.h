@@ -35,6 +35,10 @@ enum class ParamId : int {
     NearMix, NearDecay, NearDamp,
     // Far reverb (the infinite background)
     FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze,
+    // Feedback: the mixed output (before the master) returns, low-passed and saturated,
+    // into the near bus before the filters and effects, and/or as phase modulation of every
+    // partial. Throttled by the output level so it hisses and holds instead of running away.
+    FeedbackBus, FeedbackFm, FeedbackTone, FeedbackDrive,
     // Cosmos: science-fiction / deep-space path (send from the near bus)
     CosmosSend, CosmosShift, CosmosShiftDrift, CosmosRes, CosmosResPitch, CosmosResFeedback,
     CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,

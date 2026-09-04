@@ -32,7 +32,7 @@ const Preset kPresets[] = {
     { "Distant Storm",
       "depth=1;keys_depth=0.8;brain_consonance=0.15;brain_density=8;brain_rate=12;brain_hold_min=20;brain_hold_max=90;"
       "far_decay=60;far_level=1;far_highcut=2000;dly_feedback=0.8;dly_to_far=0.8;dly_mix=0.15;cutoff=1500;inharmonic=0.3;"
-      "strands=5;detune=20;master_gain=-9" },
+      "strands=5;detune=20;master_gain=-9;fb_bus=0.25;fb_drive=0.8;fb_tone=1200" },
     { "Dry Foreground Keys",
       "brain_on=off;keys_depth=0;near_mix=0.25;near_decay=1.5;far_level=0.3;dly_mix=0.2;ens_mix=0.5;attack=1.5;release=6;"
       "air=0.25;depth=0;presence=3" },
@@ -357,7 +357,7 @@ const Preset kPresets[] = {
     // ---------------------------------------------------------------- 120..127 storm / cluster / texture
     { "Cluster Storm",
       "brain_consonance=0;brain_density=10;brain_rate=6;brain_hold_min=10;brain_hold_max=40;scale=12-TET;far_decay=40;depth=0.9;"
-      "strands=5;detune=25" },
+      "strands=5;detune=25;fb_bus=0.2;fb_fm=0.2" },
     { "Micro Cluster",
       "brain_consonance=0.05;brain_density=8;brain_low=60;brain_high=72;far_decay=30;partials=8;scale=12-TET" },
     { "Rising Swarm",
@@ -371,7 +371,7 @@ const Preset kPresets[] = {
       "brain_rate=2;brain_hold_min=2;brain_hold_max=6;brain_density=10;scale=JI Pentatonic;root=D;cloud_send=1;cloud_density=30;"
       "cloud_size=120;cloud_pitch=0.5" },
     { "Inharmonic Field",
-      "inharmonic=1;partials=32;tilt=1;brain_density=6;brain_consonance=0.4;far_decay=35;far_highcut=5000" },
+      "inharmonic=1;partials=32;tilt=1;brain_density=6;brain_consonance=0.4;far_decay=35;far_highcut=5000;fb_fm=0.4;fb_tone=800" },
     { "Dissonant Cathedral",
       "brain_consonance=0.1;brain_density=7;far_size=3;far_decay=60;far_highcut=4000;partials=20;brightness=0.8;scale=12-TET" },
     { "White Storm",

@@ -21,6 +21,14 @@ struct Log2Harmonics {
 const Log2Harmonics kLog2H;
 constexpr float kPresenceCentreLog2 = 11.64386f;   // log2(3200 Hz): the bell spans about 1.8-5.6 kHz
 constexpr float kPresenceHalfWidth  = 0.8f;        // octaves to the bell's zero
+
+// Harmonic numbers as floats: phase modulation of the waveform by θ moves partial h by h·θ.
+struct HarmonicNumbers {
+    float v[kMaxPartials];
+    HarmonicNumbers() { for (int h = 0; h < kMaxPartials; ++h) v[h] = static_cast<float>(h + 1); }
+};
+const HarmonicNumbers kHf;
+constexpr float kFmMaxStep = 0.4f;   // per-sample deviation clamp (tan of the angle): keeps the two-step normalisation exact
 }
 
 void Voice::prepare(double sampleRate, uint64_t seed)
@@ -233,8 +241,10 @@ void Voice::control(int blockLen, const VoiceParams& p)
     }
 }
 
-void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p)
+void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p, const float* fm)
 {
+    const bool doFm = fm != nullptr && p.fmAmount > 0.0f;
+    const float fmScale = p.fmAmount * 3.0f;   // radians at the fundamental per unit of feedback signal
     int pos = 0;
     while (pos < n && env_.isActive()) {
         const int len = std::min(kControlBlock, n - pos);
@@ -243,6 +253,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         const bool air = airGain_ > 0.0f;
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();
+            const float th = doFm ? fm[pos + i] * fmScale : 0.0f;
             float accL = 0.0f, accR = 0.0f;
             for (int si = 0; si < unison; ++si) {
                 Strand& s = strands_[si];
@@ -250,12 +261,31 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 const int act = s.active;
                 float* pc = s.pc; float* ps = s.ps; const float* rc = s.rc; const float* rs = s.rs;
                 float* amp = s.amp; const float* step = s.ampStep;
-                for (int h = 0; h < act; ++h) {
-                    sum += amp[h] * ps[h];
-                    const float nc = pc[h] * rc[h] - ps[h] * rs[h];
-                    ps[h] = ps[h] * rc[h] + pc[h] * rs[h];
-                    pc[h] = nc;
-                    amp[h] += step[h];
+                if (doFm) {
+                    // Rotate by the partial's own step, then by the modulation angle h·θ (small-angle
+                    // rotation by tan = t, clamped, followed by two Newton steps of 1/sqrt so the
+                    // phasor stays on the unit circle within 1e-4 per sample). The clamp makes deep
+                    // modulation saturate softly on the high partials instead of tearing.
+                    for (int h = 0; h < act; ++h) {
+                        sum += amp[h] * ps[h];
+                        const float nc = pc[h] * rc[h] - ps[h] * rs[h];
+                        const float ns = ps[h] * rc[h] + pc[h] * rs[h];
+                        const float t  = clampv(th * kHf.v[h], -kFmMaxStep, kFmMaxStep);
+                        const float c2 = nc - ns * t, s2 = ns + nc * t;
+                        const float r2 = c2 * c2 + s2 * s2;
+                        float fix = 1.5f - 0.5f * r2;
+                        fix *= 1.5f - 0.5f * r2 * fix * fix;
+                        pc[h] = c2 * fix; ps[h] = s2 * fix;
+                        amp[h] += step[h];
+                    }
+                } else {
+                    for (int h = 0; h < act; ++h) {
+                        sum += amp[h] * ps[h];
+                        const float nc = pc[h] * rc[h] - ps[h] * rs[h];
+                        ps[h] = ps[h] * rc[h] + pc[h] * rs[h];
+                        pc[h] = nc;
+                        amp[h] += step[h];
+                    }
                 }
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;

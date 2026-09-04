@@ -315,6 +315,55 @@ double goertzel(const float* x, int n, double hz, double sr)
     return s1 * s1 + s2 * s2 - c * s1 * s2;
 }
 
+// The feedback loop: mix -> (tone, drive, throttle) -> near bus and/or partial phase modulation.
+void testFeedback()
+{
+    const int sr = 48000;
+    {   // Silence stays silence, a held drone with a hot loop stays bounded and gets fuller.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::FeedbackBus, 1.0f); e.setParam(ParamId::FeedbackDrive, 1.0f);
+        e.prepare(sr, 256);
+        Stats quiet = render(e, 3.0);
+        CHECK(quiet.peak == 0.0f, "feedback alone makes no sound");
+        e.noteOn(57, 0.8f);
+        Stats hot = render(e, 20.0);
+        CHECK(hot.nonFinite == 0 && hot.peak < 0.95f, "bus feedback at 1.0 stays bounded (throttled)");
+        Engine d;
+        d.setParam(ParamId::BrainOn, 0.0f);
+        d.prepare(sr, 256);
+        d.noteOn(57, 0.8f);
+        Stats dry = render(d, 20.0);
+        CHECK(hot.rms > dry.rms, "the loop adds energy to the drone");
+    }
+    {   // Phase modulation: with the loop on the pitch, energy leaves the exact harmonics.
+        auto harmonicShare = [&](float fm) {
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Attack, 0.2f);
+            e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 0.0f);
+            e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Shimmer, 0.0f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+            e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f); e.setParam(ParamId::Cutoff, 18000.0f);
+            e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f);
+            e.setParam(ParamId::FeedbackFm, fm); e.setParam(ParamId::FeedbackTone, 8000.0f);
+            e.prepare(sr, 256);
+            e.noteOn(60, 0.8f);
+            std::vector<float> cap;
+            render(e, 3.0, &cap);
+            std::vector<float> mono(sr);
+            double total = 0;
+            for (int i = 0; i < sr; ++i) { mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((2 * sr + i) * 2)]; total += mono[static_cast<size_t>(i)] * mono[static_cast<size_t>(i)]; }
+            double harm = 0;
+            for (int h = 1; h <= 32; ++h) harm += goertzel(mono.data(), sr, 261.6256 * h, sr);
+            return harm / (total * sr + 1e-12);   // Goertzel power ~ N * energy at the bin
+        };
+        const double clean = harmonicShare(0.0f), modulated = harmonicShare(1.0f);
+        CHECK(modulated < 0.7 * clean, "pitch feedback spreads energy away from the exact harmonics");
+    }
+}
+
 // Rich's foreground/background carving inside the voice: presence bell, pad low cut,
 // breathing distance, and the ghost-tone source of the foundation.
 void testRichCarving()
@@ -942,6 +991,7 @@ int main()
     testPresets();
     testSpace();
     testRichCarving();
+    testFeedback();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

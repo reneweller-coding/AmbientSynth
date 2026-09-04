@@ -70,11 +70,14 @@ mapping is saved with the plugin state and in `.ambientsynth` files.
 
 **Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
 until its key is pressed again, and switching Hold off releases everything.
-The four **macros** (Space, Alien, Motion, Bloom) each move several
-parameters at once through the gesture layer; they are automatable, MIDI-
-learnable and never part of a preset, and a macro only acts once it has
-been moved, so loading presets leaves everything intact. *Rec* in the header
-records the output to a 32-bit float WAV, for capturing a whole set.
+The eight **macros** (Space, Alien, Motion, Bloom, Density, Distance,
+Evolution, Air) each move several parameters at once through the gesture
+layer; they are automatable, MIDI-learnable and never part of a preset, and
+a macro only acts once it has been moved, so loading presets leaves
+everything intact. **Perform** in the header switches to a page with only
+these eight as large knobs and the morph slider, for playing a set without
+the editor in the way. *Rec* in the header records the output to a 32-bit
+float WAV, for capturing a whole set.
 
 **OSC and gestures.** The plugin listens on UDP port 9000 (header shows the
 message count). Namespace: `/ambient/param/<key> f`, `/ambient/paramn/<key> f`

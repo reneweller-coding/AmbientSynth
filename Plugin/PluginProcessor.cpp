@@ -103,11 +103,10 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 {
     juce::ScopedNoDenormals noDenormals;
 
-    // Macros are gesture inputs Custom0..3: one knob, several parameters.
-    gestures_.setInput(GestureInput::Custom0, raw_[static_cast<size_t>(ParamId::MacroA)]->load());
-    gestures_.setInput(GestureInput::Custom1, raw_[static_cast<size_t>(ParamId::MacroB)]->load());
-    gestures_.setInput(GestureInput::Custom2, raw_[static_cast<size_t>(ParamId::MacroC)]->load());
-    gestures_.setInput(GestureInput::Custom3, raw_[static_cast<size_t>(ParamId::MacroD)]->load());
+    // Macros are gesture inputs Custom0..7: one knob, several parameters.
+    for (int m = 0; m < 8; ++m)
+        gestures_.setInput(static_cast<GestureInput>(static_cast<int>(GestureInput::Custom0) + m),
+                           raw_[static_cast<size_t>(static_cast<int>(ParamId::MacroA) + m)]->load());
 
     // Gestures write through the host's parameter system, like a MIDI controller would.
     gestures_.update(buffer.getNumSamples() / getSampleRate(), [this](ParamId id, float v) {

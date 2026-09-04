@@ -127,7 +127,7 @@ void GestureLayer::setDefaultMappings()
     addMapping({ GestureInput::LeftForward,  ParamId::CloudSend,   0.0f, 1.0f, 0.5f,  0.02f, clutch, false });
     addMapping({ GestureInput::RightForward, ParamId::DelayMix,    0.0f, 0.6f, 0.5f,  0.02f, clutch, false });
     addMapping({ GestureInput::HeadYaw,      ParamId::Width,       0.6f, 1.8f, 1.0f,  0.02f, GestureInput::Count, false });
-    // Macros (Custom0..3 = Macro A..D): one knob, several parameters, no clutch.
+    // Macros (Custom0..7 = Macro A..H): one knob, several parameters, no clutch.
     const GestureInput none = GestureInput::Count;
     addMapping({ GestureInput::Custom0, ParamId::FarLevel,     0.3f,   1.0f,    0.3f, 0.002f, none, false });   // A "Space"
     addMapping({ GestureInput::Custom0, ParamId::FarDecay,     4.0f,   60.0f,   0.3f, 0.002f, none, false });
@@ -144,6 +144,24 @@ void GestureLayer::setDefaultMappings()
     addMapping({ GestureInput::Custom3, ParamId::Air,          0.0f,   0.5f,    0.3f, 0.002f, none, false });
     addMapping({ GestureInput::Custom3, ParamId::Cutoff,       800.0f, 8000.0f, 0.3f, 0.002f, none, false });
     addMapping({ GestureInput::Custom3, ParamId::Presence,     0.0f,   3.0f,    0.3f, 0.002f, none, false });   // the near plane steps forward
+    addMapping({ GestureInput::Custom4, ParamId::BrainDensity, 2.0f,   10.0f,   0.3f, 0.002f, none, false });   // E "Density": more notes, more grains, more strands
+    addMapping({ GestureInput::Custom4, ParamId::CloudSend,    0.0f,   0.5f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom4, ParamId::CloudDensity, 6.0f,   40.0f,   0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom4, ParamId::Unison,       2.0f,   5.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom5, ParamId::Depth,        0.2f,   1.0f,    0.3f, 0.002f, none, false });   // F "Distance": everything recedes
+    addMapping({ GestureInput::Custom5, ParamId::KeysDepth,    0.0f,   0.9f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom5, ParamId::Cutoff,       900.0f, 6000.0f, 0.3f, 0.002f, none, true  });
+    addMapping({ GestureInput::Custom5, ParamId::FarLevel,     0.4f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom5, ParamId::Presence,     0.0f,   3.0f,    0.3f, 0.002f, none, true  });
+    addMapping({ GestureInput::Custom6, ParamId::RateWander,   0.0f,   1.0f,    0.3f, 0.002f, none, false });   // G "Evolution": everything moves more
+    addMapping({ GestureInput::Custom6, ParamId::Src2PosDrift, 0.0f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom6, ParamId::Src3PosDrift, 0.0f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom6, ParamId::Breath,       0.0f,   0.8f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom6, ParamId::ArcAmount,    0.0f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom7, ParamId::Air,          0.0f,   0.6f,    0.3f, 0.002f, none, false });   // H "Air": breath and light on the sides
+    addMapping({ GestureInput::Custom7, ParamId::AirColor,     2.0f,   8.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom7, ParamId::SideAir,      0.0f,   6.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom7, ParamId::FarHighcut,   2500.0f, 9000.0f, 0.3f, 0.002f, none, false });
 }
 
 bool GestureLayer::parseMappings(const char* text)

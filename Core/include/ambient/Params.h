@@ -62,8 +62,9 @@ enum class ParamId : int {
     Scale, KeyMap, RootNote, RefPitch, Seed, Hold,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
-    // Macros: four performance controls routed through the gesture layer; not part of presets
-    MacroA, MacroB, MacroC, MacroD,
+    // Macros: eight performance controls routed through the gesture layer (Custom0..7);
+    // not part of presets. Named in Rich's vocabulary, not the engine's.
+    MacroA, MacroB, MacroC, MacroD, MacroE, MacroF, MacroG, MacroH,
     Count
 };
 

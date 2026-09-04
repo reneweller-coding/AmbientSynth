@@ -254,10 +254,18 @@ that (PCM 8–32 and float, any channel count mixed to mono).
   carries less than a fifth of the high-partial energy of the opened state.
 * **Hold**: note-on on a latched key releases it; note-off is ignored;
   switching Hold off releases all latched keys.
-* **Macros** are the gesture inputs Custom0..3 fed from four parameters, so
+* **Macros** are the gesture inputs Custom0..7 fed from eight parameters, so
   the same mapping table serves hands and knobs. A mapping only starts to
   write once its input has moved from its rest value (also true for head
   yaw), which keeps presets intact until the performer touches a macro.
+  They carry Rich's vocabulary, not the engine's: *Space* (far level, decay,
+  depth, size), *Alien* (cosmos send, nebula, shift), *Motion* (drift and
+  shimmer rates, pan drift, ensemble), *Bloom* (brightness, air, cutoff,
+  presence), *Density* (brain density, cloud, strands), *Distance* (depth,
+  keys depth, cutoff down, far level up, presence down), *Evolution* (rate
+  wander, source position drift, breath, arc), *Air* (air, air colour, side
+  air, tail cut). The plugin's **Perform** page shows only these eight as
+  large knobs plus the morph, for playing a set without the editor.
 
 ## Cosmos path (science fiction / deep space)
 

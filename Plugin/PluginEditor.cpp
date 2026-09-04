@@ -70,6 +70,14 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     mapButton_->setTooltip("Edit the gesture/macro mapping table");
     mapButton_->onClick = [this] { showMappingEditor(); };
     addAndMakeVisible(*mapButton_);
+    performButton_ = std::make_unique<juce::TextButton>("Perform");
+    performButton_->setTooltip("Only the eight macros and the morph, large: for playing a set");
+    performButton_->setClickingTogglesState(true);
+    performButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    performButton_->onClick = [this] { setPerforming(performButton_->getToggleState()); };
+    addAndMakeVisible(*performButton_);
+    perform_ = std::make_unique<PerformView>(proc_);
+    addChildComponent(*perform_);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -126,6 +134,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
 
     setResizable(true, true);
     setSize(1500, 920);
+    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPerforming(true);   // open on the perform page
     startTimerHz(12);
 }
 
@@ -302,6 +311,8 @@ void AmbientSynthEditor::resized()
     if (recButton_) recButton_->setBounds(696, 8, 56, 24);
     if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
+    if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
+    if (perform_) perform_->setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
     if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
@@ -347,6 +358,84 @@ void AmbientSynthEditor::resized()
     const int contentW = std::max(colX[1] + colWidth[1] + kPad, viewport_.getMaximumVisibleWidth());
     const int contentH = std::max(std::max(colY[0], colY[1]), viewport_.getMaximumVisibleHeight());
     content_.setSize(contentW, contentH);
+}
+
+// ---------------------------------------------------------------- perform page
+
+void AmbientSynthEditor::setPerforming(bool on)
+{
+    performing_ = on;
+    viewport_.setVisible(!on);
+    perform_->setVisible(on);
+    if (performButton_->getToggleState() != on) performButton_->setToggleState(on, juce::dontSendNotification);
+}
+
+AmbientSynthEditor::PerformView::PerformView(AmbientSynthProcessor& p) : proc(p)
+{
+    for (int m = 0; m < 8; ++m) {
+        const ParamDesc& d = paramDesc(static_cast<ParamId>(static_cast<int>(ParamId::MacroA) + m));
+        auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
+        s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+        addAndMakeVisible(*s);
+        auto l = std::make_unique<juce::Label>(juce::String(), d.name);
+        l->setJustificationType(juce::Justification::centred);
+        l->setFont(juce::FontOptions(20.0f, juce::Font::bold));
+        l->setColour(juce::Label::textColourId, kText);
+        addAndMakeVisible(*l);
+        attachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, d.key, *s));
+        knobs.push_back(std::move(s));
+        labels.push_back(std::move(l));
+    }
+    morph.setSliderStyle(juce::Slider::LinearHorizontal);
+    morph.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 22);
+    addAndMakeVisible(morph);
+    morphAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, paramDesc(ParamId::MorphPos).key, morph);
+    morphActive.setButtonText("Morph");
+    addAndMakeVisible(morphActive);
+    morphActiveAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.apvts, paramDesc(ParamId::MorphActive).key, morphActive);
+    for (auto* l : { &morphLabel, &aLabel, &bLabel }) {
+        l->setFont(juce::FontOptions(16.0f));
+        l->setColour(juce::Label::textColourId, kDim);
+        addAndMakeVisible(*l);
+    }
+    morphLabel.setText("A  <  position  >  B", juce::dontSendNotification);
+    morphLabel.setJustificationType(juce::Justification::centred);
+    aLabel.setJustificationType(juce::Justification::centredRight);
+    bLabel.setJustificationType(juce::Justification::centredLeft);
+}
+
+void AmbientSynthEditor::PerformView::paint(juce::Graphics& g)
+{
+    g.fillAll(kBg);
+    g.setColour(kGroupFill);
+    g.fillRoundedRectangle(getLocalBounds().reduced(12).toFloat(), 10.0f);
+    g.setColour(kDim);
+    g.setFont(juce::FontOptions(13.0f));
+    g.drawText("PERFORM  -  eight macros, one morph. Each knob moves several parameters; a knob acts once it has been moved.",
+               getLocalBounds().reduced(24).removeFromTop(24), juce::Justification::centredLeft);
+    aLabel.setText("A: " + proc.morphSlotName(0), juce::dontSendNotification);
+    bLabel.setText("B: " + proc.morphSlotName(1), juce::dontSendNotification);
+}
+
+void AmbientSynthEditor::PerformView::resized()
+{
+    auto area = getLocalBounds().reduced(24);
+    area.removeFromTop(32);
+    auto morphArea = area.removeFromBottom(90);
+    const int cols = 4, rows = 2;
+    const int cellW = area.getWidth() / cols, cellH = area.getHeight() / rows;
+    for (int m = 0; m < 8; ++m) {
+        juce::Rectangle<int> cell(area.getX() + (m % cols) * cellW, area.getY() + (m / cols) * cellH, cellW, cellH);
+        cell = cell.reduced(16);
+        labels[static_cast<size_t>(m)]->setBounds(cell.removeFromBottom(30));
+        const int side = std::min(cell.getWidth(), cell.getHeight());
+        knobs[static_cast<size_t>(m)]->setBounds(cell.withSizeKeepingCentre(side, side));
+    }
+    morphActive.setBounds(morphArea.removeFromLeft(90).withSizeKeepingCentre(90, 28));
+    morphLabel.setBounds(morphArea.removeFromTop(22));
+    aLabel.setBounds(morphArea.removeFromLeft(220));
+    bLabel.setBounds(morphArea.removeFromRight(220));
+    morph.setBounds(morphArea.withSizeKeepingCentre(morphArea.getWidth(), 40));
 }
 
 // ---------------------------------------------------------------- interaction
@@ -452,7 +541,7 @@ void AmbientSynthEditor::showMappingEditor()
     content->setSize(640, 470);
     content->addAndMakeVisible(editor);
     editor->setBounds(0, 0, 640, 420);
-    auto* hint = new juce::Label(juce::String(), "input param min max [smooth] [deadzone] [clutch|none] [invert]   inputs: HandDistance LeftHeight RightHeight LeftForward RightForward LeftTilt RightTilt LeftPinch RightPinch HeadYaw HeadPitch HeadRoll Custom0..7 (Custom0..3 = macros)");
+    auto* hint = new juce::Label(juce::String(), "input param min max [smooth] [deadzone] [clutch|none] [invert]   inputs: HandDistance LeftHeight RightHeight LeftForward RightForward LeftTilt RightTilt LeftPinch RightPinch HeadYaw HeadPitch HeadRoll Custom0..7 (= macros A..H)");
     hint->setFont(juce::FontOptions(11.0f));
     hint->setColour(juce::Label::textColourId, kDim);
     hint->setBounds(0, 424, 640, 44);

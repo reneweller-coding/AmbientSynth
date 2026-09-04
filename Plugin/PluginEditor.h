@@ -78,7 +78,25 @@ private:
     Content content_;
     juce::Viewport viewport_;
     void paintContent(juce::Graphics&);
-    std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_, calibButton_, mapButton_;
+    std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_, calibButton_, mapButton_, performButton_;
+    // Perform page: the eight macros as large knobs plus the morph, instead of the editor.
+    struct PerformView : juce::Component {
+        explicit PerformView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        AmbientSynthProcessor& proc;
+        std::vector<std::unique_ptr<juce::Slider>> knobs;
+        std::vector<std::unique_ptr<juce::Label>> labels;
+        std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> attachments;
+        juce::Slider morph;
+        juce::ToggleButton morphActive;
+        juce::Label morphLabel, aLabel, bLabel;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> morphAttach;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> morphActiveAttach;
+    };
+    std::unique_ptr<PerformView> perform_;
+    bool performing_ = false;
+    void setPerforming(bool on);
     void showMappingEditor();
     juce::Component::SafePointer<juce::TextEditor> mapEditor_;
     juce::String mapText_;

@@ -275,7 +275,7 @@ void testPresets()
         const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
-        CHECK(count == kNumParams - 7, "preset sets every parameter except morph controls and macros");
+        CHECK(count == kNumParams - 11, "preset sets every parameter except morph controls and the eight macros");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");

@@ -75,13 +75,28 @@ loader) and Oboe from source; `build_apk.ps1` produces a signed
 Steps 1, 2, 3 and 5 of the plan above are implemented in `src/main.cpp`.
 Not yet run on a headset.
 
+Since then (same day): calibration gesture (8 s on first start, saved to
+`calib.txt`), the hand menu (left pinch opens, right height chooses, right
+pinch activates: morph, A/B capture, A/B preset prev/next, record,
+calibrate) with a 5×7 dot font on a head-locked panel, on-device WAV
+recording through the core's lock-free `WavRecorder`, per-note envelope
+levels in the picture, and `ambient_render --bench` for a device
+measurement (`adb push build-android/Tools/render/ambient_render
+/data/local/tmp/ && adb shell /data/local/tmp/ambient_render --bench`).
+
+PC reference for that measurement (i9-12900K, one core, 48 kHz, 256-sample
+blocks, chord held plus brain): median 22× realtime, slowest presets 11–13×
+(Inharmonic Field, Solar Wind, Quasar, Reed Organ, Monolith: 24–32 partials
+or Cosmos with Nebula). A Quest 2 core is roughly a fifth of that, so the
+heavy presets land near 2× — playable, but the first on-device bench decides
+whether the Chebyshev sine recurrence for the partial bank moves up the list.
+
 ## Open
 
 * First run on a device: session state flow, swapchain format, hand-tracking
   permission prompt, Oboe stream start, `adb logcat -s AmbientSynth`.
-* Pinch strength calibration per user; a two-second "hands apart / together"
-  calibration gesture at start.
+* Pinch thresholds (15–50 mm thumb-to-index) may need tuning per hand size.
 * Visual design of the scene beyond the first soft-point version; the
   Kaleidoscope rules apply (no camera motion driven by audio, everything
   continuous).
-* Wrist menu for presets and morph slots; passthrough option.
+* Passthrough option; a wrist anchor for the menu instead of head-locked.

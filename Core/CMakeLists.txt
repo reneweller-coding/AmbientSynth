@@ -8,6 +8,7 @@ add_library(AmbientCore STATIC
     src/Cosmos.cpp
     src/Gesture.cpp
     src/Osc.cpp
+    src/Recorder.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

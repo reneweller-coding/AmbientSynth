@@ -27,6 +27,7 @@ Engine::Engine()
     scale_ = &scales_[3];
     masterSmooth_.snap(dbToGain(-6.0f));
     for (auto& d : noteDistance_) d.store(-1.0f, std::memory_order_relaxed);
+    for (auto& l : noteLevel_) l.store(0.0f, std::memory_order_relaxed);
 }
 
 void Engine::prepare(double sampleRate, int maxBlockSize)
@@ -364,13 +365,17 @@ void Engine::process(float* L, float* R, int n)
     uint64_t m0 = 0, m1 = 0;
     int active = 0;
     for (auto& d : noteDistance_) d.store(-1.0f, std::memory_order_relaxed);
+    for (auto& l : noteLevel_) l.store(0.0f, std::memory_order_relaxed);
     for (auto& v : voices_) {
         if (!v.isActive()) continue;
         ++active;
         const int nt = v.note();
         if (nt >= 0 && nt < 64) m0 |= (1ull << nt);
         else if (nt >= 64 && nt < 128) m1 |= (1ull << (nt - 64));
-        if (nt >= 0 && nt < 128) noteDistance_[nt].store(v.distance(), std::memory_order_relaxed);
+        if (nt >= 0 && nt < 128) {
+            noteDistance_[nt].store(v.distance(), std::memory_order_relaxed);
+            if (v.level() > noteLevel_[nt].load(std::memory_order_relaxed)) noteLevel_[nt].store(v.level(), std::memory_order_relaxed);
+        }
     }
     mask_[0].store(m0, std::memory_order_relaxed);
     mask_[1].store(m1, std::memory_order_relaxed);

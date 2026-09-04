@@ -53,6 +53,22 @@ public:
     void setHead(float yawDeg, float pitchDeg, float rollDeg);
     void setCalibration(float heightLow, float heightHigh, float reachNear, float reachFar, float distNear, float distFar);
 
+    // Calibration gesture: for `seconds` the layer watches the raw hand data (hands
+    // together and apart, low and high, near and far) and then sets the ranges from
+    // the extremes seen, with a small margin. Progress 0..1 for a display.
+    void  startCalibration(float seconds);
+    bool  calibrating() const { return calibRemaining_ > 0.0f; }
+    float calibrationProgress() const { return calibTotal_ > 0.0f ? 1.0f - calibRemaining_ / calibTotal_ : 1.0f; }
+    // "hLow hHigh rNear rFar dNear dFar" for persistence.
+    int   writeCalibration(char* out, int capacity) const;
+    bool  parseCalibration(const char* text);
+    float heightLow() const { return hLow_; }  float heightHigh() const { return hHigh_; }
+    float distNear() const { return dNear_; }  float distFar() const { return dFar_; }
+
+    // While suspended (a menu is open), clutched mappings hold their values.
+    void setSuspended(bool s) { suspended_.store(s, std::memory_order_relaxed); }
+    bool suspended() const { return suspended_.load(std::memory_order_relaxed); }
+
     // Mappings, message thread (the audio thread reads them; keep changes rare).
     int  numMappings() const { return numMappings_; }
     const GestureMapping& mapping(int i) const { return maps_[i]; }
@@ -70,12 +86,18 @@ public:
     template <class Sink>
     int update(double dt, Sink&& sink)
     {
+        if (calibRemaining_ > 0.0f) {
+            calibRemaining_ -= static_cast<float>(dt);
+            if (calibRemaining_ <= 0.0f) { calibRemaining_ = 0.0f; finishCalibration(); }
+            return 0;   // nothing moves while calibrating
+        }
+        const bool susp = suspended();
         int written = 0;
         for (int i = 0; i < numMappings_; ++i) {
             const GestureMapping& m = maps_[i];
             State& s = state_[i];
             float x = input(m.input);
-            const bool engaged = (m.clutch == GestureInput::Count) || input(m.clutch) > 0.5f;
+            const bool engaged = !(susp && m.clutch != GestureInput::Count) && ((m.clutch == GestureInput::Count) || input(m.clutch) > 0.5f);
             if (!s.seen) {   // a mapping only acts once its input has moved; the glide starts from the rest position
                 s.seen = true; s.lastInput = x;
                 s.value = m.min + (m.max - m.min) * (m.invert ? 1.0f - x : x); s.primed = true;
@@ -105,8 +127,12 @@ private:
     GestureMapping maps_[kMaxMappings];
     State state_[kMaxMappings];
     int numMappings_ = 0;
+    void finishCalibration();
     float handX_[2] = {}, handY_[2] = {}, handZ_[2] = {};
     float hLow_ = 0.9f, hHigh_ = 1.7f, rNear_ = 0.2f, rFar_ = 0.7f, dNear_ = 0.1f, dFar_ = 0.8f;
+    std::atomic<bool> suspended_{ false };
+    float calibRemaining_ = 0.0f, calibTotal_ = 0.0f;
+    float calMinY_ = 1e9f, calMaxY_ = -1e9f, calMinD_ = 1e9f, calMaxD_ = -1e9f, calMinR_ = 1e9f, calMaxR_ = -1e9f;
 };
 
 } // namespace ambient

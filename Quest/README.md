@@ -49,6 +49,17 @@ preset=Sleep Concert      # a full preset by name
   with a dotted bridge between them that fills up with the morph position.
 * Bridge: with `osc_host` set, the same hand/head data goes out as OSC so the
   desktop plugin can be played from the headset.
+* Hand menu (`ambient/Menu.h`): hold the **left** pinch to open a head-locked
+  panel (text drawn as dots with a 5×7 font), choose with the **right** hand's
+  height, activate with the **right** pinch. Items: morph on/off, A = now,
+  B = now, A/B previous/next preset (the names show on the panel), record
+  start/stop, calibrate. While the menu is open the clutched mappings hold.
+* Calibration: on first start (no `calib.txt`) and from the menu, 8 seconds of
+  "hands together and apart, low and high, near and far"; the ranges are
+  saved to `calib.txt` in the app's external data folder.
+* Recording: `rec-YYYYMMDD-HHMMSS.wav` (32-bit float, the stream's rate) in the
+  same folder, written by a background thread from a lock-free ring.
+* Notes glow with their envelope level (`Engine::noteLevel`).
 
 ## Status
 

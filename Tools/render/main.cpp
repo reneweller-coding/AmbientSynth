@@ -16,6 +16,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 using namespace ambient;
 
@@ -99,6 +100,33 @@ int main(int argc, char** argv)
         }
         else if (a == "--list-cosmos-presets") {
             for (int p = 0; p < numCosmosPresets(); ++p) std::printf("%s\n", cosmosPreset(p).name);
+            return 0;
+        }
+        else if (a == "--bench") {
+            // Realtime factor per preset (rendered seconds per wall second). Run on the device via adb
+            // to see what the core costs there; below ~3 the headset would be at its limit.
+            const double secs = 10.0;
+            double worst = 1e9; const char* worstName = "";
+            std::printf("%-24s %8s %8s\n", "preset", "rms dB", "x rt");
+            for (int p = 0; p < numPresets(); ++p) {
+                Engine e;
+                e.applyPreset(p);
+                e.setParam(ParamId::BrainRate, 3.0f);
+                e.prepare(sr, block);
+                e.noteOn(48, 0.8f); e.noteOn(55, 0.8f); e.noteOn(64, 0.8f);
+                std::vector<float> bl(static_cast<size_t>(block)), br(static_cast<size_t>(block));
+                double sq = 0; long cnt = 0;
+                const auto t0 = std::chrono::steady_clock::now();
+                for (long done = 0; done < static_cast<long>(secs * sr); done += block) {
+                    e.process(bl.data(), br.data(), block);
+                    for (int k = 0; k < block; ++k) { sq += bl[static_cast<size_t>(k)] * bl[static_cast<size_t>(k)]; ++cnt; }
+                }
+                const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                const double rt = secs / std::max(wall, 1e-6);
+                if (rt < worst) { worst = rt; worstName = preset(p).name; }
+                std::printf("%-24s %8.1f %8.1f\n", preset(p).name, 10.0 * std::log10(sq / std::max<long>(cnt, 1) + 1e-20), rt);
+            }
+            std::printf("slowest: %s at %.1f x realtime\n", worstName, worst);
             return 0;
         }
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }

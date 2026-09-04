@@ -80,6 +80,10 @@ bool dispatchOsc(const OscMessage& m, OscSink& sink, GestureLayer& gestures)
         gestures.setHead(m.floats[0], m.numArgs > 1 ? m.floats[1] : 0.0f, m.numArgs > 2 ? m.floats[2] : 0.0f);
         return true;
     }
+    if (std::strcmp(a, "calibrate") == 0) {
+        gestures.startCalibration(m.numArgs >= 1 ? m.floats[0] : 6.0f);
+        return true;
+    }
     if (std::strcmp(a, "morph") == 0) {
         if (m.numArgs < 1) return false;
         sink.setParam(ParamId::MorphPos, clampv(m.floats[0], 0.0f, 1.0f));

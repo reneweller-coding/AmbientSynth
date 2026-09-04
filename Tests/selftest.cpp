@@ -9,6 +9,8 @@
 #include "ambient/Presets.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
+#include "ambient/Menu.h"
+#include "ambient/Recorder.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -732,10 +734,97 @@ void testFeaturesRound7()
     }
 }
 
+void testCalibrationMenuRecorder()
+{
+    {   // Calibration: the ranges follow the explored extremes; nothing moves meanwhile.
+        GestureLayer g;
+        int writes = 0;
+        auto sk = [&](ParamId, float) { ++writes; };
+        g.startCalibration(2.0f);
+        CHECK(g.calibrating(), "calibration running");
+        // sweep: hands together low, then apart high, then far forward
+        for (int i = 0; i <= 40; ++i) {
+            const float t = i / 40.0f;
+            g.setHand(0, -0.05f - 0.35f * t, 0.7f + 0.9f * t, -0.3f - 0.3f * t, 0.0f, 0.0f);
+            g.setHand(1,  0.05f + 0.35f * t, 0.7f + 0.9f * t, -0.3f - 0.3f * t, 1.0f, 0.0f);
+            g.update(0.05, sk);
+        }
+        CHECK(writes == 0, "no parameter writes during calibration");
+        CHECK(!g.calibrating() && g.calibrationProgress() >= 1.0f, "calibration finished after its time");
+        CHECK(g.heightLow() > 0.7f && g.heightLow() < 0.8f && g.heightHigh() > 1.5f && g.heightHigh() < 1.6f, "height range from extremes with margin");
+        CHECK(g.distNear() > 0.1f && g.distNear() < 0.2f && g.distFar() > 0.7f && g.distFar() < 0.8f, "distance range from extremes");
+        char text[128];
+        g.writeCalibration(text, sizeof(text));
+        GestureLayer g2;
+        CHECK(g2.parseCalibration(text) && std::fabs(g2.heightLow() - g.heightLow()) < 1e-5f && std::fabs(g2.distFar() - g.distFar()) < 1e-5f, "calibration round-trips through text");
+        CHECK(!g2.parseCalibration("1 0 0 1 0 1"), "inverted range rejected");
+    }
+    {   // Hand menu: open with the left pinch, choose by right height, activate with the right pinch.
+        GestureLayer g;
+        HandMenu menu;
+        g.setInput(GestureInput::LeftPinch, 0.0f);
+        g.setInput(GestureInput::RightPinch, 0.0f);
+        g.setInput(GestureInput::RightHeight, 0.95f);
+        CHECK(menu.update(0.02, g) == MenuAction::None && !menu.isOpen(), "closed at rest");
+        g.setInput(GestureInput::LeftPinch, 1.0f);
+        for (int i = 0; i < 20; ++i) menu.update(0.02, g);
+        CHECK(menu.isOpen() && menu.highlighted() == 0 && g.suspended(), "open: top item highlighted, mappings suspended");
+        g.setInput(GestureInput::RightHeight, 0.05f);
+        menu.update(0.02, g);
+        CHECK(menu.highlighted() == kMenuItems - 1, "hand low: last item");
+        g.setInput(GestureInput::RightPinch, 1.0f);
+        const MenuAction a = menu.update(0.02, g);
+        CHECK(a == MenuAction::Calibrate, "right pinch activates the highlighted item");
+        CHECK(menu.update(0.02, g) == MenuAction::None, "holding the pinch does not repeat");
+        g.setInput(GestureInput::RightPinch, 0.0f); menu.update(0.02, g);
+        g.setInput(GestureInput::LeftPinch, 0.0f);
+        menu.update(0.02, g);
+        CHECK(!menu.isOpen() && !g.suspended(), "closes when the left pinch opens; mappings resume");
+        // A right pinch that was already closed when the menu opens must not fire.
+        g.setInput(GestureInput::RightPinch, 1.0f); menu.update(0.02, g);
+        g.setInput(GestureInput::LeftPinch, 1.0f);
+        MenuAction fired = MenuAction::None;
+        for (int i = 0; i < 30; ++i) { const MenuAction r = menu.update(0.02, g); if (r != MenuAction::None) fired = r; }
+        CHECK(fired == MenuAction::None, "a pinch held from before the menu opened does not select");
+    }
+    {   // Recorder: writes a valid float WAV with the right sizes.
+        WavRecorder rec;
+        const char* path = "selftest_rec.wav";
+        CHECK(rec.start(path, 48000, 2), "recorder starts");
+        std::vector<float> L(480), R(480);
+        for (int i = 0; i < 480; ++i) { L[static_cast<size_t>(i)] = 0.25f; R[static_cast<size_t>(i)] = -0.25f; }
+        for (int b = 0; b < 100; ++b) rec.write(L.data(), R.data(), 480);   // 1 s
+        rec.stop();
+        CHECK(rec.framesWritten() == 48000 && rec.framesDropped() == 0, "all frames written, none dropped");
+        FILE* f = std::fopen(path, "rb");
+        CHECK(f != nullptr, "wav exists");
+        if (f) {
+            char hdr[44]; std::fread(hdr, 1, 44, f);
+            uint32_t dataBytes; std::memcpy(&dataBytes, hdr + 40, 4);
+            uint16_t fmt; std::memcpy(&fmt, hdr + 20, 2);
+            CHECK(std::memcmp(hdr, "RIFF", 4) == 0 && fmt == 3 && dataBytes == 48000u * 8u, "header: float format, data size 1 s stereo");
+            float first[2]; std::fread(first, 4, 2, f);
+            CHECK(first[0] == 0.25f && first[1] == -0.25f, "interleaved samples intact");
+            std::fclose(f);
+            std::remove(path);
+        }
+    }
+    {   // Per-note level observer.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Attack, 0.05f);
+        e.prepare(48000.0, 256);
+        e.noteOn(60, 1.0f);
+        render(e, 0.5);
+        CHECK(e.noteLevel(60) > 0.9f && e.noteLevel(61) == 0.0f, "note level follows the envelope of the sounding note");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    testCalibrationMenuRecorder();
     testFeaturesRound7();
     testOscAndGestures();
     testMorph();

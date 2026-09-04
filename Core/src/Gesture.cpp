@@ -49,10 +49,46 @@ void GestureLayer::setCalibration(float heightLow, float heightHigh, float reach
     hLow_ = heightLow; hHigh_ = heightHigh; rNear_ = reachNear; rFar_ = reachFar; dNear_ = distNear; dFar_ = distFar;
 }
 
+void GestureLayer::startCalibration(float seconds)
+{
+    calibTotal_ = calibRemaining_ = std::max(seconds, 0.5f);
+    calMinY_ = 1e9f; calMaxY_ = -1e9f; calMinD_ = 1e9f; calMaxD_ = -1e9f; calMinR_ = 1e9f; calMaxR_ = -1e9f;
+}
+
+void GestureLayer::finishCalibration()
+{
+    // Only accept what was actually explored; keep sensible minimum spans.
+    if (calMaxY_ - calMinY_ > 0.25f) { const float m = 0.05f * (calMaxY_ - calMinY_); hLow_ = calMinY_ + m; hHigh_ = calMaxY_ - m; }
+    if (calMaxD_ - calMinD_ > 0.20f) { const float m = 0.05f * (calMaxD_ - calMinD_); dNear_ = calMinD_ + m; dFar_ = calMaxD_ - m; }
+    if (calMaxR_ - calMinR_ > 0.15f) { const float m = 0.05f * (calMaxR_ - calMinR_); rNear_ = calMinR_ + m; rFar_ = calMaxR_ - m; }
+}
+
+int GestureLayer::writeCalibration(char* out, int capacity) const
+{
+    return std::snprintf(out, static_cast<size_t>(capacity), "%g %g %g %g %g %g", hLow_, hHigh_, rNear_, rFar_, dNear_, dFar_);
+}
+
+bool GestureLayer::parseCalibration(const char* text)
+{
+    if (text == nullptr) return false;
+    float v[6];
+    if (std::sscanf(text, "%f %f %f %f %f %f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) return false;
+    if (!(v[1] > v[0] && v[3] > v[2] && v[5] > v[4])) return false;
+    setCalibration(v[0], v[1], v[2], v[3], v[4], v[5]);
+    return true;
+}
+
 void GestureLayer::setHand(int hand, float x, float y, float z, float pinch, float tilt)
 {
     const int h = hand & 1;
     handX_[h] = x; handY_[h] = y; handZ_[h] = z;
+    if (calibRemaining_ > 0.0f) {
+        calMinY_ = std::min(calMinY_, y); calMaxY_ = std::max(calMaxY_, y);
+        calMinR_ = std::min(calMinR_, -z); calMaxR_ = std::max(calMaxR_, -z);
+        const float ddx = handX_[0] - handX_[1], ddy = handY_[0] - handY_[1], ddz = handZ_[0] - handZ_[1];
+        const float dd = std::sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+        calMinD_ = std::min(calMinD_, dd); calMaxD_ = std::max(calMaxD_, dd);
+    }
     setInput(h == 0 ? GestureInput::LeftHeight : GestureInput::RightHeight, norm01(y, hLow_, hHigh_));
     setInput(h == 0 ? GestureInput::LeftForward : GestureInput::RightForward, norm01(-z, rNear_, rFar_));
     setInput(h == 0 ? GestureInput::LeftPinch : GestureInput::RightPinch, pinch);

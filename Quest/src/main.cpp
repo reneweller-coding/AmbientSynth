@@ -1,13 +1,16 @@
 // AmbientSynth for Meta Quest -- native OpenXR application.
 //
 //   hands (XR_EXT_hand_tracking) -> GestureLayer -> Engine parameters
-//   Oboe output stream           -> Engine::process
-//   GLES 3 scene                 <- Engine observers (sounding notes, distance, root, morph)
+//   left pinch                   -> HandMenu (presets A/B, morph, record, calibrate)
+//   Oboe output stream           -> Engine::process (+ WavRecorder)
+//   GLES 3 scene                 <- Engine observers (sounding notes, level, distance, root, morph)
 //   optional bridge              -> OSC to a PC running the desktop plugin
 //
 // No game engine: NativeActivity + android_native_app_glue, EGL, OpenXR loader, Oboe, the core.
-// Config file (optional): <externalDataPath>/ambient.cfg with lines
-//   osc_host=192.168.1.20   osc_port=9000   audio=1   preset=Sleep Concert
+// Files in <externalDataPath>:
+//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert
+//   calib.txt     hand calibration, written after the calibration gesture
+//   rec-*.wav     recordings
 
 #include <android/log.h>
 #include <android_native_app_glue.h>
@@ -27,13 +30,16 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <vector>
 #include <atomic>
 
 #include "ambient/Engine.h"
 #include "ambient/Gesture.h"
+#include "ambient/Menu.h"
 #include "ambient/Presets.h"
+#include "ambient/Recorder.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "AmbientSynth", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AmbientSynth", __VA_ARGS__)
@@ -45,6 +51,7 @@ namespace {
 // ---------------------------------------------------------------- small math
 
 struct Mat4 { float m[16]; };
+struct Vec3 { float x, y, z; };
 
 Mat4 identity() { Mat4 r{}; r.m[0] = r.m[5] = r.m[10] = r.m[15] = 1.0f; return r; }
 
@@ -80,7 +87,12 @@ Mat4 rotationFromQuat(const XrQuaternionf& q)
     return r;
 }
 
-// View matrix = inverse of the pose: R^T * T(-p)
+Vec3 rotate(const XrQuaternionf& q, Vec3 v)
+{
+    const Mat4 r = rotationFromQuat(q);
+    return { r.m[0] * v.x + r.m[4] * v.y + r.m[8] * v.z, r.m[1] * v.x + r.m[5] * v.y + r.m[9] * v.z, r.m[2] * v.x + r.m[6] * v.y + r.m[10] * v.z };
+}
+
 Mat4 viewFromPose(const XrPosef& pose)
 {
     Mat4 r = rotationFromQuat(pose.orientation);
@@ -93,11 +105,42 @@ Mat4 viewFromPose(const XrPosef& pose)
 
 void quatToEulerDeg(const XrQuaternionf& q, float& yaw, float& pitch, float& roll)
 {
-    // OpenXR: -Z forward, +Y up. yaw about Y, pitch about X, roll about Z.
     const float sinp = 2.0f * (q.w * q.x - q.y * q.z);
     pitch = std::asin(std::fmax(-1.0f, std::fmin(1.0f, sinp))) * 57.29578f;
     yaw = std::atan2(2.0f * (q.w * q.y + q.x * q.z), 1.0f - 2.0f * (q.x * q.x + q.y * q.y)) * 57.29578f;
     roll = std::atan2(2.0f * (q.w * q.z + q.x * q.y), 1.0f - 2.0f * (q.x * q.x + q.z * q.z)) * 57.29578f;
+}
+
+// ---------------------------------------------------------------- 5x7 point font
+
+// Rows top to bottom, 5 bits each (bit 4 = left column). Covers A-Z, 0-9 and a few signs.
+const unsigned char* glyph(char c)
+{
+    static const unsigned char kFont[][7] = {
+        {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}, {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E}, {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E}, // A B C
+        {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E}, {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}, {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10}, // D E F
+        {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F}, {0x11,0x11,0x11,0x1F,0x11,0x11,0x11}, {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E}, // G H I
+        {0x01,0x01,0x01,0x01,0x11,0x11,0x0E}, {0x11,0x12,0x14,0x18,0x14,0x12,0x11}, {0x10,0x10,0x10,0x10,0x10,0x10,0x1F}, // J K L
+        {0x11,0x1B,0x15,0x15,0x11,0x11,0x11}, {0x11,0x19,0x15,0x13,0x11,0x11,0x11}, {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}, // M N O
+        {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}, {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D}, {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}, // P Q R
+        {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}, {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}, {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}, // S T U
+        {0x11,0x11,0x11,0x11,0x11,0x0A,0x04}, {0x11,0x11,0x11,0x15,0x15,0x15,0x0A}, {0x11,0x11,0x0A,0x04,0x0A,0x11,0x11}, // V W X
+        {0x11,0x11,0x0A,0x04,0x04,0x04,0x04}, {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F},                                        // Y Z
+        {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E}, {0x04,0x0C,0x04,0x04,0x04,0x04,0x0E}, {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F}, // 0 1 2
+        {0x1F,0x02,0x04,0x02,0x01,0x11,0x0E}, {0x02,0x06,0x0A,0x12,0x1F,0x02,0x02}, {0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E}, // 3 4 5
+        {0x06,0x08,0x10,0x1E,0x11,0x11,0x0E}, {0x1F,0x01,0x02,0x04,0x08,0x08,0x08}, {0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E}, // 6 7 8
+        {0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C},                                                                              // 9
+        {0x00,0x00,0x00,0x00,0x00,0x00,0x00}, {0x00,0x00,0x00,0x1F,0x00,0x00,0x00}, {0x00,0x00,0x00,0x00,0x00,0x0C,0x0C}, // space - .
+        {0x00,0x0C,0x0C,0x00,0x0C,0x0C,0x00}, {0x01,0x02,0x04,0x08,0x10,0x00,0x00}, {0x02,0x04,0x08,0x04,0x02,0x00,0x00}, // : / <
+        {0x08,0x04,0x02,0x04,0x08,0x00,0x00}, {0x00,0x04,0x04,0x1F,0x04,0x04,0x00}, {0x00,0x00,0x1F,0x00,0x1F,0x00,0x00}, // > + =
+        {0x00,0x00,0x00,0x00,0x00,0x00,0x00},                                                                              // unknown
+    };
+    if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    if (c >= 'A' && c <= 'Z') return kFont[c - 'A'];
+    if (c >= '0' && c <= '9') return kFont[26 + (c - '0')];
+    switch (c) { case ' ': return kFont[36]; case '-': return kFont[37]; case '.': return kFont[38]; case ':': return kFont[39];
+                 case '/': return kFont[40]; case '<': return kFont[41]; case '>': return kFont[42]; case '+': return kFont[43]; case '=': return kFont[44]; }
+    return kFont[45];
 }
 
 // ---------------------------------------------------------------- OSC sender (bridge mode)
@@ -137,7 +180,7 @@ private:
 
 class Audio : public oboe::AudioStreamDataCallback {
 public:
-    explicit Audio(Engine& e) : engine_(e) {}
+    Audio(Engine& e, WavRecorder& r) : engine_(e), recorder_(r) {}
     bool start()
     {
         oboe::AudioStreamBuilder b;
@@ -149,15 +192,16 @@ public:
          ->setSampleRate(48000)
          ->setDataCallback(this);
         if (b.openStream(stream_) != oboe::Result::OK) { LOGE("Oboe: cannot open stream"); return false; }
-        const int sr = stream_->getSampleRate();
+        sampleRate_ = stream_->getSampleRate();
         const int burst = stream_->getFramesPerBurst();
         stream_->setBufferSizeInFrames(burst * 2);
         bufL_.assign(8192, 0.0f); bufR_.assign(8192, 0.0f);
-        engine_.prepare(sr, 1024);
-        LOGI("Oboe: %d Hz, burst %d", sr, burst);
+        engine_.prepare(sampleRate_, 1024);
+        LOGI("Oboe: %d Hz, burst %d", sampleRate_, burst);
         return stream_->requestStart() == oboe::Result::OK;
     }
     void stop() { if (stream_) { stream_->requestStop(); stream_->close(); stream_.reset(); } }
+    int sampleRate() const { return sampleRate_; }
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream*, void* data, int32_t frames) override
     {
         float* out = static_cast<float*>(data);
@@ -165,6 +209,7 @@ public:
         while (done < frames) {
             const int n = std::min(frames - done, 4096);
             engine_.process(bufL_.data(), bufR_.data(), n);
+            recorder_.write(bufL_.data(), bufR_.data(), n);
             for (int i = 0; i < n; ++i) { out[(done + i) * 2] = bufL_[static_cast<size_t>(i)]; out[(done + i) * 2 + 1] = bufR_[static_cast<size_t>(i)]; }
             done += n;
         }
@@ -172,8 +217,10 @@ public:
     }
 private:
     Engine& engine_;
+    WavRecorder& recorder_;
     std::shared_ptr<oboe::AudioStream> stream_;
     std::vector<float> bufL_, bufR_;
+    int sampleRate_ = 48000;
 };
 
 // ---------------------------------------------------------------- config
@@ -246,6 +293,9 @@ GLuint compile(GLenum type, const char* src)
     return s;
 }
 
+// A head-locked text panel: origin in front of the eyes, axes from the head's yaw only.
+struct Panel { Vec3 origin, right, up; };
+
 class Scene {
 public:
     bool init()
@@ -268,35 +318,32 @@ public:
         return true;
     }
 
-    // Build the picture from the engine's observers and the hands.
-    void update(Engine& engine, const GestureLayer& gestures, const XrVector3f* palms, const bool* palmsValid, const float* pinch)
+    void begin() { points_.clear(); }
+
+    void addWorld(Engine& engine, const XrVector3f* palms, const bool* palmsValid, const float* pinch)
     {
-        points_.clear();
-        // Floor ring: a faint horizon around the listener.
-        for (int i = 0; i < 64; ++i) {
+        for (int i = 0; i < 64; ++i) {   // horizon ring
             const float a = static_cast<float>(i) / 64.0f * 6.2831853f;
             points_.push_back({ 2.5f * std::sin(a), 0.02f, -2.5f * std::cos(a), 0.25f, 0.3f, 0.4f, 0.35f, 40.0f });
         }
-        // Sounding notes: pitch class around the listener, octave as height, distance as radius.
         bool notes[128];
         engine.soundingNotes(notes);
         const int root = engine.brainRoot();
         for (int n = 24; n < 108; ++n) {
             if (!notes[n]) continue;
             const float d = std::fmax(0.0f, engine.noteDistance(n));
+            const float lv = engine.noteLevel(n);
             const float ang = static_cast<float>(n % 12) / 12.0f * 6.2831853f;
             const float radius = 1.2f + 4.0f * d;
             const float y = 0.5f + (static_cast<float>(n / 12) - 3.0f) * 0.35f;
             const float warm = 1.0f - d;
             points_.push_back({ radius * std::sin(ang), y, -radius * std::cos(ang),
-                                0.5f + 0.5f * warm, 0.55f + 0.25f * warm, 1.0f - 0.5f * warm, 0.9f, 220.0f * (1.0f - 0.5f * d) });
+                                0.5f + 0.5f * warm, 0.55f + 0.25f * warm, 1.0f - 0.5f * warm, 0.2f + 0.8f * lv, (120.0f + 160.0f * lv) * (1.0f - 0.5f * d) });
         }
-        // Root marker.
         {
             const float ang = static_cast<float>(root % 12) / 12.0f * 6.2831853f;
             points_.push_back({ 1.0f * std::sin(ang), 0.1f, -1.0f * std::cos(ang), 1.0f, 0.6f, 0.2f, 0.8f, 120.0f });
         }
-        // Hands: green, red while pinching; a bridge of dots between them shows the morph axis.
         for (int h = 0; h < 2; ++h) {
             if (!palmsValid[h]) continue;
             const float p = pinch[h];
@@ -311,7 +358,26 @@ public:
                                     0.9f, 0.5f, 0.8f, lit, 35.0f });
             }
         }
-        (void)gestures;
+    }
+
+    // Text on the panel; (u, v) in metres from the panel origin, cell = dot spacing in metres.
+    void addText(const Panel& p, float u, float v, float cell, const char* text, float r, float g, float b, float a)
+    {
+        for (const char* c = text; *c; ++c) {
+            const unsigned char* gl = glyph(*c);
+            for (int row = 0; row < 7; ++row)
+                for (int col = 0; col < 5; ++col)
+                    if (gl[row] & (0x10 >> col)) {
+                        const float x = u + static_cast<float>(col) * cell, y = v - static_cast<float>(row) * cell;
+                        points_.push_back({ p.origin.x + p.right.x * x + p.up.x * y, p.origin.y + p.right.y * x + p.up.y * y, p.origin.z + p.right.z * x + p.up.z * y,
+                                            r, g, b, a, cell * 900.0f });
+                    }
+            u += 6.0f * cell;
+        }
+    }
+
+    void upload()
+    {
         glBindBuffer(GL_ARRAY_BUFFER, vbo_);
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(points_.size() * sizeof(Point)), points_.data(), GL_DYNAMIC_DRAW);
     }
@@ -351,9 +417,11 @@ public:
 
     bool init()
     {
-        config_ = readConfig(app_->activity->externalDataPath);
+        dataDir_ = app_->activity->externalDataPath ? app_->activity->externalDataPath : "";
+        config_ = readConfig(dataDir_.c_str());
         if (!config_.preset.empty())
-            for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) engine_.applyPreset(i);
+            for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) { engine_.applyPreset(i); presetA_ = presetB_ = i; }
+        loadCalibration();
         if (!config_.oscHost.empty()) {
             if (osc_.open(config_.oscHost, config_.oscPort)) LOGI("bridge: OSC to %s:%d", config_.oscHost.c_str(), config_.oscPort);
             else LOGE("bridge: bad host %s", config_.oscHost.c_str());
@@ -365,13 +433,13 @@ public:
         if (!initHands()) LOGE("hand tracking unavailable");
         if (!scene_.init()) return false;
         if (config_.audio && !audio_.start()) LOGE("audio failed to start");
+        if (!calibrated_) { gestures_.startCalibration(8.0f); LOGI("no calibration file: calibrating for 8 s"); }
         return true;
     }
 
     void run()
     {
         while (!app_->destroyRequested) {
-            // Android events
             int events; android_poll_source* source;
             const int timeout = (sessionRunning_ || app_->window == nullptr) ? 0 : -1;
             while (ALooper_pollOnce(timeout, nullptr, &events, reinterpret_cast<void**>(&source)) >= 0) {
@@ -386,6 +454,7 @@ public:
 
     void shutdown()
     {
+        recorder_.stop();
         audio_.stop();
         for (auto& t : targets_) { if (t.swapchain != XR_NULL_HANDLE) xrDestroySwapchain(t.swapchain); }
         for (int h = 0; h < 2; ++h) if (handTracker_[h] != XR_NULL_HANDLE && pfnDestroyHandTracker_) pfnDestroyHandTracker_(handTracker_[h]);
@@ -397,6 +466,69 @@ public:
     }
 
 private:
+    // ------------------------------------------------ persistence
+
+    void loadCalibration()
+    {
+        if (dataDir_.empty()) return;
+        FILE* f = std::fopen((dataDir_ + "/calib.txt").c_str(), "r");
+        if (f == nullptr) return;
+        char line[256] = {};
+        if (std::fgets(line, sizeof(line), f)) calibrated_ = gestures_.parseCalibration(line);
+        std::fclose(f);
+        LOGI("calibration %s", calibrated_ ? "loaded" : "invalid");
+    }
+
+    void saveCalibration()
+    {
+        if (dataDir_.empty()) return;
+        char text[128];
+        gestures_.writeCalibration(text, sizeof(text));
+        FILE* f = std::fopen((dataDir_ + "/calib.txt").c_str(), "w");
+        if (f) { std::fputs(text, f); std::fclose(f); }
+        calibrated_ = true;
+        LOGI("calibration saved: %s", text);
+    }
+
+    // ------------------------------------------------ menu actions
+
+    void applyMenu(MenuAction a)
+    {
+        switch (a) {
+        case MenuAction::ToggleMorph:
+            engine_.setParam(ParamId::MorphActive, engine_.getParam(ParamId::MorphActive) >= 0.5f ? 0.0f : 1.0f);
+            break;
+        case MenuAction::CaptureA: engine_.captureMorphSlot(0); slotName_[0] = "NOW"; break;
+        case MenuAction::CaptureB: engine_.captureMorphSlot(1); slotName_[1] = "NOW"; break;
+        case MenuAction::PresetAPrev: case MenuAction::PresetANext: case MenuAction::PresetBPrev: case MenuAction::PresetBNext: {
+            const int slot = (a == MenuAction::PresetAPrev || a == MenuAction::PresetANext) ? 0 : 1;
+            int& idx = slot == 0 ? presetA_ : presetB_;
+            idx = (idx + ((a == MenuAction::PresetANext || a == MenuAction::PresetBNext) ? 1 : numPresets() - 1)) % numPresets();
+            float values[kNumParams];
+            for (int i = 0; i < kNumParams; ++i) values[i] = engine_.getParam(static_cast<ParamId>(i));
+            applyPreset(preset(idx), [&](ParamId id, float v) { values[static_cast<int>(id)] = v; });
+            engine_.setMorphSlot(slot, values);
+            slotName_[slot] = preset(idx).name;
+            if (engine_.getParam(ParamId::MorphActive) < 0.5f && slot == 0) engine_.applyPreset(idx);   // without morph, A is what plays
+            break;
+        }
+        case MenuAction::ToggleRecord:
+            if (recorder_.recording()) { recorder_.stop(); LOGI("recording stopped, %.1f s", recorder_.seconds()); }
+            else if (!dataDir_.empty()) {
+                char name[64]; const std::time_t t = std::time(nullptr); std::strftime(name, sizeof(name), "rec-%Y%m%d-%H%M%S.wav", std::localtime(&t));
+                if (recorder_.start((dataDir_ + "/" + name).c_str(), audio_.sampleRate(), 2)) LOGI("recording to %s", name);
+                else LOGE("cannot start recording");
+            }
+            break;
+        case MenuAction::Calibrate:
+            gestures_.startCalibration(8.0f);
+            break;
+        default: break;
+        }
+    }
+
+    // ------------------------------------------------ OpenXR setup
+
     bool initLoader()
     {
         PFN_xrInitializeLoaderKHR initLoader = nullptr;
@@ -561,6 +693,8 @@ private:
         }
     }
 
+    // ------------------------------------------------ per frame
+
     void updateHands(XrTime time)
     {
         for (int h = 0; h < 2; ++h) {
@@ -582,9 +716,8 @@ private:
             const float dx = thumb.pose.position.x - index.pose.position.x, dy = thumb.pose.position.y - index.pose.position.y, dz = thumb.pose.position.z - index.pose.position.z;
             const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
             const float pinch = std::fmax(0.0f, std::fmin(1.0f, 1.0f - (dist - 0.015f) / 0.035f));
-            // Palm roll: how far the palm's sideways axis points up.
             const Mat4 r = rotationFromQuat(palm.pose.orientation);
-            const float tilt = std::fmax(-1.0f, std::fmin(1.0f, r.m[1]));   // world y of the local +x axis
+            const float tilt = std::fmax(-1.0f, std::fmin(1.0f, r.m[1]));   // world y of the palm's sideways axis
             palms_[h] = palm.pose.position;
             palmValid_[h] = true;
             pinch_[h] = pinch;
@@ -598,14 +731,66 @@ private:
 
     void updateHead(XrTime time)
     {
+        headValid_ = false;
         if (viewSpace_ == XR_NULL_HANDLE) return;
         XrSpaceLocation loc{ XR_TYPE_SPACE_LOCATION };
         if (XR_FAILED(xrLocateSpace(viewSpace_, stageSpace_, time, &loc))) return;
         if (!(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) return;
+        headPose_ = loc.pose;
+        headValid_ = true;
         float yaw, pitch, roll;
         quatToEulerDeg(loc.pose.orientation, yaw, pitch, roll);
         gestures_.setHead(yaw, pitch, roll);
         if (osc_.ok()) { const float args[3] = { yaw, pitch, roll }; osc_.send("/ambient/head", args, 3); }
+    }
+
+    Panel headPanel() const
+    {
+        // In front of the eyes, following yaw only (a panel that tilts with the head is tiring).
+        Panel p;
+        const Vec3 fwd = rotate(headPose_.orientation, { 0.0f, 0.0f, -1.0f });
+        const float len = std::fmax(std::sqrt(fwd.x * fwd.x + fwd.z * fwd.z), 1e-3f);
+        const Vec3 f{ fwd.x / len, 0.0f, fwd.z / len };
+        p.right = { -f.z, 0.0f, f.x };
+        p.up = { 0.0f, 1.0f, 0.0f };
+        p.origin = { headPose_.position.x + f.x * 0.9f - p.right.x * 0.22f, headPose_.position.y + 0.12f, headPose_.position.z + f.z * 0.9f - p.right.z * 0.22f };
+        return p;
+    }
+
+    void addOverlay()
+    {
+        if (!headValid_) return;
+        const Panel p = headPanel();
+        const float cell = 0.006f;
+        if (gestures_.calibrating()) {
+            scene_.addText(p, 0.0f, 0.0f, cell, "CALIBRATING", 1.0f, 0.8f, 0.3f, 1.0f);
+            scene_.addText(p, 0.0f, -0.06f, cell, "HANDS TOGETHER AND APART", 0.8f, 0.8f, 0.9f, 0.9f);
+            scene_.addText(p, 0.0f, -0.11f, cell, "LOW AND HIGH  NEAR AND FAR", 0.8f, 0.8f, 0.9f, 0.9f);
+            const int pct = static_cast<int>(gestures_.calibrationProgress() * 100.0f);
+            char line[32]; std::snprintf(line, sizeof(line), "%d", pct);
+            scene_.addText(p, 0.0f, -0.17f, cell, line, 1.0f, 0.8f, 0.3f, 1.0f);
+            return;
+        }
+        const float o = menu_.openness();
+        if (o < 0.02f) {
+            if (recorder_.recording()) {
+                char line[32]; const int s = static_cast<int>(recorder_.seconds());
+                std::snprintf(line, sizeof(line), "REC %d:%02d", s / 60, s % 60);
+                scene_.addText(p, 0.0f, 0.0f, cell, line, 1.0f, 0.3f, 0.3f, 0.9f);
+            }
+            return;
+        }
+        const int hi = menu_.highlighted();
+        for (int i = 0; i < kMenuItems; ++i) {
+            const bool sel = (i == hi);
+            const MenuAction a = static_cast<MenuAction>(i);
+            std::string label = menuLabel(a);
+            if (a == MenuAction::ToggleMorph) label += engine_.getParam(ParamId::MorphActive) >= 0.5f ? "  ON" : "  OFF";
+            if (a == MenuAction::ToggleRecord) label += recorder_.recording() ? "  STOP" : "  START";
+            scene_.addText(p, 0.0f, -static_cast<float>(i) * 0.05f, cell, label.c_str(), sel ? 1.0f : 0.5f, sel ? 0.9f : 0.55f, sel ? 0.6f : 0.7f, o * (sel ? 1.0f : 0.6f));
+        }
+        std::string ab = "A:" + slotName_[0].substr(0, 18) + "  B:" + slotName_[1].substr(0, 18);
+        scene_.addText(p, 0.0f, 0.06f, cell * 0.8f, ab.c_str(), 0.9f, 0.6f, 0.9f, o);
     }
 
     void frame()
@@ -620,7 +805,11 @@ private:
         lastTime_ = fs.predictedDisplayTime;
         updateHands(fs.predictedDisplayTime);
         updateHead(fs.predictedDisplayTime);
+        const bool wasCalibrating = gestures_.calibrating();
+        const MenuAction action = menu_.update(dt, gestures_);
+        if (action != MenuAction::None) applyMenu(action);
         gestures_.update(dt, [this](ParamId id, float v) { engine_.setParam(id, v); });
+        if (wasCalibrating && !gestures_.calibrating()) saveCalibration();
 
         std::vector<XrCompositionLayerProjectionView> projViews;
         XrCompositionLayerProjection layer{ XR_TYPE_COMPOSITION_LAYER_PROJECTION };
@@ -636,7 +825,10 @@ private:
             uint32_t viewCount = 0;
             xrLocateViews(session_, &vli, &vs, static_cast<uint32_t>(views_.size()), &viewCount, views_.data());
             if ((vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) && (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-                scene_.update(engine_, gestures_, palms_, palmValid_, pinch_);
+                scene_.begin();
+                scene_.addWorld(engine_, palms_, palmValid_, pinch_);
+                addOverlay();
+                scene_.upload();
                 projViews.resize(viewCount, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW });
                 for (uint32_t v = 0; v < viewCount; ++v) {
                     SwapchainTarget& t = targets_[v];
@@ -680,12 +872,18 @@ private:
     }
 
     android_app* app_;
+    std::string dataDir_;
     Config config_;
     Engine engine_;
     GestureLayer gestures_;
-    Audio audio_{ engine_ };
+    HandMenu menu_;
+    WavRecorder recorder_;
+    Audio audio_{ engine_, recorder_ };
     OscOut osc_;
     Scene scene_;
+    int presetA_ = 0, presetB_ = 0;
+    std::string slotName_[2] = { "INIT", "INIT" };
+    bool calibrated_ = false;
 
     XrInstance instance_ = XR_NULL_HANDLE;
     XrSystemId system_ = XR_NULL_SYSTEM_ID;
@@ -696,6 +894,8 @@ private:
     std::vector<XrView> views_;
     std::vector<SwapchainTarget> targets_;
     XrTime lastTime_ = 0;
+    XrPosef headPose_{};
+    bool headValid_ = false;
 
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLConfig config_egl_ = nullptr;

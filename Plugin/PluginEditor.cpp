@@ -62,6 +62,10 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
             });
     };
     addAndMakeVisible(*recButton_);
+    calibButton_ = std::make_unique<juce::TextButton>("Calibrate");
+    calibButton_->setTooltip("Hands: together and apart, low and high, near and far, for 6 s");
+    calibButton_->onClick = [this] { proc_.gestures().startCalibration(6.0f); };
+    addAndMakeVisible(*calibButton_);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -285,6 +289,7 @@ void AmbientSynthEditor::resized()
     if (saveButton_) saveButton_->setBounds(556, 8, 64, 24);
     if (loadButton_) loadButton_->setBounds(626, 8, 64, 24);
     if (recButton_) recButton_->setBounds(696, 8, 56, 24);
+    if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
     if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
@@ -481,7 +486,8 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
                                : "   OSC off: " + proc_.oscError();
     const auto& gl = proc_.gestures();
     const float clutch = gl.input(GestureInput::RightPinch);
-    info += clutch > 0.5f ? "   hands: engaged" : "   hands: free";
+    if (gl.calibrating()) info += "   CALIBRATING " + juce::String(static_cast<int>(gl.calibrationProgress() * 100.0f)) + " %";
+    else info += clutch > 0.5f ? "   hands: engaged" : "   hands: free";
     info += "   L " + juce::String(gl.input(GestureInput::LeftHeight), 2) + "  R " + juce::String(gl.input(GestureInput::RightHeight), 2)
           + "  dist " + juce::String(gl.input(GestureInput::HandDistance), 2) + "  pinch " + juce::String(clutch, 2);
     g.setColour(kDim);

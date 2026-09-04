@@ -65,6 +65,8 @@ public:
     void soundingNotes(bool (&out)[128]) const;
     // Distance (0 near .. 1 far) of the voice sounding `note`, or -1 if none.
     float noteDistance(int note) const;
+    // Envelope level (0..1) of the loudest voice on `note`, 0 if none.
+    float noteLevel(int note) const { return (note >= 0 && note < 128) ? noteLevel_[note].load(std::memory_order_relaxed) : 0.0f; }
 
 private:
     enum Owner { OwnerMidi = 0, OwnerBrain = 1 };
@@ -132,6 +134,7 @@ private:
     std::atomic<int> brainRoot_{ 50 };
     std::atomic<float> arcValue_{ 0.0f };
     std::atomic<float> noteDistance_[128];
+    std::atomic<float> noteLevel_[128];
 };
 
 } // namespace ambient

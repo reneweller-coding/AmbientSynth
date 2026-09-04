@@ -85,7 +85,10 @@ message count). Namespace: `/ambient/param/<key> f`, `/ambient/paramn/<key> f`
 which maps hand distance, heights, reach, palm tilt and head yaw onto
 parameters with range, smoothing, dead-zone and a clutch: by default nothing
 moves unless the right hand pinches. `Tools/osc_hand_sim.py` streams a slow
-two-hand choreography for testing. The same gesture layer will sit behind
+two-hand choreography for testing. *Calibrate* (header, or
+`/ambient/calibrate f` over OSC) watches the hands for six seconds, together
+and apart, low and high, near and far, and sets the ranges from what was
+explored; the Quest app runs it on first start and stores the result. The same gesture layer will sit behind
 OpenXR hand tracking on the Quest (see `docs/quest-plan.md`); the core already
 builds for Android arm64 with the NDK.
 

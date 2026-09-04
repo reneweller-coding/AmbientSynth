@@ -221,7 +221,11 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Cluster Brain** — density, event rate, hold time range, register range,
   *Consonance* (1 = only simple ratios to the root, 0 = clusters), *Wander*.
 * **Tuning** — 11 built-in scales plus *Load Scala…*; *Keys*: "Snap to 12
-  keys" (default) or "Consecutive degrees"; root, A4, random seed.
+  keys" (default) or "Consecutive degrees"; root, A4, random seed. *Purity*
+  blends every note between 12-TET and the chosen scale, so you can hear the
+  beating lock in; *Purity Drift* lets that come and go over minutes, with
+  sounding notes gliding along. *Freeze* (Oscillator) holds every voice's
+  spectrum still.
 
 ## Measuring instead of listening
 

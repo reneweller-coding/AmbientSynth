@@ -250,7 +250,14 @@ void Engine::setTexture(const float* mono, int n, double sampleRate, double base
 
 double Engine::frequencyOf(int note) const
 {
-    return scaleFrequency(*scale_, note, rootNote_, refPitch_, snapKeys_);
+    // Purity blends between 12-TET (0) and the chosen scale (1) in the log domain: at 1 the
+    // partials of different notes lock, at 0 they beat like a piano; in between the beating
+    // slows down as the intervals close in on their ratios.
+    const double pure = scaleFrequency(*scale_, note, rootNote_, refPitch_, snapKeys_);
+    const double p = purityCur_;
+    if (p >= 0.9999) return pure;
+    const double et = refPitch_ * std::pow(2.0, (note - 69) / 12.0);
+    return std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
 }
 
 void Engine::soundingNotes(bool (&out)[128]) const
@@ -470,6 +477,13 @@ void Engine::readParams()
     snapKeys_ = std::lround(g(ParamId::KeyMap)) == 0;
     const int rootPc = clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11);
     rootNote_ = 60 + rootPc;
+    {
+        const float purity = g(ParamId::TunePurity), drift = g(ParamId::TuneDrift);
+        const float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()
+        purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
+        retune_ = purityCur_ < 0.9999 || drift > 0.0f;
+    }
+    vp_.freeze = g(ParamId::Freeze) >= 0.5f;
     if (rootPc != lastRootPc_) {
         lastRootPc_ = rootPc;
         brain_.setRoot(48 + rootPc);
@@ -509,6 +523,7 @@ void Engine::process(float* L, float* R, int n)
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
     shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
+    purityDrift_.update(static_cast<float>(n / sr_), getParam(ParamId::TuneDriftRate), rng_);
     {   // morph position glides toward its target at 1/glide per second (glide 0 = jump)
         const float target = clampv(getParam(ParamId::MorphPos), 0.0f, 1.0f);
         const float glide = getParam(ParamId::MorphGlide);
@@ -522,12 +537,25 @@ void Engine::process(float* L, float* R, int n)
     }
     updateBlend(n);
     readParams();
+    if (retune_)   // tuning purity / drift: every sounding voice glides to its current frequency
+        for (auto& v : voices_) if (v.isActive()) v.setTargetFrequency(frequencyOf(v.note()));
 
     int pos = 0;
     while (pos < n) {
         const int chunk = std::min(n - pos, maxBlock_);
         renderChunk(L + pos, R + pos, chunk);
         pos += chunk;
+    }
+    // Sleep: nothing sounding and the tails gone for two seconds -> the next blocks skip the
+    // effect chain (zeros out) until a voice starts. The brain keeps running inside renderChunk,
+    // so a generative patch wakes itself; MIDI and OSC notes wake it through the voices.
+    {
+        bool anyVoice = false;
+        for (auto& v : voices_) if (v.isActive()) { anyVoice = true; break; }
+        float peak = 0.0f;
+        for (int i = 0; i < n; ++i) peak = std::max(peak, std::max(std::fabs(L[i]), std::fabs(R[i])));
+        if (!anyVoice && peak < 3.2e-5f) silentSamples_ += n; else silentSamples_ = 0;
+        asleep_ = silentSamples_ > static_cast<long>(2.0 * sr_);
     }
 
     uint64_t m0 = 0, m1 = 0;
@@ -601,11 +629,16 @@ void Engine::renderChunk(float* L, float* R, int n)
         fbReg_ = regTarget;
     }
 
+    bool anyVoice = false;
     for (int p = 0; p < n; p += kControlBlock) {
         const int len = std::min(kControlBlock, n - p);
         brain_.update(len / sr_, bp_, anchor, freqOf, emit);
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
-        for (auto& v : voices_) if (v.isActive()) v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm);
+        for (auto& v : voices_) if (v.isActive()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm); }
+    }
+    if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
+        std::memset(L, 0, bytes); std::memset(R, 0, bytes);
+        return;
     }
     if (fbOn && fbBus_ > 0.0f)
         for (int i = 0; i < n; ++i) { nl[i] += fbl[i] * fbBus_; nr[i] += fbr[i] * fbBus_; }

@@ -68,6 +68,10 @@ public:
     // While suspended (a menu is open), clutched mappings hold their values.
     void setSuspended(bool s) { suspended_.store(s, std::memory_order_relaxed); }
     bool suspended() const { return suspended_.load(std::memory_order_relaxed); }
+    // Rest zone: share of the calibrated height below which both hands count as resting (0 = off).
+    void  setRestZone(float share) { restZone_ = share; }
+    float restZone() const { return restZone_; }
+    bool  resting() const { return resting_; }
 
     // Mappings, message thread (the audio thread reads them; keep changes rare).
     int  numMappings() const { return numMappings_; }
@@ -91,6 +95,10 @@ public:
             if (calibRemaining_ <= 0.0f) { calibRemaining_ = 0.0f; finishCalibration(); }
             return 0;   // nothing moves while calibrating
         }
+        // Rest zone: both hands hanging low (below restZone_ of the calibrated height) means
+        // "I am not playing" -- nothing is written, so the arms can drop without touching the sound.
+        resting_ = restZone_ > 0.0f && handsSeen_ && input(GestureInput::LeftHeight) < restZone_ && input(GestureInput::RightHeight) < restZone_;
+        if (resting_) return 0;
         const bool susp = suspended();
         int written = 0;
         for (int i = 0; i < numMappings_; ++i) {
@@ -131,6 +139,9 @@ private:
     float handX_[2] = {}, handY_[2] = {}, handZ_[2] = {};
     float hLow_ = 0.9f, hHigh_ = 1.7f, rNear_ = 0.2f, rFar_ = 0.7f, dNear_ = 0.1f, dFar_ = 0.8f;
     std::atomic<bool> suspended_{ false };
+    float restZone_ = 0.08f;
+    bool  resting_ = false;
+    bool  handsSeen_ = false;   // set once real hand data arrived (setHand); knobs and OSC gestures alone never "rest"
     float calibRemaining_ = 0.0f, calibTotal_ = 0.0f;
     float calMinY_ = 1e9f, calMaxY_ = -1e9f, calMinD_ = 1e9f, calMaxD_ = -1e9f, calMinR_ = 1e9f, calMaxR_ = -1e9f;
 };

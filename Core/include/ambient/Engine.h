@@ -84,6 +84,7 @@ public:
     Route& route() { return route_; }
     bool routeStep(double dt, float& x, float& y, float& radius);
     bool routeRunning() const { return route_.running(); }
+    bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
 
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
@@ -183,6 +184,12 @@ private:
     int               rootNote_ = 62;
     double            refPitch_ = 440.0;
     bool              snapKeys_ = true;
+    double            purityCur_ = 1.0;   // Purity plus its drift, evaluated per block
+    Drifter           purityDrift_;
+    bool              retune_ = false;    // purity below 1 or drifting: sounding voices follow
+    // Sleep: after two seconds of silence (no voice, output below -90 dBFS) the effects sleep
+    long              silentSamples_ = 0;
+    bool              asleep_ = false;
 
     std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
     double   sr_ = 48000.0;

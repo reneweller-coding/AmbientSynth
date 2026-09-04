@@ -439,6 +439,96 @@ void testSources()
     }
 }
 
+// Tuning purity, freeze, sleep and the rest zone.
+void testPurityFreezeSleep()
+{
+    const int sr = 48000;
+    {   // Purity 0 = 12-TET, 1 = the scale, 0.5 = geometric middle; sounding voices glide there.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Scale, 1.0f); e.setParam(ParamId::RootNote, 0.0f);   // Ptolemy major, root C: E4 = 5/4 * 261.63 = 327.03 Hz
+        e.setParam(ParamId::TunePurity, 1.0f);
+        e.prepare(sr, 256);
+        const double pure = e.frequencyOf(64), et = 440.0 * std::pow(2.0, (64 - 69) / 12.0);
+        CHECK(std::fabs(pure - 327.03) < 0.05 && std::fabs(et - 329.63) < 0.05, "scale and 12-TET frequencies of E4");
+        e.setParam(ParamId::TunePurity, 0.0f);
+        render(e, 0.02);
+        CHECK(std::fabs(e.frequencyOf(64) - et) < 1e-6, "purity 0 is 12-TET");
+        e.setParam(ParamId::TunePurity, 0.5f);
+        render(e, 0.02);
+        CHECK(std::fabs(e.frequencyOf(64) - std::sqrt(pure * et)) < 1e-6, "purity 0.5 is the geometric middle");
+        // a sounding voice follows: after 5 s it sits within 0.1 Hz of the new frequency
+        e.setParam(ParamId::TunePurity, 1.0f); render(e, 0.02);
+        e.setParam(ParamId::Attack, 0.1f); e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+        e.setParam(ParamId::Shimmer, 0.0f); e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Partials, 1.0f); e.setParam(ParamId::Cutoff, 18000.0f);
+        e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f); e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+        e.noteOn(64, 0.8f);
+        render(e, 1.0);
+        e.setParam(ParamId::TunePurity, 0.0f);
+        std::vector<float> cap;
+        render(e, 6.0, &cap);
+        std::vector<float> mono(sr * 2);
+        for (int i = 0; i < sr * 2; ++i) mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((4 * sr + i) * 2)];
+        const double pEt = goertzel(mono.data(), sr * 2, et, sr), pPure = goertzel(mono.data(), sr * 2, pure, sr);
+        CHECK(pEt > 5.0 * pPure, "a sounding voice glides from the just to the tempered frequency");
+    }
+    {   // Freeze stops the shimmer: two seconds of a frozen voice have a steadier spectrum than the same voice moving.
+        auto spectralWobble = [&](bool freeze) {
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f); e.setParam(ParamId::Attack, 0.1f);
+            e.setParam(ParamId::Shimmer, 1.0f); e.setParam(ParamId::ShimmerRate, 2.0f); e.setParam(ParamId::Partials, 16.0f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::Cutoff, 18000.0f); e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+            e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f); e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 0.0f);
+            e.setParam(ParamId::Freeze, freeze ? 1.0f : 0.0f);
+            e.prepare(sr, 256);
+            e.noteOn(57, 0.8f);
+            render(e, 1.0);
+            std::vector<float> cap; render(e, 2.0, &cap);
+            // energy of partial 3 in four half-second windows: how much does it move?
+            double vals[4];
+            for (int w = 0; w < 4; ++w) {
+                std::vector<float> seg(sr / 2);
+                for (int i = 0; i < sr / 2; ++i) seg[static_cast<size_t>(i)] = cap[static_cast<size_t>((w * sr / 2 + i) * 2)];
+                vals[w] = std::sqrt(goertzel(seg.data(), sr / 2, 660.0, sr));
+            }
+            double mean = 0; for (double v : vals) mean += v / 4;
+            double dev = 0; for (double v : vals) dev += std::fabs(v - mean) / 4;
+            return dev / (mean + 1e-12);
+        };
+        const double moving = spectralWobble(false), frozen = spectralWobble(true);
+        CHECK(frozen < 0.25 * moving + 1e-6, "freeze holds the partials still while shimmer would move them");
+    }
+    {   // Sleep: after two silent seconds the engine sleeps; a note wakes it.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f); e.setParam(ParamId::Release, 0.1f); e.setParam(ParamId::FarDecay, 1.0f); e.setParam(ParamId::NearDecay, 0.2f);
+        e.setParam(ParamId::DelayFeedback, 0.0f); e.setParam(ParamId::Delay2Feedback, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+        e.prepare(sr, 256);
+        render(e, 3.0);
+        CHECK(e.asleep(), "engine sleeps after silence");
+        e.noteOn(57, 0.8f);
+        Stats s = render(e, 0.5);
+        CHECK(!e.asleep() && s.rms > 0.001, "a note wakes it and sounds");
+    }
+    {   // Rest zone: both hands low = nothing written; raise one hand and the mapping writes again.
+        GestureLayer g;
+        g.clearMappings();
+        g.addMapping({ GestureInput::LeftHeight, ParamId::Depth, 0.0f, 1.0f, 0.0f, 0.0f, GestureInput::Count, false });
+        g.setRestZone(0.1f);
+        g.setCalibration(0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f);   // heights map 1:1
+        g.setHand(0, 0.0f, 0.02f, 0.0f, 0.0f, 0.0f);   // left low
+        g.setHand(1, 0.0f, 0.02f, 0.0f, 0.0f, 0.0f);   // right low
+        int writes = 0;
+        g.update(0.02, [&](ParamId, float) { ++writes; });
+        CHECK(g.resting() && writes == 0, "both hands low: resting, nothing written");
+        g.setHand(0, 0.0f, 0.8f, 0.0f, 0.0f, 0.0f);
+        g.update(0.02, [&](ParamId, float) { ++writes; });
+        CHECK(!g.resting() && writes > 0, "a raised hand ends the rest");
+    }
+}
+
 // Set timeline: record, write, parse, play back in order.
 void testTimeline()
 {
@@ -1405,6 +1495,7 @@ int main()
     testRoute();
     testZPlane();
     testTimeline();
+    testPurityFreezeSleep();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

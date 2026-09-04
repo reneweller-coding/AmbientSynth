@@ -150,6 +150,36 @@ free.
   10 cents (q ≤ 32), score 1/(1+log2(p·q)). Unison 1.0, fifth 0.28, major
   third 0.19, semitone 0.11, anything unrecognised 0.05.
 
+### Purity, purity drift, freeze
+
+*Purity* (Tuning) blends every note's frequency between 12-TET (0) and
+the chosen scale (1) in the log domain: at 1 the partials of different
+notes lock into each other and the beating is gone, at 0 they beat like a
+piano, in between the beating slows as the intervals close in on their
+ratios. *Purity Drift* lets the blend wander on a Drifter at *Drift Rate*
+(default one swing per 100 s), so the lock-in comes and goes over minutes;
+sounding voices follow with a one-second log-domain glide, no retrigger.
+Measured: E4 over a C root is 327.03 Hz pure and 329.63 Hz tempered, 0.5
+gives their geometric mean, and a held voice moves from one to the other
+within five seconds. *Freeze* (Oscillator) stops the movement clock of
+every voice — shimmer, pitch drift, breath, bloom — while envelopes,
+filters and effects keep their own time: the spectrum stands still.
+Measured: the third partial of a frozen voice varies less than a quarter as
+much as with shimmer at 2 Hz.
+
+### Sleep and the rest zone
+
+After two seconds with no voice and the output below −90 dBFS the engine
+sleeps: the effect chain is skipped and zeros go out, so a silent Quest
+costs nothing; the brain keeps ticking inside the render and a note (MIDI,
+OSC, brain) wakes the engine in the same block. The gesture layer has a
+**rest zone** (default 8 % of the calibrated height, `rest_zone=` in
+`ambient.cfg`): both hands hanging low means nothing is written, so the
+arms can drop without touching the sound; it only arms once real hand data
+arrived, so knobs and OSC alone never "rest". On the Quest the map cursor
+now uses both hands — left reach and height for the position, right height
+for the blend radius (sharp low, blurred high).
+
 ## Cluster Brain
 
 Runs at control rate inside the engine. State: up to 12 slots (note, time

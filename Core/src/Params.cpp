@@ -231,6 +231,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::RefPitch,  "ref_pitch", "A4",        "Tuning", 415.f, 466.f, 440.f, 1.f, "Hz"),
     I(ParamId::Seed,      "seed",      "Seed",      "Tuning", 0.f, 9999.f, 1.f),
     B(ParamId::Hold,      "hold",      "Hold",      "Tuning", false),
+    F(ParamId::TunePurity,    "purity",       "Purity",       "Tuning",     0.f,    1.f,   1.f,   1.f,  ""),
+    F(ParamId::TuneDrift,     "purity_drift", "Purity Drift", "Tuning",     0.f,    1.f,   0.f,   1.f,  ""),
+    F(ParamId::TuneDriftRate, "purity_rate",  "Drift Rate",   "Tuning",     0.002f, 0.1f,  0.01f, 0.5f, "Hz"),
+    B(ParamId::Freeze,        "freeze",       "Freeze",       "Oscillator", false),
 
     B(ParamId::MorphActive, "morph_active", "Active",   "Morph", false),
     F(ParamId::MorphPos,    "morph",        "Position", "Morph", 0.f, 1.f,   0.f,  1.f,  ""),

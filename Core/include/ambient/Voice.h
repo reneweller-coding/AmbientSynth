@@ -41,6 +41,7 @@ struct VoiceParams {
     float breath = 0.0f, breathRate = 0.03f;   // slow wandering of the distance itself (+-0.35 at 1)
     float lowCut = 0.0f;        // Hz; partials below fall 12 dB/oct, keeping the pads out of the sub's register
     float fmAmount = 0.0f;      // phase modulation of every partial (h times the deviation) by the `fm` signal given to render()
+    bool  freeze = false;       // hold the spectrum still: shimmer, pitch drift, breath and bloom stop moving
     // Extra sources (Source 2 / 3) and the data they may need; pointers stay valid for the block.
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
@@ -62,6 +63,8 @@ public:
     int  owner() const       { return owner_; }
     float distance() const   { return distEff_; }   // where the voice is right now (breath included)
     double frequency() const { return freq_; }
+    // Retune a sounding voice (tuning purity/drift): glides in the log domain, ~1 s time constant.
+    void setTargetFrequency(double hz) { freqTarget_ = hz; }
     uint64_t order = 0;      // allocation order for voice stealing
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
@@ -98,7 +101,7 @@ private:
     int      zModeCur_ = 0;
     Rng      rng_;
     double   sr_ = 48000.0;
-    double   freq_ = 220.0;
+    double   freq_ = 220.0, freqTarget_ = 220.0;
     float    velocity_ = 1.0f;
     float    distance_ = 0.0f;   // the plane the note was placed on
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate

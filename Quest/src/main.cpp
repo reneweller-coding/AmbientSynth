@@ -8,7 +8,7 @@
 //
 // No game engine: NativeActivity + android_native_app_glue, EGL, OpenXR loader, Oboe, the core.
 // Files in <externalDataPath>:
-//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert  route=Night Descent
+//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert  route=Night Descent  rest_zone=0.08
 //   calib.txt     hand calibration, written after the calibration gesture
 //   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
 //   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)
@@ -237,6 +237,7 @@ struct Config {
     bool audio = true;
     std::string preset;
     std::string route;   // route preset name or route text for ROUTE PLAY/STOP
+    float restZone = 0.08f;   // both hands below this share of the calibrated height = resting, nothing moves
 };
 
 Config readConfig(const char* dir)
@@ -258,6 +259,7 @@ Config readConfig(const char* dir)
         else if (k == "audio") c.audio = v != "0";
         else if (k == "preset") c.preset = v;
         else if (k == "route") c.route = v;
+        else if (k == "rest_zone") c.restZone = static_cast<float>(std::atof(v.c_str()));
     }
     std::fclose(f);
     return c;
@@ -431,6 +433,7 @@ public:
             for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) { engine_.applyPreset(i); presetA_ = presetB_ = i; }
         loadCalibration();
         loadSourceFiles();
+        gestures_.setRestZone(config_.restZone);
         engine_.setRoomMaxSeconds(4.0f);   // a 4 s convolution is about a third of one XR2 core; 8 s would be two thirds
         if (!config_.oscHost.empty()) {
             if (osc_.open(config_.oscHost, config_.oscPort)) LOGI("bridge: OSC to %s:%d", config_.oscHost.c_str(), config_.oscPort);
@@ -885,9 +888,11 @@ private:
         {
             float rx, ry, rr;
             const bool routing = engine_.routeStep(dt, rx, ry, rr);
-            if (!routing && engine_.getParam(ParamId::MapActive) >= 0.5f && !menu_.isOpen() && !gestures_.calibrating()) {
+            if (!routing && engine_.getParam(ParamId::MapActive) >= 0.5f && !menu_.isOpen() && !gestures_.calibrating() && !gestures_.resting()) {
+                // left hand: cursor (reach = x, height = y); right hand height: blend radius (sharp low, blurred high)
                 engine_.setParam(ParamId::MapX, clampv(gestures_.input(GestureInput::LeftForward), 0.0f, 1.0f));
                 engine_.setParam(ParamId::MapY, clampv(gestures_.input(GestureInput::LeftHeight), 0.0f, 1.0f));
+                engine_.setParam(ParamId::MapRadius, 0.02f + 0.38f * clampv(gestures_.input(GestureInput::RightHeight), 0.0f, 1.0f));
             }
         }
         if (wasCalibrating && !gestures_.calibrating()) saveCalibration();

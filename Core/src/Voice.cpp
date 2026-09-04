@@ -70,7 +70,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
 void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p)
 {
     note_ = note;
-    freq_ = freqHz;
+    freq_ = freqTarget_ = freqHz;
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
     distance_ = clampv(distance, 0.0f, 1.0f);
@@ -103,8 +103,18 @@ void Voice::kill()    { env_.kill(); note_ = -1; }
 
 void Voice::control(int blockLen, const VoiceParams& p)
 {
-    const float dt = static_cast<float>(blockLen / sr_);
+    const float dtReal = static_cast<float>(blockLen / sr_);
+    // Freeze: the movement clock stops (spectrum, pitch drift, breath, bloom hold still); the
+    // envelope, filter and effects keep their own time.
+    const float dt = p.freeze ? 0.0f : dtReal;
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
+
+    // Retune glide (tuning purity / drift): log-domain one-pole toward the target, ~1 s.
+    if (freqTarget_ != freq_) {
+        const double c = 1.0 - std::exp(-static_cast<double>(dtReal) / 1.0);
+        freq_ = std::exp(std::log(freq_) + (std::log(freqTarget_) - std::log(freq_)) * c);
+        if (std::fabs(freq_ - freqTarget_) < 1e-5 * freqTarget_) freq_ = freqTarget_;
+    }
 
     // Breath: the voice's plane itself wanders slowly (Rich's "the room breathes"): everything
     // that hangs on the distance -- dry/wet balance, level, air absorption, presence -- moves

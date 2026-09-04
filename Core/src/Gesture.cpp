@@ -82,6 +82,7 @@ void GestureLayer::setHand(int hand, float x, float y, float z, float pinch, flo
 {
     const int h = hand & 1;
     handX_[h] = x; handY_[h] = y; handZ_[h] = z;
+    handsSeen_ = true;
     if (calibRemaining_ > 0.0f) {
         calMinY_ = std::min(calMinY_, y); calMaxY_ = std::max(calMaxY_, y);
         calMinR_ = std::min(calMinR_, -z); calMaxR_ = std::max(calMaxR_, -z);

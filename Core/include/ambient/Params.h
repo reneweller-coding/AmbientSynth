@@ -64,6 +64,10 @@ enum class ParamId : int {
     BrainLow, BrainHigh, BrainConsonance, BrainWander,
     // Tuning
     Scale, KeyMap, RootNote, RefPitch, Seed, Hold,
+    // Purity blends every note between 12-TET (0) and the chosen scale (1) in the log domain; Drift
+    // lets that blend wander so the beating locks in and loosens over minutes; Freeze holds every
+    // voice's spectrum and pitch still (drifts, shimmer, bloom stop moving)
+    TunePurity, TuneDrift, TuneDriftRate, Freeze,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
     // Macros: eight performance controls routed through the gesture layer (Custom0..7);

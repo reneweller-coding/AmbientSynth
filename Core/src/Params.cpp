@@ -23,6 +23,18 @@ const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" }
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
+const char* const kStackNames[kNumStacks] = { "Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics" };
+// Strand ratios, ordered so that fewer strands still make sense (2 = root + fifth, 3 = a triad...).
+const double kStackRatios[kNumStacks][6] = {
+    { 1.0, 1.0,       1.0,       1.0,       1.0,       1.0       },   // Detune (classic unison)
+    { 1.0, 2.0,       0.5,       4.0,       0.25,      1.0       },   // Octaves
+    { 1.0, 1.5,       2.0,       3.0,       0.5,       2.25      },   // Fifths: 1 3/2 2 3 1/2 9/4
+    { 1.0, 1.5,       1.25,      2.0,       2.5,       0.5       },   // Major: 1 3/2 5/4 2 5/2 1/2
+    { 1.0, 1.5,       1.2,       2.0,       2.4,       0.5       },   // Minor: 1 3/2 6/5 2 12/5 1/2
+    { 1.0, 1.5,       1.25,      1.75,      2.0,       0.5       },   // Seventh: 1 3/2 5/4 7/4 2 1/2
+    { 1.0, 2.0,       3.0,       4.0,       5.0,       6.0       },   // Harmonics
+    { 1.0, 0.5,       1.0 / 3.0, 0.25,      0.2,       1.0 / 6.0 },   // Subharmonics
+};
 const float kShimmerPitchSemitones[kNumShimmerPitches] = { 12.0f, 7.0f, 5.0f, 19.0f, -12.0f, 24.0f };
 
 namespace {
@@ -56,6 +68,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Spread,      "spread",       "Stereo Spread", "Oscillator", 0.f,   1.f,    0.7f,  1.f,  ""),
     F(ParamId::Bloom,       "bloom",        "Bloom",         "Oscillator", 0.f,   1.f,    0.f,   1.f,  ""),
     F(ParamId::BloomTime,   "bloom_time",   "Bloom Time",    "Oscillator", 5.f,   300.f,  60.f,  0.4f, "s"),
+    C(ParamId::Stack,       "stack",        "Stack",         "Oscillator", kStackNames, kNumStacks, 0),
+    F(ParamId::RateWander,  "rate_wander",  "Rate Wander",   "Oscillator", 0.f,   1.f,    0.3f,  1.f,  ""),
 
     F(ParamId::SubLevel,    "sub_level",    "Level",         "Foundation", 0.f,   1.f,    0.f,   1.f,  ""),
     C(ParamId::SubOctave,   "sub_octave",   "Octave",        "Foundation", kSubOctaveNames, 2, 0),

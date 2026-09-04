@@ -110,7 +110,11 @@ Sections of the GUI (all parameters are automatable in a DAW):
   brightness, odd/even balance, inharmonicity, *Shimmer* (each partial's level
   drifts on its own), strands (unison), detune, pitch drift, stereo spread.
   *Bloom* opens each note's spectrum from dark to its brightness over *Bloom
-  Time* (up to five minutes), a slow flowering per voice.
+  Time* (up to five minutes), a slow flowering per voice. *Stack* puts the
+  strands at pure ratios instead of detuning them (octaves, fifths, a just
+  major or minor triad, sevenths, harmonics, subharmonics): one key, one
+  beat-free chord. *Rate Wander* lets every movement rate itself wander
+  slowly, so the drone never repeats its own pace.
 * **Foundation** — a dry sub voice that follows the brain's root one or two
   octaves down and glides between roots (*Glide*); *Binaural* runs the two
   ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends

@@ -174,6 +174,23 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+### Stack and Rate Wander
+
+* **Stack** (Oscillator): instead of detuned copies, the strands sit at
+  pure ratios to the note — Octaves (1 2 ½ 4 ¼), Fifths (1 3/2 2 3 ½ 9/4),
+  Major (1 3/2 5/4 2 5/2 ½), Minor (1 3/2 6/5 …), Seventh (… 7/4), the
+  harmonic and the subharmonic series — ordered so that two strands already
+  make root + fifth and three a triad. Detune and drift still apply on top,
+  so Detune 0 makes the chord beat-free: one key, one just chord, and the
+  partials of the strands lock into each other (the fifth's second partial
+  is the root's third). Measured: three strands, Major, one partial each,
+  A3 → 220, 330 and 275 Hz, nothing else within 20×.
+* **Rate Wander** (Oscillator, default 0.3): one 100-second `Drifter` per
+  voice scales the pitch-drift, pan, filter, air, shimmer and breath rates
+  by 2^(±wander), the nested-LFO idea — the movement itself speeds up and
+  slows down, so a stretch of five minutes never resembles the previous
+  five.
+
 ## Foundation, Bloom, Hold, Macros
 
 * **Foundation** (`Engine::renderChunk`, after the mid/side stage so the

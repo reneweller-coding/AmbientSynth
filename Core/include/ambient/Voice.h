@@ -24,6 +24,8 @@ struct VoiceParams {
     int   unison = 3;
     float detune = 8.0f, drift = 4.0f, driftRate = 0.08f, spread = 0.7f;
     float bloom = 0.0f, bloomTime = 60.0f;   // spectrum opens from brightness*(1-bloom) to brightness over bloomTime
+    int   stack = 0;            // index into kStackRatios: strands at pure ratios (0 = classic detuned unison)
+    float rateWander = 0.3f;    // drift/shimmer/breath rates wander by up to +-1 octave on a 100 s curve
     float air = 0.15f, airColor = 3.0f, airQ = 10.0f;
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
@@ -76,7 +78,7 @@ private:
     Envelope env_;
     Svf      filtL_, filtR_;
     Svf      airL_, airR_;
-    Drifter  filterDrift_, airDrift_, panCenter_, breath_;
+    Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Rng      rng_;
     double   sr_ = 48000.0;
     double   freq_ = 220.0;

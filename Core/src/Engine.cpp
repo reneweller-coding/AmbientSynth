@@ -234,6 +234,8 @@ void Engine::readParams()
     vp_.spread      = g(ParamId::Spread);
     vp_.bloom       = g(ParamId::Bloom);
     vp_.bloomTime   = g(ParamId::BloomTime);
+    vp_.stack       = static_cast<int>(std::lround(g(ParamId::Stack)));
+    vp_.rateWander  = g(ParamId::RateWander);
     subLevel_       = g(ParamId::SubLevel);
     subOctave_      = std::lround(g(ParamId::SubOctave)) == 0 ? 1 : 2;
     subGlide_       = g(ParamId::SubGlide);

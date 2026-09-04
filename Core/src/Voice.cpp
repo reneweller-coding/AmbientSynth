@@ -1,4 +1,5 @@
 #include "ambient/Voice.h"
+#include "ambient/Params.h"   // kStackRatios
 #include <cmath>
 #include <cstring>
 
@@ -51,6 +52,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     airDrift_.init(rng_);
     panCenter_.init(rng_);
     breath_.init(rng_);
+    rateWander_.init(rng_);
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -103,7 +105,13 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // Breath: the voice's plane itself wanders slowly (Rich's "the room breathes"): everything
     // that hangs on the distance -- dry/wet balance, level, air absorption, presence -- moves
     // with it, continuously (Drifter = smoothstep curves, no steps).
-    const float bd = breath_.update(dt, p.breathRate, rng_);
+    // Rate wander (nested modulation): one very slow curve per voice scales every movement
+    // rate by up to +-1 octave, so five minutes never look like the five before.
+    const float rw = rateWander_.update(dt, 0.01f, rng_);
+    const float rateMul = p.rateWander > 0.0f ? std::pow(2.0f, rw * p.rateWander) : 1.0f;
+    const float driftRate = p.driftRate * rateMul, shimmerRate = p.shimmerRate * rateMul;
+
+    const float bd = breath_.update(dt, p.breathRate * rateMul, rng_);
     distEff_ = clampv(distance_ + 0.35f * p.breath * bd, 0.0f, 1.0f);
     gNear_  = std::cos(distEff_ * 0.5f * kPi);
     gFar_   = std::sin(distEff_ * 0.5f * kPi);
@@ -152,13 +160,16 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
     // The voice's centre wanders slowly; strands fan out around it.
-    const float centre = panCenter_.update(dt, p.driftRate * 0.3f, rng_) * p.panDrift;
+    const float centre = panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift;
+    const int stack = clampv(p.stack, 0, kNumStacks - 1);
 
     for (int si = 0; si < unison; ++si) {
         Strand& s = strands_[si];
         const float pos = (unison == 1) ? 0.0f : (2.0f * static_cast<float>(si) / static_cast<float>(unison - 1) - 1.0f);
-        const float cents = pos * p.detune + s.pitch.update(dt, p.driftRate, rng_) * p.drift;
-        const double f = freq_ * std::pow(2.0, cents / 1200.0);
+        const float cents = pos * p.detune + s.pitch.update(dt, driftRate, rng_) * p.drift;
+        // Stack: the strand sits at a pure ratio to the note (a just chord from one key);
+        // detune and drift still apply on top, so Detune 0 makes it beat-free.
+        const double f = freq_ * kStackRatios[stack][si] * std::pow(2.0, cents / 1200.0);
         const float pan = clampv(centre + pos * p.spread, -1.0f, 1.0f);
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         s.gainL = std::cos(angle) * norm;
@@ -177,7 +188,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
             const float r2 = s.pc[h - 1] * s.pc[h - 1] + s.ps[h - 1] * s.ps[h - 1];
             const float fix = 1.5f - 0.5f * r2;
             s.pc[h - 1] *= fix; s.ps[h - 1] *= fix;
-            const float d = s.shimmer[h - 1].update(dt, p.shimmerRate, rng_);
+            const float d = s.shimmer[h - 1].update(dt, shimmerRate, rng_);
             float a = base[h] * (1.0f + 0.9f * p.shimmer * d);
             if (presLin > 0.0f) {
                 const float x = (lf0 + kLog2H.v[h]) / kPresenceHalfWidth;
@@ -217,7 +228,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     shadowCoefR_ = fcR >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcR / static_cast<float>(sr_));
 
     // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
-    const float fd = filterDrift_.update(dt, p.driftRate * 0.5f, rng_);
+    const float fd = filterDrift_.update(dt, driftRate * 0.5f, rng_);
     const float octaves = p.keyTrack * static_cast<float>(note_ - 60) / 12.0f
                         + p.filterEnv * 4.0f * env_.level()
                         + p.filterDrift * 2.0f * fd
@@ -228,7 +239,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
 
     // Air: band-passed noise around a drifting multiple of the fundamental.
     if (p.air > 0.0f) {
-        const float ad = airDrift_.update(dt, p.driftRate * 0.7f, rng_);
+        const float ad = airDrift_.update(dt, driftRate * 0.7f, rng_);
         const float fc = clampv(static_cast<float>(freq_) * p.airColor * std::pow(2.0f, 0.5f * ad), 40.0f, static_cast<float>(nyq));
         const float q = clampv(p.airQ, 1.0f, 40.0f);
         airL_.setQ(fc, q, static_cast<float>(sr_));

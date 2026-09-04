@@ -315,6 +315,48 @@ double goertzel(const float* x, int n, double hz, double sr)
     return s1 * s1 + s2 * s2 - c * s1 * s2;
 }
 
+// Stack: strands at pure ratios; Rate Wander: the movement rates themselves move.
+void testStackAndWander()
+{
+    const int sr = 48000;
+    {   // Major stack, three strands, one partial each: A3 gives 220 + 330 + 275 Hz and nothing else.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Attack, 0.2f);
+        e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 9.0f);   // 12-TET, A: key 57 = 220 Hz
+        e.setParam(ParamId::Partials, 1.0f);
+        e.setParam(ParamId::Unison, 3.0f); e.setParam(ParamId::Stack, 3.0f);      // Major: 1, 3/2, 5/4
+        e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f); e.setParam(ParamId::Shimmer, 0.0f);
+        e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Cutoff, 18000.0f); e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+        e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f); e.setParam(ParamId::Spread, 0.0f);
+        e.prepare(sr, 256);
+        e.noteOn(57, 0.8f);
+        std::vector<float> cap;
+        render(e, 2.0, &cap);
+        std::vector<float> mono(sr);
+        for (int i = 0; i < sr; ++i) mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((sr + i) * 2)];
+        const double p220 = goertzel(mono.data(), sr, 220.0, sr), p330 = goertzel(mono.data(), sr, 330.0, sr), p275 = goertzel(mono.data(), sr, 275.0, sr);
+        const double p262 = goertzel(mono.data(), sr, 261.6, sr), p440 = goertzel(mono.data(), sr, 440.0, sr);
+        CHECK(p220 > 20.0 * p262 && p330 > 20.0 * p262 && p275 > 20.0 * p262, "major stack puts the strands at 1, 3/2 and 5/4");
+        CHECK(p220 > 20.0 * p440, "one partial per strand: no octave in the stack");
+    }
+    {   // Rate wander changes the movement (different output), stays finite, and off means unchanged rates.
+        auto capture = [&](float wander, int seed) {
+            Engine e;
+            e.setParam(ParamId::RateWander, wander); e.setParam(ParamId::Seed, static_cast<float>(seed));
+            e.prepare(sr, 256);
+            std::vector<float> cap;
+            Stats s = render(e, 20.0, &cap);
+            CHECK(s.nonFinite == 0, "rate wander renders finite");
+            return cap;
+        };
+        const auto a = capture(0.0f, 5), b = capture(1.0f, 5);
+        double diff = 0; for (size_t i = 0; i < a.size(); ++i) diff += std::fabs(a[i] - b[i]);
+        CHECK(diff > 1.0, "rate wander changes the movement");
+    }
+}
+
 // The feedback loop: mix -> (tone, drive, throttle) -> near bus and/or partial phase modulation.
 void testFeedback()
 {
@@ -992,6 +1034,7 @@ int main()
     testSpace();
     testRichCarving();
     testFeedback();
+    testStackAndWander();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

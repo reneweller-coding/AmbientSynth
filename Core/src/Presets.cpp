@@ -35,7 +35,7 @@ const Preset kPresets[] = {
       "strands=5;detune=20;master_gain=-9;fb_bus=0.25;fb_drive=0.8;fb_tone=1200" },
     { "Dry Foreground Keys",
       "brain_on=off;keys_depth=0;near_mix=0.25;near_decay=1.5;far_level=0.3;dly_mix=0.2;ens_mix=0.5;attack=1.5;release=6;"
-      "air=0.25;depth=0;presence=3" },
+      "air=0.25;depth=0;presence=3;strands=3;stack=Major;detune=0;drift=1" },
     { "Sleep Concert II",
       "scale=JI Minor;root=A;brain_density=5;brain_rate=45;brain_hold_min=90;brain_hold_max=300;depth=0.9;far_decay=40;"
       "far_highcut=2000;arc=0.6;arc_period=90;attack=12;release=30;sub_level=0.3;sub_source=Difference;breath=0.35;breath_rate=0.02" },
@@ -59,7 +59,8 @@ const Preset kPresets[] = {
     { "Warm Blanket",
       "tilt=1.6;brightness=0.5;cutoff=1200;air=0.1;scale=JI Major (Ptolemy);root=G;near_mix=0.35;far_level=0.5;depth=0.4;breath=0.4" },
     { "Somnus Harmonics",
-      "scale=Harmonic 8-16;root=C;brain_low=48;brain_high=84;partials=12;shimmer=0.6;depth=0.7;far_decay=30" },
+      "scale=Harmonic 8-16;root=C;brain_low=48;brain_high=84;partials=12;shimmer=0.6;depth=0.7;far_decay=30;"
+      "strands=4;stack=Harmonics;detune=0;drift=1;brain_density=3" },
     { "Breathing Dark",
       "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200" },
     { "Velvet Hours",
@@ -80,7 +81,8 @@ const Preset kPresets[] = {
       "partials=3;tilt=0.5;strands=6;detune=3;air=0.35;air_color=1;air_q=30;far_decay=30;brain_low=60;brain_high=90;"
       "far_highcut=8000;master_gain=-9" },
     { "High Organ",
-      "odd_even=-0.5;partials=16;brightness=0.9;cutoff=8000;near_mix=0.4;near_decay=3;far_level=0.6;scale=Pythagorean;root=D" },
+      "odd_even=-0.5;partials=16;brightness=0.9;cutoff=8000;near_mix=0.4;near_decay=3;far_level=0.6;scale=Pythagorean;root=D;"
+      "strands=4;stack=Fifths;detune=0;drift=0.5" },
     { "Stained Light",
       "brightness=0.8;shimmer=1;shimmer_rate=0.6;partials=24;far_decay=40;far_highcut=7000;scale=Otonality 1-11;root=F" },
     { "Frozen Chapel",

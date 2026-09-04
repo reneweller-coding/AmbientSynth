@@ -13,6 +13,9 @@ enum class ParamId : int {
     // Oscillator (additive partial bank per strand)
     Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
     Unison, Detune, Drift, DriftRate, Spread, Bloom, BloomTime,
+    // Stack: strands at pure ratios (one key = one just chord) instead of detuned copies;
+    // Rate Wander: every voice's drift and shimmer rates themselves wander (nested LFO)
+    Stack, RateWander,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
     SubLevel, SubOctave, SubGlide, SubBinaural, SubTone, SubSource, PadLowCut,
@@ -91,6 +94,9 @@ extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
+constexpr int kNumStacks = 8;
+extern const char* const kStackNames[kNumStacks];   // Detune, Octaves, Fifths, Major, Minor, Seventh, Harmonics, Subharmonics
+extern const double kStackRatios[kNumStacks][6];    // ratio of strand 0..5 to the note (Detune = all 1)
 constexpr int kNumShimmerPitches = 6;
 extern const char* const kShimmerPitchNames[kNumShimmerPitches];
 extern const float kShimmerPitchSemitones[kNumShimmerPitches];

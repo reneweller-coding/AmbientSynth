@@ -51,10 +51,13 @@ public:
 
 private:
     struct Strand {
-        double phase[kMaxPartials] = {};
+        double phase[kMaxPartials] = {};      // per-partial phases (inharmonic path)
         double inc[kMaxPartials] = {};
         float  amp[kMaxPartials] = {};
         float  ampStep[kMaxPartials] = {};
+        float  cosTheta[kMaxPartials] = {};   // fixed random phase offsets (harmonic path)
+        float  sinTheta[kMaxPartials] = {};
+        double basePhase = 0.0, baseInc = 0.0; // fundamental phase for the harmonic path
         Drifter shimmer[kMaxPartials];
         Drifter pitch;
         float  gainL = 0.7f, gainR = 0.7f;
@@ -75,6 +78,7 @@ private:
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
     float    bloomT_ = 0.0f;     // seconds since note start, for Bloom
+    bool     harmonicMode_ = true;   // inharmonic == 0: all partials from one phase by angle addition
     float    itdBufL_[kItdBuffer] = {}, itdBufR_[kItdBuffer] = {};
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;

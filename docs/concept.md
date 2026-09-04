@@ -83,10 +83,15 @@ parameters instead of waveform switches.
 * Measured on the default patch, 180 s: stereo correlation 0.11 (was 0.36
   before the spatial model), no sample jump above 0.06, level −21 … −28 dBFS.
 
-Cost at the defaults is ~3 % of one core (180 s in 5.8 s); "Distant Storm"
-(8 voices, 5 strands) 5 %; the worst case (16 voices × 6 strands × 32
-partials) is about ten times that and would need the Chebyshev recurrence or
-SIMD, both straightforward later.
+Cost at the defaults is ~3 % of one core (180 s in 5.8 s). Harmonic spectra
+(Inharmonic = 0, the common case) are generated from one phase per strand by
+angle addition — sin(hφ+θ_h) from sin φ, cos φ and the fixed random offsets
+θ_h — instead of one table lookup per partial; `ambient_render --bench`
+(all 128 presets, held chord plus brain, 48 kHz, 256-sample blocks, one core
+of an i9-12900K) went from a median of 22× realtime to 26×, and the slowest
+presets are now the inharmonic ones (13–16×, table path). When the spectrum
+switches between harmonic and inharmonic the phases are handed over, so the
+knob can be turned while a note sounds.
 
 ## Tuning
 

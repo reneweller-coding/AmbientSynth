@@ -85,11 +85,12 @@ measurement (`adb push build-android/Tools/render/ambient_render
 /data/local/tmp/ && adb shell /data/local/tmp/ambient_render --bench`).
 
 PC reference for that measurement (i9-12900K, one core, 48 kHz, 256-sample
-blocks, chord held plus brain): median 22× realtime, slowest presets 11–13×
-(Inharmonic Field, Solar Wind, Quasar, Reed Organ, Monolith: 24–32 partials
-or Cosmos with Nebula). A Quest 2 core is roughly a fifth of that, so the
-heavy presets land near 2× — playable, but the first on-device bench decides
-whether the Chebyshev sine recurrence for the partial bank moves up the list.
+blocks, chord held plus brain): median 26× realtime after the angle-addition
+partial bank (22× before), slowest presets 13–16× (Inharmonic Field, Ice
+Cathedral, Cryo Chamber, Prism, Glass Cathedral: inharmonic spectra on the
+table path). A Quest 2 core is roughly a fifth of that, so the heavy presets
+land near 3× — playable; the first on-device bench decides whether the
+reverbs or the inharmonic path need work next.
 
 ## Open
 

@@ -74,7 +74,11 @@ private:
     Content content_;
     juce::Viewport viewport_;
     void paintContent(juce::Graphics&);
-    std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_, calibButton_;
+    std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_, calibButton_, mapButton_;
+    void showMappingEditor();
+    juce::Component::SafePointer<juce::TextEditor> mapEditor_;
+    juce::String mapText_;
+    bool mapOpen_ = false;
     std::unique_ptr<juce::ComboBox> soundBox_, cosmosBox_;
     juce::ComboBox* morphABox_ = nullptr;   // owned by their cells
     juce::ComboBox* morphBBox_ = nullptr;

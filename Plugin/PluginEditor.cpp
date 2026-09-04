@@ -66,6 +66,10 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     calibButton_->setTooltip("Hands: together and apart, low and high, near and far, for 6 s");
     calibButton_->onClick = [this] { proc_.gestures().startCalibration(6.0f); };
     addAndMakeVisible(*calibButton_);
+    mapButton_ = std::make_unique<juce::TextButton>("Gestures...");
+    mapButton_->setTooltip("Edit the gesture/macro mapping table");
+    mapButton_->onClick = [this] { showMappingEditor(); };
+    addAndMakeVisible(*mapButton_);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -290,6 +294,7 @@ void AmbientSynthEditor::resized()
     if (loadButton_) loadButton_->setBounds(626, 8, 64, 24);
     if (recButton_) recButton_->setBounds(696, 8, 56, 24);
     if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
+    if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
     if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
@@ -361,6 +366,14 @@ void AmbientSynthEditor::mouseDown(const juce::MouseEvent& e)
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
+    if (mapOpen_) {
+        if (mapEditor_ != nullptr) mapText_ = mapEditor_->getText();
+        else {
+            mapOpen_ = false;
+            if (!proc_.setGestureMappings(mapText_))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Mappings", "A line could not be parsed; the previous table is kept.");
+        }
+    }
     if (soundBox_ && soundBox_->getSelectedId() != proc_.soundPresetIndex() + 1)
         soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
     if (cosmosBox_ && cosmosBox_->getSelectedId() != proc_.cosmosPresetIndex() + 1)
@@ -379,6 +392,41 @@ void AmbientSynthEditor::timerCallback()
     }
     repaint(header_);
     if (Section* m = findSection("Morph")) content_.repaint(m->bounds.withTrimmedTop(-kGroupTitleH));
+}
+
+void AmbientSynthEditor::showMappingEditor()
+{
+    // A plain text editor over the mapping table: one line per mapping,
+    //   input param min max smooth deadzone clutch invert
+    auto* editor = new juce::TextEditor();
+    editor->setMultiLine(true, false);
+    editor->setReturnKeyStartsNewLine(true);
+    editor->setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    editor->setText(proc_.gestureMappings(), false);
+    editor->setSize(640, 420);
+    auto* content = new juce::Component();
+    content->setSize(640, 470);
+    content->addAndMakeVisible(editor);
+    editor->setBounds(0, 0, 640, 420);
+    auto* hint = new juce::Label(juce::String(), "input param min max [smooth] [deadzone] [clutch|none] [invert]   inputs: HandDistance LeftHeight RightHeight LeftForward RightForward LeftTilt RightTilt LeftPinch RightPinch HeadYaw HeadPitch HeadRoll Custom0..7 (Custom0..3 = macros)");
+    hint->setFont(juce::FontOptions(11.0f));
+    hint->setColour(juce::Label::textColourId, kDim);
+    hint->setBounds(0, 424, 640, 44);
+    hint->setMinimumHorizontalScale(0.5f);
+    content->addAndMakeVisible(hint);
+    juce::DialogWindow::LaunchOptions o;
+    o.dialogTitle = "Gesture and macro mappings";
+    o.content.setOwned(content);
+    o.componentToCentreAround = this;
+    o.dialogBackgroundColour = kGroupFill;
+    o.escapeKeyTriggersCloseButton = true;
+    o.useNativeTitleBar = true;
+    o.resizable = false;
+    o.launchAsync();
+    // The timer mirrors the text while the dialog lives and applies it once the dialog is gone.
+    mapEditor_ = editor;
+    mapText_ = editor->getText();
+    mapOpen_ = true;
 }
 
 void AmbientSynthEditor::chooseScalaFile()

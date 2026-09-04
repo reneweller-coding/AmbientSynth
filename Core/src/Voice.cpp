@@ -13,10 +13,13 @@ void Voice::prepare(double sampleRate, uint64_t seed)
         for (int h = 0; h < kMaxPartials; ++h) {
             s.shimmer[h].init(rng_);
             s.phase[h] = rng_.uniform();
+            s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(s.phase[h]));
+            s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(s.phase[h]));
             s.amp[h] = 0.0f;
             s.ampStep[h] = 0.0f;
         }
         s.pitch.init(rng_);
+        s.basePhase = rng_.uniform();
         s.active = 0;
     }
     filterDrift_.init(rng_);
@@ -46,9 +49,15 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     if (!env_.isActive()) {
         // Fresh start: random phases (no two voices share a waveform), silent partials.
         for (auto& s : strands_) {
-            for (int h = 0; h < kMaxPartials; ++h) { s.phase[h] = rng_.uniform(); s.amp[h] = 0.0f; s.ampStep[h] = 0.0f; }
+            for (int h = 0; h < kMaxPartials; ++h) {
+                s.phase[h] = rng_.uniform(); s.amp[h] = 0.0f; s.ampStep[h] = 0.0f;
+                s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(s.phase[h]));
+                s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(s.phase[h]));
+            }
+            s.basePhase = rng_.uniform();
             s.active = 0;
         }
+        harmonicMode_ = true;
         filtL_.reset(); filtR_.reset();
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -105,6 +114,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         s.gainL = std::cos(angle) * norm;
         s.gainR = std::sin(angle) * norm;
 
+        s.baseInc = f / sr_;
         float target[kMaxPartials];
         float sumSq = 0.0f;
         int H = 0;
@@ -131,6 +141,31 @@ void Voice::control(int blockLen, const VoiceParams& p)
         for (int si = unison; si < lastUnison_; ++si)
             for (int h = 0; h < kMaxPartials; ++h) { strands_[si].amp[h] = 0.0f; strands_[si].ampStep[h] = 0.0f; }
     lastUnison_ = unison;
+
+    // Harmonic spectra come from one phase per strand (angle addition); the inharmonic
+    // path keeps a phase per partial. Hand the phases over when the mode changes.
+    const bool harmonic = B <= 0.0f;
+    if (harmonic != harmonicMode_) {
+        for (int si = 0; si < kMaxStrands; ++si) {
+            Strand& s = strands_[si];
+            if (!harmonic) {
+                for (int h = 0; h < kMaxPartials; ++h) {
+                    const double th = std::atan2(static_cast<double>(s.sinTheta[h]), static_cast<double>(s.cosTheta[h])) / (2.0 * 3.14159265358979);
+                    double ph = (h + 1) * s.basePhase + th;
+                    ph -= std::floor(ph);
+                    s.phase[h] = ph;
+                }
+            } else {
+                for (int h = 0; h < kMaxPartials; ++h) {
+                    double th = s.phase[h] - (h + 1) * s.basePhase;
+                    th -= std::floor(th);
+                    s.cosTheta[h] = std::cos(kTwoPi * static_cast<float>(th));
+                    s.sinTheta[h] = std::sin(kTwoPi * static_cast<float>(th));
+                }
+            }
+        }
+        harmonicMode_ = harmonic;
+    }
 
     // Interaural time difference from the centre pan: the far ear hears it later.
     const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
@@ -183,12 +218,28 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 Strand& s = strands_[si];
                 float sum = 0.0f;
                 const int act = s.active;
-                for (int h = 0; h < act; ++h) {
-                    double ph = s.phase[h] + s.inc[h];
+                if (harmonicMode_) {
+                    // One phase, all partials by angle addition: sin(h*phi + theta_h).
+                    double ph = s.basePhase + s.baseInc;
                     if (ph >= 1.0) ph -= 1.0;
-                    s.phase[h] = ph;
-                    sum += s.amp[h] * sin01(ph);
-                    s.amp[h] += s.ampStep[h];
+                    s.basePhase = ph;
+                    const float s1 = sin01(ph);
+                    double phc = ph + 0.25; if (phc >= 1.0) phc -= 1.0;
+                    const float c1 = sin01(phc);
+                    float sh = s1, ch = c1;
+                    for (int h = 0; h < act; ++h) {
+                        if (h > 0) { const float ns = sh * c1 + ch * s1; ch = ch * c1 - sh * s1; sh = ns; }
+                        sum += s.amp[h] * (sh * s.cosTheta[h] + ch * s.sinTheta[h]);
+                        s.amp[h] += s.ampStep[h];
+                    }
+                } else {
+                    for (int h = 0; h < act; ++h) {
+                        double ph = s.phase[h] + s.inc[h];
+                        if (ph >= 1.0) ph -= 1.0;
+                        s.phase[h] = ph;
+                        sum += s.amp[h] * sin01(ph);
+                        s.amp[h] += s.ampStep[h];
+                    }
                 }
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;

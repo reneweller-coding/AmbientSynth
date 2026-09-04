@@ -200,6 +200,9 @@ private:
     int      lastRootPc_ = -1;
     bool     midiHeld_[128] = {};
     Smoother masterSmooth_;
+    // Per-sample smoothing of the level-type parameters in the effect chain (20 ms), so
+    // automation, gestures, morph and map blend never step a gain by a whole block.
+    Smoother smDelayMix_, smDelayToFar_, smDelay2Mix_, smDelay2ToFar_, smCloudSend_, smCosmosSend_, smCosmosReturn_, smCosmosToFar_, smFarLevel_;
 
     std::atomic<uint64_t> mask_[2]{ 0, 0 };
     std::atomic<int> activeVoices_{ 0 };

@@ -37,6 +37,13 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
     PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
+    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_ })
+        s->setTime(0.02f, sr_);
+    smDelayMix_.snap(getParam(ParamId::DelayMix)); smDelayToFar_.snap(getParam(ParamId::DelayToFar));
+    smDelay2Mix_.snap(getParam(ParamId::Delay2Mix)); smDelay2ToFar_.snap(getParam(ParamId::Delay2ToFar));
+    smCloudSend_.snap(getParam(ParamId::CloudSend)); smCosmosSend_.snap(getParam(ParamId::CosmosSend));
+    smCosmosReturn_.snap(getParam(ParamId::CosmosReturn)); smCosmosToFar_.snap(getParam(ParamId::CosmosToFar));
+    smFarLevel_.snap(getParam(ParamId::FarLevel));
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
     for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_,
@@ -647,27 +654,29 @@ void Engine::renderChunk(float* L, float* R, int n)
     ensemble_.process(nl, nr, n);
     delay_.process(nl, nr, wl, wr, n);
     for (int i = 0; i < n; ++i) {
-        nl[i] += wl[i] * delayMix_;  nr[i] += wr[i] * delayMix_;
-        fl[i] += wl[i] * delayToFar_; fr[i] += wr[i] * delayToFar_;
+        const float m = smDelayMix_.next(delayMix_), tf = smDelayToFar_.next(delayToFar_);
+        nl[i] += wl[i] * m;  nr[i] += wr[i] * m;
+        fl[i] += wl[i] * tf; fr[i] += wr[i] * tf;
     }
     // Second delay in series: it hears the first delay's echoes and spins longer chains.
     delay2_.process(nl, nr, wl, wr, n);
     for (int i = 0; i < n; ++i) {
-        nl[i] += wl[i] * delay2Mix_;   nr[i] += wr[i] * delay2Mix_;
-        fl[i] += wl[i] * delay2ToFar_; fr[i] += wr[i] * delay2ToFar_;
+        const float m = smDelay2Mix_.next(delay2Mix_), tf = smDelay2ToFar_.next(delay2ToFar_);
+        nl[i] += wl[i] * m;  nr[i] += wr[i] * m;
+        fl[i] += wl[i] * tf; fr[i] += wr[i] * tf;
     }
     // Granular cloud on the far plane: grains of the foreground, scattered and transposed,
     // dropped into the far reverb.
-    if (cloudSend_ > 0.0f) {
+    if (cloudSend_ > 0.0f || smCloudSend_.value > 1e-4f) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
-        for (int i = 0; i < n; ++i) { cl[i] = nl[i] * cloudSend_; cr[i] = nr[i] * cloudSend_; }
+        for (int i = 0; i < n; ++i) { const float s = smCloudSend_.next(cloudSend_); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
         cloud_.process(cl, cr, fl, fr, n);
     }
 
     // Cosmos: a parallel send off the near bus, returned to both planes; the dry path is untouched.
-    if (cosmosSend_ > 0.0f) {
+    if (cosmosSend_ > 0.0f || smCosmosSend_.value > 1e-4f) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
-        for (int i = 0; i < n; ++i) { cl[i] = nl[i] * cosmosSend_; cr[i] = nr[i] * cosmosSend_; }
+        for (int i = 0; i < n; ++i) { const float s = smCosmosSend_.next(cosmosSend_); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
         shifter_.process(cl, cr, n);
         resonator_.process(cl, cr, n);
         vowel_.process(cl, cr, n);
@@ -678,8 +687,9 @@ void Engine::renderChunk(float* L, float* R, int n)
             for (int i = 0; i < n; ++i) { cl[i] = cl[i] * (1.0f - m) + bl[i] * m; cr[i] = cr[i] * (1.0f - m) + br[i] * m; }
         }
         for (int i = 0; i < n; ++i) {
-            nl[i] += cl[i] * cosmosReturn_; nr[i] += cr[i] * cosmosReturn_;
-            fl[i] += cl[i] * cosmosToFar_;  fr[i] += cr[i] * cosmosToFar_;
+            const float ret = smCosmosReturn_.next(cosmosReturn_), tf = smCosmosToFar_.next(cosmosToFar_);
+            nl[i] += cl[i] * ret; nr[i] += cr[i] * ret;
+            fl[i] += cl[i] * tf;  fr[i] += cr[i] * tf;
         }
     }
     nearReverb_.process(nl, nr, n);
@@ -731,8 +741,9 @@ void Engine::renderChunk(float* L, float* R, int n)
 
     const float master = dbToGain(effectiveParam(ParamId::MasterGain));
     for (int i = 0; i < n; ++i) {
-        L[i] = nl[i] + fl[i] * farLevel_;
-        R[i] = nr[i] + fr[i] * farLevel_;
+        const float far = smFarLevel_.next(farLevel_);
+        L[i] = nl[i] + fl[i] * far;
+        R[i] = nr[i] + fr[i] * far;
     }
     if (roomOn) {
         float* ol = roomOutL_.data(); float* orr = roomOutR_.data();

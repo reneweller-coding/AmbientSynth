@@ -23,6 +23,7 @@ struct VoiceParams {
     float shimmer = 0.4f, shimmerRate = 0.15f;
     int   unison = 3;
     float detune = 8.0f, drift = 4.0f, driftRate = 0.08f, spread = 0.7f;
+    float bloom = 0.0f, bloomTime = 60.0f;   // spectrum opens from brightness*(1-bloom) to brightness over bloomTime
     float air = 0.15f, airColor = 3.0f, airQ = 10.0f;
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
@@ -73,6 +74,7 @@ private:
     float    distance_ = 0.0f;
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
+    float    bloomT_ = 0.0f;     // seconds since note start, for Bloom
     float    itdBufL_[kItdBuffer] = {}, itdBufR_[kItdBuffer] = {};
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;

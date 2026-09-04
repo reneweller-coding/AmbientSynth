@@ -53,6 +53,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
+        bloomT_ = 0.0f;
     }
     env_.noteOn();
 }
@@ -65,9 +66,15 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float dt = static_cast<float>(blockLen / sr_);
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
 
+    // Bloom: the spectrum opens over bloomTime seconds (smoothstep, so the start is gentle).
+    bloomT_ += dt;
+    const float bt = clampv(bloomT_ / std::max(p.bloomTime, 1.0f), 0.0f, 1.0f);
+    const float bloomOpen = bt * bt * (3.0f - 2.0f * bt);
+    const float brightness = p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen));
+
     // Base spectrum shared by all strands of this voice.
     const int partials = clampv(p.partials, 1, kMaxPartials);
-    const float hc = 1.0f + p.brightness * p.brightness * 31.0f;   // brightness -> last full-level harmonic
+    const float hc = 1.0f + brightness * brightness * 31.0f;   // brightness -> last full-level harmonic
     float base[kMaxPartials + 1];
     for (int h = 1; h <= partials; ++h) {
         float a = std::pow(static_cast<float>(h), -p.tilt);

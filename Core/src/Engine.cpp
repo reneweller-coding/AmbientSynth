@@ -57,7 +57,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     masterSmooth_.setTime(0.02f, sr_);
     lastRootPc_ = -1;
     readParams();
-    brain_.reset(rng_.fork(), rootNote_);
+    brain_.reset(rng_.fork(), rootNote_ - 12);   // the brain's root lives an octave below the key root
     for (auto& h : midiHeld_) h = false;
 }
 
@@ -65,7 +65,7 @@ void Engine::reset()
 {
     for (auto& v : voices_) v.kill();
     for (auto& h : midiHeld_) h = false;
-    brain_.reset(rng_.fork(), rootNote_);
+    brain_.reset(rng_.fork(), rootNote_ - 12);
 }
 
 bool Engine::applyPreset(int index)
@@ -184,6 +184,11 @@ void Engine::stopNote(int note, int owner)
 void Engine::noteOn(int note, float velocity)
 {
     if (note < 0 || note > 127) return;
+    if (hold_ && midiHeld_[note]) {   // Hold: pressing a sounding key releases it
+        midiHeld_[note] = false;
+        stopNote(note, OwnerMidi);
+        return;
+    }
     midiHeld_[note] = true;
     startNote(note, velocity, OwnerMidi, keysDepth_);
 }
@@ -191,6 +196,7 @@ void Engine::noteOn(int note, float velocity)
 void Engine::noteOff(int note)
 {
     if (note < 0 || note > 127) return;
+    if (hold_) return;   // keys latch
     midiHeld_[note] = false;
     stopNote(note, OwnerMidi);
 }
@@ -218,6 +224,16 @@ void Engine::readParams()
     vp_.drift       = g(ParamId::Drift);
     vp_.driftRate   = g(ParamId::DriftRate);
     vp_.spread      = g(ParamId::Spread);
+    vp_.bloom       = g(ParamId::Bloom);
+    vp_.bloomTime   = g(ParamId::BloomTime);
+    subLevel_       = g(ParamId::SubLevel);
+    subOctave_      = std::lround(g(ParamId::SubOctave)) == 0 ? 1 : 2;
+    subGlide_       = g(ParamId::SubGlide);
+    subBinaural_    = g(ParamId::SubBinaural);
+    subTone_        = g(ParamId::SubTone);
+    const bool hold = g(ParamId::Hold) >= 0.5f;
+    if (hold_ && !hold) { for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { midiHeld_[i] = false; stopNote(i, OwnerMidi); } }
+    hold_ = hold;
     vp_.air         = g(ParamId::Air);
     vp_.airColor    = g(ParamId::AirColor);
     vp_.airQ        = g(ParamId::AirQ);
@@ -472,7 +488,34 @@ void Engine::renderChunk(float* L, float* R, int n)
         L[i] = nl[i] + fl[i] * farLevel_;
         R[i] = nr[i] + fr[i] * farLevel_;
     }
+
+    // Foundation: a dry sub voice on the brain's root, gliding between roots; the two ears
+    // may run a few Hz apart (binaural beat), which Bass Mono leaves alone below its crossover
+    // only in the mid channel -- so the beat is kept by feeding it after the mid/side stage.
+    float* subL = wl; float* subR = wr;   // the delay scratch buffers are free by now
+    const bool subOn = subLevel_ > 0.0f || subLevelCur_ > 1e-4f;
+    if (subOn) {
+        const double target = std::log(std::max(frequencyOf(brain_.root()) / (subOctave_ == 1 ? 2.0 : 4.0), 10.0));
+        if (subFreqCur_ <= 0.0) subFreqCur_ = target;
+        const double glideC = 1.0 - std::exp(-1.0 / (std::max(subGlide_, 0.05f) * sr_));
+        const float levelC = 1.0f - std::exp(-1.0f / (2.0f * static_cast<float>(sr_)));
+        for (int i = 0; i < n; ++i) {
+            subFreqCur_ += (target - subFreqCur_) * glideC;
+            subLevelCur_ += (subLevel_ - subLevelCur_) * levelC;
+            const double f = std::exp(subFreqCur_);
+            const double fL = std::max(f - 0.5 * subBinaural_, 5.0), fR = std::max(f + 0.5 * subBinaural_, 5.0);
+            subPhaseL_ += fL / sr_; if (subPhaseL_ >= 1.0) subPhaseL_ -= 1.0;
+            subPhaseR_ += fR / sr_; if (subPhaseR_ >= 1.0) subPhaseR_ -= 1.0;
+            const float triL = 4.0f * std::fabs(static_cast<float>(subPhaseL_) - 0.5f) - 1.0f;
+            const float triR = 4.0f * std::fabs(static_cast<float>(subPhaseR_) - 0.5f) - 1.0f;
+            const float g = subLevelCur_ * 0.45f;
+            subL[i] = g * ((1.0f - subTone_) * sin01(subPhaseL_) + subTone_ * triL);
+            subR[i] = g * ((1.0f - subTone_) * sin01(subPhaseR_) + subTone_ * triR);
+        }
+    }
     midSide_.process(L, R, n);
+    if (subOn)
+        for (int i = 0; i < n; ++i) { L[i] += subL[i]; R[i] += subR[i]; }
     for (int i = 0; i < n; ++i) {
         const float g = masterSmooth_.next(master);
         L[i] = softClip(L[i] * g);

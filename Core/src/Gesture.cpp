@@ -91,6 +91,22 @@ void GestureLayer::setDefaultMappings()
     addMapping({ GestureInput::LeftForward,  ParamId::CloudSend,   0.0f, 1.0f, 0.5f,  0.02f, clutch, false });
     addMapping({ GestureInput::RightForward, ParamId::DelayMix,    0.0f, 0.6f, 0.5f,  0.02f, clutch, false });
     addMapping({ GestureInput::HeadYaw,      ParamId::Width,       0.6f, 1.8f, 1.0f,  0.02f, GestureInput::Count, false });
+    // Macros (Custom0..3 = Macro A..D): one knob, several parameters, no clutch.
+    const GestureInput none = GestureInput::Count;
+    addMapping({ GestureInput::Custom0, ParamId::FarLevel,     0.3f,   1.0f,    0.3f, 0.002f, none, false });   // A "Space"
+    addMapping({ GestureInput::Custom0, ParamId::FarDecay,     4.0f,   60.0f,   0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom0, ParamId::Depth,        0.2f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom0, ParamId::FarSize,      1.0f,   3.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom1, ParamId::CosmosSend,   0.0f,   1.0f,    0.3f, 0.002f, none, false });   // B "Alien"
+    addMapping({ GestureInput::Custom1, ParamId::CosmosNebula, 0.0f,   0.8f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom1, ParamId::CosmosShift,  0.0f,   80.0f,   0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom2, ParamId::DriftRate,    0.02f,  0.5f,    0.3f, 0.002f, none, false });   // C "Motion"
+    addMapping({ GestureInput::Custom2, ParamId::ShimmerRate,  0.05f,  1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom2, ParamId::PanDrift,     0.0f,   1.0f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom2, ParamId::EnsembleMix,  0.2f,   0.8f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom3, ParamId::Brightness,   0.3f,   1.0f,    0.3f, 0.002f, none, false });   // D "Bloom"
+    addMapping({ GestureInput::Custom3, ParamId::Air,          0.0f,   0.5f,    0.3f, 0.002f, none, false });
+    addMapping({ GestureInput::Custom3, ParamId::Cutoff,       800.0f, 8000.0f, 0.3f, 0.002f, none, false });
 }
 
 bool GestureLayer::parseMappings(const char* text)

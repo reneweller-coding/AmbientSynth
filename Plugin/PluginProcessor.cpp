@@ -103,6 +103,12 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // Macros are gesture inputs Custom0..3: one knob, several parameters.
+    gestures_.setInput(GestureInput::Custom0, raw_[static_cast<size_t>(ParamId::MacroA)]->load());
+    gestures_.setInput(GestureInput::Custom1, raw_[static_cast<size_t>(ParamId::MacroB)]->load());
+    gestures_.setInput(GestureInput::Custom2, raw_[static_cast<size_t>(ParamId::MacroC)]->load());
+    gestures_.setInput(GestureInput::Custom3, raw_[static_cast<size_t>(ParamId::MacroD)]->load());
+
     // Gestures write through the host's parameter system, like a MIDI controller would.
     gestures_.update(buffer.getNumSamples() / getSampleRate(), [this](ParamId id, float v) {
         if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
@@ -155,6 +161,45 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         buffer.applyGain(0.5f);
     }
     for (int ch = 2; ch < buffer.getNumChannels(); ++ch) buffer.clear(ch, 0, n);
+
+    if (recording_.load(std::memory_order_relaxed)) {
+        const juce::ScopedTryLock sl(recordLock_);
+        if (sl.isLocked() && recordWriter_ != nullptr) {
+            const float* chans[2] = { buffer.getReadPointer(0), buffer.getNumChannels() > 1 ? buffer.getReadPointer(1) : buffer.getReadPointer(0) };
+            recordWriter_->write(chans, n);
+            recordedSamples_.fetch_add(n, std::memory_order_relaxed);
+        }
+    }
+}
+
+bool AmbientSynthProcessor::startRecording(const juce::File& file)
+{
+    stopRecording();
+    file.deleteFile();
+    auto stream = std::unique_ptr<juce::FileOutputStream>(file.createOutputStream());
+    if (stream == nullptr || stream->failedToOpen()) return false;
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(stream.get(), getSampleRate(), 2, 32, {}, 0));
+    if (writer == nullptr) return false;
+    stream.release();   // the writer owns the stream now
+    recordThread_.startThread();
+    {
+        const juce::ScopedLock sl(recordLock_);
+        recordWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer.release(), recordThread_, 1 << 18);
+        recordedSamples_.store(0);
+    }
+    recording_.store(true);
+    return true;
+}
+
+void AmbientSynthProcessor::stopRecording()
+{
+    recording_.store(false);
+    {
+        const juce::ScopedLock sl(recordLock_);
+        recordWriter_.reset();
+    }
+    recordThread_.stopThread(2000);
 }
 
 int AmbientSynthProcessor::getNumPrograms() { return numPresets(); }

@@ -128,6 +128,24 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+## Foundation, Bloom, Hold, Macros
+
+* **Foundation** (`Engine::renderChunk`, after the mid/side stage so the
+  binaural offset survives Bass Mono): one sine/triangle voice per ear on
+  the brain's root ÷ 2 or ÷ 4, frequency glides in the log domain with time
+  constant *Glide*, level rises over 2 s, ears offset by ±*Binaural*/2 Hz.
+  Measured: root A3 gives 110 Hz an octave below; with 6 Hz binaural the
+  left ear sits at 107 Hz and the right at 113 Hz.
+* **Bloom** (per voice): brightness = brightness × (1 − bloom × (1 −
+  smoothstep(t / bloomTime))). Measured: with bloom 1 the first second
+  carries less than a fifth of the high-partial energy of the opened state.
+* **Hold**: note-on on a latched key releases it; note-off is ignored;
+  switching Hold off releases all latched keys.
+* **Macros** are the gesture inputs Custom0..3 fed from four parameters, so
+  the same mapping table serves hands and knobs. A mapping only starts to
+  write once its input has moved from its rest value (also true for head
+  yaw), which keeps presets intact until the performer touches a macro.
+
 ## Cosmos path (science fiction / deep space)
 
 A parallel send off the near bus after the delay; the dry path is untouched

@@ -29,15 +29,39 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setLookAndFeel(&laf_);
 
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Filter", "Space" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "MORPH",      kMorph,     { { "Morph" } }, {}, 1 },
+        { "MORPH",      kMorph,     { { "Morph" }, { "Macros" } }, {}, 1 },
     };
 
+    content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
+    viewport_.setViewedComponent(&content_, false);
+    viewport_.setScrollBarsShown(true, false);
+    addAndMakeVisible(viewport_);
     buildCells();
+    // The Master section lives in the header, so its cells belong to the editor, not the content.
+    if (Section* ms = findSection("Master"))
+        for (int ci : ms->cells) { addAndMakeVisible(*cells_[static_cast<size_t>(ci)].comp); addAndMakeVisible(*cells_[static_cast<size_t>(ci)].label); }
+
+    recButton_ = std::make_unique<juce::TextButton>("Rec");
+    recButton_->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffb03030));
+    recButton_->setClickingTogglesState(false);
+    recButton_->onClick = [this] {
+        if (proc_.isRecording()) { proc_.stopRecording(); recButton_->setToggleState(false, juce::dontSendNotification); return; }
+        chooser_ = std::make_unique<juce::FileChooser>("Record to WAV", juce::File(), "*.wav");
+        chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& fc) {
+                auto file = fc.getResult();
+                if (file == juce::File()) return;
+                if (!file.hasFileExtension("wav")) file = file.withFileExtension("wav");
+                if (proc_.startRecording(file)) recButton_->setToggleState(true, juce::dontSendNotification);
+                else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Record", "Could not open the file for writing.");
+            });
+    };
+    addAndMakeVisible(*recButton_);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -126,21 +150,21 @@ void AmbientSynthEditor::buildCells()
         c.label->setJustificationType(juce::Justification::centred);
         c.label->setFont(juce::FontOptions(11.0f));
         c.label->setColour(juce::Label::textColourId, kDim);
-        addAndMakeVisible(*c.label);
+        content_.addAndMakeVisible(*c.label);
         switch (d.kind) {
         case ParamKind::Float:
         case ParamKind::Int: {
             auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
             s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, kCellW - 6, 15);
             if (d.unit[0] != 0) s->setTextValueSuffix(juce::String(" ") + d.unit);
-            addAndMakeVisible(*s);
+            content_.addAndMakeVisible(*s);
             c.slider = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, d.key, *s);
             c.comp = std::move(s);
             break;
         }
         case ParamKind::Bool: {
             auto b = std::make_unique<juce::ToggleButton>();
-            addAndMakeVisible(*b);
+            content_.addAndMakeVisible(*b);
             c.button = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc_.apvts, d.key, *b);
             c.comp = std::move(b);
             break;
@@ -148,7 +172,7 @@ void AmbientSynthEditor::buildCells()
         case ParamKind::Choice: {
             auto cb = std::make_unique<juce::ComboBox>();
             for (int i = 0; i < d.numChoices; ++i) cb->addItem(d.choices[i], i + 1);
-            addAndMakeVisible(*cb);
+            content_.addAndMakeVisible(*cb);
             c.combo = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc_.apvts, d.key, *cb);
             c.comp = std::move(cb);
             c.units = 2;
@@ -197,8 +221,8 @@ int AmbientSynthEditor::addExtraCell(const juce::String& section, std::unique_pt
     c.label->setJustificationType(juce::Justification::centred);
     c.label->setFont(juce::FontOptions(11.0f));
     c.label->setColour(juce::Label::textColourId, kDim);
-    addAndMakeVisible(*c.label);
-    addAndMakeVisible(*comp);
+    content_.addAndMakeVisible(*c.label);
+    content_.addAndMakeVisible(*comp);
     c.comp = std::move(comp);
     const int idx = static_cast<int>(cells_.size());
     sec->cells.push_back(idx);
@@ -260,6 +284,7 @@ void AmbientSynthEditor::resized()
     if (cosmosBox_) cosmosBox_->setBounds(388, 8, 160, 24);
     if (saveButton_) saveButton_->setBounds(556, 8, 64, 24);
     if (loadButton_) loadButton_->setBounds(626, 8, 64, 24);
+    if (recButton_) recButton_->setBounds(696, 8, 56, 24);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
     if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
@@ -271,6 +296,9 @@ void AmbientSynthEditor::resized()
         ms->bounds = ms->bounds.withTrimmedTop(-2);
     }
 
+    // Everything else scrolls below the header.
+    viewport_.setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
+
     // Column widths from the widest group row in each column.
     int colWidth[2] = { 0, 0 };
     for (auto& g : groups_) {
@@ -281,7 +309,7 @@ void AmbientSynthEditor::resized()
         }
     }
     int colX[2] = { kPad, kPad + colWidth[0] + kPad };
-    int colY[2] = { kHeaderH + kPad, kHeaderH + kPad };
+    int colY[2] = { kPad, kPad };
     for (auto& g : groups_) {
         const int x0 = colX[g.column];
         int y = colY[g.column] + kGroupTitleH;
@@ -299,6 +327,9 @@ void AmbientSynthEditor::resized()
         g.bounds = { x0, colY[g.column], colWidth[g.column], y - colY[g.column] };
         colY[g.column] = y + kPad;
     }
+    const int contentW = std::max(colX[1] + colWidth[1] + kPad, viewport_.getMaximumVisibleWidth());
+    const int contentH = std::max(std::max(colY[0], colY[1]), viewport_.getMaximumVisibleHeight());
+    content_.setSize(contentW, contentH);
 }
 
 // ---------------------------------------------------------------- interaction
@@ -342,7 +373,7 @@ void AmbientSynthEditor::timerCallback()
         }
     }
     repaint(header_);
-    if (Section* m = findSection("Morph")) repaint(m->bounds.withTrimmedTop(-kGroupTitleH));
+    if (Section* m = findSection("Morph")) content_.repaint(m->bounds.withTrimmedTop(-kGroupTitleH));
 }
 
 void AmbientSynthEditor::chooseScalaFile()
@@ -457,7 +488,25 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     g.setFont(juce::FontOptions(11.0f));
     g.drawText(info, routing_.getX() + 90, header_.getBottom() - 16, getWidth() - routing_.getX() - 400, 14, juce::Justification::centredLeft);
 
-    // Groups and sections
+    if (proc_.isRecording()) {
+        g.setColour(juce::Colour(0xffe05050));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText("REC " + juce::String(static_cast<int>(proc_.recordedSeconds() / 60)) + ":" + juce::String(static_cast<int>(proc_.recordedSeconds()) % 60).paddedLeft('0', 2),
+                   760, 8, 90, 24, juce::Justification::centredLeft);
+    }
+    // The Master section is the only section painted here (it sits in the header).
+    if (const Section* ms = const_cast<AmbientSynthEditor*>(this)->findSection("Master")) {
+        g.setColour(kSectionFill);
+        g.fillRoundedRectangle(ms->bounds.toFloat(), 5.0f);
+        g.setColour(kMaster.withAlpha(0.85f));
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+        g.drawText("MASTER", ms->bounds.getX() + kPad, ms->bounds.getY() + 1, ms->bounds.getWidth() - 2 * kPad, kTitleH, juce::Justification::centredLeft);
+    }
+}
+
+void AmbientSynthEditor::paintContent(juce::Graphics& g)
+{
+    g.fillAll(kBg);
     for (const auto& grp : groups_) {
         g.setColour(kGroupFill);
         g.fillRoundedRectangle(grp.bounds.toFloat(), 8.0f);
@@ -467,6 +516,7 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
         g.drawText(grp.name, grp.bounds.getX() + 12, grp.bounds.getY() + 2, grp.bounds.getWidth() - 20, kGroupTitleH, juce::Justification::centredLeft);
     }
     for (const auto& s : sections_) {
+        if (s.name == "Master") continue;   // painted in the header
         const juce::Colour col = s.group >= 0 ? groups_[static_cast<size_t>(s.group)].colour : kMaster;
         g.setColour(kSectionFill);
         g.fillRoundedRectangle(s.bounds.toFloat(), 5.0f);

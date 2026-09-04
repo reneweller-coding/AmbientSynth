@@ -66,7 +66,15 @@ private:
     std::map<juce::Component*, int> cellOf_;
     std::unique_ptr<juce::Slider> master_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttach_;
-    std::unique_ptr<juce::TextButton> saveButton_, loadButton_;
+    // Everything below the header lives in a scrollable content component.
+    struct Content : juce::Component {
+        std::function<void(juce::Graphics&)> onPaint;
+        void paint(juce::Graphics& g) override { if (onPaint) onPaint(g); }
+    };
+    Content content_;
+    juce::Viewport viewport_;
+    void paintContent(juce::Graphics&);
+    std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_;
     std::unique_ptr<juce::ComboBox> soundBox_, cosmosBox_;
     juce::ComboBox* morphABox_ = nullptr;   // owned by their cells
     juce::ComboBox* morphBBox_ = nullptr;

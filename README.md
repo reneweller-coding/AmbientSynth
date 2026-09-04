@@ -67,6 +67,14 @@ switches flip halfway. Morph settings are never part of a preset.
 controller. The label shows the bound CC; right-click again to clear. The
 mapping is saved with the plugin state and in `.ambientsynth` files.
 
+**Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
+until its key is pressed again, and switching Hold off releases everything.
+The four **macros** (Space, Alien, Motion, Bloom) each move several
+parameters at once through the gesture layer; they are automatable, MIDI-
+learnable and never part of a preset, and a macro only acts once it has
+been moved, so loading presets leaves everything intact. *Rec* in the header
+records the output to a 32-bit float WAV, for capturing a whole set.
+
 **OSC and gestures.** The plugin listens on UDP port 9000 (header shows the
 message count). Namespace: `/ambient/param/<key> f`, `/ambient/paramn/<key> f`
 (normalised), `/ambient/morph f`, `/ambient/note i i`, `/ambient/preset s|i`,
@@ -97,6 +105,12 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Oscillator** — additive bank per strand: partials, spectral tilt,
   brightness, odd/even balance, inharmonicity, *Shimmer* (each partial's level
   drifts on its own), strands (unison), detune, pitch drift, stereo spread.
+  *Bloom* opens each note's spectrum from dark to its brightness over *Bloom
+  Time* (up to five minutes), a slow flowering per voice.
+* **Foundation** — a dry sub voice that follows the brain's root one or two
+  octaves down and glides between roots (*Glide*); *Binaural* runs the two
+  ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends
+  sine into triangle.
 * **Air** — a band-passed noise layer per voice around a drifting multiple of
   the fundamental: breath, flute air, glass hiss.
 * **Envelope** — attack up to 60 s, release up to 120 s.

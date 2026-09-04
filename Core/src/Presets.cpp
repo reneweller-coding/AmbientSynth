@@ -12,7 +12,7 @@ const Preset kPresets[] = {
     { "Init", "" },
     { "Sleep Concert",
       "brain_density=6;brain_rate=35;brain_hold_min=60;brain_hold_max=240;depth=0.85;far_decay=35;far_highcut=2500;"
-      "air=0.2;arc=0.5;arc_period=60;brightness=0.6;attack=10;release=25" },
+      "air=0.2;arc=0.5;arc_period=60;brightness=0.6;attack=10;release=25;sub_level=0.35;sub_binaural=4;bloom=0.5;bloom_time=90" },
     { "Glass Cathedral",
       "partials=24;tilt=0.8;brightness=0.95;inharmonic=0.15;cutoff=6000;far_size=3;far_decay=45;far_highcut=7000;"
       "far_damp=0.3;ens_mix=0.6;shimmer=0.6;depth=0.6;scale=Harmonic 8-16;root=E" },
@@ -44,7 +44,7 @@ const Preset kPresets[] = {
       "scale=JI Pentatonic;root=F#;brain_density=4;brain_low=40;brain_high=76;air=0.25;far_decay=30;attack=8;release=20" },
     { "Deep Sleep Sub",
       "root=C;brain_low=24;brain_high=55;tilt=2;cutoff=600;bass_mono=220;brain_density=3;far_decay=50;far_highcut=1200;"
-      "master_gain=-4;attack=15;release=40" },
+      "master_gain=-4;attack=15;release=40;sub_level=0.6;sub_octave=-2;sub_binaural=2;sub_glide=15" },
     { "Dawn Drift",
       "brightness=0.85;arc=1;arc_period=120;brain_density=6;scale=JI Major (Ptolemy);root=D;far_decay=20;air=0.15" },
     { "Night Rain",
@@ -54,7 +54,7 @@ const Preset kPresets[] = {
       "arc=1;arc_period=30;brain_density=6;brain_rate=20;brain_hold_min=40;brain_hold_max=160;depth=0.8;far_decay=30" },
     { "Hypnos",
       "attack=30;release=60;brain_hold_min=120;brain_hold_max=400;brain_rate=60;brain_density=7;far_decay=60;far_highcut=1800;"
-      "depth=0.9" },
+      "depth=0.9;sub_level=0.4;sub_binaural=6;bloom=0.8;bloom_time=180" },
     { "Warm Blanket",
       "tilt=1.6;brightness=0.5;cutoff=1200;air=0.1;scale=JI Major (Ptolemy);root=G;near_mix=0.35;far_level=0.5;depth=0.4" },
     { "Somnus Harmonics",
@@ -82,7 +82,7 @@ const Preset kPresets[] = {
     { "Stained Light",
       "brightness=0.8;shimmer=1;shimmer_rate=0.6;partials=24;far_decay=40;far_highcut=7000;scale=Otonality 1-11;root=F" },
     { "Frozen Chapel",
-      "far_decay=90;far_highcut=5000;far_size=3;brain_density=3;attack=20;release=50;partials=20;brightness=0.85" },
+      "far_decay=90;far_highcut=5000;far_size=3;brain_density=3;attack=20;release=50;partials=20;brightness=0.85;bloom=1;bloom_time=200" },
     { "Silver Threads",
       "strands=6;detune=25;drift=12;partials=12;brightness=0.9;dly_mix=0.3;dly_time_l=1.7;dly_time_r=2.3;dly_feedback=0.7;"
       "far_decay=20;far_highcut=6000" },
@@ -327,11 +327,11 @@ const Preset kPresets[] = {
     // ---------------------------------------------------------------- 110..119 long-form night arcs
     { "All Night Arc",
       "arc=1;arc_period=240;brain_density=5;brain_rate=40;brain_hold_min=90;brain_hold_max=400;far_decay=40;depth=0.85;"
-      "scale=JI 7-limit;root=D" },
+      "scale=JI 7-limit;root=D;sub_level=0.3;sub_binaural=3;bloom=0.6;bloom_time=120" },
     { "Tidal Hours",
       "arc=1;arc_period=120;brain_density=6;brain_hold_min=60;brain_hold_max=240;far_decay=35;scale=JI Major (Ptolemy);root=G;air=0.2" },
     { "Slow Sunrise",
-      "arc=0.8;arc_period=90;brightness=0.4;brain_density=4;far_decay=30;scale=JI Pentatonic;root=C" },
+      "arc=0.8;arc_period=90;brightness=0.4;brain_density=4;far_decay=30;scale=JI Pentatonic;root=C;bloom=0.8;bloom_time=150" },
     { "Ninety Minute Cycle",
       "arc=1;arc_period=90;brain_density=5;brain_rate=30;brain_hold_min=60;brain_hold_max=200;cosmos_send=0.4;cosmos_nebula=0.6;"
       "cosmos_smear=0.8;cosmos_return=0.5;cosmos_to_far=0.5" },

@@ -99,6 +99,11 @@ private:
     BrainParams  bp_;
     Drifter      arc_;
     float        arcAmount_ = 0.0f, arcPeriodMin_ = 40.0f;
+    // Foundation sub voice
+    double       subPhaseL_ = 0.0, subPhaseR_ = 0.0, subFreqCur_ = 0.0;
+    float        subLevel_ = 0.0f, subLevelCur_ = 0.0f, subGlide_ = 8.0f, subBinaural_ = 0.0f, subTone_ = 0.2f;
+    int          subOctave_ = 1;
+    bool         hold_ = false;
     float        depth_ = 0.7f, keysDepth_ = 0.0f;
     float        delayMix_ = 0.25f, delayToFar_ = 0.4f, farLevel_ = 0.8f;
 

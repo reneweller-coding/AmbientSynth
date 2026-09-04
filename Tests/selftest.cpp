@@ -271,7 +271,7 @@ void testPresets()
         const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
-        CHECK(count == kNumParams - 3, "preset sets every parameter except the three morph controls");
+        CHECK(count == kNumParams - 7, "preset sets every parameter except morph controls and macros");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");
@@ -556,12 +556,14 @@ void testOscAndGestures()
     g2.addMapping({ GestureInput::LeftHeight, ParamId::Depth, 0.0f, 1.0f, 0.0f, 0.05f, GestureInput::RightPinch, false });
     float depth = -1.0f; int writes = 0;
     auto sinkFn = [&](ParamId id, float v) { if (id == ParamId::Depth) { depth = v; ++writes; } };
+    g2.setInput(GestureInput::LeftHeight, 0.5f);
+    g2.update(0.01, sinkFn);
     g2.setInput(GestureInput::LeftHeight, 0.8f);
     g2.update(0.01, sinkFn);
     CHECK(writes == 0, "nothing moves while the clutch is open");
     g2.setInput(GestureInput::RightPinch, 1.0f);
     g2.update(0.01, sinkFn);
-    CHECK(writes == 1 && std::fabs(depth - 0.8f) < 1e-6f, "clutch closed: value follows immediately (no smoothing)");
+    CHECK(writes == 1 && std::fabs(depth - 0.8f) < 1e-6f, "clutch closed and hand moved: value follows (no smoothing)");
     g2.setInput(GestureInput::LeftHeight, 0.82f);
     g2.update(0.01, sinkFn);
     CHECK(writes == 1, "jitter below the dead-zone is ignored");
@@ -581,15 +583,17 @@ void testOscAndGestures()
     CHECK(b > 0.6f && b < 0.7f, "smoothing: one time constant reaches ~63 %");
     {   // Default mappings through the hand path, as the simulator drives them.
         GestureLayer gd;
-        float depth = -1.0f, width = -1.0f, morph = -1.0f;
-        auto sk = [&](ParamId id, float v) { if (id == ParamId::Depth) depth = v; if (id == ParamId::Width) width = v; if (id == ParamId::MorphPos) morph = v; };
-        gd.setHand(0, -0.2f, 0.96f, -0.45f, 0.0f, 0.0f);
+        float depthH = -1.0f, width = -1.0f, morph = -1.0f;
+        auto sk = [&](ParamId id, float v) { if (id == ParamId::Depth) depthH = v; if (id == ParamId::Width) width = v; if (id == ParamId::MorphPos) morph = v; };
+        gd.setHand(0, -0.1f, 1.30f, -0.45f, 0.0f, 0.0f);   // rest position first ...
+        gd.setHand(1,  0.1f, 1.30f, -0.45f, 1.0f, 0.0f);
+        gd.setHead(0.0f, 0.0f, 0.0f);
+        gd.update(0.005, sk);
+        gd.setHand(0, -0.2f, 0.96f, -0.45f, 0.0f, 0.0f);   // ... then the hands move
         gd.setHand(1,  0.2f, 1.30f, -0.45f, 1.0f, 0.0f);   // right pinch closed = clutch
         gd.setHead(40.0f, 0.0f, 0.0f);
-        std::printf("clutch input %.2f, left height %.3f\n", gd.input(GestureInput::RightPinch), gd.input(GestureInput::LeftHeight));
-        gd.update(0.005, sk);
-        std::printf("depth %.3f width %.3f morph %.3f\n", depth, width, morph);
-        CHECK(std::fabs(depth - 0.075f) < 0.01f, "default mapping: left height drives depth while the right hand pinches");
+        for (int i = 0; i < 400; ++i) gd.update(0.005, sk);   // 2 s: smoothing settles
+        CHECK(std::fabs(depthH - 0.075f) < 0.01f, "default mapping: left height drives depth while the right hand pinches");
         CHECK(width > 1.2f, "head yaw drives width without clutch");
         CHECK(morph >= 0.0f, "hand distance drives morph");
     }
@@ -629,10 +633,110 @@ void testOscAndGestures()
     }
 }
 
+void testFeaturesRound7()
+{
+    const int sr = 48000;
+    {   // Hold: keys latch, pressing again releases, switching Hold off releases everything.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Hold, 1.0f);
+        e.setParam(ParamId::Attack, 0.1f);
+        e.setParam(ParamId::Release, 0.2f);
+        e.setParam(ParamId::FarDecay, 1.0f); e.setParam(ParamId::NearDecay, 0.3f); e.setParam(ParamId::DelayFeedback, 0.0f);
+        e.prepare(sr, 256);
+        render(e, 0.05);
+        e.noteOn(60, 0.8f); e.noteOff(60);
+        render(e, 1.0);
+        CHECK(e.activeVoices() == 1, "hold keeps the note after note-off");
+        e.noteOn(60, 0.8f);   // second press releases
+        render(e, 2.0);
+        CHECK(e.activeVoices() == 0, "pressing a held key again releases it");
+        e.noteOn(62, 0.8f); e.noteOff(62); e.noteOn(65, 0.8f); e.noteOff(65);
+        render(e, 0.5);
+        CHECK(e.activeVoices() == 2, "two latched notes");
+        e.setParam(ParamId::Hold, 0.0f);
+        render(e, 2.5);
+        CHECK(e.activeVoices() == 0, "hold off releases the latched notes");
+    }
+    {   // Foundation: sub follows the root an octave below, binaural offset splits L/R.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::SubLevel, 0.8f);
+        e.setParam(ParamId::SubBinaural, 0.0f);
+        e.setParam(ParamId::RootNote, 9.0f);      // A
+        e.setParam(ParamId::Scale, 0.0f);         // 12-TET
+        e.prepare(sr, 256);
+        std::vector<float> cap;
+        render(e, 4.0, &cap);
+        std::vector<float> L(sr);
+        for (int i = 0; i < sr; ++i) L[static_cast<size_t>(i)] = cap[static_cast<size_t>((3 * sr + i) * 2)];
+        // brain root = 48 + 9 = 57 (A3, 220 Hz) -> sub one octave below = 110 Hz
+        const double p110 = goertzel(L.data(), sr, 110.0, sr), p220 = goertzel(L.data(), sr, 220.0, sr), p55 = goertzel(L.data(), sr, 55.0, sr);
+        CHECK(p110 > 10.0 * p220 && p110 > 10.0 * p55, "sub sits one octave below the root");
+        e.setParam(ParamId::SubBinaural, 6.0f);
+        cap.clear();
+        render(e, 4.0, &cap);
+        std::vector<float> Lb(2 * sr), Rb(2 * sr);
+        for (int i = 0; i < 2 * sr; ++i) { Lb[static_cast<size_t>(i)] = cap[static_cast<size_t>((2 * sr + i) * 2)]; Rb[static_cast<size_t>(i)] = cap[static_cast<size_t>((2 * sr + i) * 2 + 1)]; }
+        const double l107 = goertzel(Lb.data(), 2 * sr, 107.0, sr), l113 = goertzel(Lb.data(), 2 * sr, 113.0, sr);
+        const double r107 = goertzel(Rb.data(), 2 * sr, 107.0, sr), r113 = goertzel(Rb.data(), 2 * sr, 113.0, sr);
+        CHECK(l107 > 4.0 * l113 && r113 > 4.0 * r107, "binaural: left ear 3 Hz below, right ear 3 Hz above");
+    }
+    {   // Bloom: a voice starts dark and opens.
+        auto centroidAt = [&](float bloom) {
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Bloom, bloom);
+            e.setParam(ParamId::BloomTime, 5.0f);
+            e.setParam(ParamId::Attack, 0.2f);
+            e.setParam(ParamId::Brightness, 1.0f);
+            e.setParam(ParamId::Cutoff, 18000.0f);
+            e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 0.0f);   // 12-TET, C: note 48 = 130.81 Hz
+            e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::Shimmer, 0.0f);   // no random partial drift: the spectrum must be reproducible
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);   // one strand, on-grid partials
+            e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+            e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.prepare(sr, 256);
+            e.noteOn(48, 0.8f);
+            std::vector<float> cap;
+            render(e, 1.0, &cap);   // early
+            auto highRatio = [&](const std::vector<float>& c, int from) {
+                double hi = 0, lo = 0;
+                std::vector<float> mono(sr);
+                for (int i = 0; i < sr; ++i) mono[static_cast<size_t>(i)] = c[static_cast<size_t>((from + i) * 2)];
+                for (int h = 1; h <= 24; ++h) { const double p = goertzel(mono.data(), sr, 130.81 * h, sr); if (h <= 4) lo += p; else hi += p; }
+                return hi / (lo + 1e-12);
+            };
+            const double early = highRatio(cap, 0);
+            cap.clear();
+            render(e, 6.0, &cap);   // after bloom time
+            const double late = highRatio(cap, 5 * sr);
+            return std::make_pair(early, late);
+        };
+        const auto withBloom = centroidAt(1.0f);
+        const auto without = centroidAt(0.0f);
+        CHECK(withBloom.first < 0.2 * withBloom.second, "bloom: far fewer high partials at the start than after bloom time");
+        CHECK(without.first > 0.5 * without.second, "no bloom: spectrum steady from the start");
+    }
+    {   // Macros act only once moved, then drive several parameters.
+        GestureLayer g;   // defaults incl. macro mappings
+        int writes = 0; float farLevel = -1.0f, depthM = -1.0f;
+        auto sk = [&](ParamId id, float v) { ++writes; if (id == ParamId::FarLevel) farLevel = v; if (id == ParamId::Depth) depthM = v; };
+        g.setInput(GestureInput::Custom0, 0.0f);
+        for (int i = 0; i < 10; ++i) g.update(0.01, sk);
+        CHECK(writes == 0, "a macro at rest writes nothing (presets stay intact)");
+        g.setInput(GestureInput::Custom0, 1.0f);
+        for (int i = 0; i < 300; ++i) g.update(0.01, sk);   // 3 s
+        CHECK(farLevel > 0.95f && depthM > 0.95f, "macro A drives far level and depth to their maxima");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    testFeaturesRound7();
     testOscAndGestures();
     testMorph();
     testCloudAndLayers();

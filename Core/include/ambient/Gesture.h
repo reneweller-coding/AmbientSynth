@@ -76,14 +76,15 @@ public:
             State& s = state_[i];
             float x = input(m.input);
             const bool engaged = (m.clutch == GestureInput::Count) || input(m.clutch) > 0.5f;
-            if (engaged) {
-                if (!s.hasTarget || std::fabs(x - s.lastInput) >= m.deadzone) { s.lastInput = x; s.hasTarget = true; }
+            if (!s.seen) {   // a mapping only acts once its input has moved; the glide starts from the rest position
+                s.seen = true; s.lastInput = x;
+                s.value = m.min + (m.max - m.min) * (m.invert ? 1.0f - x : x); s.primed = true;
             }
+            if (engaged && std::fabs(x - s.lastInput) >= m.deadzone) { s.lastInput = x; s.hasTarget = true; }
             if (!s.hasTarget) continue;
             float u = s.lastInput;
             if (m.invert) u = 1.0f - u;
             const float target = m.min + (m.max - m.min) * u;
-            if (!s.primed) { s.value = target; s.primed = true; }
             const float coef = m.smoothSeconds <= 1e-4 ? 1.0f : 1.0f - static_cast<float>(std::exp(-dt / m.smoothSeconds));
             const float next = s.value + (target - s.value) * coef;
             if (std::fabs(next - s.value) > 1e-6f || !s.sent) {
@@ -98,7 +99,7 @@ public:
     uint64_t inputUpdates() const { return updates_.load(std::memory_order_relaxed); }
 
 private:
-    struct State { float lastInput = 0.0f, value = 0.0f; bool hasTarget = false, primed = false, sent = false; };
+    struct State { float lastInput = 0.0f, value = 0.0f; bool seen = false, hasTarget = false, primed = false, sent = false; };
     std::atomic<float> inputs_[kNumGestureInputs];
     std::atomic<uint64_t> updates_{ 0 };
     GestureMapping maps_[kMaxMappings];

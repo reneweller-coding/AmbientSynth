@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include "ambient/Engine.h"
 #include "ambient/Presets.h"
 #include "ambient/Gesture.h"
@@ -63,6 +64,12 @@ public:
     bool setGestureMappings(const juce::String& text);
     juce::String gestureMappings() const;
 
+    // Recording the output to a 32-bit float WAV (message thread to start/stop).
+    bool startRecording(const juce::File& file);
+    void stopRecording();
+    bool isRecording() const { return recording_.load(); }
+    double recordedSeconds() const { return recordedSamples_.load() / juce::jmax(1.0, getSampleRate()); }
+
     // MIDI learn: arm a parameter, the next controller message binds to it.
     void armMidiLearn(ambient::ParamId id) { learnTarget_.store(static_cast<int>(id)); }
     void clearMidiLearn(ambient::ParamId id);
@@ -95,6 +102,13 @@ private:
     ambient::OscServer    osc_;
     ambient::EventQueue   events_;
     juce::String          mappingText_;
+
+    // Recording
+    juce::TimeSliceThread recordThread_{ "AmbientSynth recorder" };
+    std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> recordWriter_;
+    juce::CriticalSection recordLock_;
+    std::atomic<bool> recording_{ false };
+    std::atomic<juce::int64> recordedSamples_{ 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthProcessor)
 };

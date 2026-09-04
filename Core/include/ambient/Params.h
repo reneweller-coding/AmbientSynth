@@ -12,7 +12,9 @@ enum class ParamId : int {
     MasterGain,
     // Oscillator (additive partial bank per strand)
     Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
-    Unison, Detune, Drift, DriftRate, Spread,
+    Unison, Detune, Drift, DriftRate, Spread, Bloom, BloomTime,
+    // Foundation: a sub voice that follows the brain's root (binaural beat optional)
+    SubLevel, SubOctave, SubGlide, SubBinaural, SubTone,
     // Air (filtered-noise breath layer per voice)
     Air, AirColor, AirQ,
     // Amplitude envelope
@@ -43,9 +45,11 @@ enum class ParamId : int {
     BrainOn, BrainDensity, BrainRate, BrainHoldMin, BrainHoldMax,
     BrainLow, BrainHigh, BrainConsonance, BrainWander,
     // Tuning
-    Scale, KeyMap, RootNote, RefPitch, Seed,
+    Scale, KeyMap, RootNote, RefPitch, Seed, Hold,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
+    // Macros: four performance controls routed through the gesture layer; not part of presets
+    MacroA, MacroB, MacroC, MacroD,
     Count
 };
 
@@ -79,6 +83,7 @@ constexpr int kNumScaleChoices = 12;
 extern const char* const kScaleNames[kNumScaleChoices];
 extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
+extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 constexpr int kNumShimmerPitches = 6;
 extern const char* const kShimmerPitchNames[kNumShimmerPitches];
 extern const float kShimmerPitchSemitones[kNumShimmerPitches];

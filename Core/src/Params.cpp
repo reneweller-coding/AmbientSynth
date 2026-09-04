@@ -21,6 +21,7 @@ const char* const kScaleNames[kNumScaleChoices] = {
 const char* const kRootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" };
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
+const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const float kShimmerPitchSemitones[kNumShimmerPitches] = { 12.0f, 7.0f, 5.0f, 19.0f, -12.0f, 24.0f };
 
 namespace {
@@ -52,6 +53,14 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Drift,       "drift",        "Pitch Drift",   "Oscillator", 0.f,   30.f,   4.f,   0.6f, "ct"),
     F(ParamId::DriftRate,   "drift_rate",   "Drift Rate",    "Oscillator", 0.01f, 1.f,    0.08f, 0.4f, "Hz"),
     F(ParamId::Spread,      "spread",       "Stereo Spread", "Oscillator", 0.f,   1.f,    0.7f,  1.f,  ""),
+    F(ParamId::Bloom,       "bloom",        "Bloom",         "Oscillator", 0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::BloomTime,   "bloom_time",   "Bloom Time",    "Oscillator", 5.f,   300.f,  60.f,  0.4f, "s"),
+
+    F(ParamId::SubLevel,    "sub_level",    "Level",         "Foundation", 0.f,   1.f,    0.f,   1.f,  ""),
+    C(ParamId::SubOctave,   "sub_octave",   "Octave",        "Foundation", kSubOctaveNames, 2, 0),
+    F(ParamId::SubGlide,    "sub_glide",    "Glide",         "Foundation", 0.1f,  30.f,   8.f,   0.4f, "s"),
+    F(ParamId::SubBinaural, "sub_binaural", "Binaural",      "Foundation", 0.f,   12.f,   0.f,   0.6f, "Hz"),
+    F(ParamId::SubTone,     "sub_tone",     "Tone",          "Foundation", 0.f,   1.f,    0.2f,  1.f,  ""),
 
     F(ParamId::Air,         "air",          "Air",           "Air",        0.f,   1.f,    0.15f, 1.f,  ""),
     F(ParamId::AirColor,    "air_color",    "Color",         "Air",        1.f,   16.f,   3.f,   0.5f, "x f0"),
@@ -149,10 +158,16 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::RootNote,  "root",      "Root",      "Tuning", kRootNames, 12, 2),
     F(ParamId::RefPitch,  "ref_pitch", "A4",        "Tuning", 415.f, 466.f, 440.f, 1.f, "Hz"),
     I(ParamId::Seed,      "seed",      "Seed",      "Tuning", 0.f, 9999.f, 1.f),
+    B(ParamId::Hold,      "hold",      "Hold",      "Tuning", false),
 
     B(ParamId::MorphActive, "morph_active", "Active",   "Morph", false),
     F(ParamId::MorphPos,    "morph",        "Position", "Morph", 0.f, 1.f,   0.f,  1.f,  ""),
     F(ParamId::MorphGlide,  "morph_glide",  "Glide",    "Morph", 0.f, 900.f, 30.f, 0.4f, "s"),
+
+    F(ParamId::MacroA, "macro_a", "Space",  "Macros", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::MacroB, "macro_b", "Alien",  "Macros", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::MacroC, "macro_c", "Motion", "Macros", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::MacroD, "macro_d", "Bloom",  "Macros", 0.f, 1.f, 0.f, 1.f, ""),
 }};
 } // namespace
 

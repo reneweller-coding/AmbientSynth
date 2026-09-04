@@ -32,7 +32,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setLookAndFeel(&laf_);
 
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Z-Plane" }, { "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Air", "Filter" }, { "Space" }, { "Z-Plane" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" } }, {}, 1 },

@@ -1,5 +1,6 @@
 #include "ambient/Voice.h"
 #include <cmath>
+#include <cstring>
 
 namespace ambient {
 
@@ -19,18 +20,28 @@ void Voice::prepare(double sampleRate, uint64_t seed)
         s.active = 0;
     }
     filterDrift_.init(rng_);
-    filtL_.reset();
-    filtR_.reset();
+    airDrift_.init(rng_);
+    panCenter_.init(rng_);
+    filtL_.reset(); filtR_.reset();
+    airL_.reset();  airR_.reset();
+    std::memset(itdBufL_, 0, sizeof(itdBufL_));
+    std::memset(itdBufR_, 0, sizeof(itdBufR_));
+    itdW_ = 0;
+    itdL_ = itdR_ = itdLTarget_ = itdRTarget_ = 0.0f;
     env_.kill();
     note_ = -1;
 }
 
-void Voice::noteOn(int note, double freqHz, float velocity, int owner, const VoiceParams& p)
+void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p)
 {
     note_ = note;
     freq_ = freqHz;
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
+    distance_ = clampv(distance, 0.0f, 1.0f);
+    gNear_  = std::cos(distance_ * 0.5f * kPi);
+    gFar_   = std::sin(distance_ * 0.5f * kPi);
+    gLevel_ = 1.0f - 0.5f * distance_;
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
     if (!env_.isActive()) {
         // Fresh start: random phases (no two voices share a waveform), silent partials.
@@ -38,8 +49,10 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, const Voi
             for (int h = 0; h < kMaxPartials; ++h) { s.phase[h] = rng_.uniform(); s.amp[h] = 0.0f; s.ampStep[h] = 0.0f; }
             s.active = 0;
         }
-        filtL_.reset();
-        filtR_.reset();
+        filtL_.reset(); filtR_.reset();
+        airL_.reset();  airR_.reset();
+        std::memset(itdBufL_, 0, sizeof(itdBufL_));
+        std::memset(itdBufR_, 0, sizeof(itdBufR_));
     }
     env_.noteOn();
 }
@@ -72,12 +85,15 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const double nyq = 0.45 * sr_;
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
+    // The voice's centre wanders slowly; strands fan out around it.
+    const float centre = panCenter_.update(dt, p.driftRate * 0.3f, rng_) * p.panDrift;
+
     for (int si = 0; si < unison; ++si) {
         Strand& s = strands_[si];
         const float pos = (unison == 1) ? 0.0f : (2.0f * static_cast<float>(si) / static_cast<float>(unison - 1) - 1.0f);
         const float cents = pos * p.detune + s.pitch.update(dt, p.driftRate, rng_) * p.drift;
         const double f = freq_ * std::pow(2.0, cents / 1200.0);
-        const float pan = pos * p.spread;
+        const float pan = clampv(centre + pos * p.spread, -1.0f, 1.0f);
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         s.gainL = std::cos(angle) * norm;
         s.gainR = std::sin(angle) * norm;
@@ -100,36 +116,53 @@ void Voice::control(int blockLen, const VoiceParams& p)
             const float tgt = (h < H) ? target[h] * scale : 0.0f;
             s.ampStep[h] = (tgt - s.amp[h]) * invLen;
         }
-        // Keep rendering partials that are fading out after a drop in H.
         int act = H;
         for (int h = H; h < s.active; ++h) if (std::fabs(s.amp[h]) > 1e-6f) act = h + 1;
         s.active = act;
     }
-    // Strands that were switched off keep their state but are not rendered; when
-    // switched back on they fade in from zero because amp was left untouched only
-    // if they had been silent -- so silence them explicitly.
     if (unison < lastUnison_)
         for (int si = unison; si < lastUnison_; ++si)
             for (int h = 0; h < kMaxPartials; ++h) { strands_[si].amp[h] = 0.0f; strands_[si].ampStep[h] = 0.0f; }
     lastUnison_ = unison;
 
-    // Filter: cutoff follows key, envelope and a slow drift.
+    // Interaural time difference from the centre pan: the far ear hears it later.
+    const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
+    itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
+    itdRTarget_ = centre < 0.0f ? -centre * maxItd : 0.0f;
+
+    // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
     const float fd = filterDrift_.update(dt, p.driftRate * 0.5f, rng_);
     const float octaves = p.keyTrack * static_cast<float>(note_ - 60) / 12.0f
                         + p.filterEnv * 4.0f * env_.level()
-                        + p.filterDrift * 2.0f * fd;
+                        + p.filterDrift * 2.0f * fd
+                        - 2.5f * distance_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filtL_.set(cut, p.resonance, static_cast<float>(sr_));
     filtR_.set(cut, p.resonance, static_cast<float>(sr_));
+
+    // Air: band-passed noise around a drifting multiple of the fundamental.
+    if (p.air > 0.0f) {
+        const float ad = airDrift_.update(dt, p.driftRate * 0.7f, rng_);
+        const float fc = clampv(static_cast<float>(freq_) * p.airColor * std::pow(2.0f, 0.5f * ad), 40.0f, static_cast<float>(nyq));
+        const float q = clampv(p.airQ, 1.0f, 40.0f);
+        airL_.setQ(fc, q, static_cast<float>(sr_));
+        airR_.setQ(fc, q, static_cast<float>(sr_));
+        // Normalise the expected band-passed noise level so `air` reads as a level.
+        const float expectedRms = std::sqrt((1.0f / 3.0f) * kPi * fc / (q * static_cast<float>(sr_)));
+        airGain_ = p.air * std::min(0.05f / std::max(expectedRms, 1e-4f), 40.0f);
+    } else {
+        airGain_ = 0.0f;
+    }
 }
 
-void Voice::render(float* L, float* R, int n, const VoiceParams& p)
+void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p)
 {
     int pos = 0;
     while (pos < n && env_.isActive()) {
         const int len = std::min(kControlBlock, n - pos);
         control(len, p);
         const int unison = clampv(p.unison, 1, kMaxStrands);
+        const bool air = airGain_ > 0.0f;
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();
             float accL = 0.0f, accR = 0.0f;
@@ -147,9 +180,36 @@ void Voice::render(float* L, float* R, int n, const VoiceParams& p)
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;
             }
-            const float g = e * velocity_;
-            L[pos + i] += filtL_.lp(accL) * g;
-            R[pos + i] += filtR_.lp(accR) * g;
+            float outL = filtL_.lp(accL);
+            float outR = filtR_.lp(accR);
+            if (air) {
+                float lp, bp, hp;
+                airL_.tick(rng_.bipolar(), lp, bp, hp); outL += airGain_ * bp;
+                airR_.tick(rng_.bipolar(), lp, bp, hp); outR += airGain_ * bp;
+            }
+            const float g = e * velocity_ * gLevel_;
+            outL *= g;
+            outR *= g;
+            // Interaural time difference.
+            itdL_ += (itdLTarget_ - itdL_) * 0.002f;
+            itdR_ += (itdRTarget_ - itdR_) * 0.002f;
+            itdBufL_[itdW_ & (kItdBuffer - 1)] = outL;
+            itdBufR_[itdW_ & (kItdBuffer - 1)] = outR;
+            {
+                const int di = static_cast<int>(itdL_); const float f = itdL_ - static_cast<float>(di);
+                const float a = itdBufL_[(itdW_ - di) & (kItdBuffer - 1)], b = itdBufL_[(itdW_ - di - 1) & (kItdBuffer - 1)];
+                outL = a + f * (b - a);
+            }
+            {
+                const int di = static_cast<int>(itdR_); const float f = itdR_ - static_cast<float>(di);
+                const float a = itdBufR_[(itdW_ - di) & (kItdBuffer - 1)], b = itdBufR_[(itdW_ - di - 1) & (kItdBuffer - 1)];
+                outR = a + f * (b - a);
+            }
+            ++itdW_;
+            nearL[pos + i] += outL * gNear_;
+            nearR[pos + i] += outR * gNear_;
+            farL[pos + i]  += outL * gFar_;
+            farR[pos + i]  += outR * gFar_;
         }
         pos += len;
     }

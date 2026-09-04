@@ -24,10 +24,11 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 120.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return {}; }
+    // Programs == built-in presets from the core.
+    int getNumPrograms() override;
+    int getCurrentProgram() override { return currentProgram_; }
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
 
     void getStateInformation(juce::MemoryBlock& destData) override;
@@ -47,6 +48,7 @@ private:
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
+    int currentProgram_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthProcessor)
 };

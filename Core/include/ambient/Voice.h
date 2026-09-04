@@ -1,6 +1,11 @@
 // AmbientSynth -- one cluster voice: `unison` strands, each an additive bank of
 // up to 32 harmonic partials with individually drifting amplitudes and a slowly
-// drifting pitch. Alias-free by construction (partials above Nyquist are dropped).
+// drifting pitch, plus a filtered-noise "air" layer. Alias-free by construction.
+//
+// Spatial model (after Robert Rich): every voice sits on a plane between the
+// listener's ear (distance 0: dry, bright, close) and the infinite background
+// (distance 1: darker, softer, sent to the far reverb). The voice's centre pan
+// is rendered with a true interaural time difference, not only with gain.
 #pragma once
 #include "Dsp.h"
 #include <cstdint>
@@ -10,6 +15,7 @@ namespace ambient {
 constexpr int kMaxPartials  = 32;
 constexpr int kMaxStrands   = 6;
 constexpr int kControlBlock = 32;   // samples between control-rate updates
+constexpr int kItdBuffer    = 256;  // >= 0.7 ms at 192 kHz
 
 struct VoiceParams {
     int   partials = 16;
@@ -17,14 +23,17 @@ struct VoiceParams {
     float shimmer = 0.4f, shimmerRate = 0.15f;
     int   unison = 3;
     float detune = 8.0f, drift = 4.0f, driftRate = 0.08f, spread = 0.7f;
+    float air = 0.15f, airColor = 3.0f, airQ = 10.0f;
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
+    float panDrift = 0.4f, itd = 0.6f;
 };
 
 class Voice {
 public:
     void prepare(double sampleRate, uint64_t seed);
-    void noteOn(int note, double freqHz, float velocity, int owner, const VoiceParams& p);
+    // distance 0..1 = plane (see above); fixed for the life of the note.
+    void noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p);
     void noteOff();
     void kill();
 
@@ -33,11 +42,11 @@ public:
     float level() const      { return env_.level(); }
     int  note() const        { return note_; }
     int  owner() const       { return owner_; }
+    float distance() const   { return distance_; }
     uint64_t order = 0;      // allocation order for voice stealing
 
-    // Adds `n` samples into L/R. n should be <= kControlBlock for one control update per call,
-    // larger n is split internally.
-    void render(float* L, float* R, int n, const VoiceParams& p);
+    // Adds `n` samples into the near (dry plane) and far (reverb send) buses.
+    void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p);
 
 private:
     struct Strand {
@@ -55,11 +64,18 @@ private:
     Strand   strands_[kMaxStrands];
     Envelope env_;
     Svf      filtL_, filtR_;
-    Drifter  filterDrift_;
+    Svf      airL_, airR_;
+    Drifter  filterDrift_, airDrift_, panCenter_;
     Rng      rng_;
     double   sr_ = 48000.0;
     double   freq_ = 220.0;
     float    velocity_ = 1.0f;
+    float    distance_ = 0.0f;
+    float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
+    float    airGain_ = 0.0f;
+    float    itdBufL_[kItdBuffer] = {}, itdBufR_[kItdBuffer] = {};
+    int      itdW_ = 0;
+    float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;
     int      note_ = -1;
     int      owner_ = 0;
     int      lastUnison_ = 0;

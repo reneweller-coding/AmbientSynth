@@ -1,5 +1,9 @@
-// AmbientSynth -- stereo effects: ensemble (modulated multi-tap chorus) and an
-// 8-line feedback-delay-network reverb with diffusion, damping, freeze.
+// AmbientSynth -- stereo effects.
+//   Ensemble    modulated three-tap chorus
+//   StereoDelay asymmetric L/R delay with cross-feed and damping (time-based width)
+//   Reverb      8-line feedback delay network with diffusion, damping, freeze,
+//               L/R asymmetry and a tail high-cut (the dark "infinite background")
+//   MidSide     mono bass below a crossover, gentle side upper-mid lift, width
 // Buffers are allocated in prepare() only.
 #pragma once
 #include "Dsp.h"
@@ -20,18 +24,37 @@ private:
     float  mix_ = 0.4f, depth_ = 0.4f, rate_ = 0.2f;
 };
 
+class StereoDelay {
+public:
+    void prepare(double sampleRate);
+    void set(float timeL, float timeR, float feedback, float cross, float damping);
+    // Writes the wet signal only; the caller mixes it.
+    void process(const float* inL, const float* inR, float* wetL, float* wetR, int n);
+private:
+    std::vector<float> bufL_, bufR_;
+    int    mask_ = 0, w_ = 0;
+    double sr_ = 48000.0;
+    float  tL_ = 0, tR_ = 0, tLcur_ = 0, tRcur_ = 0;
+    float  fb_ = 0.5f, cross_ = 0.3f, lpc_ = 0.5f;
+    float  lpL_ = 0, lpR_ = 0;
+    double modPh_[2] = { 0.0, 0.5 };
+};
+
 class Reverb {
 public:
     void prepare(double sampleRate);
     void set(float size, float decaySeconds, float damping, float preDelayMs, bool freeze, float mix);
+    // asymmetry 0..1: right-hand lines lengthened and the right output delayed by up to 10 ms
+    // highcutHz: one-pole low-pass on the wet output (20000 = off)
+    void setSpace(float asymmetry, float highcutHz);
     void process(float* L, float* R, int n);
 private:
     static constexpr int kLines = 8;
     static constexpr int kAllpasses = 4;
     std::vector<float> line_[kLines];
     std::vector<float> ap_[kAllpasses];
-    std::vector<float> pre_;
-    int    mask_ = 0, w_ = 0;
+    std::vector<float> pre_, outR_;
+    int    mask_ = 0, w_ = 0, outMask_ = 0;
     double sr_ = 48000.0;
     float  lenTarget_[kLines] = {}, lenCur_[kLines] = {};
     float  gain_[kLines] = {};
@@ -40,8 +63,21 @@ private:
     float  modRate_[kLines] = {};
     int    apLen_[kAllpasses] = {};
     float  preTarget_ = 0.0f, preCur_ = 0.0f;
-    float  damp_ = 0.4f, mix_ = 0.45f, decay_ = 12.0f, size_ = 1.6f;
+    float  outDelayTarget_ = 0.0f, outDelayCur_ = 0.0f;
+    float  damp_ = 0.4f, mix_ = 0.45f, decay_ = 12.0f, size_ = 1.6f, asym_ = 0.0f;
+    float  hcCoef_ = 1.0f, hcL_ = 0.0f, hcR_ = 0.0f;
     bool   freeze_ = false;
+};
+
+class MidSide {
+public:
+    void prepare(double sampleRate);
+    void set(float bassMonoHz, float sideAirDb, float width);
+    void process(float* L, float* R, int n);
+private:
+    Svf    hp_, air_;
+    float  airGain_ = 0.0f, width_ = 1.0f;
+    double sr_ = 48000.0;
 };
 
 // Read `delay` samples (>= 1, fractional) behind write index `w` from a power-of-two ring.

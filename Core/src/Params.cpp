@@ -1,4 +1,5 @@
 #include "ambient/Params.h"
+#include <cstring>
 
 namespace ambient {
 
@@ -50,6 +51,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::DriftRate,   "drift_rate",   "Drift Rate",    "Oscillator", 0.01f, 1.f,    0.08f, 0.4f, "Hz"),
     F(ParamId::Spread,      "spread",       "Stereo Spread", "Oscillator", 0.f,   1.f,    0.7f,  1.f,  ""),
 
+    F(ParamId::Air,         "air",          "Air",           "Air",        0.f,   1.f,    0.15f, 1.f,  ""),
+    F(ParamId::AirColor,    "air_color",    "Color",         "Air",        1.f,   16.f,   3.f,   0.5f, "x f0"),
+    F(ParamId::AirQ,        "air_q",        "Q",             "Air",        1.f,   40.f,   10.f,  0.5f, ""),
+
     F(ParamId::Attack,      "attack",       "Attack",        "Envelope",   0.01f, 60.f,   6.f,   0.3f, "s"),
     F(ParamId::Decay,       "decay",        "Decay",         "Envelope",   0.01f, 60.f,   4.f,   0.3f, "s"),
     F(ParamId::Sustain,     "sustain",      "Sustain",       "Envelope",   0.f,   1.f,    0.8f,  1.f,  ""),
@@ -61,17 +66,41 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FilterDrift, "filter_drift", "Drift",         "Filter",     0.f,   1.f,    0.3f,  1.f,  ""),
     F(ParamId::KeyTrack,    "keytrack",     "Key Track",     "Filter",     0.f,   1.f,    0.5f,  1.f,  ""),
 
+    F(ParamId::Depth,       "depth",        "Depth",         "Space",      0.f,   1.f,    0.7f,  1.f,  ""),
+    F(ParamId::KeysDepth,   "keys_depth",   "Keys Depth",    "Space",      0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::PanDrift,    "pan_drift",    "Pan Drift",     "Space",      0.f,   1.f,    0.4f,  1.f,  ""),
+    F(ParamId::Itd,         "itd",          "Time Width",    "Space",      0.f,   1.f,    0.6f,  1.f,  ""),
+    F(ParamId::ArcAmount,   "arc",          "Arc",           "Space",      0.f,   1.f,    0.3f,  1.f,  ""),
+    F(ParamId::ArcPeriod,   "arc_period",   "Arc Period",    "Space",      2.f,   240.f,  40.f,  0.4f, "min"),
+
     F(ParamId::EnsembleMix,   "ens_mix",   "Mix",   "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),
     F(ParamId::EnsembleDepth, "ens_depth", "Depth", "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),
     F(ParamId::EnsembleRate,  "ens_rate",  "Rate",  "Ensemble", 0.02f, 2.f, 0.2f, 0.4f, "Hz"),
 
-    F(ParamId::ReverbMix,      "rev_mix",      "Mix",       "Reverb", 0.f,  1.f,   0.45f, 1.f,  ""),
-    F(ParamId::ReverbSize,     "rev_size",     "Size",      "Reverb", 0.5f, 3.f,   1.6f,  1.f,  ""),
-    F(ParamId::ReverbDecay,    "rev_decay",    "Decay",     "Reverb", 0.5f, 60.f,  12.f,  0.3f, "s"),
-    F(ParamId::ReverbDamp,     "rev_damp",     "Damping",   "Reverb", 0.f,  1.f,   0.4f,  1.f,  ""),
-    F(ParamId::ReverbPreDelay, "rev_predelay", "Pre-Delay", "Reverb", 0.f,  500.f, 40.f,  0.5f, "ms"),
-    B(ParamId::ReverbFreeze,   "rev_freeze",   "Freeze",    "Reverb", false),
-    F(ParamId::Width,          "width",        "Width",     "Reverb", 0.f,  2.f,   1.2f,  1.f,  ""),
+    F(ParamId::DelayTimeL,    "dly_time_l",   "Time L",    "Delay", 0.02f, 4.f,   0.75f, 0.4f, "s"),
+    F(ParamId::DelayTimeR,    "dly_time_r",   "Time R",    "Delay", 0.02f, 4.f,   1.1f,  0.4f, "s"),
+    F(ParamId::DelayFeedback, "dly_feedback", "Feedback",  "Delay", 0.f,   0.95f, 0.5f,  1.f,  ""),
+    F(ParamId::DelayCross,    "dly_cross",    "Cross",     "Delay", 0.f,   1.f,   0.3f,  1.f,  ""),
+    F(ParamId::DelayDamp,     "dly_damp",     "Damping",   "Delay", 0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::DelayMix,      "dly_mix",      "Mix",       "Delay", 0.f,   1.f,   0.25f, 1.f,  ""),
+    F(ParamId::DelayToFar,    "dly_to_far",   "To Far",    "Delay", 0.f,   1.f,   0.4f,  1.f,  ""),
+
+    F(ParamId::NearMix,   "near_mix",   "Mix",     "Near Reverb", 0.f,  1.f, 0.2f, 1.f,  ""),
+    F(ParamId::NearDecay, "near_decay", "Decay",   "Near Reverb", 0.2f, 6.f, 1.2f, 0.5f, "s"),
+    F(ParamId::NearDamp,  "near_damp",  "Damping", "Near Reverb", 0.f,  1.f, 0.3f, 1.f,  ""),
+
+    F(ParamId::FarLevel,    "far_level",    "Level",     "Far Reverb", 0.f,   1.f,     0.8f,   1.f,  ""),
+    F(ParamId::FarSize,     "far_size",     "Size",      "Far Reverb", 0.5f,  3.f,     2.f,    1.f,  ""),
+    F(ParamId::FarDecay,    "far_decay",    "Decay",     "Far Reverb", 1.f,   90.f,    25.f,   0.3f, "s"),
+    F(ParamId::FarDamp,     "far_damp",     "Damping",   "Far Reverb", 0.f,   1.f,     0.5f,   1.f,  ""),
+    F(ParamId::FarPreDelay, "far_predelay", "Pre-Delay", "Far Reverb", 0.f,   500.f,   60.f,   0.5f, "ms"),
+    F(ParamId::FarAsym,     "far_asym",     "Asymmetry", "Far Reverb", 0.f,   1.f,     0.5f,   1.f,  ""),
+    F(ParamId::FarHighcut,  "far_highcut",  "Tail Cut",  "Far Reverb", 500.f, 16000.f, 3500.f, 0.3f, "Hz"),
+    B(ParamId::FarFreeze,   "far_freeze",   "Freeze",    "Far Reverb", false),
+
+    F(ParamId::BassMono, "bass_mono", "Bass Mono", "Master", 40.f, 300.f, 150.f, 0.5f, "Hz"),
+    F(ParamId::SideAir,  "side_air",  "Side Air",  "Master", 0.f,  6.f,   2.f,   1.f,  "dB"),
+    F(ParamId::Width,    "width",     "Width",     "Master", 0.f,  2.f,   1.2f,  1.f,  ""),
 
     B(ParamId::BrainOn,         "brain_on",         "Active",     "Cluster Brain", true),
     I(ParamId::BrainDensity,    "brain_density",    "Density",    "Cluster Brain", 1.f,  10.f,  5.f),
@@ -92,5 +121,12 @@ const std::array<ParamDesc, kNumParams> kTable = {{
 } // namespace
 
 const std::array<ParamDesc, kNumParams>& paramTable() { return kTable; }
+
+const ParamDesc* findParam(const char* key)
+{
+    if (key == nullptr) return nullptr;
+    for (const auto& d : kTable) if (std::strcmp(key, d.key) == 0) return &d;
+    return nullptr;
+}
 
 } // namespace ambient

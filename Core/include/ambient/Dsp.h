@@ -127,15 +127,30 @@ private:
 // TPT state-variable filter (Simper), low-pass output.
 struct Svf {
     float ic1 = 0, ic2 = 0;
-    float a1 = 0, a2 = 0, a3 = 0;
+    float a1 = 0, a2 = 0, a3 = 0, k = 1.0f;
     void set(float cutoffHz, float resonance, float sr)
+    {
+        setK(cutoffHz, 2.0f - 1.9f * clampv(resonance, 0.0f, 1.0f), sr);
+    }
+    void setQ(float cutoffHz, float q, float sr) { setK(cutoffHz, 1.0f / std::max(q, 0.05f), sr); }
+    void setK(float cutoffHz, float damping, float sr)
     {
         const float fc = clampv(cutoffHz, 10.0f, sr * 0.45f);
         const float g = std::tan(kPi * fc / sr);
-        const float k = 2.0f - 1.9f * clampv(resonance, 0.0f, 1.0f);
+        k = damping;
         a1 = 1.0f / (1.0f + g * (g + k));
         a2 = g * a1;
         a3 = g * a2;
+    }
+    // All three outputs at once (band-pass has unity gain at the cutoff).
+    inline void tick(float in, float& lp, float& bp, float& hp)
+    {
+        const float v3 = in - ic2;
+        const float v1 = a1 * ic1 + a2 * v3;
+        const float v2 = ic2 + a2 * ic1 + a3 * v3;
+        ic1 = 2.0f * v1 - ic1;
+        ic2 = 2.0f * v2 - ic2;
+        lp = v2; bp = v1; hp = in - k * v1 - v2;
     }
     inline float lp(float in)
     {

@@ -50,25 +50,93 @@ void Ensemble::process(float* L, float* R, int n)
     }
 }
 
+// ---------------------------------------------------------------- StereoDelay
+
+void StereoDelay::prepare(double sampleRate)
+{
+    sr_ = sampleRate;
+    const int size = pow2At(static_cast<int>(4.05 * sr_) + 64);
+    bufL_.assign(static_cast<size_t>(size), 0.0f);
+    bufR_.assign(static_cast<size_t>(size), 0.0f);
+    mask_ = size - 1;
+    w_ = 0;
+    lpL_ = lpR_ = 0.0f;
+    tLcur_ = tRcur_ = 0.0f;
+}
+
+void StereoDelay::set(float timeL, float timeR, float feedback, float cross, float damping)
+{
+    const float maxT = static_cast<float>(mask_ - 64);
+    tL_ = std::min(clampv(timeL, 0.001f, 4.0f) * static_cast<float>(sr_), maxT);
+    tR_ = std::min(clampv(timeR, 0.001f, 4.0f) * static_cast<float>(sr_), maxT);
+    if (tLcur_ <= 0.0f) tLcur_ = tL_;
+    if (tRcur_ <= 0.0f) tRcur_ = tR_;
+    fb_ = clampv(feedback, 0.0f, 0.98f);
+    cross_ = clampv(cross, 0.0f, 1.0f);
+    lpc_ = 1.0f - 0.9f * clampv(damping, 0.0f, 1.0f);
+}
+
+void StereoDelay::process(const float* inL, const float* inR, float* wetL, float* wetR, int n)
+{
+    float* bl = bufL_.data();
+    float* br = bufR_.data();
+    const float modDepth = 0.0003f * static_cast<float>(sr_);   // 0.3 ms of slow wander
+    const float glide = 0.0003f;
+    for (int i = 0; i < n; ++i) {
+        tLcur_ += (tL_ - tLcur_) * glide;
+        tRcur_ += (tR_ - tRcur_) * glide;
+        modPh_[0] += 0.07 / sr_; if (modPh_[0] >= 1.0) modPh_[0] -= 1.0;
+        modPh_[1] += 0.053 / sr_; if (modPh_[1] >= 1.0) modPh_[1] -= 1.0;
+        const float dL = tLcur_ + modDepth * sin01(modPh_[0]) + 1.0f;
+        const float dR = tRcur_ + modDepth * sin01(modPh_[1]) + 1.0f;
+        const float oL = ringRead(bl, mask_, w_, dL);
+        const float oR = ringRead(br, mask_, w_, dR);
+        lpL_ += lpc_ * (oL - lpL_);
+        lpR_ += lpc_ * (oR - lpR_);
+        const float fbL = fb_ * ((1.0f - cross_) * lpL_ + cross_ * lpR_);
+        const float fbR = fb_ * ((1.0f - cross_) * lpR_ + cross_ * lpL_);
+        bl[w_ & mask_] = inL[i] + fbL;
+        br[w_ & mask_] = inR[i] + fbR;
+        wetL[i] = oL;
+        wetR[i] = oR;
+        ++w_;
+    }
+}
+
 // ---------------------------------------------------------------- Reverb
 
 void Reverb::prepare(double sampleRate)
 {
     sr_ = sampleRate;
-    const int need = static_cast<int>(std::max(0.08 * 3.0 * sr_, 0.5 * sr_)) + 64;
+    const int need = static_cast<int>(std::max(0.08 * 3.0 * 1.1 * sr_, 0.5 * sr_)) + 64;
     const int size = pow2At(need);
     mask_ = size - 1;
     w_ = 0;
     for (auto& l : line_) l.assign(static_cast<size_t>(size), 0.0f);
     for (auto& a : ap_)   a.assign(static_cast<size_t>(size), 0.0f);
     pre_.assign(static_cast<size_t>(size), 0.0f);
+    const int outSize = pow2At(static_cast<int>(0.012 * sr_) + 8);
+    outR_.assign(static_cast<size_t>(outSize), 0.0f);
+    outMask_ = outSize - 1;
 
     static const float kApMs[kAllpasses] = { 5.1f, 7.3f, 11.3f, 13.7f };
     for (int k = 0; k < kAllpasses; ++k) apLen_[k] = std::max(1, static_cast<int>(kApMs[k] * sr_ / 1000.0));
     static const float kModHz[kLines] = { 0.11f, 0.13f, 0.17f, 0.19f, 0.23f, 0.29f, 0.31f, 0.37f };
     for (int l = 0; l < kLines; ++l) { modRate_[l] = kModHz[l]; modPh_[l] = l / static_cast<double>(kLines); lp_[l] = 0.0f; lenCur_[l] = 0.0f; }
     preCur_ = 0.0f;
+    outDelayCur_ = 0.0f;
+    hcL_ = hcR_ = 0.0f;
+    setSpace(asym_, 20000.0f);
     set(size_, decay_, damp_, 40.0f, false, mix_);
+}
+
+void Reverb::setSpace(float asymmetry, float highcutHz)
+{
+    asym_ = clampv(asymmetry, 0.0f, 1.0f);
+    const float fc = clampv(highcutHz, 200.0f, 20000.0f);
+    hcCoef_ = (fc >= 19000.0f) ? 1.0f : (1.0f - std::exp(-kTwoPi * fc / static_cast<float>(sr_)));
+    outDelayTarget_ = asym_ * 0.010f * static_cast<float>(sr_);
+    set(size_, decay_, damp_, preTarget_ * 1000.0f / static_cast<float>(sr_), freeze_, mix_);
 }
 
 void Reverb::set(float size, float decaySeconds, float damping, float preDelayMs, bool freeze, float mix)
@@ -81,7 +149,8 @@ void Reverb::set(float size, float decaySeconds, float damping, float preDelayMs
     freeze_ = freeze;
     const float maxLen = static_cast<float>(mask_) - 8.0f;
     for (int l = 0; l < kLines; ++l) {
-        lenTarget_[l] = std::min(kBaseMs[l] * size_ * static_cast<float>(sr_ / 1000.0), maxLen);
+        const float stretch = (l >= kLines / 2) ? (1.0f + 0.08f * asym_) : 1.0f;   // right-hand group runs longer
+        lenTarget_[l] = std::min(kBaseMs[l] * size_ * stretch * static_cast<float>(sr_ / 1000.0), maxLen);
         if (lenCur_[l] <= 0.0f) lenCur_[l] = lenTarget_[l];
         gain_[l] = freeze_ ? 1.0f : std::pow(10.0f, -3.0f * lenTarget_[l] / (decay_ * static_cast<float>(sr_)));
     }
@@ -95,6 +164,7 @@ void Reverb::process(float* L, float* R, int n)
     const float inGain = freeze_ ? 0.0f : 0.5f;
     const float mix = mix_;
     const float glide = 0.0005f;
+    float* outR = outR_.data();
     for (int i = 0; i < n; ++i) {
         const float in = 0.5f * (L[i] + R[i]);
         pre_[static_cast<size_t>(w_ & mask_)] = in;
@@ -125,11 +195,52 @@ void Reverb::process(float* L, float* R, int n)
         for (int l = 0; l < kLines; ++l)
             line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (o[l] - hh) + ((l & 1) ? -inGain : inGain) * x;
 
-        const float wetL = 0.3f * (o[0] - o[1] + o[2] - o[3]);
-        const float wetR = 0.3f * (o[4] - o[5] + o[6] - o[7]);
-        L[i] = L[i] * (1.0f - mix) + wetL * mix;
-        R[i] = R[i] * (1.0f - mix) + wetR * mix;
+        float wetL = 0.3f * (o[0] - o[1] + o[2] - o[3]);
+        float wetR = 0.3f * (o[4] - o[5] + o[6] - o[7]);
+        // Interaural disparity: the right output arrives a little later.
+        outR[w_ & outMask_] = wetR;
+        outDelayCur_ += (outDelayTarget_ - outDelayCur_) * glide;
+        wetR = ringRead(outR, outMask_, w_, outDelayCur_ + 1.0f);
+        // Tail darkening.
+        hcL_ += hcCoef_ * (wetL - hcL_);
+        hcR_ += hcCoef_ * (wetR - hcR_);
+        L[i] = L[i] * (1.0f - mix) + hcL_ * mix;
+        R[i] = R[i] * (1.0f - mix) + hcR_ * mix;
         ++w_;
+    }
+}
+
+// ---------------------------------------------------------------- MidSide
+
+void MidSide::prepare(double sampleRate)
+{
+    sr_ = sampleRate;
+    hp_.reset();
+    air_.reset();
+    set(150.0f, 2.0f, 1.2f);
+}
+
+void MidSide::set(float bassMonoHz, float sideAirDb, float width)
+{
+    hp_.setQ(clampv(bassMonoHz, 20.0f, 400.0f), 0.707f, static_cast<float>(sr_));
+    air_.setQ(3000.0f, 0.6f, static_cast<float>(sr_));           // broad, gentle upper-mid bell
+    airGain_ = std::pow(10.0f, clampv(sideAirDb, 0.0f, 12.0f) / 20.0f) - 1.0f;
+    width_ = clampv(width, 0.0f, 2.0f);
+}
+
+void MidSide::process(float* L, float* R, int n)
+{
+    for (int i = 0; i < n; ++i) {
+        const float m = 0.5f * (L[i] + R[i]);
+        float s = 0.5f * (L[i] - R[i]);
+        float lp, bp, hp;
+        hp_.tick(s, lp, bp, hp);          // everything below the crossover collapses to the centre
+        s = hp;
+        air_.tick(s, lp, bp, hp);
+        s += airGain_ * bp;               // lift the side's upper mids
+        s *= width_;
+        L[i] = m + s;
+        R[i] = m - s;
     }
 }
 

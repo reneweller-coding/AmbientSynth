@@ -4,6 +4,8 @@
 #include "ambient/Params.h"
 #include "ambient/Tuning.h"
 #include "ambient/Dsp.h"
+#include "ambient/Effects.h"
+#include "ambient/Presets.h"
 #include <cstdio>
 #include <cmath>
 #include <vector>
@@ -121,7 +123,9 @@ void testEngineMidi()
     e.setParam(ParamId::BrainOn, 0.0f);
     e.setParam(ParamId::Attack, 1.0f);
     e.setParam(ParamId::Release, 2.0f);
-    e.setParam(ParamId::ReverbDecay, 1.0f);
+    e.setParam(ParamId::FarDecay, 1.0f);
+    e.setParam(ParamId::NearDecay, 0.5f);
+    e.setParam(ParamId::DelayFeedback, 0.0f);
     e.prepare(48000.0, 256);
     Stats silence = render(e, 0.5);
     CHECK(silence.rms < 1e-6, "silent before any note");
@@ -199,6 +203,84 @@ void testUserScale()
     CHECK(std::fabs(e.frequencyOf(62) / c - 2.0) < 1e-9, "user scale wraps after 2 degrees");
 }
 
+void testDelay()
+{
+    StereoDelay d;
+    d.prepare(48000.0);
+    d.set(0.1f, 0.15f, 0.0f, 0.0f, 0.0f);
+    std::vector<float> inL(48000, 0.0f), inR(48000, 0.0f), wl(48000), wr(48000);
+    inL[0] = 1.0f; inR[0] = 1.0f;
+    d.process(inL.data(), inR.data(), wl.data(), wr.data(), 48000);
+    int pl = 0, pr = 0;
+    for (int i = 1; i < 48000; ++i) { if (std::fabs(wl[static_cast<size_t>(i)]) > std::fabs(wl[static_cast<size_t>(pl)])) pl = i; if (std::fabs(wr[static_cast<size_t>(i)]) > std::fabs(wr[static_cast<size_t>(pr)])) pr = i; }
+    CHECK(std::abs(pl - 4800) < 24, "left echo at 100 ms");
+    CHECK(std::abs(pr - 7200) < 24, "right echo at 150 ms (asymmetric)");
+    float echo = 0.0f;   // the impulse is spread over two samples by the fractional read
+    for (int i = pl - 2; i <= pl + 2; ++i) echo += std::fabs(wl[static_cast<size_t>(i)]);
+    CHECK(echo > 0.9f, "echo level");
+}
+
+void testMidSide()
+{
+    auto sideRatio = [](float hz) {
+        MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 0.0f, 1.0f);
+        std::vector<float> L(48000), R(48000);
+        for (int i = 0; i < 48000; ++i) { const float s = std::sin(kTwoPi * hz * i / 48000.0f); L[static_cast<size_t>(i)] = s; R[static_cast<size_t>(i)] = -s; }
+        ms.process(L.data(), R.data(), 48000);
+        double sq = 0; for (int i = 9600; i < 48000; ++i) { const float s = 0.5f * (L[static_cast<size_t>(i)] - R[static_cast<size_t>(i)]); sq += s * s; }
+        return std::sqrt(sq / (48000 - 9600)) / 0.7071;
+    };
+    CHECK(sideRatio(50.0f) < 0.25, "side content at 50 Hz collapses to mono (> 12 dB down)");
+    CHECK(sideRatio(2000.0f) > 0.9, "side content at 2 kHz passes");
+    MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 6.0f, 1.0f);
+    std::vector<float> L(48000), R(48000);
+    for (int i = 0; i < 48000; ++i) { const float s = std::sin(kTwoPi * 3000.0f * i / 48000.0f); L[static_cast<size_t>(i)] = s; R[static_cast<size_t>(i)] = -s; }
+    ms.process(L.data(), R.data(), 48000);
+    double sq = 0; for (int i = 9600; i < 48000; ++i) { const float s = 0.5f * (L[static_cast<size_t>(i)] - R[static_cast<size_t>(i)]); sq += s * s; }
+    const double lift = 20.0 * std::log10(std::sqrt(sq / (48000 - 9600)) / 0.7071);
+    CHECK(lift > 4.0 && lift < 7.0, "side air lifts 3 kHz by about 6 dB");
+}
+
+void testPresets()
+{
+    CHECK(numPresets() >= 5, "presets exist");
+    for (int p = 0; p < numPresets(); ++p) {
+        int count = 0;
+        const bool ok = applyPreset(preset(p), [&](ParamId, float) { ++count; });
+        CHECK(ok, "preset settings all refer to known parameters");
+        CHECK(count >= kNumParams, "preset sets every parameter");
+    }
+    Engine e;
+    CHECK(e.applyPreset(1), "apply preset 1");
+    CHECK(e.getParam(ParamId::BrainDensity) == 6.0f, "Sleep Concert density");
+    CHECK(e.applyPreset(2), "apply preset 2");
+    CHECK(e.getParam(ParamId::Scale) == 6.0f, "Glass Cathedral selects Harmonic 8-16 by name");
+    CHECK(e.getParam(ParamId::RootNote) == 4.0f, "root E by name");
+    CHECK(!e.applyPreset(999), "out of range preset rejected");
+}
+
+void testSpace()
+{
+    Engine e;
+    e.setParam(ParamId::BrainRate, 2.0f);
+    e.setParam(ParamId::Attack, 0.5f);
+    e.setParam(ParamId::Depth, 1.0f);
+    e.prepare(48000.0, 256);
+    Stats s = render(e, 15.0);
+    CHECK(s.nonFinite == 0 && s.rms > 0.01, "spatial engine renders");
+    bool notes[128]; e.soundingNotes(notes);
+    int seen = 0, far = 0;
+    for (int n = 0; n < 128; ++n) if (notes[n]) { const float d = e.noteDistance(n); CHECK(d >= 0.0f && d <= 1.0f, "distance in range"); ++seen; if (d > 0.5f) ++far; }
+    CHECK(seen >= 2, "several notes sounding");
+    CHECK(far >= 1, "at least one note in the background plane");
+    // MIDI notes take the keys depth.
+    e.setParam(ParamId::KeysDepth, 0.9f);
+    render(e, 0.1);
+    e.noteOn(100, 0.5f);
+    render(e, 0.1);
+    CHECK(std::fabs(e.noteDistance(100) - 0.9f) < 1e-5f, "keys depth applied to MIDI note");
+}
+
 } // namespace
 
 int main()
@@ -210,6 +292,10 @@ int main()
     testBrain();
     testDeterminism();
     testUserScale();
+    testDelay();
+    testMidSide();
+    testPresets();
+    testSpace();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

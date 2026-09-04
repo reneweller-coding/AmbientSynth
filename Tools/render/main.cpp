@@ -1,11 +1,13 @@
 // ambient_render -- offline renderer for AmbientSynth (no JUCE, deterministic).
-// Renders the engine to a 32-bit float WAV and prints measurements, so a scene
+// Renders the engine to a 32-bit float WAV and prints measurements, so a patch
 // can be judged by numbers instead of by ear.
 //
 //   ambient_render [--out file.wav] [--seconds 60] [--sr 48000] [--block 256]
-//                  [--set key=value]... [--notes 45,52,59] [--scl file.scl] [--stats]
+//                  [--preset "name"] [--set key=value]... [--notes 45,52,59]
+//                  [--scl file.scl] [--stats] [--list] [--list-presets]
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
+#include "ambient/Presets.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -35,23 +37,6 @@ bool writeWav(const std::string& path, const std::vector<float>& interleaved, in
     return static_cast<bool>(f);
 }
 
-const ParamDesc* findParam(const std::string& key)
-{
-    for (const auto& d : paramTable()) if (key == d.key) return &d;
-    return nullptr;
-}
-
-float parseValue(const ParamDesc& d, const std::string& text)
-{
-    if (d.kind == ParamKind::Choice)
-        for (int i = 0; i < d.numChoices; ++i) if (text == d.choices[i]) return static_cast<float>(i);
-    if (d.kind == ParamKind::Bool) {
-        if (text == "on" || text == "true" || text == "yes") return 1.0f;
-        if (text == "off" || text == "false" || text == "no") return 0.0f;
-    }
-    return static_cast<float>(std::atof(text.c_str()));
-}
-
 } // namespace
 
 int main(int argc, char** argv)
@@ -77,17 +62,29 @@ int main(int argc, char** argv)
             std::stringstream ss(next()); std::string tok;
             while (std::getline(ss, tok, ',')) if (!tok.empty()) notes.push_back(std::atoi(tok.c_str()));
         }
+        else if (a == "--preset") {
+            const std::string name = next();
+            int found = -1;
+            for (int p = 0; p < numPresets(); ++p) if (name == preset(p).name) found = p;
+            if (found < 0) { std::fprintf(stderr, "unknown preset '%s' (see --list-presets)\n", name.c_str()); return 2; }
+            engine.applyPreset(found);
+            std::printf("preset: %s\n", preset(found).name);
+        }
         else if (a == "--set") {
             std::string kv = next();
             const size_t eq = kv.find('=');
             if (eq == std::string::npos) { std::fprintf(stderr, "bad --set %s\n", kv.c_str()); return 2; }
-            const ParamDesc* d = findParam(kv.substr(0, eq));
+            const ParamDesc* d = findParam(kv.substr(0, eq).c_str());
             if (!d) { std::fprintf(stderr, "unknown parameter '%s'\n", kv.substr(0, eq).c_str()); return 2; }
-            engine.setParam(d->id, parseValue(*d, kv.substr(eq + 1)));
+            engine.setParam(d->id, paramValueFromText(*d, kv.substr(eq + 1).c_str()));
         }
         else if (a == "--list") {
             for (const auto& d : paramTable())
                 std::printf("%-18s %-14s [%g .. %g] default %g %s\n", d.key, d.section, d.min, d.max, d.def, d.unit);
+            return 0;
+        }
+        else if (a == "--list-presets") {
+            for (int p = 0; p < numPresets(); ++p) std::printf("%s\n", preset(p).name);
             return 0;
         }
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
@@ -112,7 +109,7 @@ int main(int argc, char** argv)
 
     double sumSq[2] = { 0, 0 }; float peak = 0.0f; long nans = 0;
     double secSq[2] = { 0, 0 }; long secCount = 0; int sec = 0;
-    if (stats) std::printf("sec, rmsL_dB, rmsR_dB, peak, voices, root\n");
+    if (stats) std::printf("sec, rmsL_dB, rmsR_dB, peak, voices, root, arc\n");
     float secPeak = 0.0f;
 
     for (long done = 0; done < total; done += block) {
@@ -127,9 +124,9 @@ int main(int argc, char** argv)
             peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
             secPeak = std::max(secPeak, std::max(std::fabs(l), std::fabs(r)));
             if (++secCount >= sr) {
-                if (stats) std::printf("%d, %.1f, %.1f, %.3f, %d, %d\n", sec,
+                if (stats) std::printf("%d, %.1f, %.1f, %.3f, %d, %d, %.2f\n", sec,
                     10.0 * std::log10(secSq[0] / secCount + 1e-20), 10.0 * std::log10(secSq[1] / secCount + 1e-20),
-                    secPeak, engine.activeVoices(), engine.brainRoot());
+                    secPeak, engine.activeVoices(), engine.brainRoot(), engine.arcValue());
                 secSq[0] = secSq[1] = 0; secCount = 0; secPeak = 0.0f; ++sec;
             }
         }

@@ -4,6 +4,7 @@ add_library(AmbientCore STATIC
     src/Voice.cpp
     src/Effects.cpp
     src/Engine.cpp
+    src/Presets.cpp
 )
 target_include_directories(AmbientCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(AmbientCore PUBLIC cxx_std_20)

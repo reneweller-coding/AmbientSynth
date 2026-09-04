@@ -1,5 +1,5 @@
 // AmbientSynth -- parameter table (single source of truth).
-// The core engine, the plugin host layer and the GUI all read this table.
+// The core engine, the plugin host layer, the GUI and the render tool all read this table.
 // No framework dependencies here: this header must compile on Quest/Android.
 #pragma once
 #include <array>
@@ -13,15 +13,24 @@ enum class ParamId : int {
     // Oscillator (additive partial bank per strand)
     Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
     Unison, Detune, Drift, DriftRate, Spread,
+    // Air (filtered-noise breath layer per voice)
+    Air, AirColor, AirQ,
     // Amplitude envelope
     Attack, Decay, Sustain, Release,
     // Filter
     Cutoff, Resonance, FilterEnv, FilterDrift, KeyTrack,
+    // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc
+    Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod,
     // Ensemble
     EnsembleMix, EnsembleDepth, EnsembleRate,
-    // Reverb
-    ReverbMix, ReverbSize, ReverbDecay, ReverbDamp, ReverbPreDelay, ReverbFreeze,
-    Width,
+    // Stereo delay (asymmetric L/R)
+    DelayTimeL, DelayTimeR, DelayFeedback, DelayCross, DelayDamp, DelayMix, DelayToFar,
+    // Near reverb (foreground room)
+    NearMix, NearDecay, NearDamp,
+    // Far reverb (the infinite background)
+    FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze,
+    // Mid/side master stage
+    BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)
     BrainOn, BrainDensity, BrainRate, BrainHoldMin, BrainHoldMax,
     BrainLow, BrainHigh, BrainConsonance, BrainWander,
@@ -52,6 +61,7 @@ struct ParamDesc {
 // Ordered by ParamId. Verified by the self test.
 const std::array<ParamDesc, kNumParams>& paramTable();
 inline const ParamDesc& paramDesc(ParamId id) { return paramTable()[static_cast<size_t>(id)]; }
+const ParamDesc* findParam(const char* key);   // nullptr if unknown
 
 // Names used by the Scale choice parameter; index == built-in scale index,
 // the last entry is the user slot filled by a loaded Scala file.

@@ -19,42 +19,71 @@ control and a visual world around the sound.
 2. **Every movement is continuous.** Random values never step; the `Drifter`
    produces smoothstep-interpolated random curves with zero slope at the
    knots. Envelopes are exponential, partial levels ramp across a control
-   block, filter cutoff and reverb lengths glide. A drone must never click.
+   block, filter cutoff, delay and reverb lengths glide. A drone must never click.
 3. **Measure, don't only listen.** `ambient_render` renders deterministically
-   and prints per-second RMS, peak, voice count and root; `analyze.py` reports
-   clicks, spectral centroid and the strongest peaks. The self test checks the
-   tuning maths to 1e-9.
+   and prints per-second RMS, peak, voice count, root and arc; `analyze.py`
+   reports clicks, stereo correlation, spectral centroid and the strongest
+   peaks. The self test checks the tuning maths to 1e-9 and the effects by
+   impulse and sine measurements.
 4. **One parameter table.** `Core/include/ambient/Params.h` lists every
    parameter with range, default, skew, unit and section. The engine, the
-   JUCE parameter layout, the GUI and the command-line renderer all iterate
-   that table. Adding a parameter is one line in the table plus one line in
-   `Engine::readParams`.
+   JUCE parameter layout, the GUI, the presets and the command-line renderer
+   all iterate that table. Adding a parameter is one line in the table plus
+   one line in `Engine::readParams`.
+5. **Space is a landscape, not an effect** (after Rich). Depth comes from
+   contrast between planes, width from time differences, focus from a mono
+   low end; nothing is compressed.
 
 ## Signal path
 
 ```
 MIDI / Cluster Brain
-      │ note on/off
+      │ note on/off + distance (0 = at the ear, 1 = infinite background)
       ▼
-Voice (×16)  = Strand (×1..6) = additive bank of ≤32 partials
+Voice (×16) = Strand (×1..6) = additive bank of ≤32 partials
       │  each partial: own phase, own slow amplitude drift ("Shimmer")
-      │  strand: detune offset + slow pitch drift, own pan position
+      │  strand: detune offset + slow pitch drift, pan around a wandering voice centre
       │  spectrum: h^-tilt · odd/even weight · brightness window · inharmonic stretch
-      │  → TPT state-variable low-pass (key track, env amount, drift)
-      │  → ADSR (seconds to minutes)
+      │  + Air: band-passed noise around a drifting multiple of f0
+      │  → TPT state-variable low-pass (key track, env, drift, −2.5 oct per unit distance)
+      │  → ADSR (seconds to minutes) · (1 − 0.5·distance)
+      │  → interaural time difference from the centre pan (≤ 0.65 ms, the far ear later)
+      │  → near gain cos(d·π/2) → NEAR bus ; far gain sin(d·π/2) → FAR bus
       ▼
-stereo bus → Ensemble (3 modulated taps) → Reverb (8-line FDN, Householder feedback,
-             4 input all-passes, per-line damping, slow length modulation, freeze)
-          → width (mid/side) → master gain → cubic soft clip
+NEAR: Ensemble → StereoDelay (asymmetric L/R, cross-feed, damping) ─┬─ mix → + Near reverb (small room)
+                                                                     └─ "to far" ─┐
+FAR:  (+ delay echoes) → Far reverb: 8-line FDN, 4 input all-passes, per-line   │
+      damping, slow length modulation, right group 8 % longer + right output   ◄┘
+      delayed ≤ 10 ms (asymmetry), tail low-pass, freeze; 100 % wet · level
+      ▼
+Mid/Side: side high-passed at Bass Mono (low end centred), broad +N dB bell at
+3 kHz on the side, width → master gain → cubic soft clip (no compressor)
 ```
 
 Why additive: partials above Nyquist are simply not generated, so there is no
 aliasing at any pitch; every partial can have its own life (that is the
 "breathing" of a Rich drone); brightness and inharmonicity become continuous
-parameters instead of waveform switches. Cost at the defaults is ~5 % of one
-core (180 s render in 8.4 s); the worst case (16 voices × 6 strands × 32
+parameters instead of waveform switches.
+
+### The spatial model in numbers
+
+* Distance `d` per note. Brain notes are bimodal: 40 % land at `Depth·0.15·u`
+  (close), 60 % at `Depth·(0.55 + 0.45·u)` (deep). MIDI notes take *Keys Depth*.
+* Per unit distance: cutoff −2.5 octaves, level −6 dB, dry→wet crossfade by
+  cos/sin, so the far plane is only heard through the dark far reverb.
+* Interaural time difference: `0.65 ms · Time Width · |centre pan|`, applied
+  as a fractional delay on the far ear's channel; it glides, never jumps.
+* Far reverb asymmetry: lines 4–7 stretched by `1 + 0.08·a`, right output
+  delayed `10 ms·a`. Left and right therefore hear different reflections.
+* Mid/side: second-order high-pass on the side at *Bass Mono* (default 150 Hz),
+  side bell at 3 kHz, Q 0.6, up to +6 dB.
+* Measured on the default patch, 180 s: stereo correlation 0.11 (was 0.36
+  before the spatial model), no sample jump above 0.06, level −21 … −28 dBFS.
+
+Cost at the defaults is ~3 % of one core (180 s in 5.8 s); "Distant Storm"
+(8 voices, 5 strands) 5 %; the worst case (16 voices × 6 strands × 32
 partials) is about ten times that and would need the Chebyshev recurrence or
-SIMD, both of which are straightforward later.
+SIMD, both straightforward later.
 
 ## Tuning
 
@@ -92,10 +121,17 @@ remaining), a root note, a timer.
   nothing sounds it, ×0.25 when something does; exact duplicate pitches
   (possible with snapped keys) are excluded. Hold time uniform in
   [Hold Min, Hold Max], velocity 0.5–0.9.
+* *Arc*: a `Drifter` with period *Arc Period* (minutes) scaled by *Arc*
+  shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
+  so an all-night run has tides instead of a flat sea.
 
-At the defaults this yields 2–6 voices, a root that moves every few minutes,
-and a level that stays within a few dB (measured: −22 … −27 dBFS over 3 min,
-no sample jump above 0.03).
+## Presets
+
+`Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
+parameter table (choices by name). The engine, the render tool (`--preset`)
+and the plugin's program list all use the same table. Nine so far: Init,
+Sleep Concert, Glass Cathedral, Subharmonic Deep, Breath of Flutes, Bohlen
+Night, Otonal Shimmer, Distant Storm, Dry Foreground Keys.
 
 ## Plugin shell
 
@@ -103,22 +139,23 @@ no sample jump above 0.03).
   atomic values are copied into the engine at the top of every block.
 * MIDI note on/off and all-notes-off; sample-accurate splitting is
   deliberately absent (nothing here is faster than a control block).
-* State = APVTS XML + Scala text + display name.
+* Programs = presets; state = APVTS XML + Scala text + display name.
 * Editor: sections flow-laid-out from the table (knobs, toggles, combo boxes),
-  header with voice count, brain root, scale name and a keyboard strip showing
-  sounding notes and the root; *Load Scala…* file chooser; resizable.
+  header with preset box, voice count, brain root, scale, arc value and a
+  keyboard strip where near notes are bright and far notes dim; *Load Scala…*
+  file chooser; resizable.
 
 ## Roadmap
 
-1. **Sound** — presets (a preset = a list of key/value pairs; the render tool
-   already parses `--set`), a second spectral layer (noise/air with formant
-   drift), spectral freeze, binaural panning per strand, an "arc" over hours
-   (very slow macro drift of density/brightness).
+1. **Sound** — a spectral freeze on the far plane, per-voice binaural cues
+   beyond ITD (head-shadow low-pass on the far ear), user presets saved as
+   files, a second delay line in series for longer rhythmic-free echo chains.
 2. **Performance** — Chebyshev sine recurrence when inharmonicity is 0, SIMD
    across partials, voice rendering in parallel on desktop.
 3. **Quest** — CMake toolchain for the Android NDK (arm64-v8a), Oboe for
    low-latency audio, OpenXR for hands and head; the visual layer is a
    separate concern and can reuse the Kaleidoscope engine's ideas (calm
    motion, no camera shake). `Core/` is expected to compile unchanged; the
-   `Engine::soundingNotes` / `activeVoices` observers already exist for a
-   visualisation to read.
+   `Engine::soundingNotes` / `noteDistance` / `arcValue` observers already
+   exist for a visualisation to read, and the distance model maps directly
+   onto placing sound sources in a 3D scene.

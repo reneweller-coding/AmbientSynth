@@ -1,12 +1,17 @@
-// AmbientSynth -- the engine: voices, cluster brain, effects, parameters.
+// AmbientSynth -- the engine: voices, cluster brain, spatial routing, effects, parameters.
 // Framework-free. `process()` never allocates; parameters are plain atomics so the
 // host layer can write them from any thread.
+//
+// Signal flow:
+//   voices -> near bus (dry plane) -> ensemble -> stereo delay -> near reverb ----+
+//          -> far bus (reverb send) + delay "to far" -> far reverb (dark, wide) --+-> mid/side -> master
 #pragma once
 #include "Params.h"
 #include "Tuning.h"
 #include "Voice.h"
 #include "Effects.h"
 #include "ClusterBrain.h"
+#include "Presets.h"
 #include <atomic>
 #include <vector>
 #include <cstdint>
@@ -23,6 +28,7 @@ public:
 
     void  setParam(ParamId id, float v) { params_[static_cast<int>(id)].store(v, std::memory_order_relaxed); }
     float getParam(ParamId id) const    { return params_[static_cast<int>(id)].load(std::memory_order_relaxed); }
+    bool  applyPreset(int index);       // any thread; sets every parameter
 
     // MIDI, audio thread only.
     void noteOn(int note, float velocity);
@@ -42,12 +48,15 @@ public:
     // Observers for the GUI (approximate, lock-free).
     int  activeVoices() const { return activeVoices_.load(std::memory_order_relaxed); }
     int  brainRoot() const    { return brainRoot_.load(std::memory_order_relaxed); }
+    float arcValue() const    { return arcValue_.load(std::memory_order_relaxed); }
     void soundingNotes(bool (&out)[128]) const;
+    // Distance (0 near .. 1 far) of the voice sounding `note`, or -1 if none.
+    float noteDistance(int note) const;
 
 private:
     enum Owner { OwnerMidi = 0, OwnerBrain = 1 };
     Voice* allocate(int note, int owner);
-    void   startNote(int note, float velocity, int owner);
+    void   startNote(int note, float velocity, int owner, float distance);
     void   stopNote(int note, int owner);
     void   readParams();
     void   renderChunk(float* L, float* R, int n);
@@ -56,9 +65,15 @@ private:
     Voice        voices_[kMaxVoices];
     ClusterBrain brain_;
     Ensemble     ensemble_;
-    Reverb       reverb_;
+    StereoDelay  delay_;
+    Reverb       nearReverb_, farReverb_;
+    MidSide      midSide_;
     VoiceParams  vp_;
     BrainParams  bp_;
+    Drifter      arc_;
+    float        arcAmount_ = 0.0f, arcPeriodMin_ = 40.0f;
+    float        depth_ = 0.7f, keysDepth_ = 0.0f;
+    float        delayMix_ = 0.25f, delayToFar_ = 0.4f, farLevel_ = 0.8f;
 
     FixedScale        scales_[kNumScaleChoices];
     FixedScale        userPending_;
@@ -70,7 +85,7 @@ private:
     double            refPitch_ = 440.0;
     bool              snapKeys_ = true;
 
-    std::vector<float> busL_, busR_;
+    std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
     double   sr_ = 48000.0;
     int      maxBlock_ = 512;
     uint64_t order_ = 0;
@@ -79,11 +94,12 @@ private:
     int      lastRootPc_ = -1;
     bool     midiHeld_[128] = {};
     Smoother masterSmooth_;
-    float    width_ = 1.0f;
 
     std::atomic<uint64_t> mask_[2]{ 0, 0 };
     std::atomic<int> activeVoices_{ 0 };
     std::atomic<int> brainRoot_{ 50 };
+    std::atomic<float> arcValue_{ 0.0f };
+    std::atomic<float> noteDistance_[128];
 };
 
 } // namespace ambient

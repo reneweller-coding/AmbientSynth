@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ambient/Tuning.h"
+#include "ambient/Presets.h"
 
 using namespace ambient;
 
@@ -87,6 +88,23 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         buffer.applyGain(0.5f);
     }
     for (int ch = 2; ch < buffer.getNumChannels(); ++ch) buffer.clear(ch, 0, n);
+}
+
+int AmbientSynthProcessor::getNumPrograms() { return numPresets(); }
+
+const juce::String AmbientSynthProcessor::getProgramName(int index)
+{
+    return (index >= 0 && index < numPresets()) ? juce::String(preset(index).name) : juce::String();
+}
+
+void AmbientSynthProcessor::setCurrentProgram(int index)
+{
+    if (index < 0 || index >= numPresets()) return;
+    currentProgram_ = index;
+    applyPreset(preset(index), [this](ParamId id, float v) {
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+            p->setValueNotifyingHost(p->convertTo0to1(v));
+    });
 }
 
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()

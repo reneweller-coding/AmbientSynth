@@ -21,19 +21,23 @@ Engine::Engine()
     std::strncpy(scales_[kNumScaleChoices - 1].name, "User (Scala)", sizeof(FixedScale::name) - 1);
     scale_ = &scales_[3];
     masterSmooth_.snap(dbToGain(-6.0f));
+    for (auto& d : noteDistance_) d.store(-1.0f, std::memory_order_relaxed);
 }
 
 void Engine::prepare(double sampleRate, int maxBlockSize)
 {
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
-    busL_.assign(static_cast<size_t>(maxBlock_), 0.0f);
-    busR_.assign(static_cast<size_t>(maxBlock_), 0.0f);
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_ }) b->assign(static_cast<size_t>(maxBlock_), 0.0f);
     seed_ = static_cast<int>(getParam(ParamId::Seed));
     rng_.seed(static_cast<uint64_t>(seed_) + 1);
     for (auto& v : voices_) v.prepare(sr_, rng_.fork());
+    arc_.init(rng_);
     ensemble_.prepare(sr_);
-    reverb_.prepare(sr_);
+    delay_.prepare(sr_);
+    nearReverb_.prepare(sr_);
+    farReverb_.prepare(sr_);
+    midSide_.prepare(sr_);
     masterSmooth_.setTime(0.02f, sr_);
     lastRootPc_ = -1;
     readParams();
@@ -46,6 +50,12 @@ void Engine::reset()
     for (auto& v : voices_) v.kill();
     for (auto& h : midiHeld_) h = false;
     brain_.reset(rng_.fork(), rootNote_);
+}
+
+bool Engine::applyPreset(int index)
+{
+    if (index < 0 || index >= numPresets()) return false;
+    return ambient::applyPreset(preset(index), [this](ParamId id, float v) { setParam(id, v); });
 }
 
 void Engine::setUserScale(const FixedScale& s)
@@ -67,6 +77,12 @@ void Engine::soundingNotes(bool (&out)[128]) const
     for (int i = 0; i < 64; ++i)  out[64 + i] = (m1 >> i) & 1u;
 }
 
+float Engine::noteDistance(int note) const
+{
+    if (note < 0 || note > 127) return -1.0f;
+    return noteDistance_[note].load(std::memory_order_relaxed);
+}
+
 // ---------------------------------------------------------------- notes
 
 Voice* Engine::allocate(int note, int owner)
@@ -80,12 +96,12 @@ Voice* Engine::allocate(int note, int owner)
     return best;
 }
 
-void Engine::startNote(int note, float velocity, int owner)
+void Engine::startNote(int note, float velocity, int owner, float distance)
 {
     if (note < 0 || note > 127) return;
     Voice* v = allocate(note, owner);
     v->order = ++order_;
-    v->noteOn(note, frequencyOf(note), velocity, owner, vp_);
+    v->noteOn(note, frequencyOf(note), velocity, owner, distance, vp_);
 }
 
 void Engine::stopNote(int note, int owner)
@@ -97,7 +113,7 @@ void Engine::noteOn(int note, float velocity)
 {
     if (note < 0 || note > 127) return;
     midiHeld_[note] = true;
-    startNote(note, velocity, OwnerMidi);
+    startNote(note, velocity, OwnerMidi, keysDepth_);
 }
 
 void Engine::noteOff(int note)
@@ -130,6 +146,9 @@ void Engine::readParams()
     vp_.drift       = g(ParamId::Drift);
     vp_.driftRate   = g(ParamId::DriftRate);
     vp_.spread      = g(ParamId::Spread);
+    vp_.air         = g(ParamId::Air);
+    vp_.airColor    = g(ParamId::AirColor);
+    vp_.airQ        = g(ParamId::AirQ);
     vp_.attack      = g(ParamId::Attack);
     vp_.decay       = g(ParamId::Decay);
     vp_.sustain     = g(ParamId::Sustain);
@@ -139,6 +158,13 @@ void Engine::readParams()
     vp_.filterEnv   = g(ParamId::FilterEnv);
     vp_.filterDrift = g(ParamId::FilterDrift);
     vp_.keyTrack    = g(ParamId::KeyTrack);
+    vp_.panDrift    = g(ParamId::PanDrift);
+    vp_.itd         = g(ParamId::Itd);
+
+    depth_       = g(ParamId::Depth);
+    keysDepth_   = g(ParamId::KeysDepth);
+    arcAmount_   = g(ParamId::ArcAmount);
+    arcPeriodMin_ = g(ParamId::ArcPeriod);
 
     bp_.on          = g(ParamId::BrainOn) >= 0.5f;
     bp_.density     = static_cast<int>(std::lround(g(ParamId::BrainDensity)));
@@ -150,10 +176,22 @@ void Engine::readParams()
     bp_.consonance  = g(ParamId::BrainConsonance);
     bp_.wander      = g(ParamId::BrainWander);
 
+    // Hour-scale arc: a very slow drift that leans on density, brightness and depth.
+    const float a = arc_.value() * arcAmount_;
+    bp_.density = clampv(bp_.density + static_cast<int>(std::lround(a * 2.0f)), 1, ClusterBrain::kSlots);
+    vp_.brightness = clampv(vp_.brightness * (1.0f + 0.25f * a), 0.0f, 1.0f);
+    depth_ = clampv(depth_ * (1.0f + 0.3f * a), 0.0f, 1.0f);
+
     ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), g(ParamId::EnsembleRate));
-    reverb_.set(g(ParamId::ReverbSize), g(ParamId::ReverbDecay), g(ParamId::ReverbDamp),
-                g(ParamId::ReverbPreDelay), g(ParamId::ReverbFreeze) >= 0.5f, g(ParamId::ReverbMix));
-    width_ = g(ParamId::Width);
+    delay_.set(g(ParamId::DelayTimeL), g(ParamId::DelayTimeR), g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp));
+    delayMix_   = g(ParamId::DelayMix);
+    delayToFar_ = g(ParamId::DelayToFar);
+    nearReverb_.setSpace(0.3f, 20000.0f);
+    nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
+    farReverb_.setSpace(g(ParamId::FarAsym), g(ParamId::FarHighcut));
+    farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
+    farLevel_ = g(ParamId::FarLevel);
+    midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
 
     // Tuning
     const int scaleIdx = clampv(static_cast<int>(std::lround(g(ParamId::Scale))), 0, kNumScaleChoices - 1);
@@ -171,6 +209,7 @@ void Engine::readParams()
         seed_ = seed;
         rng_.seed(static_cast<uint64_t>(seed_) + 1);
         brain_.reset(rng_.fork(), 48 + rootPc);
+        arc_.init(rng_);
     }
 }
 
@@ -190,6 +229,8 @@ void Engine::process(float* L, float* R, int n)
         userBusy_.store(false, std::memory_order_release);
         userSeen_ = uv;
     }
+    arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
+    arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
     readParams();
 
     int pos = 0;
@@ -201,12 +242,14 @@ void Engine::process(float* L, float* R, int n)
 
     uint64_t m0 = 0, m1 = 0;
     int active = 0;
+    for (auto& d : noteDistance_) d.store(-1.0f, std::memory_order_relaxed);
     for (auto& v : voices_) {
         if (!v.isActive()) continue;
         ++active;
         const int nt = v.note();
         if (nt >= 0 && nt < 64) m0 |= (1ull << nt);
         else if (nt >= 64 && nt < 128) m1 |= (1ull << (nt - 64));
+        if (nt >= 0 && nt < 128) noteDistance_[nt].store(v.distance(), std::memory_order_relaxed);
     }
     mask_[0].store(m0, std::memory_order_relaxed);
     mask_[1].store(m1, std::memory_order_relaxed);
@@ -219,37 +262,57 @@ void Engine::process(float* L, float* R, int n)
 
 void Engine::renderChunk(float* L, float* R, int n)
 {
-    float* bl = busL_.data();
-    float* br = busR_.data();
-    std::memset(bl, 0, sizeof(float) * static_cast<size_t>(n));
-    std::memset(br, 0, sizeof(float) * static_cast<size_t>(n));
+    float* nl = nearL_.data(); float* nr = nearR_.data();
+    float* fl = farL_.data();  float* fr = farR_.data();
+    float* wl = wetL_.data();  float* wr = wetR_.data();
+    const size_t bytes = sizeof(float) * static_cast<size_t>(n);
+    std::memset(nl, 0, bytes); std::memset(nr, 0, bytes);
+    std::memset(fl, 0, bytes); std::memset(fr, 0, bytes);
 
     int anchor = -1;
     for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { anchor = i; break; }
 
     auto freqOf = [this](int note) { return frequencyOf(note); };
     auto emit = [this](const BrainEvent& e) {
-        if (e.type == BrainEvent::Type::NoteOn) startNote(e.note, e.velocity, OwnerBrain);
-        else stopNote(e.note, OwnerBrain);
+        if (e.type == BrainEvent::Type::NoteOn) {
+            // Rich's contrast: some notes intimately close, most of them deep in the background.
+            const float u = rng_.uniform();
+            const float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
+                                       : depth_ * (0.55f + 0.45f * rng_.uniform());
+            startNote(e.note, e.velocity, OwnerBrain, d);
+        } else {
+            stopNote(e.note, OwnerBrain);
+        }
     };
 
     for (int p = 0; p < n; p += kControlBlock) {
         const int len = std::min(kControlBlock, n - p);
         brain_.update(len / sr_, bp_, anchor, freqOf, emit);
-        for (auto& v : voices_) if (v.isActive()) v.render(bl + p, br + p, len, vp_);
+        for (auto& v : voices_) if (v.isActive()) v.render(nl + p, nr + p, fl + p, fr + p, len, vp_);
     }
 
-    ensemble_.process(bl, br, n);
-    reverb_.process(bl, br, n);
+    // Foreground plane: ensemble, asymmetric delay (echoes partly recede into the far plane), small room.
+    ensemble_.process(nl, nr, n);
+    delay_.process(nl, nr, wl, wr, n);
+    for (int i = 0; i < n; ++i) {
+        nl[i] += wl[i] * delayMix_;  nr[i] += wr[i] * delayMix_;
+        fl[i] += wl[i] * delayToFar_; fr[i] += wr[i] * delayToFar_;
+    }
+    nearReverb_.process(nl, nr, n);
+
+    // Background plane: 100 % wet, dark, wide.
+    farReverb_.process(fl, fr, n);
 
     const float master = dbToGain(getParam(ParamId::MasterGain));
-    const float width = width_;
+    for (int i = 0; i < n; ++i) {
+        L[i] = nl[i] + fl[i] * farLevel_;
+        R[i] = nr[i] + fr[i] * farLevel_;
+    }
+    midSide_.process(L, R, n);
     for (int i = 0; i < n; ++i) {
         const float g = masterSmooth_.next(master);
-        const float m = 0.5f * (bl[i] + br[i]);
-        const float s = 0.5f * (bl[i] - br[i]) * width;
-        L[i] = softClip((m + s) * g);
-        R[i] = softClip((m - s) * g);
+        L[i] = softClip(L[i] * g);
+        R[i] = softClip(R[i] * g);
     }
 }
 

@@ -1,10 +1,11 @@
 #include "PluginEditor.h"
 #include "ambient/Params.h"
+#include "ambient/Presets.h"
 
 using namespace ambient;
 
 namespace {
-constexpr int kCellW = 68, kCellH = 82, kPad = 10, kTitleH = 20, kHeaderH = 58;
+constexpr int kCellW = 64, kCellH = 78, kPad = 10, kTitleH = 20, kHeaderH = 58;
 const juce::Colour kBg(0xff14161a), kPanel(0xff1e2128), kAccent(0xff7fb3d5), kText(0xffd8dbe0), kDim(0xff7c8290);
 }
 
@@ -35,7 +36,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         }
         if (sections_.empty() || sections_.back().name != d.section) {
             Section s; s.name = d.section;
-            if (s.name == "Tuning") s.maxUnits = 8;
+            if (s.name == "Tuning" || s.name == "Far Reverb") s.maxUnits = 8;
             sections_.push_back(std::move(s));
         }
         Cell c;
@@ -93,8 +94,17 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         cells_.push_back(std::move(c));
     }
 
+    presetBox_ = std::make_unique<juce::ComboBox>();
+    for (int i = 0; i < numPresets(); ++i) presetBox_->addItem(preset(i).name, i + 1);
+    presetBox_->setSelectedId(proc_.getCurrentProgram() + 1, juce::dontSendNotification);
+    presetBox_->onChange = [this] {
+        const int idx = presetBox_->getSelectedId() - 1;
+        if (idx >= 0 && idx != proc_.getCurrentProgram()) proc_.setCurrentProgram(idx);
+    };
+    addAndMakeVisible(*presetBox_);
+
     setResizable(true, true);
-    setSize(1140, 760);
+    setSize(1100, 840);
     startTimerHz(12);
 }
 
@@ -106,6 +116,8 @@ AmbientSynthEditor::~AmbientSynthEditor()
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
+    if (presetBox_ && presetBox_->getSelectedId() != proc_.getCurrentProgram() + 1)
+        presetBox_->setSelectedId(proc_.getCurrentProgram() + 1, juce::dontSendNotification);
     repaint(header_);
 }
 
@@ -126,6 +138,7 @@ void AmbientSynthEditor::resized()
 {
     header_ = getLocalBounds().removeFromTop(kHeaderH);
     if (master_) master_->setBounds(getWidth() - 84, 4, 76, kHeaderH - 6);
+    if (presetBox_) presetBox_->setBounds(200, 8, 190, 24);
 
     int x = kPad, y = kHeaderH + kPad, rowH = 0;
     for (auto& s : sections_) {
@@ -177,26 +190,31 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     g.fillRect(header_);
     g.setColour(kText);
     g.setFont(juce::FontOptions(22.0f, juce::Font::bold));
-    g.drawText("AmbientSynth", 14, 6, 220, 26, juce::Justification::centredLeft);
+    g.drawText("AmbientSynth", 14, 6, 180, 26, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(12.0f));
     g.setColour(kDim);
     const int voices = proc_.engine().activeVoices();
     const int root = proc_.engine().brainRoot();
+    const float arc = proc_.engine().arcValue();
     juce::String info = juce::String(voices) + " voice" + (voices == 1 ? "" : "s")
         + "   root " + juce::MidiMessage::getMidiNoteName(root, true, true, 4)
-        + "   scale " + juce::String(proc_.engine().scale().name);
+        + "   scale " + juce::String(proc_.engine().scale().name)
+        + "   arc " + juce::String(arc, 2);
     if (proc_.userScaleName().isNotEmpty()) info += "   (user: " + proc_.userScaleName() + ")";
-    g.drawText(info, 14, 34, 500, 18, juce::Justification::centredLeft);
+    g.drawText(info, 14, 34, 560, 18, juce::Justification::centredLeft);
 
-    // Keyboard strip: notes 24..108
+    // Keyboard strip: notes 24..108; near notes bright, far notes dim (the front-to-back planes).
     const int first = 24, last = 108;
-    const int stripX = 540, stripW = getWidth() - 540 - 100;
+    const int stripX = 590, stripW = getWidth() - 590 - 100;
     const float keyW = static_cast<float>(stripW) / static_cast<float>(last - first + 1);
     for (int n = first; n <= last; ++n) {
         const float kx = stripX + (n - first) * keyW;
         const bool black = juce::MidiMessage::isMidiNoteBlack(n);
         juce::Colour col = black ? juce::Colour(0xff2a2e36) : juce::Colour(0xff3a3f4a);
-        if (sounding_[n]) col = kAccent;
+        if (sounding_[n]) {
+            const float d = juce::jlimit(0.0f, 1.0f, proc_.engine().noteDistance(n));
+            col = kAccent.interpolatedWith(juce::Colour(0xff35506a), d);
+        }
         if (n == root) col = col.interpolatedWith(juce::Colours::orange, 0.6f);
         g.setColour(col);
         g.fillRect(kx + 0.5f, 14.0f, keyW - 1.0f, 30.0f);

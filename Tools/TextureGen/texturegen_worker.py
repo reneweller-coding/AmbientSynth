@@ -182,8 +182,8 @@ class Generator:
             audio = audio[None, :]
         audio = np.nan_to_num(audio.astype(np.float32))
         peak = float(np.max(np.abs(audio))) if audio.size else 0.0
-        if peak > 0:
-            audio *= min(1.0, 0.5 / peak)                            # -6 dBFS peak: leave headroom for the synth
+        if peak > 1e-4:
+            audio *= 0.5 / peak                                      # normalise to -6 dBFS peak (Stable Audio comes out at ~0.2)
         mono = audio.mean(axis=0)
         hz, note = detect_pitch(mono, sr)
         out_dir = job.get("out_dir", "Textures")

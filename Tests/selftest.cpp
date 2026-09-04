@@ -7,6 +7,25 @@
 #include "ambient/Effects.h"
 #include "ambient/Cosmos.h"
 #include "ambient/Presets.h"
+#include "ambient/Gesture.h"
+#include "ambient/Osc.h"
+#include <thread>
+#include <chrono>
+#if defined(_WIN32)
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #ifndef NOMINMAX
+    #define NOMINMAX
+  #endif
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+#else
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+  #include <unistd.h>
+#endif
 #include <cstdio>
 #include <cmath>
 #include <vector>
@@ -273,10 +292,10 @@ void testSpace()
     Stats s = render(e, 15.0);
     CHECK(s.nonFinite == 0 && s.rms > 0.01, "spatial engine renders");
     bool notes[128]; e.soundingNotes(notes);
-    int seen = 0, far = 0;
-    for (int n = 0; n < 128; ++n) if (notes[n]) { const float d = e.noteDistance(n); CHECK(d >= 0.0f && d <= 1.0f, "distance in range"); ++seen; if (d > 0.5f) ++far; }
+    int seen = 0, farCount = 0;   // ("far" is a Windows macro)
+    for (int n = 0; n < 128; ++n) if (notes[n]) { const float d = e.noteDistance(n); CHECK(d >= 0.0f && d <= 1.0f, "distance in range"); ++seen; if (d > 0.5f) ++farCount; }
     CHECK(seen >= 2, "several notes sounding");
-    CHECK(far >= 1, "at least one note in the background plane");
+    CHECK(farCount >= 1, "at least one note in the background plane");
     // MIDI notes take the keys depth.
     e.setParam(ParamId::KeysDepth, 0.9f);
     render(e, 0.1);
@@ -453,10 +472,168 @@ void testMorph()
     CHECK(s.nonFinite == 0, "morph render finite");
 }
 
+struct TestSink : OscSink {
+    float last[kNumParams] = {};
+    bool  set[kNumParams] = {};
+    int   events = 0;
+    ControlEvent lastEvent{ ControlEvent::Type::NoteOn, 0, 0.0f };
+    void setParam(ParamId id, float v) override { last[static_cast<int>(id)] = v; set[static_cast<int>(id)] = true; }
+    void setParamNormalised(ParamId id, float n) override { const ParamDesc& d = paramDesc(id); last[static_cast<int>(id)] = d.min + (d.max - d.min) * n; set[static_cast<int>(id)] = true; }
+    void event(const ControlEvent& e) override { ++events; lastEvent = e; }
+};
+
+// Build an OSC message the way a sender would (big-endian, 4-byte padded).
+static size_t oscBuild(char* out, const char* address, const char* tags, const float* floats, const char* const* strings)
+{
+    size_t pos = 0;
+    auto putStr = [&](const char* s) { const size_t n = std::strlen(s) + 1; std::memcpy(out + pos, s, n); pos += n; while (pos & 3) out[pos++] = 0; };
+    putStr(address);
+    char t[16]; t[0] = ','; std::strcpy(t + 1, tags); putStr(t);
+    int fi = 0, si = 0;
+    for (const char* c = tags; *c; ++c) {
+        if (*c == 'f') { uint32_t u; std::memcpy(&u, &floats[fi++], 4); out[pos++] = static_cast<char>(u >> 24); out[pos++] = static_cast<char>(u >> 16); out[pos++] = static_cast<char>(u >> 8); out[pos++] = static_cast<char>(u); }
+        else if (*c == 'i') { const int32_t v = static_cast<int32_t>(floats[fi++]); out[pos++] = static_cast<char>(v >> 24); out[pos++] = static_cast<char>(v >> 16); out[pos++] = static_cast<char>(v >> 8); out[pos++] = static_cast<char>(v); }
+        else if (*c == 's') putStr(strings[si++]);
+    }
+    return pos;
+}
+
+void testOscAndGestures()
+{
+    // Parser
+    char buf[512];
+    const float f1[] = { 1234.5f };
+    size_t n = oscBuild(buf, "/ambient/param/cutoff", "f", f1, nullptr);
+    int seen = 0; OscMessage got;
+    CHECK(parseOscPacket(buf, n, [&](const OscMessage& m) { ++seen; got = m; }) == 1, "parse one message");
+    CHECK(seen == 1 && std::strcmp(got.address, "/ambient/param/cutoff") == 0 && got.numArgs == 1 && got.types[0] == 'f' && std::fabs(got.floats[0] - 1234.5f) < 1e-3f, "message decoded");
+    const float f2[] = { 60.0f, 100.0f };
+    n = oscBuild(buf, "/ambient/note", "ii", f2, nullptr);
+    parseOscPacket(buf, n, [&](const OscMessage& m) { got = m; });
+    CHECK(got.numArgs == 2 && got.types[1] == 'i' && got.floats[1] == 100.0f, "ints decoded");
+    const char* s1[] = { "Sleep Concert" };
+    n = oscBuild(buf, "/ambient/preset", "s", nullptr, s1);
+    parseOscPacket(buf, n, [&](const OscMessage& m) { got = m; });
+    CHECK(got.numArgs == 1 && got.types[0] == 's' && std::strcmp(got.strings[0], "Sleep Concert") == 0, "string decoded");
+    // Bundle of two
+    char bundle[512]; size_t bp = 0;
+    std::memcpy(bundle, "#bundle\0", 8); bp = 8; std::memset(bundle + bp, 0, 8); bp += 8;
+    char m1[128]; const float g1[] = { 0.7f }; const size_t l1 = oscBuild(m1, "/ambient/morph", "f", g1, nullptr);
+    char m2[128]; const float gb[] = { 0.2f, 1.4f, -0.5f, 1.0f, 0.3f }; const size_t l2 = oscBuild(m2, "/ambient/hand/R", "fffff", gb, nullptr);
+    auto putLen = [&](size_t l) { bundle[bp++] = 0; bundle[bp++] = 0; bundle[bp++] = static_cast<char>(l >> 8); bundle[bp++] = static_cast<char>(l); };
+    putLen(l1); std::memcpy(bundle + bp, m1, l1); bp += l1;
+    putLen(l2); std::memcpy(bundle + bp, m2, l2); bp += l2;
+    CHECK(parseOscPacket(bundle, bp, [&](const OscMessage&) {}) == 2, "bundle unpacked");
+    CHECK(parseOscPacket("garbage", 7, [&](const OscMessage&) {}) < 0, "garbage rejected");
+
+    // Dispatch
+    TestSink sink; GestureLayer gl;
+    OscMessage m; m.address = "/ambient/param/cutoff"; m.numArgs = 1; m.types[0] = 'f'; m.floats[0] = 1234.5f;
+    CHECK(dispatchOsc(m, sink, gl) && sink.set[static_cast<int>(ParamId::Cutoff)] && std::fabs(sink.last[static_cast<int>(ParamId::Cutoff)] - 1234.5f) < 1e-3f, "param dispatched");
+    m.address = "/ambient/paramn/brightness"; m.floats[0] = 0.25f;
+    CHECK(dispatchOsc(m, sink, gl) && std::fabs(sink.last[static_cast<int>(ParamId::Brightness)] - 0.25f) < 1e-6f, "normalised param dispatched");
+    m.address = "/ambient/param/scale"; m.types[0] = 's'; m.strings[0] = "JI Minor";
+    CHECK(dispatchOsc(m, sink, gl) && sink.last[static_cast<int>(ParamId::Scale)] == 2.0f, "choice by name");
+    m.address = "/ambient/hand/R"; m.numArgs = 5; for (int i = 0; i < 5; ++i) m.types[i] = 'f';
+    m.floats[0] = 0.2f; m.floats[1] = 1.7f; m.floats[2] = -0.45f; m.floats[3] = 1.0f; m.floats[4] = 0.0f;
+    CHECK(dispatchOsc(m, sink, gl), "hand dispatched");
+    CHECK(std::fabs(gl.input(GestureInput::RightHeight) - 1.0f) < 1e-6f, "hand height at the top of the range");
+    CHECK(std::fabs(gl.input(GestureInput::RightForward) - 0.5f) < 1e-6f, "reach halfway");
+    CHECK(gl.input(GestureInput::RightPinch) == 1.0f && std::fabs(gl.input(GestureInput::RightTilt) - 0.5f) < 1e-6f, "pinch and tilt passed");
+    m.address = "/ambient/hand/L"; m.floats[0] = -0.2f;
+    dispatchOsc(m, sink, gl);
+    CHECK(std::fabs(gl.input(GestureInput::HandDistance) - (0.4f - 0.1f) / 0.7f) < 1e-5f, "hand distance from both hands");
+    m.address = "/ambient/note"; m.numArgs = 2; m.types[0] = 'i'; m.types[1] = 'i'; m.floats[0] = 64.0f; m.floats[1] = 0.0f;
+    CHECK(dispatchOsc(m, sink, gl) && sink.lastEvent.type == ControlEvent::Type::NoteOff && sink.lastEvent.a == 64, "note off event");
+    m.address = "/ambient/cosmos"; m.numArgs = 1; m.types[0] = 's'; m.strings[0] = "Alien Choir";
+    CHECK(dispatchOsc(m, sink, gl) && sink.lastEvent.type == ControlEvent::Type::CosmosPreset && sink.lastEvent.a == 9, "cosmos preset by name");
+    m.address = "/ambient/nonsense";
+    CHECK(!dispatchOsc(m, sink, gl), "unknown address rejected");
+
+    // Gesture mapping: clutch, dead-zone, smoothing, text round trip.
+    GestureLayer g2;
+    g2.clearMappings();
+    g2.addMapping({ GestureInput::LeftHeight, ParamId::Depth, 0.0f, 1.0f, 0.0f, 0.05f, GestureInput::RightPinch, false });
+    float depth = -1.0f; int writes = 0;
+    auto sinkFn = [&](ParamId id, float v) { if (id == ParamId::Depth) { depth = v; ++writes; } };
+    g2.setInput(GestureInput::LeftHeight, 0.8f);
+    g2.update(0.01, sinkFn);
+    CHECK(writes == 0, "nothing moves while the clutch is open");
+    g2.setInput(GestureInput::RightPinch, 1.0f);
+    g2.update(0.01, sinkFn);
+    CHECK(writes == 1 && std::fabs(depth - 0.8f) < 1e-6f, "clutch closed: value follows immediately (no smoothing)");
+    g2.setInput(GestureInput::LeftHeight, 0.82f);
+    g2.update(0.01, sinkFn);
+    CHECK(writes == 1, "jitter below the dead-zone is ignored");
+    g2.setInput(GestureInput::LeftHeight, 0.3f);
+    g2.setInput(GestureInput::RightPinch, 0.0f);
+    g2.update(0.01, sinkFn);
+    CHECK(writes == 1 && std::fabs(depth - 0.8f) < 1e-6f, "clutch released: the last value holds");
+    GestureLayer g3;
+    g3.clearMappings();
+    g3.addMapping({ GestureInput::Custom0, ParamId::Brightness, 0.0f, 1.0f, 1.0f, 0.0f, GestureInput::Count, false });
+    float b = 0.0f;
+    g3.setInput(GestureInput::Custom0, 0.0f);
+    g3.update(0.01, [&](ParamId, float v) { b = v; });   // first value primes without a glide
+    CHECK(b == 0.0f, "first target is taken as is");
+    g3.setInput(GestureInput::Custom0, 1.0f);
+    for (int i = 0; i < 100; ++i) g3.update(0.01, [&](ParamId, float v) { b = v; });   // 1 s at 1 s smoothing
+    CHECK(b > 0.6f && b < 0.7f, "smoothing: one time constant reaches ~63 %");
+    {   // Default mappings through the hand path, as the simulator drives them.
+        GestureLayer gd;
+        float depth = -1.0f, width = -1.0f, morph = -1.0f;
+        auto sk = [&](ParamId id, float v) { if (id == ParamId::Depth) depth = v; if (id == ParamId::Width) width = v; if (id == ParamId::MorphPos) morph = v; };
+        gd.setHand(0, -0.2f, 0.96f, -0.45f, 0.0f, 0.0f);
+        gd.setHand(1,  0.2f, 1.30f, -0.45f, 1.0f, 0.0f);   // right pinch closed = clutch
+        gd.setHead(40.0f, 0.0f, 0.0f);
+        std::printf("clutch input %.2f, left height %.3f\n", gd.input(GestureInput::RightPinch), gd.input(GestureInput::LeftHeight));
+        gd.update(0.005, sk);
+        std::printf("depth %.3f width %.3f morph %.3f\n", depth, width, morph);
+        CHECK(std::fabs(depth - 0.075f) < 0.01f, "default mapping: left height drives depth while the right hand pinches");
+        CHECK(width > 1.2f, "head yaw drives width without clutch");
+        CHECK(morph >= 0.0f, "hand distance drives morph");
+    }
+    char text[2048];
+    GestureLayer g4;   // defaults
+    const int len = g4.writeMappings(text, sizeof(text));
+    CHECK(len > 0 && g4.numMappings() >= 6, "default mappings written");
+    GestureLayer g5;
+    CHECK(g5.parseMappings(text) && g5.numMappings() == g4.numMappings(), "mappings round-trip through text");
+    CHECK(g5.mapping(0).input == GestureInput::HandDistance && g5.mapping(0).param == ParamId::MorphPos && g5.mapping(0).clutch == GestureInput::RightPinch, "first default mapping: hand distance -> morph, clutch right pinch");
+    CHECK(!g5.parseMappings("Nonsense morph 0 1"), "unknown input rejected");
+
+    // Real UDP loopback through the server.
+    OscServer server; TestSink netSink; GestureLayer netGl;
+    const bool started = server.start(19877, netSink, netGl);
+    CHECK(started, "OSC server binds a port");
+    if (started) {
+#if defined(_WIN32)
+        WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
+        SOCKET s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+#else
+        int s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+#endif
+        sockaddr_in to{}; to.sin_family = AF_INET; to.sin_port = htons(19877); to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        const float fv[] = { 0.42f };
+        const size_t ln = oscBuild(buf, "/ambient/morph", "f", fv, nullptr);
+        ::sendto(s, buf, static_cast<int>(ln), 0, reinterpret_cast<sockaddr*>(&to), sizeof(to));
+        for (int i = 0; i < 100 && server.messagesReceived() == 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        CHECK(server.messagesReceived() == 1 && std::fabs(netSink.last[static_cast<int>(ParamId::MorphPos)] - 0.42f) < 1e-6f, "UDP message reached the sink");
+#if defined(_WIN32)
+        closesocket(s); WSACleanup();
+#else
+        ::close(s);
+#endif
+        server.stop();
+        CHECK(!server.running(), "server stops");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    testOscAndGestures();
     testMorph();
     testCloudAndLayers();
     testCosmos();

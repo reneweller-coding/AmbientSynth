@@ -2,10 +2,12 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ambient/Engine.h"
 #include "ambient/Presets.h"
+#include "ambient/Gesture.h"
+#include "ambient/Osc.h"
 #include <array>
 #include <atomic>
 
-class AmbientSynthProcessor : public juce::AudioProcessor
+class AmbientSynthProcessor : public juce::AudioProcessor, private ambient::OscSink
 {
 public:
     AmbientSynthProcessor();
@@ -52,6 +54,15 @@ public:
     void setMorphSlotFromCurrent(int slot);
     juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
 
+    // OSC input and gesture layer (see ambient/Osc.h for the namespace).
+    ambient::GestureLayer& gestures() { return gestures_; }
+    bool oscRunning() const { return osc_.running(); }
+    int  oscPort() const { return osc_.port(); }
+    juce::String oscError() const { return osc_.lastError(); }
+    juce::uint64 oscMessages() const { return osc_.messagesReceived(); }
+    bool setGestureMappings(const juce::String& text);
+    juce::String gestureMappings() const;
+
     // MIDI learn: arm a parameter, the next controller message binds to it.
     void armMidiLearn(ambient::ParamId id) { learnTarget_.store(static_cast<int>(id)); }
     void clearMidiLearn(ambient::ParamId id);
@@ -75,6 +86,15 @@ private:
     std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none
     std::atomic<int> learnTarget_{ -1 };
     juce::String slotName_[2] = { "Init", "Init" };
+
+    // OscSink
+    void setParam(ambient::ParamId id, float value) override;
+    void setParamNormalised(ambient::ParamId id, float norm) override;
+    void event(const ambient::ControlEvent& e) override;
+    ambient::GestureLayer gestures_;
+    ambient::OscServer    osc_;
+    ambient::EventQueue   events_;
+    juce::String          mappingText_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthProcessor)
 };

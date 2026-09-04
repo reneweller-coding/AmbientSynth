@@ -67,6 +67,19 @@ switches flip halfway. Morph settings are never part of a preset.
 controller. The label shows the bound CC; right-click again to clear. The
 mapping is saved with the plugin state and in `.ambientsynth` files.
 
+**OSC and gestures.** The plugin listens on UDP port 9000 (header shows the
+message count). Namespace: `/ambient/param/<key> f`, `/ambient/paramn/<key> f`
+(normalised), `/ambient/morph f`, `/ambient/note i i`, `/ambient/preset s|i`,
+`/ambient/sound s|i`, `/ambient/cosmos s|i`, and the hand vocabulary
+`/ambient/hand/L|R x y z pinch tilt` (metres, OpenXR axes) and
+`/ambient/head yaw pitch roll` (degrees). Hand data feeds the gesture layer,
+which maps hand distance, heights, reach, palm tilt and head yaw onto
+parameters with range, smoothing, dead-zone and a clutch: by default nothing
+moves unless the right hand pinches. `Tools/osc_hand_sim.py` streams a slow
+two-hand choreography for testing. The same gesture layer will sit behind
+OpenXR hand tracking on the Quest (see `docs/quest-plan.md`); the core already
+builds for Android arm64 with the NDK.
+
 **Layout.** The sections are grouped the way the signal flows: VOICE,
 FOREGROUND and BACKGROUND on the left, CONDUCTOR (brain, tuning), COSMOS and
 MORPH on the right, Master mid/side in the header. The header draws the

@@ -48,6 +48,41 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     for (int i = 0; i < kNumParams; ++i)
         raw_[static_cast<size_t>(i)] = apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key);
     for (auto& c : ccMap_) c.store(-1);
+    // OSC on 9000; a second instance in a DAW simply reports the port as taken.
+    osc_.start(9000, *this, gestures_);
+}
+
+// ---------------------------------------------------------------- OSC sink + gestures
+
+void AmbientSynthProcessor::setParam(ParamId id, float value)
+{
+    if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+        p->setValueNotifyingHost(p->convertTo0to1(value));
+}
+
+void AmbientSynthProcessor::setParamNormalised(ParamId id, float norm)
+{
+    if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+        p->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, norm));
+}
+
+void AmbientSynthProcessor::event(const ControlEvent& e)
+{
+    events_.push(e);   // consumed on the audio thread
+}
+
+bool AmbientSynthProcessor::setGestureMappings(const juce::String& text)
+{
+    if (!gestures_.parseMappings(text.toRawUTF8())) return false;
+    mappingText_ = text;
+    return true;
+}
+
+juce::String AmbientSynthProcessor::gestureMappings() const
+{
+    char buf[4096];
+    const int n = gestures_.writeMappings(buf, sizeof(buf));
+    return juce::String(juce::CharPointer_UTF8(buf), static_cast<size_t>(juce::jmax(0, n)));
 }
 
 void AmbientSynthProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -67,6 +102,24 @@ bool AmbientSynthProcessor::isBusesLayoutSupported(const BusesLayout& layouts) c
 void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    // Gestures write through the host's parameter system, like a MIDI controller would.
+    gestures_.update(buffer.getNumSamples() / getSampleRate(), [this](ParamId id, float v) {
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+            p->setValueNotifyingHost(p->convertTo0to1(v));
+    });
+    // Events from OSC (notes, presets) arrive on the audio thread through the queue.
+    ControlEvent ev;
+    while (events_.pop(ev)) {
+        switch (ev.type) {
+        case ControlEvent::Type::NoteOn:       engine_.noteOn(ev.a, ev.b); break;
+        case ControlEvent::Type::NoteOff:      engine_.noteOff(ev.a); break;
+        case ControlEvent::Type::Preset:       setCurrentProgram(ev.a); break;
+        case ControlEvent::Type::SoundPreset:  applySoundPreset(ev.a); break;
+        case ControlEvent::Type::CosmosPreset: applyCosmosPreset(ev.a); break;
+        }
+    }
+
     for (int i = 0; i < kNumParams; ++i)
         engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
 
@@ -219,6 +272,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         state.setProperty("scalaText", scalaText_, nullptr);
         state.setProperty("scalaName", userScaleName_, nullptr);
     }
+    state.setProperty("gestureMappings", gestureMappings(), nullptr);
     juce::ValueTree midi("midi");
     for (int cc = 0; cc < 128; ++cc) {
         const int target = ccMap_[static_cast<size_t>(cc)].load();
@@ -244,6 +298,8 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String text = tree.getProperty("scalaText").toString();
             const juce::String name = tree.getProperty("scalaName").toString();
             for (auto& c : ccMap_) c.store(-1);
+            const juce::String mappings = tree.getProperty("gestureMappings").toString();
+            if (mappings.isNotEmpty()) setGestureMappings(mappings);
             auto midi = tree.getChildWithName("midi");
             if (midi.isValid())
                 for (int cc = 0; cc < 128; ++cc) {

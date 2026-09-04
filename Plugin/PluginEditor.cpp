@@ -5,7 +5,7 @@
 using namespace ambient;
 
 namespace {
-constexpr int kCellW = 60, kCellH = 70, kPad = 8, kTitleH = 18, kGroupTitleH = 22, kHeaderH = 100;
+constexpr int kCellW = 60, kCellH = 70, kPad = 8, kTitleH = 18, kGroupTitleH = 22, kHeaderH = 114;
 const juce::Colour kBg(0xff121418), kGroupFill(0xff1a1d23), kSectionFill(0xff21252c), kAccent(0xff7fb3d5),
                    kText(0xffd8dbe0), kDim(0xff7c8290);
 const juce::Colour kVoice(0xff7fb3d5), kFore(0xff8fd18f), kBack(0xffb59ce6), kCosmos(0xfff0a35e),
@@ -446,9 +446,16 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
         + "   " + juce::String(proc_.engine().scale().name)
         + "   arc " + juce::String(proc_.engine().arcValue(), 2);
     if (proc_.userScaleName().isNotEmpty()) info += "   (user: " + proc_.userScaleName() + ")";
+    info += proc_.oscRunning() ? "   OSC :" + juce::String(proc_.oscPort()) + " (" + juce::String(static_cast<juce::int64>(proc_.oscMessages())) + " msg)"
+                               : "   OSC off: " + proc_.oscError();
+    const auto& gl = proc_.gestures();
+    const float clutch = gl.input(GestureInput::RightPinch);
+    info += clutch > 0.5f ? "   hands: engaged" : "   hands: free";
+    info += "   L " + juce::String(gl.input(GestureInput::LeftHeight), 2) + "  R " + juce::String(gl.input(GestureInput::RightHeight), 2)
+          + "  dist " + juce::String(gl.input(GestureInput::HandDistance), 2) + "  pinch " + juce::String(clutch, 2);
     g.setColour(kDim);
     g.setFont(juce::FontOptions(11.0f));
-    g.drawText(info, keys_.getX(), keys_.getBottom() + 2, keys_.getWidth(), 14, juce::Justification::centredLeft);
+    g.drawText(info, routing_.getX() + 90, header_.getBottom() - 16, getWidth() - routing_.getX() - 400, 14, juce::Justification::centredLeft);
 
     // Groups and sections
     for (const auto& grp : groups_) {

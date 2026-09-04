@@ -154,14 +154,14 @@ double intervalConsonance(double ratio)
     while (ratio >= 2.0) ratio *= 0.5;
     while (ratio < 1.0) ratio *= 2.0;
     // Nearest simple ratio p/q with q <= 32 within 10 cents; rank by Tenney height.
-    double best = 1e9; long bp = 0, bq = 0;
+    double best = 1e9; long bp = 0;
     for (long q = 1; q <= 32; ++q) {
         const long p = static_cast<long>(std::lround(ratio * static_cast<double>(q)));
         if (p < q) continue;
         const double err = std::fabs(std::log2((static_cast<double>(p) / static_cast<double>(q)) / ratio)) * 1200.0;
         if (err > 10.0) continue;
         const double height = std::log2(static_cast<double>(p * q));
-        if (height < best) { best = height; bp = p; bq = q; }
+        if (height < best) { best = height; bp = p; }
     }
     if (bp == 0) return 0.05;
     return 1.0 / (1.0 + best);

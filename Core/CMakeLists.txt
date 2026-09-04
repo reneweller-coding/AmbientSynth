@@ -6,7 +6,16 @@ add_library(AmbientCore STATIC
     src/Engine.cpp
     src/Presets.cpp
     src/Cosmos.cpp
+    src/Gesture.cpp
+    src/Osc.cpp
 )
+if(WIN32)
+    target_link_libraries(AmbientCore PUBLIC ws2_32)
+endif()
+find_package(Threads)
+if(Threads_FOUND)
+    target_link_libraries(AmbientCore PUBLIC Threads::Threads)
+endif()
 target_include_directories(AmbientCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(AmbientCore PUBLIC cxx_std_20)
 set_target_properties(AmbientCore PROPERTIES POSITION_INDEPENDENT_CODE ON)

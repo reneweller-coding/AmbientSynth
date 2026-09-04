@@ -210,10 +210,15 @@ What that already dictates here:
 * the engine exposes observers (`soundingNotes`, `noteDistance`, `arcValue`,
   `morphPosition`, `brainRoot`) for a synaesthetic visualisation to read;
 * the distance model maps one-to-one onto placing sources in a 3D scene.
-Next steps on that path: an OSC/UDP control input into the core (hand
-positions → parameters) so the desktop version can be played from a headset
-before the native port, and a "gesture" layer that maps a few continuous
-hand quantities onto parameter sets (morph, depth, brightness, cosmos send).
+Both of these exist now (`ambient/Osc.h`, `ambient/Gesture.h`): the OSC
+server (framework-free UDP, Winsock/BSD, own parser for messages and
+bundles) writes parameters through an `OscSink` and hand/head data into the
+`GestureLayer`; the gesture layer maps inputs to parameters with range,
+smoothing, dead-zone and a clutch, and its mappings are a small text format
+saved with the plugin state. Decision 2026-09-04: the headset app is native
+(NDK, OpenXR + `XR_EXT_hand_tracking`, Vulkan/GLES, Oboe), starting from
+Meta's native hand-tracking sample; the core already cross-compiles for
+arm64-v8a. Details in `docs/quest-plan.md`.
 
 ## Plugin shell
 

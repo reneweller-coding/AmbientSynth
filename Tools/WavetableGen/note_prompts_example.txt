@@ -1,0 +1,7 @@
+# Prompts that give a single sustained note: WavetableGen slices these into tables.
+# python wavetablegen_cli.py prompt --prompts note_prompts_example.txt --model sao --seconds 10
+a single sustained note of a bowed glass harmonica, steady pitch, no vibrato, no reverb | name=glass_note
+one held note of a cello bowed very slowly, steady pitch, dry, close | name=cello_note
+a single sustained organ pipe note, flute stop, steady, no reverb | name=organ_note
+a sustained throat singing drone on one note, steady pitch, dry | name=throat_note
+one held brass note, soft, steady pitch, no vibrato | name=brass_note

@@ -11,6 +11,10 @@ one JSON object per line:
        {"event": "error", "text": "..."}
 Can also be used from the command line:  python texturegen_worker.py --model musicgen-large
 --prompt "..." --seconds 20 --out-dir Textures
+Batch:  python texturegen_worker.py --batch prompts.txt --count 3        (one prompt per line,
+        '#' comments; a line may end with '| key=value key=value' to override model, seconds,
+        steps, guidance, seed, name for that prompt) or --batch jobs.json (a list of job objects
+        with the same keys as the protocol above). The model stays loaded across the batch.
 """
 import argparse
 import json
@@ -154,12 +158,13 @@ class Generator:
         gen = torch.Generator(self.device).manual_seed(seed)
         emit(event="status", text=f"{label}: {seconds:.0f} s, seed {seed}")
         t0 = time.time()
+        # Both diffusers audio pipelines use the older callback(step, timestep, latents) API.
+        def cb(i, t, latents):
+            emit(event="progress", step=i + 1, total=steps)
         if key == "sao":
-            def cb(pipe, i, t, kw):
-                emit(event="progress", step=i + 1, total=steps); return kw
             out = self.pipe(prompt, negative_prompt=negative, num_inference_steps=steps, guidance_scale=guidance,
                             audio_end_in_s=seconds, num_waveforms_per_prompt=1, generator=gen,
-                            callback_on_step_end=cb)
+                            callback=cb, callback_steps=1)
             audio = out.audios[0].float().cpu().numpy()          # (channels, samples)
         elif key.startswith("musicgen"):
             inputs = self.proc(text=[prompt], padding=True, return_tensors="pt").to(self.device)
@@ -169,11 +174,9 @@ class Generator:
                 wav = self.pipe.generate(**inputs, do_sample=True, guidance_scale=max(guidance, 1.0), max_new_tokens=tokens)
             audio = wav[0].float().cpu().numpy()                    # (channels, samples)
         else:
-            def cb2(pipe, i, t, kw):
-                emit(event="progress", step=i + 1, total=steps); return kw
             out = self.pipe(prompt, negative_prompt=negative, num_inference_steps=steps, guidance_scale=guidance,
                             audio_length_in_s=seconds, num_waveforms_per_prompt=1, generator=gen,
-                            callback_on_step_end=cb2)
+                            callback=cb, callback_steps=1)
             audio = np.asarray(out.audios[0], dtype=np.float32)[None, :]
         if audio.ndim == 1:
             audio = audio[None, :]
@@ -214,9 +217,38 @@ def serve():
             emit(event="error", text=f"{type(e).__name__}: {e}")
 
 
+def load_batch(path, defaults):
+    """Jobs from a text file (one prompt per line, optional '| key=value ...') or a JSON list."""
+    jobs = []
+    if path.lower().endswith(".json"):
+        with open(path, encoding="utf-8") as f:
+            for j in json.load(f):
+                job = dict(defaults); job.update(j); jobs.append(job)
+        return jobs
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            job = dict(defaults)
+            if "|" in line:
+                line, opts = line.rsplit("|", 1)
+                for tok in opts.split():
+                    if "=" not in tok:
+                        continue
+                    k, v = tok.split("=", 1)
+                    if k in ("seconds", "guidance"): job[k] = float(v)
+                    elif k in ("steps", "seed"): job[k] = int(v)
+                    elif k in ("model", "name", "negative", "out_dir"): job[k] = v
+            job["prompt"] = line.strip()
+            jobs.append(job)
+    return jobs
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--serve", action="store_true", help="read jobs from stdin (used by the GUI)")
+    ap.add_argument("--batch", help="prompts.txt (one per line) or jobs.json; --count variations per prompt")
     ap.add_argument("--model", default="sao", choices=sorted(MODELS))
     ap.add_argument("--prompt")
     ap.add_argument("--negative", default="")
@@ -234,12 +266,28 @@ def main():
         return
     if a.serve:
         serve(); return
-    if not a.prompt:
-        ap.error("--prompt is required")
+    defaults = {"model": a.model, "negative": a.negative, "seconds": a.seconds, "steps": a.steps,
+                "guidance": a.guidance, "seed": a.seed, "out_dir": a.out_dir}
+    if a.batch:
+        jobs = load_batch(a.batch, defaults)
+    elif a.prompt:
+        jobs = [dict(defaults, prompt=a.prompt)]
+    else:
+        ap.error("--prompt or --batch is required")
     g = Generator()
-    for i in range(a.count):
-        g.generate({"model": a.model, "prompt": a.prompt, "negative": a.negative, "seconds": a.seconds, "steps": a.steps,
-                    "guidance": a.guidance, "seed": a.seed + i, "out_dir": a.out_dir})
+    # Group by model so each model is loaded once even when the batch mixes them.
+    order = sorted(range(len(jobs)), key=lambda i: (list(MODELS).index(jobs[i]["model"]) if jobs[i]["model"] in MODELS else 99, i))
+    done = failed = 0
+    for i in order:
+        job = jobs[i]
+        for v in range(a.count):
+            j = dict(job); j["seed"] = int(job.get("seed", a.seed)) + v
+            try:
+                g.generate(j); done += 1
+            except Exception as e:
+                failed += 1
+                emit(event="error", text=f"{type(e).__name__}: {e}  [{job.get('prompt', '')[:50]}]")
+    emit(event="status", text=f"batch finished: {done} files, {failed} failed")
 
 
 if __name__ == "__main__":

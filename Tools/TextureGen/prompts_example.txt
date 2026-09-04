@@ -1,0 +1,10 @@
+# One prompt per line. '#' starts a comment. Optional overrides after '|': model= seconds= steps= guidance= seed= name=
+# python texturegen_worker.py --batch prompts_example.txt --model sao --seconds 30 --count 2
+soft breathy flute overtones, held note, slowly wavering, close and dry | name=flute_air
+bowed metal plate, long resonant shimmer, glassy overtones, no rhythm | name=bowed_plate
+gentle rain on a tin roof at night, distant thunder, wide stereo | name=night_rain seconds=40
+deep analog circuit hum with slow filter sweeps, warm, sub bass | name=circuit_hum
+tibetan singing bowl, one strike, very long decay, room air | name=bowl
+wind through pine trees, high mountain, slow gusts, no birds | name=pine_wind seconds=40
+choir of low male voices humming a single drone, cathedral | name=low_choir model=musicgen-large seconds=25
+crackling ice sheet, creaks and deep booms, frozen lake | name=ice_sheet

@@ -16,7 +16,9 @@ model is loaded once per session.
 
 Stable Audio Open is gated: accept the licence on its Hugging Face page and
 run `huggingface-cli login` once. The others download without a login. All
-weights land in the Hugging Face cache (several GB each).
+weights land in the Hugging Face cache (several GB each). Stable Audio's
+scheduler needs `torchsde`; without it diffusers fails with an empty
+`ImportError` at load time (it is in `requirements.txt`).
 
 ## Setup
 
@@ -42,4 +44,11 @@ Command line, without the GUI:
 
 ```
 .venv\Scripts\python texturegen_worker.py --model sao --prompt "bowed metal plate, long shimmer" --seconds 30 --count 4
+.venv\Scripts\python texturegen_worker.py --batch prompts_example.txt --model sao --seconds 30 --count 2
 ```
+
+A batch file has one prompt per line (`#` comments); a line may end with
+`| name=... seconds=... model=... steps=... guidance=... seed=...` to override
+the defaults for that prompt, and a `.json` list of job objects works too.
+Jobs are grouped by model so each model loads once. `--count` renders that
+many seeds per prompt.

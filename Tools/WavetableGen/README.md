@@ -31,6 +31,20 @@ Source 2/3 → Type Wavetable → Table User → *Wavetable...* → the file;
 `ambient_render --wavetable file.wav` and `wavetable.wav` on the Quest do the
 same.
 
+## Batch from the command line
+
+```
+..\TextureGen\.venv\Scripts\python wavetablegen_cli.py audio ..\..\Textures\*.wav --frames 32
+..\TextureGen\.venv\Scripts\python wavetablegen_cli.py procedural --recipe all --seeds 3
+..\TextureGen\.venv\Scripts\python wavetablegen_cli.py prompt --prompts note_prompts_example.txt --model sao
+..\TextureGen\.venv\Scripts\python wavetablegen_cli.py preview ..\..\Wavetables\proc_Comb_1.wav --note 45
+```
+
+`audio` makes one table per file (skipping files without a stable pitch,
+`--pitch` forces one), `procedural` every recipe times `--seeds`, `prompt`
+generates a note per line through TextureGen's batch mode and slices it,
+`preview` renders a sweep through a table to a WAV.
+
 ## Why not a learned latent space?
 
 Models like WaveSpace learn a latent space of single cycles and let you walk

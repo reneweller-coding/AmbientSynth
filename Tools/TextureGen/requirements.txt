@@ -1,6 +1,7 @@
 diffusers>=0.32
 transformers>=4.45
 accelerate
+torchsde
 soundfile
 numpy
 scipy

@@ -184,7 +184,43 @@ normalised by √(density · grain length) so density does not change loudness.
 The cloud is added to the far bus only: it exists in the background and the
 far reverb smears it.
 
+## Morph (the performance control)
+
+Two full parameter snapshots live in the engine (`slotA_`, `slotB_`, atomics
+per parameter, writable from any thread). While *MorphActive* is on,
+`Engine::effectiveParam(id)` replaces the live value with the blend at the
+current position: floats interpolate in the skewed domain the knobs use
+(`p = ((v−min)/span)^skew`, lerp p, invert), integers round, choices and
+switches take A below 0.5 and B above. The position glides toward *MorphPos*
+at `1/MorphGlide` per second (glide 0 = jump), so a controller or a hand can
+jump while the sound follows over minutes. The Morph section is excluded
+from every preset scope: loading presets never disturbs a running morph.
+Slots are saved in the plugin state and in `.ambientsynth` files.
+
+## Toward VR (the reason for the design)
+
+The target is a 30-minute drone set built with nothing but slow movements
+in a headset: hands and head change parameters, the picture is the sound.
+What that already dictates here:
+
+* the whole instrument is a framework-free library with atomics as its only
+  control surface, so an OpenXR app can drive it directly;
+* every control is continuous and glides, nothing steps;
+* the morph is one scalar — the natural quantity for a hand to own;
+* the engine exposes observers (`soundingNotes`, `noteDistance`, `arcValue`,
+  `morphPosition`, `brainRoot`) for a synaesthetic visualisation to read;
+* the distance model maps one-to-one onto placing sources in a 3D scene.
+Next steps on that path: an OSC/UDP control input into the core (hand
+positions → parameters) so the desktop version can be played from a headset
+before the native port, and a "gesture" layer that maps a few continuous
+hand quantities onto parameter sets (morph, depth, brightness, cosmos send).
+
 ## Plugin shell
+
+* MIDI learn: right-click on a control arms it; the next controller message
+  binds (one controller per parameter, one parameter per controller); the
+  map lives in the plugin state. Controllers write the parameter through the
+  host, so the DAW sees the movement.
 
 * `AudioProcessorValueTreeState` built from the parameter table; the raw
   atomic values are copied into the engine at the top of every block.

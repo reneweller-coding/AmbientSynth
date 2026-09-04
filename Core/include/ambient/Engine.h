@@ -44,6 +44,16 @@ public:
     // Any thread. Applied at the start of the next block.
     void setUserScale(const FixedScale& s);
 
+    // Morph: two full parameter snapshots (A = 0, B = 1). While MorphActive is on the
+    // engine plays lerp(A, B, position); the position glides toward MorphPos at
+    // 1/MorphGlide per second. Meant for a hand in VR: one continuous gesture moves
+    // the whole instrument from one world to another.
+    void  setMorphSlot(int slot, const float* values);   // kNumParams values, any thread
+    void  captureMorphSlot(int slot);                    // copy the live parameters into a slot
+    void  morphSlot(int slot, float* out) const;
+    float morphPosition() const { return morphCur_.load(std::memory_order_relaxed); }
+    float effectiveParam(ParamId id) const;              // what is actually playing
+
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
     double sampleRate() const { return sr_; }
@@ -65,6 +75,8 @@ private:
     void   renderChunk(float* L, float* R, int n);
 
     std::atomic<float> params_[kNumParams];
+    std::atomic<float> slotA_[kNumParams], slotB_[kNumParams];
+    std::atomic<float> morphCur_{ 0.0f };
     Voice        voices_[kMaxVoices];
     ClusterBrain brain_;
     Ensemble     ensemble_;

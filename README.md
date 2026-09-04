@@ -54,6 +54,26 @@ state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.
 
+**Morph.** The Morph section holds two full snapshots, A and B: pick a preset
+for each or capture the current state with *A ← now* / *B ← now*. Switch
+*Active* on and the *Position* knob (or a mapped MIDI controller, later a hand
+in VR) blends the whole instrument between the two worlds; *Glide* sets how
+long the instrument takes to follow a new position, up to 15 minutes, so one
+gesture can carry a piece across a quarter of an hour. Continuous parameters
+interpolate in the knob's own perceptual curve, integers round, choices and
+switches flip halfway. Morph settings are never part of a preset.
+
+**MIDI learn.** Right-click any knob, switch or box: *MIDI Learn*, then move a
+controller. The label shows the bound CC; right-click again to clear. The
+mapping is saved with the plugin state and in `.ambientsynth` files.
+
+**Layout.** The sections are grouped the way the signal flows: VOICE,
+FOREGROUND and BACKGROUND on the left, CONDUCTOR (brain, tuning), COSMOS and
+MORPH on the right, Master mid/side in the header. The header draws the
+routing map: voices into the foreground chain, the parallel Cosmos return, the
+cloud and far sends into the background reverb, and both planes into the
+mid/side output.
+
 Preset families: sleep and night pieces, cathedral and glass, deep and sub,
 breath and voice, exotic tunings, shimmer and delay, thirty Cosmos
 science-fiction textures, playable keyboard patches (brain off), long-form

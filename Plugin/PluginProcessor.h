@@ -46,6 +46,17 @@ public:
     void applyCosmosPreset(int index);
     int  soundPresetIndex() const  { return soundIndex_; }
     int  cosmosPresetIndex() const { return cosmosIndex_; }
+
+    // Morph slots A (0) and B (1).
+    void setMorphSlotFromPreset(int slot, int presetIndex);
+    void setMorphSlotFromCurrent(int slot);
+    juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
+
+    // MIDI learn: arm a parameter, the next controller message binds to it.
+    void armMidiLearn(ambient::ParamId id) { learnTarget_.store(static_cast<int>(id)); }
+    void clearMidiLearn(ambient::ParamId id);
+    int  midiCcFor(ambient::ParamId id) const;     // -1 if unmapped
+    int  learnTarget() const { return learnTarget_.load(); }
     juce::String userScaleName() const { return userScaleName_; }
 
     juce::AudioProcessorValueTreeState apvts;
@@ -61,6 +72,9 @@ private:
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;
     void applyScoped(const ambient::Preset& p, ambient::PresetScope scope);
+    std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none
+    std::atomic<int> learnTarget_{ -1 };
+    juce::String slotName_[2] = { "Init", "Init" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthProcessor)
 };

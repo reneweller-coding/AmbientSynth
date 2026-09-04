@@ -25,8 +25,11 @@ int numCosmosPresets();                   // Cosmos-only bank
 const Preset& cosmosPreset(int index);
 
 inline bool isCosmosParam(ParamId id) { return std::strcmp(paramDesc(id).section, "Cosmos") == 0; }
+inline bool isMorphParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Morph") == 0; }
+// Morph controls are performance state, never part of any preset.
 inline bool inScope(ParamId id, PresetScope scope)
 {
+    if (isMorphParam(id)) return false;
     return scope == PresetScope::Full || (scope == PresetScope::Cosmos) == isCosmosParam(id);
 }
 

@@ -44,6 +44,8 @@ enum class ParamId : int {
     BrainLow, BrainHigh, BrainConsonance, BrainWander,
     // Tuning
     Scale, KeyMap, RootNote, RefPitch, Seed,
+    // Morph between two stored full presets (A/B); never part of a preset itself
+    MorphActive, MorphPos, MorphGlide,
     Count
 };
 

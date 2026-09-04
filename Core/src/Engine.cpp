@@ -15,7 +15,12 @@ namespace ambient {
 
 Engine::Engine()
 {
-    for (int i = 0; i < kNumParams; ++i) params_[i].store(paramTable()[static_cast<size_t>(i)].def, std::memory_order_relaxed);
+    for (int i = 0; i < kNumParams; ++i) {
+        const float def = paramTable()[static_cast<size_t>(i)].def;
+        params_[i].store(def, std::memory_order_relaxed);
+        slotA_[i].store(def, std::memory_order_relaxed);
+        slotB_[i].store(def, std::memory_order_relaxed);
+    }
     for (int i = 0; i < kNumScaleChoices - 1; ++i) makeBuiltinScale(i, scales_[i]);
     makeBuiltinScale(0, scales_[kNumScaleChoices - 1]);
     std::strncpy(scales_[kNumScaleChoices - 1].name, "User (Scala)", sizeof(FixedScale::name) - 1);
@@ -79,6 +84,50 @@ bool Engine::applyCosmosPreset(int index)
 {
     if (index < 0 || index >= numCosmosPresets()) return false;
     return ambient::applyPreset(cosmosPreset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Cosmos);
+}
+
+// ---------------------------------------------------------------- morph
+
+void Engine::setMorphSlot(int slot, const float* values)
+{
+    auto& s = (slot == 0) ? slotA_ : slotB_;
+    for (int i = 0; i < kNumParams; ++i) s[i].store(values[i], std::memory_order_relaxed);
+}
+
+void Engine::captureMorphSlot(int slot)
+{
+    auto& s = (slot == 0) ? slotA_ : slotB_;
+    for (int i = 0; i < kNumParams; ++i) s[i].store(params_[i].load(std::memory_order_relaxed), std::memory_order_relaxed);
+}
+
+void Engine::morphSlot(int slot, float* out) const
+{
+    const auto& s = (slot == 0) ? slotA_ : slotB_;
+    for (int i = 0; i < kNumParams; ++i) out[i] = s[i].load(std::memory_order_relaxed);
+}
+
+float Engine::effectiveParam(ParamId id) const
+{
+    const float live = getParam(id);
+    if (isMorphParam(id) || getParam(ParamId::MorphActive) < 0.5f) return live;
+    const int i = static_cast<int>(id);
+    const float a = slotA_[i].load(std::memory_order_relaxed), b = slotB_[i].load(std::memory_order_relaxed);
+    const float t = morphCur_.load(std::memory_order_relaxed);
+    const ParamDesc& d = paramDesc(id);
+    switch (d.kind) {
+    case ParamKind::Float: {
+        // Interpolate in the skewed (perceptual) domain, like the host's knob travel.
+        const float span = std::max(d.max - d.min, 1e-9f);
+        const float pa = std::pow(clampv((a - d.min) / span, 0.0f, 1.0f), d.skew);
+        const float pb = std::pow(clampv((b - d.min) / span, 0.0f, 1.0f), d.skew);
+        const float p = pa + (pb - pa) * t;
+        return d.min + span * std::pow(p, 1.0f / d.skew);
+    }
+    case ParamKind::Int:
+        return static_cast<float>(std::lround(a + (b - a) * t));
+    default:
+        return t < 0.5f ? a : b;   // choices and switches flip halfway
+    }
 }
 
 void Engine::setUserScale(const FixedScale& s)
@@ -156,7 +205,7 @@ void Engine::allNotesOff()
 
 void Engine::readParams()
 {
-    auto g = [this](ParamId id) { return getParam(id); };
+    auto g = [this](ParamId id) { return effectiveParam(id); };
     vp_.partials    = static_cast<int>(std::lround(g(ParamId::Partials)));
     vp_.tilt        = g(ParamId::Tilt);
     vp_.brightness  = g(ParamId::Brightness);
@@ -276,6 +325,17 @@ void Engine::process(float* L, float* R, int n)
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
     shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
+    {   // morph position glides toward its target at 1/glide per second (glide 0 = jump)
+        const float target = clampv(getParam(ParamId::MorphPos), 0.0f, 1.0f);
+        const float glide = getParam(ParamId::MorphGlide);
+        float cur = morphCur_.load(std::memory_order_relaxed);
+        if (glide <= 0.001f) cur = target;
+        else {
+            const float step = static_cast<float>(n / sr_) / glide;
+            cur += clampv(target - cur, -step, step);
+        }
+        morphCur_.store(cur, std::memory_order_relaxed);
+    }
     readParams();
 
     int pos = 0;
@@ -407,7 +467,7 @@ void Engine::renderChunk(float* L, float* R, int n)
         std::memset(sl, 0, bytes); std::memset(sr, 0, bytes);
     }
 
-    const float master = dbToGain(getParam(ParamId::MasterGain));
+    const float master = dbToGain(effectiveParam(ParamId::MasterGain));
     for (int i = 0; i < n; ++i) {
         L[i] = nl[i] + fl[i] * farLevel_;
         R[i] = nr[i] + fr[i] * farLevel_;

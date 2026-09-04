@@ -149,6 +149,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::RootNote,  "root",      "Root",      "Tuning", kRootNames, 12, 2),
     F(ParamId::RefPitch,  "ref_pitch", "A4",        "Tuning", 415.f, 466.f, 440.f, 1.f, "Hz"),
     I(ParamId::Seed,      "seed",      "Seed",      "Tuning", 0.f, 9999.f, 1.f),
+
+    B(ParamId::MorphActive, "morph_active", "Active",   "Morph", false),
+    F(ParamId::MorphPos,    "morph",        "Position", "Morph", 0.f, 1.f,   0.f,  1.f,  ""),
+    F(ParamId::MorphGlide,  "morph_glide",  "Glide",    "Morph", 0.f, 900.f, 30.f, 0.4f, "s"),
 }};
 } // namespace
 

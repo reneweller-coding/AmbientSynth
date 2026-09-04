@@ -248,10 +248,11 @@ void testPresets()
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
     for (int p = 0; p < numPresets(); ++p) {
-        int count = 0;
-        const bool ok = applyPreset(preset(p), [&](ParamId, float) { ++count; });
+        bool touched[kNumParams] = {};
+        const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
-        CHECK(count >= kNumParams, "preset sets every parameter");
+        int count = 0; for (bool t : touched) count += t ? 1 : 0;
+        CHECK(count == kNumParams - 3, "preset sets every parameter except the three morph controls");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");
@@ -403,10 +404,60 @@ void testCloudAndLayers()
     }
 }
 
+void testMorph()
+{
+    Engine e;
+    e.prepare(48000.0, 256);
+    float a[kNumParams], b[kNumParams];
+    for (int i = 0; i < kNumParams; ++i) a[i] = b[i] = paramTable()[static_cast<size_t>(i)].def;
+    a[static_cast<int>(ParamId::Cutoff)] = 200.0f;   b[static_cast<int>(ParamId::Cutoff)] = 8000.0f;
+    a[static_cast<int>(ParamId::Partials)] = 4.0f;   b[static_cast<int>(ParamId::Partials)] = 20.0f;
+    a[static_cast<int>(ParamId::Scale)] = 0.0f;      b[static_cast<int>(ParamId::Scale)] = 5.0f;
+    a[static_cast<int>(ParamId::BrainOn)] = 0.0f;    b[static_cast<int>(ParamId::BrainOn)] = 1.0f;
+    e.setMorphSlot(0, a);
+    e.setMorphSlot(1, b);
+    e.setParam(ParamId::Cutoff, 999.0f);
+    CHECK(e.effectiveParam(ParamId::Cutoff) == 999.0f, "morph off: live parameter plays");
+    e.setParam(ParamId::MorphActive, 1.0f);
+    e.setParam(ParamId::MorphGlide, 0.0f);
+    e.setParam(ParamId::MorphPos, 0.0f);
+    render(e, 0.05);
+    CHECK(std::fabs(e.effectiveParam(ParamId::Cutoff) - 200.0f) < 1e-3f, "position 0 plays slot A");
+    e.setParam(ParamId::MorphPos, 1.0f);
+    render(e, 0.05);
+    CHECK(std::fabs(e.effectiveParam(ParamId::Cutoff) - 8000.0f) < 1e-2f, "position 1 plays slot B");
+    CHECK(e.effectiveParam(ParamId::Partials) == 20.0f && e.effectiveParam(ParamId::Scale) == 5.0f, "ints and choices follow");
+    e.setParam(ParamId::MorphPos, 0.5f);
+    render(e, 0.05);
+    const float mid = e.effectiveParam(ParamId::Cutoff);
+    CHECK(mid > 1000.0f && mid < 3000.0f, "halfway cutoff sits between in the perceptual (skewed) domain");
+    CHECK(e.effectiveParam(ParamId::Partials) == 12.0f, "int rounds");
+    CHECK(e.effectiveParam(ParamId::Scale) == 5.0f && e.effectiveParam(ParamId::BrainOn) == 1.0f, "choice/switch flip at 0.5");
+    CHECK(std::fabs(e.morphPosition() - 0.5f) < 1e-6f, "morph position observer");
+    // Glide: with 10 s glide, 1 s of audio moves the position by 0.1.
+    e.setParam(ParamId::MorphGlide, 10.0f);
+    e.setParam(ParamId::MorphPos, 1.0f);
+    render(e, 1.0);
+    CHECK(std::fabs(e.morphPosition() - 0.6f) < 0.01f, "glide moves 0.1 per second at 10 s glide");
+    // Presets never touch morph controls.
+    e.applyPreset(2);
+    CHECK(e.getParam(ParamId::MorphActive) == 1.0f && e.getParam(ParamId::MorphGlide) == 10.0f, "presets leave morph state alone");
+    // Capture: slot B takes the live parameters.
+    e.setParam(ParamId::MorphActive, 0.0f);
+    e.setParam(ParamId::Detune, 42.0f);
+    e.captureMorphSlot(1);
+    float out[kNumParams];
+    e.morphSlot(1, out);
+    CHECK(out[static_cast<int>(ParamId::Detune)] == 42.0f, "capture copies live values");
+    Stats s = render(e, 1.0);
+    CHECK(s.nonFinite == 0, "morph render finite");
+}
+
 } // namespace
 
 int main()
 {
+    testMorph();
     testCloudAndLayers();
     testCosmos();
     testParams();

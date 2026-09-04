@@ -47,6 +47,7 @@ AmbientSynthProcessor::AmbientSynthProcessor()
 {
     for (int i = 0; i < kNumParams; ++i)
         raw_[static_cast<size_t>(i)] = apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key);
+    for (auto& c : ccMap_) c.store(-1);
 }
 
 void AmbientSynthProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -74,6 +75,19 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         if (m.isNoteOn())            engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity());
         else if (m.isNoteOff())      engine_.noteOff(m.getNoteNumber());
         else if (m.isAllNotesOff() || m.isAllSoundOff()) engine_.allNotesOff();
+        else if (m.isController()) {
+            const int cc = m.getControllerNumber();
+            if (cc < 0 || cc >= 128) continue;
+            const int learn = learnTarget_.exchange(-1);
+            if (learn >= 0) {
+                for (auto& c : ccMap_) if (c.load() == learn) c.store(-1);   // one controller per parameter
+                ccMap_[static_cast<size_t>(cc)].store(learn);
+            }
+            const int target = ccMap_[static_cast<size_t>(cc)].load();
+            if (target >= 0)
+                if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(target)].key))
+                    p->setValueNotifyingHost(static_cast<float>(m.getControllerValue()) / 127.0f);
+        }
     }
     midi.clear();
 
@@ -168,12 +182,56 @@ bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
     return true;
 }
 
+void AmbientSynthProcessor::setMorphSlotFromPreset(int slot, int presetIndex)
+{
+    if (presetIndex < 0 || presetIndex >= numPresets()) return;
+    float values[kNumParams];
+    for (int i = 0; i < kNumParams; ++i) values[i] = raw_[static_cast<size_t>(i)]->load();
+    applyPreset(preset(presetIndex), [&](ParamId id, float v) { values[static_cast<int>(id)] = v; });
+    engine_.setMorphSlot(slot, values);
+    slotName_[slot & 1] = preset(presetIndex).name;
+}
+
+void AmbientSynthProcessor::setMorphSlotFromCurrent(int slot)
+{
+    float values[kNumParams];
+    for (int i = 0; i < kNumParams; ++i) values[i] = raw_[static_cast<size_t>(i)]->load();
+    engine_.setMorphSlot(slot, values);
+    slotName_[slot & 1] = "(captured)";
+}
+
+void AmbientSynthProcessor::clearMidiLearn(ParamId id)
+{
+    for (auto& c : ccMap_) if (c.load() == static_cast<int>(id)) c.store(-1);
+    if (learnTarget_.load() == static_cast<int>(id)) learnTarget_.store(-1);
+}
+
+int AmbientSynthProcessor::midiCcFor(ParamId id) const
+{
+    for (int cc = 0; cc < 128; ++cc) if (ccMap_[static_cast<size_t>(cc)].load() == static_cast<int>(id)) return cc;
+    return -1;
+}
+
 void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     if (scalaText_.isNotEmpty()) {
         state.setProperty("scalaText", scalaText_, nullptr);
         state.setProperty("scalaName", userScaleName_, nullptr);
+    }
+    juce::ValueTree midi("midi");
+    for (int cc = 0; cc < 128; ++cc) {
+        const int target = ccMap_[static_cast<size_t>(cc)].load();
+        if (target >= 0) midi.setProperty("cc" + juce::String(cc), paramTable()[static_cast<size_t>(target)].key, nullptr);
+    }
+    state.addChild(midi, -1, nullptr);
+    for (int slot = 0; slot < 2; ++slot) {
+        juce::ValueTree m(slot == 0 ? "morphA" : "morphB");
+        m.setProperty("name", slotName_[slot], nullptr);
+        float values[kNumParams];
+        engine_.morphSlot(slot, values);
+        for (int i = 0; i < kNumParams; ++i) m.setProperty(paramTable()[static_cast<size_t>(i)].key, values[i], nullptr);
+        state.addChild(m, -1, nullptr);
     }
     if (auto xml = state.createXml()) copyXmlToBinary(*xml, destData);
 }
@@ -185,6 +243,27 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             auto tree = juce::ValueTree::fromXml(*xml);
             const juce::String text = tree.getProperty("scalaText").toString();
             const juce::String name = tree.getProperty("scalaName").toString();
+            for (auto& c : ccMap_) c.store(-1);
+            auto midi = tree.getChildWithName("midi");
+            if (midi.isValid())
+                for (int cc = 0; cc < 128; ++cc) {
+                    const juce::String key = midi.getProperty("cc" + juce::String(cc)).toString();
+                    if (const ParamDesc* d = findParam(key.toRawUTF8())) ccMap_[static_cast<size_t>(cc)].store(static_cast<int>(d->id));
+                }
+            for (int slot = 0; slot < 2; ++slot) {
+                auto m = tree.getChildWithName(slot == 0 ? "morphA" : "morphB");
+                if (!m.isValid()) continue;
+                float values[kNumParams];
+                for (int i = 0; i < kNumParams; ++i) {
+                    const ParamDesc& d = paramTable()[static_cast<size_t>(i)];
+                    values[i] = m.hasProperty(d.key) ? static_cast<float>(static_cast<double>(m.getProperty(d.key))) : d.def;
+                }
+                engine_.setMorphSlot(slot, values);
+                slotName_[slot] = m.getProperty("name").toString();
+            }
+            tree.removeChild(tree.getChildWithName("midi"), nullptr);
+            tree.removeChild(tree.getChildWithName("morphA"), nullptr);
+            tree.removeChild(tree.getChildWithName("morphB"), nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
         }

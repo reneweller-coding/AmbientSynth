@@ -5,44 +5,373 @@
 namespace ambient {
 
 namespace {
+// 128 presets in ten families. Unspecified parameters keep their defaults
+// (see Params.cpp); the Cosmos send is off unless a preset turns it on.
 const Preset kPresets[] = {
+    // ---------------------------------------------------------------- 0..9 originals
     { "Init", "" },
-
     { "Sleep Concert",
-      "brain_density=6;brain_rate=35;brain_hold_min=60;brain_hold_max=240;depth=0.85;"
-      "far_decay=35;far_highcut=2500;air=0.2;arc=0.5;arc_period=60;brightness=0.6;"
-      "attack=10;release=25" },
-
+      "brain_density=6;brain_rate=35;brain_hold_min=60;brain_hold_max=240;depth=0.85;far_decay=35;far_highcut=2500;"
+      "air=0.2;arc=0.5;arc_period=60;brightness=0.6;attack=10;release=25" },
     { "Glass Cathedral",
-      "partials=24;tilt=0.8;brightness=0.95;inharmonic=0.15;cutoff=6000;far_size=3;"
-      "far_decay=45;far_highcut=7000;far_damp=0.3;ens_mix=0.6;shimmer=0.6;depth=0.6;"
-      "scale=Harmonic 8-16;root=E" },
-
+      "partials=24;tilt=0.8;brightness=0.95;inharmonic=0.15;cutoff=6000;far_size=3;far_decay=45;far_highcut=7000;"
+      "far_damp=0.3;ens_mix=0.6;shimmer=0.6;depth=0.6;scale=Harmonic 8-16;root=E" },
     { "Subharmonic Deep",
-      "scale=Subharmonic 16-8;brain_low=28;brain_high=60;tilt=1.8;cutoff=900;bass_mono=200;"
-      "brain_density=4;partials=10;far_decay=20;far_highcut=1800;air=0.05;strands=4;detune=12" },
-
+      "scale=Subharmonic 16-8;brain_low=28;brain_high=60;tilt=1.8;cutoff=900;bass_mono=200;brain_density=4;partials=10;"
+      "far_decay=20;far_highcut=1800;air=0.05;strands=4;detune=12" },
     { "Breath of Flutes",
-      "air=0.5;air_color=2;air_q=14;partials=6;tilt=1.5;keys_depth=0;depth=0.5;brain_low=55;"
-      "brain_high=84;near_mix=0.3;far_level=0.6;dly_mix=0.3;dly_feedback=0.4;attack=3;release=8;"
-      "master_gain=-10" },
-
+      "air=0.5;air_color=2;air_q=14;partials=6;tilt=1.5;keys_depth=0;depth=0.5;brain_low=55;brain_high=84;near_mix=0.3;"
+      "far_level=0.6;dly_mix=0.3;dly_feedback=0.4;attack=3;release=8;master_gain=-10" },
     { "Bohlen Night",
-      "scale=Bohlen-Pierce (JI);keymap=Consecutive degrees;brain_consonance=0.4;brain_wander=0.5;"
-      "brain_low=40;brain_high=80;odd_even=0.6;far_decay=30;depth=0.75" },
-
+      "scale=Bohlen-Pierce (JI);keymap=Consecutive degrees;brain_consonance=0.4;brain_wander=0.5;brain_low=40;brain_high=80;"
+      "odd_even=0.6;far_decay=30;depth=0.75" },
     { "Otonal Shimmer",
-      "scale=Otonality 1-11;shimmer=0.9;shimmer_rate=0.4;dly_time_l=0.45;dly_time_r=0.68;"
-      "dly_cross=0.7;dly_feedback=0.6;dly_mix=0.35;brightness=0.8;depth=0.6;brain_density=6" },
-
+      "scale=Otonality 1-11;shimmer=0.9;shimmer_rate=0.4;dly_time_l=0.45;dly_time_r=0.68;dly_cross=0.7;dly_feedback=0.6;"
+      "dly_mix=0.35;brightness=0.8;depth=0.6;brain_density=6" },
     { "Distant Storm",
-      "depth=1;keys_depth=0.8;brain_consonance=0.15;brain_density=8;brain_rate=12;brain_hold_min=20;"
-      "brain_hold_max=90;far_decay=60;far_level=1;far_highcut=2000;dly_feedback=0.8;dly_to_far=0.8;"
-      "dly_mix=0.15;cutoff=1500;inharmonic=0.3;strands=5;detune=20" },
-
+      "depth=1;keys_depth=0.8;brain_consonance=0.15;brain_density=8;brain_rate=12;brain_hold_min=20;brain_hold_max=90;"
+      "far_decay=60;far_level=1;far_highcut=2000;dly_feedback=0.8;dly_to_far=0.8;dly_mix=0.15;cutoff=1500;inharmonic=0.3;"
+      "strands=5;detune=20;master_gain=-9" },
     { "Dry Foreground Keys",
-      "brain_on=off;keys_depth=0;near_mix=0.25;near_decay=1.5;far_level=0.3;dly_mix=0.2;"
-      "ens_mix=0.5;attack=1.5;release=6;air=0.25;depth=0" },
+      "brain_on=off;keys_depth=0;near_mix=0.25;near_decay=1.5;far_level=0.3;dly_mix=0.2;ens_mix=0.5;attack=1.5;release=6;"
+      "air=0.25;depth=0" },
+    { "Sleep Concert II",
+      "scale=JI Minor;root=A;brain_density=5;brain_rate=45;brain_hold_min=90;brain_hold_max=300;depth=0.9;far_decay=40;"
+      "far_highcut=2000;arc=0.6;arc_period=90;attack=12;release=30" },
+
+    // ---------------------------------------------------------------- 10..19 sleep / night
+    { "Midnight Pentatonic",
+      "scale=JI Pentatonic;root=F#;brain_density=4;brain_low=40;brain_high=76;air=0.25;far_decay=30;attack=8;release=20" },
+    { "Deep Sleep Sub",
+      "root=C;brain_low=24;brain_high=55;tilt=2;cutoff=600;bass_mono=220;brain_density=3;far_decay=50;far_highcut=1200;"
+      "master_gain=-4;attack=15;release=40" },
+    { "Dawn Drift",
+      "brightness=0.85;arc=1;arc_period=120;brain_density=6;scale=JI Major (Ptolemy);root=D;far_decay=20;air=0.15" },
+    { "Night Rain",
+      "air=0.45;air_color=6;air_q=6;partials=8;brain_density=5;dly_mix=0.3;dly_feedback=0.6;dly_damp=0.8;far_decay=15;"
+      "master_gain=-8" },
+    { "Slow Tide",
+      "arc=1;arc_period=30;brain_density=6;brain_rate=20;brain_hold_min=40;brain_hold_max=160;depth=0.8;far_decay=30" },
+    { "Hypnos",
+      "attack=30;release=60;brain_hold_min=120;brain_hold_max=400;brain_rate=60;brain_density=7;far_decay=60;far_highcut=1800;"
+      "depth=0.9" },
+    { "Warm Blanket",
+      "tilt=1.6;brightness=0.5;cutoff=1200;air=0.1;scale=JI Major (Ptolemy);root=G;near_mix=0.35;far_level=0.5;depth=0.4" },
+    { "Somnus Harmonics",
+      "scale=Harmonic 8-16;root=C;brain_low=48;brain_high=84;partials=12;shimmer=0.6;depth=0.7;far_decay=30" },
+    { "Breathing Dark",
+      "scale=JI Minor;root=E;odd_even=0.5;tilt=1.4;shimmer=0.8;shimmer_rate=0.05;brain_density=5;far_decay=35;far_highcut=2200" },
+    { "Velvet Hours",
+      "tilt=1.5;brightness=0.55;cutoff=1500;strands=4;detune=6;air=0.12;brain_density=5;brain_rate=40;brain_hold_min=80;"
+      "brain_hold_max=260;far_decay=38;far_highcut=2400;depth=0.8;arc=0.4;arc_period=75" },
+
+    // ---------------------------------------------------------------- 20..29 cathedral / glass
+    { "Ice Cathedral",
+      "partials=32;tilt=0.7;brightness=1;inharmonic=0.25;cutoff=9000;far_size=3;far_decay=60;far_highcut=9000;far_damp=0.2;"
+      "brain_density=5;brain_low=55;brain_high=96" },
+    { "Glass Choir",
+      "partials=20;air=0.3;air_color=4;air_q=20;ens_mix=0.7;far_decay=30;far_highcut=6000;scale=JI Major (Ptolemy);root=A" },
+    { "Crystal Bells",
+      "inharmonic=0.5;partials=24;tilt=0.9;attack=0.5;decay=20;sustain=0.3;release=20;brain_rate=8;brain_hold_min=5;"
+      "brain_hold_max=20;brain_density=6;far_decay=25;far_highcut=8000" },
+    { "Wineglass Rim",
+      "partials=3;tilt=0.5;strands=6;detune=3;air=0.35;air_color=1;air_q=30;far_decay=30;brain_low=60;brain_high=90;"
+      "far_highcut=8000;master_gain=-9" },
+    { "High Organ",
+      "odd_even=-0.5;partials=16;brightness=0.9;cutoff=8000;near_mix=0.4;near_decay=3;far_level=0.6;scale=Pythagorean;root=D" },
+    { "Stained Light",
+      "brightness=0.8;shimmer=1;shimmer_rate=0.6;partials=24;far_decay=40;far_highcut=7000;scale=Otonality 1-11;root=F" },
+    { "Frozen Chapel",
+      "far_decay=90;far_highcut=5000;far_size=3;brain_density=3;attack=20;release=50;partials=20;brightness=0.85" },
+    { "Silver Threads",
+      "strands=6;detune=25;drift=12;partials=12;brightness=0.9;dly_mix=0.3;dly_time_l=1.7;dly_time_r=2.3;dly_feedback=0.7;"
+      "far_decay=20;far_highcut=6000" },
+    { "Bright Pentatonic",
+      "scale=JI Pentatonic;root=E;brightness=0.9;cutoff=7000;brain_density=6;brain_low=52;brain_high=92;air=0.2;far_highcut=6000" },
+    { "Prism",
+      "inharmonic=0.15;shimmer=0.7;partials=28;tilt=1;brightness=1;far_highcut=8000;ens_mix=0.5;width=1.6;side_air=4;cutoff=8000" },
+
+    // ---------------------------------------------------------------- 30..39 deep / sub / dark
+    { "Abyss",
+      "scale=Subharmonic 16-8;root=E;brain_low=24;brain_high=50;tilt=2.2;cutoff=500;partials=8;far_decay=45;far_highcut=900;"
+      "bass_mono=250;brain_density=4" },
+    { "Tectonic",
+      "root=C;brain_low=24;brain_high=48;strands=5;detune=15;tilt=1.8;cutoff=700;far_decay=30;dly_mix=0.2;dly_time_l=2.5;"
+      "dly_time_r=3.3;dly_feedback=0.6;dly_damp=0.9;far_highcut=1200" },
+    { "Whale Song",
+      "brain_low=30;brain_high=62;drift=25;drift_rate=0.05;partials=6;air=0.3;air_color=2;air_q=8;far_decay=40;scale=JI Minor;"
+      "root=D;far_highcut=2500" },
+    { "Cave Water",
+      "air=0.5;air_color=8;air_q=4;partials=6;cutoff=900;near_mix=0.5;near_decay=4;far_decay=25;brain_density=3;brain_low=30;"
+      "brain_high=60;master_gain=-8" },
+    { "Undertow",
+      "scale=Subharmonic 16-8;root=A;brain_density=5;brain_consonance=0.5;tilt=1.5;cutoff=1000;far_size=3;far_decay=50;"
+      "far_highcut=1500" },
+    { "Bass Temple",
+      "scale=JI Major (Ptolemy);root=C;brain_low=28;brain_high=52;odd_even=-0.6;cutoff=800;near_mix=0.3;far_level=0.6;bass_mono=200" },
+    { "Slow Magma",
+      "inharmonic=0.4;partials=10;brain_low=26;brain_high=54;tilt=1.7;cutoff=600;resonance=0.5;filter_drift=0.8;far_decay=35;"
+      "far_highcut=1500" },
+    { "Deep Space Hum",
+      "scale=12-TET;root=C;brain_low=24;brain_high=44;brain_density=3;partials=4;cutoff=400;far_decay=60;far_highcut=800;"
+      "air=0.15;air_color=12;air_q=3" },
+    { "Subterranean Choir",
+      "scale=Harmonic 8-16;root=C;brain_low=36;brain_high=64;air=0.3;air_color=3;air_q=12;cutoff=1500;far_decay=30" },
+    { "Low Pythagorean",
+      "scale=Pythagorean;root=G;brain_low=29;brain_high=60;tilt=1.5;strands=4;detune=10;far_decay=28;dly_mix=0.25;far_highcut=2000" },
+
+    // ---------------------------------------------------------------- 40..49 breath / flute / voice
+    { "Shakuhachi Air",
+      "air=0.7;air_color=1;air_q=6;partials=5;tilt=1.8;keys_depth=0;brain_low=60;brain_high=88;brain_density=3;brain_rate=10;"
+      "brain_hold_min=8;brain_hold_max=30;attack=1.5;release=5;far_decay=12;master_gain=-8" },
+    { "Ocarina Clouds",
+      "air=0.4;air_color=2;air_q=18;partials=3;brain_low=64;brain_high=92;brain_density=5;far_decay=25;ens_mix=0.5;master_gain=-8" },
+    { "Bamboo Wind",
+      "air=0.6;air_color=5;air_q=5;partials=6;brain_low=55;brain_high=84;dly_mix=0.35;dly_feedback=0.5;far_decay=20;master_gain=-8" },
+    { "Alto Voices",
+      "air=0.3;air_color=3;air_q=14;cosmos_send=0.5;cosmos_vowel=0.8;cosmos_vowel_rate=0.03;cosmos_return=0.8;cosmos_to_far=0.3;"
+      "brain_low=50;brain_high=76;partials=14;scale=JI Major (Ptolemy);root=F" },
+    { "Boys Choir",
+      "cosmos_send=0.6;cosmos_vowel=0.9;cosmos_vowel_rate=0.08;cosmos_return=0.9;cosmos_to_far=0.5;brain_low=60;brain_high=88;"
+      "partials=12;tilt=1.4;scale=JI Major (Ptolemy);root=C;brain_density=6" },
+    { "Throat Drone",
+      "odd_even=0.4;brain_low=36;brain_high=55;cosmos_send=0.5;cosmos_vowel=0.7;cosmos_vowel_rate=0.02;cosmos_return=0.7;"
+      "brain_density=3;partials=20;air=0.2;air_color=8;air_q=6" },
+    { "Whispered",
+      "air=0.8;air_color=10;air_q=3;partials=2;master_gain=-10;brain_low=60;brain_high=96;brain_density=4;far_decay=20;near_mix=0.4" },
+    { "Reed Organ",
+      "odd_even=0.8;partials=24;tilt=1.1;air=0.15;air_color=4;near_mix=0.4;near_decay=2;far_level=0.5;keys_depth=0.2;"
+      "scale=JI Major (Ptolemy);root=D" },
+    { "Wooden Flutes",
+      "air=0.5;air_color=2;air_q=10;partials=4;tilt=2;ens_mix=0.6;ens_depth=0.6;brain_low=55;brain_high=84;brain_hold_min=10;"
+      "brain_hold_max=40;brain_rate=8;far_decay=15;master_gain=-8" },
+    { "Sirens Far Away",
+      "air=0.4;air_color=3;air_q=12;drift=20;drift_rate=0.03;depth=1;keys_depth=0.9;far_decay=45;far_highcut=3000;brain_low=60;"
+      "brain_high=90;brain_density=4" },
+
+    // ---------------------------------------------------------------- 50..59 exotic scales
+    { "Slendro Dusk",
+      "scale=Slendro (JI);root=D;brain_density=5;brain_low=48;brain_high=84;partials=10;inharmonic=0.2;attack=0.3;decay=10;"
+      "sustain=0.4;release=15;brain_rate=6;brain_hold_min=5;brain_hold_max=25;far_decay=20" },
+    { "Bohlen Cathedral",
+      "scale=Bohlen-Pierce (JI);keymap=Consecutive degrees;root=C;brain_density=6;partials=24;brightness=0.9;far_decay=40;"
+      "far_highcut=6000" },
+    { "Pythagorean Drone",
+      "scale=Pythagorean;root=G;brain_consonance=0.9;brain_density=4;tilt=1.3;far_decay=30" },
+    { "Otonal Cloud",
+      "scale=Otonality 1-11;root=C;brain_density=8;brain_consonance=0.3;brain_hold_min=20;brain_hold_max=80;brain_rate=8;"
+      "far_decay=30;depth=0.8" },
+    { "Subharmonic Bells",
+      "scale=Subharmonic 16-8;root=E;inharmonic=0.35;attack=0.2;decay=15;sustain=0.2;release=20;brain_rate=7;brain_hold_min=5;"
+      "brain_hold_max=15;brain_density=7" },
+    { "Harmonic Ladder",
+      "scale=Harmonic 8-16;root=D;brain_low=50;brain_high=98;brain_consonance=1;brain_density=8;brain_rate=12;brain_wander=0" },
+    { "Seven Limit Garden",
+      "scale=JI 7-limit;root=F;brain_density=7;brain_consonance=0.55;brain_wander=0.6;brain_hold_min=30;brain_hold_max=120;"
+      "far_decay=25" },
+    { "Minor Third Field",
+      "scale=JI Minor;root=B;brain_density=6;brain_consonance=0.6;brain_low=40;brain_high=80;far_decay=35;dly_mix=0.2" },
+    { "Twelve Tone Fog",
+      "scale=12-TET;root=C;brain_consonance=0.2;brain_density=7;brain_rate=15;brain_hold_min=15;brain_hold_max=60;far_decay=40;"
+      "far_highcut=2500;depth=0.9" },
+    { "Pentatonic Rain",
+      "scale=JI Pentatonic;root=A;attack=0.05;decay=6;sustain=0;release=10;brain_rate=3;brain_hold_min=5;brain_hold_max=8;"
+      "brain_density=8;dly_mix=0.4;dly_feedback=0.6;dly_time_l=0.62;dly_time_r=0.93;far_decay=15" },
+
+    // ---------------------------------------------------------------- 60..69 shimmer / delay / motion
+    { "Shimmer Rise",
+      "cosmos_shimmer=0.7;cosmos_shimmer_pitch=+12;far_decay=20;far_level=0.9;depth=0.6;brain_density=4" },
+    { "Fifth Shimmer",
+      "cosmos_shimmer=0.6;cosmos_shimmer_pitch=+7;scale=JI Major (Ptolemy);root=C;far_decay=25;brain_density=4;brightness=0.8" },
+    { "Octave Below",
+      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=-12;far_decay=30;far_highcut=2000;brain_low=48;brain_high=84;brain_density=4" },
+    { "Echo Canyon",
+      "dly_time_l=1.5;dly_time_r=2.25;dly_feedback=0.75;dly_cross=0.5;dly_damp=0.6;dly_mix=0.45;dly_to_far=0.6;attack=0.5;"
+      "brain_rate=10;brain_hold_min=8;brain_hold_max=30;brain_density=4;far_decay=12" },
+    { "Ping Pong Drift",
+      "dly_time_l=0.33;dly_time_r=0.5;dly_cross=1;dly_feedback=0.7;dly_mix=0.4;attack=0.3;decay=3;sustain=0.5;release=6;"
+      "brain_rate=4;brain_hold_min=3;brain_hold_max=10;brain_density=5" },
+    { "Rotating Sky",
+      "pan_drift=1;itd=1;drift_rate=0.3;ens_mix=0.6;ens_rate=0.5;far_asym=1;width=1.8;brain_density=5" },
+    { "Slow Chorus Field",
+      "ens_mix=0.8;ens_depth=0.8;ens_rate=0.05;strands=6;detune=12;far_decay=20;brain_density=5" },
+    { "Tape Echo Drone",
+      "dly_time_l=0.42;dly_time_r=0.42;dly_feedback=0.85;dly_damp=0.9;dly_mix=0.35;dly_to_far=0.2;far_decay=8;cutoff=1800;"
+      "brain_density=4" },
+    { "Shimmer Cathedral",
+      "cosmos_shimmer=0.8;cosmos_shimmer_pitch=+12;far_size=3;far_decay=45;far_highcut=7000;partials=20;brightness=0.9;"
+      "brain_density=5" },
+    { "Nineteenth Above",
+      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=+19;far_decay=35;far_highcut=5000;scale=JI Major (Ptolemy);root=A;brain_density=4" },
+
+    // ---------------------------------------------------------------- 70..99 cosmos / science fiction
+    { "Nebula Drift",
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5;far_decay=30;brain_density=5" },
+    { "Frozen Nebula",
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.98;cosmos_return=0.8;cosmos_to_far=0.6;far_decay=20;brain_density=4" },
+    { "Alien Choir",
+      "cosmos_send=0.8;cosmos_vowel=1;cosmos_vowel_rate=0.02;cosmos_shift=3;cosmos_return=0.8;cosmos_to_far=0.6;partials=16;"
+      "brain_density=6;far_decay=25" },
+    { "Forbidden Planet",
+      "cosmos_send=1;cosmos_shift=120;cosmos_shift_drift=1;cosmos_res=0.6;cosmos_res_pitch=1.5;cosmos_res_fb=0.9;cosmos_return=0.7;"
+      "cosmos_to_far=0.5;scale=12-TET;brain_consonance=0.2;brain_density=5" },
+    { "Hull Resonance",
+      "cosmos_send=1;cosmos_res=0.9;cosmos_res_pitch=0.5;cosmos_res_fb=0.96;cosmos_return=0.8;brain_low=30;brain_high=60;partials=6;"
+      "far_decay=20;far_highcut=1500" },
+    { "Signal From Deep Space",
+      "cosmos_send=0.8;cosmos_shift=220;cosmos_shift_drift=0.6;cosmos_nebula=0.5;cosmos_smear=0.6;cosmos_return=0.6;cosmos_to_far=0.8;"
+      "air=0.3;air_color=9;air_q=20;brain_density=3;brain_rate=40" },
+    { "Event Horizon",
+      "cosmos_send=1;cosmos_shift=-40;cosmos_shift_drift=0.5;cosmos_nebula=0.8;cosmos_smear=0.9;cosmos_shimmer=0.5;"
+      "cosmos_shimmer_pitch=-12;cosmos_return=0.5;cosmos_to_far=1;far_decay=60;far_highcut=1500;depth=1;brain_density=4" },
+    { "Ion Wind",
+      "air=0.6;air_color=14;air_q=3;cosmos_send=1;cosmos_shift=60;cosmos_shift_drift=1;cosmos_return=0.8;partials=4;far_decay=25;"
+      "brain_density=4;master_gain=-8" },
+    { "Cryo Chamber",
+      "cosmos_send=1;cosmos_nebula=0.9;cosmos_smear=0.95;cosmos_res=0.4;cosmos_res_pitch=4;cosmos_res_fb=0.85;cosmos_return=0.6;"
+      "cosmos_to_far=0.6;partials=24;brightness=0.9;inharmonic=0.3;far_decay=40;far_highcut=6000;brain_density=4" },
+    { "Pulsar Field",
+      "cosmos_send=1;cosmos_shift=300;cosmos_shift_drift=0;cosmos_return=0.5;cosmos_to_far=0.5;attack=0.05;decay=4;sustain=0.2;"
+      "release=8;brain_rate=3;brain_hold_min=3;brain_hold_max=8;brain_density=8;dly_mix=0.4;dly_feedback=0.6;scale=12-TET;"
+      "brain_consonance=0" },
+    { "Ring World",
+      "cosmos_send=1;cosmos_shift=55;cosmos_res=0.5;cosmos_res_pitch=3;cosmos_res_fb=0.9;cosmos_return=0.8;scale=Otonality 1-11;"
+      "root=C;brain_density=5" },
+    { "Solar Wind",
+      "cosmos_send=0.7;cosmos_nebula=1;cosmos_smear=0.7;cosmos_shimmer=0.6;cosmos_shimmer_pitch=+12;cosmos_return=0.5;"
+      "cosmos_to_far=0.8;air=0.4;air_color=6;air_q=5;far_decay=40;brain_density=5" },
+    { "Derelict Ship",
+      "cosmos_send=1;cosmos_res=0.8;cosmos_res_pitch=0.75;cosmos_res_fb=0.95;cosmos_shift=-15;cosmos_shift_drift=1;cosmos_return=0.7;"
+      "cosmos_to_far=0.6;brain_low=28;brain_high=60;inharmonic=0.5;partials=10;brain_density=4;far_decay=30;far_highcut=1200" },
+    { "Telepathy",
+      "cosmos_send=0.9;cosmos_vowel=0.9;cosmos_vowel_rate=0.2;cosmos_shift=8;cosmos_shift_drift=1;cosmos_nebula=0.4;cosmos_smear=0.5;"
+      "cosmos_return=0.8;brain_density=5;partials=12" },
+    { "Warp Core",
+      "cosmos_send=1;cosmos_shift=-200;cosmos_shift_drift=0.3;cosmos_res=0.7;cosmos_res_pitch=0.25;cosmos_res_fb=0.96;cosmos_return=0.8;"
+      "cosmos_to_far=0.4;brain_low=24;brain_high=48;brain_density=3;bass_mono=300;far_decay=20" },
+    { "Comet Tail",
+      "cosmos_send=1;cosmos_shimmer=0.9;cosmos_shimmer_pitch=+24;cosmos_nebula=0.6;cosmos_smear=0.8;cosmos_return=0.4;cosmos_to_far=1;"
+      "far_decay=50;far_highcut=9000;brightness=0.9;brain_density=4" },
+    { "Andromeda",
+      "cosmos_send=0.8;cosmos_nebula=1;cosmos_smear=0.85;cosmos_shift=5;cosmos_shift_drift=1;cosmos_return=0.7;cosmos_to_far=0.7;"
+      "partials=24;shimmer=0.8;far_decay=45;brain_density=6;arc=0.8;arc_period=20" },
+    { "Ganymede Ice",
+      "cosmos_send=1;cosmos_res=0.6;cosmos_res_pitch=6;cosmos_res_fb=0.92;cosmos_shift=30;cosmos_return=0.6;cosmos_to_far=0.5;"
+      "inharmonic=0.4;partials=24;brightness=1;far_decay=35;far_highcut=8000;brain_density=4;brain_low=55;brain_high=96" },
+    { "Lost Transmission",
+      "cosmos_send=1;cosmos_shift=150;cosmos_shift_drift=1;cosmos_vowel=0.5;cosmos_vowel_rate=0.4;cosmos_nebula=0.3;cosmos_return=0.9;"
+      "cosmos_to_far=0.2;dly_mix=0.4;dly_feedback=0.7;dly_damp=0.8;air=0.4;air_color=12;air_q=8;brain_density=3;brain_rate=30" },
+    { "Stellar Nursery",
+      "cosmos_send=0.6;cosmos_nebula=1;cosmos_smear=0.9;cosmos_shimmer=0.4;cosmos_shimmer_pitch=+7;cosmos_return=0.6;cosmos_to_far=0.8;"
+      "scale=JI Major (Ptolemy);root=E;far_decay=45;brain_density=6;depth=0.9" },
+    { "Xenomorph Hive",
+      "cosmos_send=1;cosmos_vowel=0.8;cosmos_vowel_rate=0.5;cosmos_shift=-80;cosmos_shift_drift=1;cosmos_res=0.5;cosmos_res_pitch=0.5;"
+      "cosmos_res_fb=0.9;cosmos_return=0.8;cosmos_to_far=0.5;scale=12-TET;brain_consonance=0.1;brain_density=7;brain_low=30;"
+      "brain_high=70;cutoff=1500" },
+    { "Zero Gravity",
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.75;cosmos_return=1;cosmos_to_far=0.3;near_mix=0;far_level=0.4;pan_drift=1;itd=1;"
+      "brain_density=5" },
+    { "Monolith",
+      "cosmos_send=1;cosmos_res=1;cosmos_res_pitch=1;cosmos_res_fb=0.97;cosmos_return=0.6;cosmos_to_far=0.6;brain_low=36;brain_high=60;"
+      "brain_density=3;partials=32;tilt=0.8;far_decay=60;far_highcut=2500;attack=30;release=60" },
+    { "Quasar",
+      "cosmos_send=1;cosmos_shift=280;cosmos_shift_drift=1;cosmos_shimmer=0.7;cosmos_shimmer_pitch=+19;cosmos_return=0.5;"
+      "cosmos_to_far=0.8;brightness=1;partials=32;far_decay=30;far_highcut=10000;brain_density=5" },
+    { "Dark Matter",
+      "cosmos_send=1;cosmos_shift=-300;cosmos_nebula=0.9;cosmos_smear=0.9;cosmos_return=0.7;cosmos_to_far=0.7;brain_low=24;brain_high=52;"
+      "cutoff=500;far_decay=60;far_highcut=1000;brain_density=3" },
+    { "Orbital Decay",
+      "cosmos_send=0.8;cosmos_shift=40;cosmos_shift_drift=1;cosmos_res=0.4;cosmos_res_pitch=2;cosmos_res_fb=0.8;cosmos_return=0.7;"
+      "dly_time_l=3;dly_time_r=4;dly_feedback=0.8;dly_mix=0.3;dly_to_far=0.8;brain_density=4;far_decay=30" },
+    { "First Contact",
+      "cosmos_send=0.7;cosmos_vowel=0.6;cosmos_vowel_rate=0.01;cosmos_shimmer=0.5;cosmos_shimmer_pitch=+12;cosmos_return=0.7;"
+      "cosmos_to_far=0.6;scale=JI Major (Ptolemy);root=C;air=0.2;brain_density=5;far_decay=35" },
+    { "Plasma Sea",
+      "cosmos_send=1;cosmos_nebula=0.7;cosmos_smear=0.6;cosmos_shift=12;cosmos_shift_drift=1;cosmos_res=0.3;cosmos_res_pitch=5;"
+      "cosmos_res_fb=0.8;cosmos_return=0.8;cosmos_to_far=0.6;air=0.3;air_color=7;air_q=4;brain_density=6" },
+    { "Void Whisper",
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.95;cosmos_return=0.5;cosmos_to_far=0.9;air=0.5;air_color=10;air_q=6;partials=3;"
+      "master_gain=-8;far_decay=50;far_highcut=2500;brain_density=3" },
+    { "Alien Cathedral",
+      "cosmos_send=0.8;cosmos_vowel=0.5;cosmos_vowel_rate=0.03;cosmos_shimmer=0.6;cosmos_shimmer_pitch=+12;cosmos_nebula=0.4;"
+      "cosmos_smear=0.7;cosmos_return=0.6;cosmos_to_far=0.8;far_size=3;far_decay=60;far_highcut=6000;partials=24;brain_density=6;"
+      "scale=Bohlen-Pierce (JI);keymap=Consecutive degrees;root=C" },
+
+    // ---------------------------------------------------------------- 100..109 playable keys (brain off)
+    { "Warm Keys",
+      "brain_on=off;keys_depth=0;attack=0.8;decay=4;sustain=0.7;release=5;near_mix=0.3;near_decay=2;far_level=0.4;ens_mix=0.4;"
+      "partials=12;tilt=1.4" },
+    { "Glass Keys",
+      "brain_on=off;attack=0.02;decay=8;sustain=0.2;release=8;inharmonic=0.3;partials=24;brightness=0.9;far_level=0.6;far_decay=20;"
+      "keys_depth=0.2;cutoff=6000" },
+    { "Pad Keys",
+      "brain_on=off;attack=3;release=10;strands=6;detune=15;ens_mix=0.6;far_level=0.7;far_decay=25;keys_depth=0.3" },
+    { "Flute Keys",
+      "brain_on=off;air=0.6;air_color=2;air_q=12;partials=5;attack=0.3;release=3;near_mix=0.3;far_level=0.5;master_gain=-8" },
+    { "Organ Keys",
+      "brain_on=off;odd_even=-0.4;partials=20;attack=0.05;release=0.5;sustain=1;near_mix=0.35;near_decay=3;far_level=0.5;cutoff=6000" },
+    { "Cosmos Keys",
+      "brain_on=off;cosmos_send=1;cosmos_shift=30;cosmos_shift_drift=1;cosmos_nebula=0.5;cosmos_smear=0.7;cosmos_return=0.7;"
+      "cosmos_to_far=0.6;attack=1;release=12;far_decay=30" },
+    { "Shimmer Keys",
+      "brain_on=off;cosmos_shimmer=0.7;cosmos_shimmer_pitch=+12;attack=0.5;release=8;far_level=0.9;far_decay=25;keys_depth=0.3" },
+    { "Sub Keys",
+      "brain_on=off;tilt=2;cutoff=600;partials=8;attack=0.3;release=4;bass_mono=250;far_level=0.3;near_mix=0.2" },
+    { "Vowel Keys",
+      "brain_on=off;cosmos_send=1;cosmos_vowel=1;cosmos_vowel_rate=0.1;cosmos_return=1;cosmos_to_far=0.3;partials=16;attack=0.5;release=5;"
+      "master_gain=-9" },
+    { "Resonant Keys",
+      "brain_on=off;cosmos_send=1;cosmos_res=0.7;cosmos_res_pitch=2;cosmos_res_fb=0.93;cosmos_return=0.8;attack=0.2;release=6;near_mix=0.3" },
+
+    // ---------------------------------------------------------------- 110..119 long-form night arcs
+    { "All Night Arc",
+      "arc=1;arc_period=240;brain_density=5;brain_rate=40;brain_hold_min=90;brain_hold_max=400;far_decay=40;depth=0.85;"
+      "scale=JI 7-limit;root=D" },
+    { "Tidal Hours",
+      "arc=1;arc_period=120;brain_density=6;brain_hold_min=60;brain_hold_max=240;far_decay=35;scale=JI Major (Ptolemy);root=G;air=0.2" },
+    { "Slow Sunrise",
+      "arc=0.8;arc_period=90;brightness=0.4;brain_density=4;far_decay=30;scale=JI Pentatonic;root=C" },
+    { "Ninety Minute Cycle",
+      "arc=1;arc_period=90;brain_density=5;brain_rate=30;brain_hold_min=60;brain_hold_max=200;cosmos_send=0.4;cosmos_nebula=0.6;"
+      "cosmos_smear=0.8;cosmos_return=0.5;cosmos_to_far=0.5" },
+    { "REM Drift",
+      "arc=0.7;arc_period=45;brain_density=6;brain_consonance=0.5;brain_wander=0.6;far_decay=35;depth=0.9" },
+    { "Dream Corridor",
+      "arc=0.6;arc_period=60;dly_mix=0.25;dly_time_l=2;dly_time_r=3;dly_feedback=0.7;dly_to_far=0.8;far_decay=45;brain_density=5" },
+    { "Deep Night Harmonics",
+      "arc=0.9;arc_period=150;scale=Harmonic 8-16;root=C;brain_low=40;brain_high=88;brain_density=6;far_decay=40;far_highcut=2500" },
+    { "Long Otonal Night",
+      "arc=0.8;arc_period=180;scale=Otonality 1-11;root=E;brain_density=7;brain_consonance=0.6;brain_hold_min=90;brain_hold_max=300;"
+      "far_decay=50" },
+    { "Sleeping Nebula",
+      "arc=0.9;arc_period=120;cosmos_send=0.6;cosmos_nebula=0.8;cosmos_smear=0.9;cosmos_return=0.5;cosmos_to_far=0.8;far_decay=50;"
+      "far_highcut=2000;brain_density=4;depth=1" },
+    { "Morning Fade",
+      "arc=1;arc_period=60;brain_density=3;brain_rate=60;brain_hold_min=120;brain_hold_max=400;brightness=0.5;far_decay=30;attack=30;"
+      "release=60" },
+
+    // ---------------------------------------------------------------- 120..127 storm / cluster / texture
+    { "Cluster Storm",
+      "brain_consonance=0;brain_density=10;brain_rate=6;brain_hold_min=10;brain_hold_max=40;scale=12-TET;far_decay=40;depth=0.9;"
+      "strands=5;detune=25" },
+    { "Micro Cluster",
+      "brain_consonance=0.05;brain_density=8;brain_low=60;brain_high=72;far_decay=30;partials=8;scale=12-TET" },
+    { "Rising Swarm",
+      "cosmos_shimmer=0.8;cosmos_shimmer_pitch=+12;brain_consonance=0.2;brain_density=9;brain_rate=5;brain_hold_min=8;"
+      "brain_hold_max=30;far_decay=25" },
+    { "Thunder Head",
+      "brain_low=24;brain_high=60;brain_density=8;brain_consonance=0.3;tilt=1.8;cutoff=900;resonance=0.4;far_decay=30;air=0.3;"
+      "air_color=6;air_q=3" },
+    { "Granular Sky",
+      "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.5;cosmos_return=1;cosmos_to_far=0.5;attack=0.1;decay=2;sustain=0.3;release=4;"
+      "brain_rate=2;brain_hold_min=2;brain_hold_max=6;brain_density=10;scale=JI Pentatonic;root=D" },
+    { "Inharmonic Field",
+      "inharmonic=1;partials=32;tilt=1;brain_density=6;brain_consonance=0.4;far_decay=35;far_highcut=5000" },
+    { "Dissonant Cathedral",
+      "brain_consonance=0.1;brain_density=7;far_size=3;far_decay=60;far_highcut=4000;partials=20;brightness=0.8;scale=12-TET" },
+    { "White Storm",
+      "air=1;air_color=8;air_q=2;partials=2;brain_density=8;brain_consonance=0;master_gain=-10;far_decay=30;dly_mix=0.3;"
+      "dly_feedback=0.7;scale=12-TET" },
 };
 }
 

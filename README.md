@@ -45,9 +45,16 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 ## Using it
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
-within a few seconds. Pick a preset from the box in the header. Play MIDI
-notes to add your own voices; they sit in the foreground (see *Keys Depth*)
-and the lowest held key becomes the brain's root.
+within a few seconds. Pick one of the 128 presets from the box in the header
+(they are also the plugin's programs in a DAW); *Save…* / *Load…* store the
+whole state as an `.ambientsynth` file. Play MIDI notes to add your own
+voices; they sit in the foreground (see *Keys Depth*) and the lowest held key
+becomes the brain's root.
+
+Preset families: sleep and night pieces, cathedral and glass, deep and sub,
+breath and voice, exotic tunings, shimmer and delay, thirty Cosmos
+science-fiction textures, playable keyboard patches (brain off), long-form
+night arcs, storms and clusters.
 
 Sections of the GUI (all parameters are automatable in a DAW):
 
@@ -71,6 +78,16 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*
   (low-pass on the tail: distance darkens), *Freeze*.
+* **Cosmos** — a parallel science-fiction path fed from the foreground bus
+  (*Send*) and mixed back in (*Return* to the foreground, *To Far* into the
+  background reverb), so the original sound and the alien one blend freely:
+  *Shift* (single-sideband frequency shifter, ±300 Hz, with slow *Shift Drift*;
+  the right ear is shifted 3 % less, so wide shifts beat slowly), *Resonator*
+  (tuned comb filters that follow the brain's root × *Res Pitch*, hull-like
+  ringing), *Vowel* (three formants morphing between a-e-i-o-u at *Vowel
+  Rate*, alien choirs), *Nebula* (spectral smearing with random phases,
+  *Smear* = 1 freezes the spectrum), *Shimmer* (pitch-shifted feedback around
+  the far reverb at *Shimmer Pitch*, self-regulating so it blooms and holds).
 * **Master** — mid/side stage: *Bass Mono* (side channel high-passed, the low
   end stays centred), *Side Air* (broad upper-mid lift on the sides), *Width*.
   No compressor: dynamics are left alone.

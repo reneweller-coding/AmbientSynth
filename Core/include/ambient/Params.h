@@ -29,6 +29,10 @@ enum class ParamId : int {
     NearMix, NearDecay, NearDamp,
     // Far reverb (the infinite background)
     FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze,
+    // Cosmos: science-fiction / deep-space path (send from the near bus)
+    CosmosSend, CosmosShift, CosmosShiftDrift, CosmosRes, CosmosResPitch, CosmosResFeedback,
+    CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,
+    CosmosReturn, CosmosToFar,
     // Mid/side master stage
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)
@@ -69,5 +73,8 @@ constexpr int kNumScaleChoices = 12;
 extern const char* const kScaleNames[kNumScaleChoices];
 extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
+constexpr int kNumShimmerPitches = 6;
+extern const char* const kShimmerPitchNames[kNumShimmerPitches];
+extern const float kShimmerPitchSemitones[kNumShimmerPitches];
 
 } // namespace ambient

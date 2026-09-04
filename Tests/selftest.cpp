@@ -5,6 +5,7 @@
 #include "ambient/Tuning.h"
 #include "ambient/Dsp.h"
 #include "ambient/Effects.h"
+#include "ambient/Cosmos.h"
 #include "ambient/Presets.h"
 #include <cstdio>
 #include <cmath>
@@ -243,7 +244,9 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(numPresets() >= 5, "presets exist");
+    CHECK(numPresets() == 128, "exactly 128 presets");
+    for (int p = 0; p < numPresets(); ++p)
+        for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
     for (int p = 0; p < numPresets(); ++p) {
         int count = 0;
         const bool ok = applyPreset(preset(p), [&](ParamId, float) { ++count; });
@@ -281,10 +284,78 @@ void testSpace()
     CHECK(std::fabs(e.noteDistance(100) - 0.9f) < 1e-5f, "keys depth applied to MIDI note");
 }
 
+double goertzel(const float* x, int n, double hz, double sr)
+{
+    const double w = 2.0 * 3.14159265358979 * hz / sr;
+    const double c = 2.0 * std::cos(w);
+    double s0 = 0, s1 = 0, s2 = 0;
+    for (int i = 0; i < n; ++i) { s0 = x[i] + c * s1 - s2; s2 = s1; s1 = s0; }
+    return s1 * s1 + s2 * s2 - c * s1 * s2;
+}
+
+void testCosmos()
+{
+    const int sr = 48000;
+    {
+        FreqShifter fs; fs.prepare(sr); fs.set(100.0f, 1.0f);
+        std::vector<float> L(sr), R(sr);
+        for (int i = 0; i < sr; ++i) { L[static_cast<size_t>(i)] = std::sin(kTwoPi * 440.0f * i / sr); R[static_cast<size_t>(i)] = L[static_cast<size_t>(i)]; }
+        fs.process(L.data(), R.data(), sr);
+        const double p540 = goertzel(L.data() + sr / 2, sr / 2, 540.0, sr), p440 = goertzel(L.data() + sr / 2, sr / 2, 440.0, sr), p340 = goertzel(L.data() + sr / 2, sr / 2, 340.0, sr);
+        CHECK(p540 > 20.0 * p440 && p540 > 20.0 * p340, "frequency shifter moves 440 Hz to 540 Hz (single sideband)");
+    }
+    {
+        PitchShifter ps; ps.prepare(sr); ps.setSemitones(12.0f);
+        std::vector<float> in(sr), out(sr);
+        for (int i = 0; i < sr; ++i) in[static_cast<size_t>(i)] = std::sin(kTwoPi * 220.0f * i / sr);
+        ps.process(in.data(), out.data(), sr);
+        const double p440 = goertzel(out.data() + sr / 2, sr / 2, 440.0, sr), p220 = goertzel(out.data() + sr / 2, sr / 2, 220.0, sr);
+        CHECK(p440 > 4.0 * p220, "pitch shifter +12 doubles the frequency");
+    }
+    {
+        Nebula nb; nb.prepare(sr, 5);
+        nb.set(0.0f);
+        std::vector<float> L(sr), R(sr), wl(sr), wr(sr);
+        for (int i = 0; i < sr; ++i) { L[static_cast<size_t>(i)] = 0.5f * std::sin(kTwoPi * 440.0f * i / sr); R[static_cast<size_t>(i)] = L[static_cast<size_t>(i)]; }
+        nb.process(L.data(), R.data(), wl.data(), wr.data(), sr);
+        double sq = 0; for (int i = sr / 2; i < sr; ++i) sq += wl[static_cast<size_t>(i)] * wl[static_cast<size_t>(i)];
+        const double rmsFollow = std::sqrt(sq / (sr / 2));
+        CHECK(rmsFollow > 0.2 && rmsFollow < 0.7, "nebula reproduces the input level");
+        const double p440 = goertzel(wl.data() + sr / 2, sr / 2, 440.0, sr), p600 = goertzel(wl.data() + sr / 2, sr / 2, 600.0, sr);
+        CHECK(p440 > 10.0 * p600, "nebula keeps the spectrum");
+        nb.set(1.0f);   // freeze
+        std::fill(L.begin(), L.end(), 0.0f); std::fill(R.begin(), R.end(), 0.0f);
+        nb.process(L.data(), R.data(), wl.data(), wr.data(), sr);
+        sq = 0; for (int i = sr / 2; i < sr; ++i) sq += wl[static_cast<size_t>(i)] * wl[static_cast<size_t>(i)];
+        CHECK(std::sqrt(sq / (sr / 2)) > 0.15, "frozen nebula keeps sounding without input");
+    }
+    {
+        Engine e;
+        e.setParam(ParamId::CosmosSend, 1.0f);
+        e.setParam(ParamId::CosmosShift, 50.0f);
+        e.setParam(ParamId::CosmosRes, 0.6f);
+        e.setParam(ParamId::CosmosResFeedback, 0.97f);
+        e.setParam(ParamId::CosmosVowel, 0.6f);
+        e.setParam(ParamId::CosmosNebula, 0.6f);
+        e.setParam(ParamId::CosmosShimmer, 1.0f);
+        e.setParam(ParamId::BrainRate, 2.0f);
+        e.setParam(ParamId::Attack, 0.5f);
+        e.prepare(sr, 256);
+        render(e, 10.0);
+        Stats a = render(e, 5.0);
+        Stats b = render(e, 5.0);
+        CHECK(a.nonFinite == 0 && b.nonFinite == 0, "cosmos path finite");
+        CHECK(b.peak <= 1.0f, "cosmos path clipped safely");
+        CHECK(b.rms < 0.5 && b.rms < a.rms * 2.0 + 0.05, "shimmer + resonator feedback does not run away");
+        CHECK(a.rms > 0.01, "cosmos path audible");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    testCosmos();
     testParams();
     testTuning();
     testEnvelope();

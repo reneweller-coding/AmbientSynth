@@ -76,6 +76,7 @@ private:
     float    itdBufL_[kItdBuffer] = {}, itdBufR_[kItdBuffer] = {};
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;
+    float    shadowL_ = 0.0f, shadowR_ = 0.0f, shadowCoefL_ = 1.0f, shadowCoefR_ = 1.0f;   // head shadow on the far ear
     int      note_ = -1;
     int      owner_ = 0;
     int      lastUnison_ = 0;

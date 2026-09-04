@@ -28,16 +28,25 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
 {
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
-    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_ }) b->assign(static_cast<size_t>(maxBlock_), 0.0f);
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_ })
+        b->assign(static_cast<size_t>(maxBlock_), 0.0f);
     seed_ = static_cast<int>(getParam(ParamId::Seed));
     rng_.seed(static_cast<uint64_t>(seed_) + 1);
     for (auto& v : voices_) v.prepare(sr_, rng_.fork());
     arc_.init(rng_);
+    shiftDrift_.init(rng_);
     ensemble_.prepare(sr_);
     delay_.prepare(sr_);
     nearReverb_.prepare(sr_);
     farReverb_.prepare(sr_);
     midSide_.prepare(sr_);
+    shifter_.prepare(sr_);
+    resonator_.prepare(sr_);
+    vowel_.prepare(sr_, rng_.fork());
+    nebula_.prepare(sr_, rng_.fork());
+    shimmerL_.prepare(sr_);
+    shimmerR_.prepare(sr_);
+    shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
     lastRootPc_ = -1;
     readParams();
@@ -193,6 +202,22 @@ void Engine::readParams()
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
 
+    // Cosmos
+    cosmosSend_   = g(ParamId::CosmosSend);
+    cosmosReturn_ = g(ParamId::CosmosReturn);
+    cosmosToFar_  = g(ParamId::CosmosToFar);
+    cosmosNebula_ = g(ParamId::CosmosNebula);
+    const float shiftHz = g(ParamId::CosmosShift) * (1.0f + 0.5f * g(ParamId::CosmosShiftDrift) * shiftDrift_.value());
+    shifter_.set(shiftHz, shiftHz == 0.0f ? 0.0f : 1.0f);
+    const float rootHz = static_cast<float>(scaleFrequency(*scale_, brain_.root(), 60 + clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11), g(ParamId::RefPitch), snapKeys_));
+    resonator_.set(rootHz * g(ParamId::CosmosResPitch), g(ParamId::CosmosResFeedback), g(ParamId::CosmosRes));
+    vowel_.set(g(ParamId::CosmosVowel), g(ParamId::CosmosVowelRate));
+    nebula_.set(g(ParamId::CosmosSmear));
+    cosmosShimmer_ = g(ParamId::CosmosShimmer);
+    const int sp = clampv(static_cast<int>(std::lround(g(ParamId::CosmosShimmerPitch))), 0, kNumShimmerPitches - 1);
+    shimmerL_.setSemitones(kShimmerPitchSemitones[sp]);
+    shimmerR_.setSemitones(kShimmerPitchSemitones[sp]);
+
     // Tuning
     const int scaleIdx = clampv(static_cast<int>(std::lround(g(ParamId::Scale))), 0, kNumScaleChoices - 1);
     scale_ = &scales_[scaleIdx];
@@ -231,6 +256,7 @@ void Engine::process(float* L, float* R, int n)
     }
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
+    shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
     readParams();
 
     int pos = 0;
@@ -298,10 +324,56 @@ void Engine::renderChunk(float* L, float* R, int n)
         nl[i] += wl[i] * delayMix_;  nr[i] += wr[i] * delayMix_;
         fl[i] += wl[i] * delayToFar_; fr[i] += wr[i] * delayToFar_;
     }
+
+    // Cosmos: a parallel send off the near bus, returned to both planes; the dry path is untouched.
+    if (cosmosSend_ > 0.0f) {
+        float* cl = cosL_.data(); float* cr = cosR_.data();
+        for (int i = 0; i < n; ++i) { cl[i] = nl[i] * cosmosSend_; cr[i] = nr[i] * cosmosSend_; }
+        shifter_.process(cl, cr, n);
+        resonator_.process(cl, cr, n);
+        vowel_.process(cl, cr, n);
+        if (cosmosNebula_ > 0.0f) {
+            float* bl = nebL_.data(); float* br = nebR_.data();
+            nebula_.process(cl, cr, bl, br, n);
+            const float m = cosmosNebula_;
+            for (int i = 0; i < n; ++i) { cl[i] = cl[i] * (1.0f - m) + bl[i] * m; cr[i] = cr[i] * (1.0f - m) + br[i] * m; }
+        }
+        for (int i = 0; i < n; ++i) {
+            nl[i] += cl[i] * cosmosReturn_; nr[i] += cr[i] * cosmosReturn_;
+            fl[i] += cl[i] * cosmosToFar_;  fr[i] += cr[i] * cosmosToFar_;
+        }
+    }
     nearReverb_.process(nl, nr, n);
 
-    // Background plane: 100 % wet, dark, wide.
+    // Background plane: 100 % wet, dark, wide. Shimmer feeds the pitch-shifted previous
+    // block of the far reverb back into its input (the classic rising cloud).
+    float* sl = shimL_.data(); float* sr = shimR_.data();
+    if (cosmosShimmer_ > 0.0f)
+        for (int i = 0; i < n; ++i) { fl[i] += sl[i]; fr[i] += sr[i]; }
     farReverb_.process(fl, fr, n);
+    if (cosmosShimmer_ > 0.0f) {
+        shimmerL_.process(fl, sl, n);
+        shimmerR_.process(fr, sr, n);
+        const float lpc = 1.0f - std::exp(-kTwoPi * 4000.0f / static_cast<float>(sr_));
+        const float amt = cosmosShimmer_ * 0.5f;
+        // Self-regulating loop: the feedback is throttled by the level of the far reverb
+        // itself (the reverb integrates every injection), so the cloud blooms up to a fixed
+        // ceiling and holds there instead of running into the clipper.
+        const float envC = 1.0f - std::exp(-1.0f / (0.1f * static_cast<float>(sr_)));
+        for (int i = 0; i < n; ++i) {
+            shimmerLpL_ += lpc * (sl[i] - shimmerLpL_);
+            shimmerLpR_ += lpc * (sr[i] - shimmerLpR_);
+            const float mag = 0.5f * (std::fabs(fl[i]) + std::fabs(fr[i]));
+            shimmerEnv_ += envC * (mag - shimmerEnv_);
+            const float reg = clampv((0.12f - shimmerEnv_) / 0.12f, 0.0f, 1.0f);   // 1 when quiet, 0 at the ceiling
+            sl[i] = shimmerLpL_ * amt * reg;
+            sr[i] = shimmerLpR_ * amt * reg;
+        }
+    } else {
+        shimmerLpL_ = shimmerLpR_ = 0.0f;
+        shimmerEnv_ = 0.0f;
+        std::memset(sl, 0, bytes); std::memset(sr, 0, bytes);
+    }
 
     const float master = dbToGain(getParam(ParamId::MasterGain));
     for (int i = 0; i < n; ++i) {

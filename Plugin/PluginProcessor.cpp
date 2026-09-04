@@ -128,6 +128,25 @@ bool AmbientSynthProcessor::loadScalaText(const juce::String& text, const juce::
     return true;
 }
 
+bool AmbientSynthProcessor::savePresetFile(const juce::File& file)
+{
+    juce::MemoryBlock block;
+    getStateInformation(block);
+    auto xml = getXmlFromBinary(block.getData(), static_cast<int>(block.getSize()));
+    if (xml == nullptr) return false;
+    return xml->writeTo(file);
+}
+
+bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
+{
+    auto xml = juce::XmlDocument::parse(file);
+    if (xml == nullptr || !xml->hasTagName(apvts.state.getType())) return false;
+    juce::MemoryBlock block;
+    copyXmlToBinary(*xml, block);
+    setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+    return true;
+}
+
 void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();

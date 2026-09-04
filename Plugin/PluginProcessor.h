@@ -36,6 +36,9 @@ public:
 
     // Message thread. Returns false if the file is not a valid Scala scale.
     bool loadScalaText(const juce::String& text, const juce::String& displayName);
+    // User presets as files (full state including a loaded Scala scale).
+    bool savePresetFile(const juce::File& file);
+    bool loadPresetFile(const juce::File& file);
     juce::String userScaleName() const { return userScaleName_; }
 
     juce::AudioProcessorValueTreeState apvts;

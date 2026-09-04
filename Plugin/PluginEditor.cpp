@@ -5,7 +5,7 @@
 using namespace ambient;
 
 namespace {
-constexpr int kCellW = 64, kCellH = 78, kPad = 10, kTitleH = 20, kHeaderH = 58;
+constexpr int kCellW = 64, kCellH = 72, kPad = 10, kTitleH = 20, kHeaderH = 58;
 const juce::Colour kBg(0xff14161a), kPanel(0xff1e2128), kAccent(0xff7fb3d5), kText(0xffd8dbe0), kDim(0xff7c8290);
 }
 
@@ -36,7 +36,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         }
         if (sections_.empty() || sections_.back().name != d.section) {
             Section s; s.name = d.section;
-            if (s.name == "Tuning" || s.name == "Far Reverb") s.maxUnits = 8;
+            if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
             sections_.push_back(std::move(s));
         }
         Cell c;
@@ -103,8 +103,35 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     };
     addAndMakeVisible(*presetBox_);
 
+    saveButton_ = std::make_unique<juce::TextButton>("Save...");
+    saveButton_->onClick = [this] {
+        chooser_ = std::make_unique<juce::FileChooser>("Save preset", juce::File(), "*.ambientsynth");
+        chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& fc) {
+                auto file = fc.getResult();
+                if (file == juce::File()) return;
+                if (!file.hasFileExtension("ambientsynth")) file = file.withFileExtension("ambientsynth");
+                if (!proc_.savePresetFile(file))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Preset", "Could not write the preset file.");
+            });
+    };
+    addAndMakeVisible(*saveButton_);
+    loadButton_ = std::make_unique<juce::TextButton>("Load...");
+    loadButton_->onClick = [this] {
+        chooser_ = std::make_unique<juce::FileChooser>("Load preset", juce::File(), "*.ambientsynth");
+        chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& fc) {
+                const auto file = fc.getResult();
+                if (!file.existsAsFile()) return;
+                if (!proc_.loadPresetFile(file))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Preset", "This is not an AmbientSynth preset file.");
+                repaint();
+            });
+    };
+    addAndMakeVisible(*loadButton_);
+
     setResizable(true, true);
-    setSize(1100, 840);
+    setSize(1280, 860);
     startTimerHz(12);
 }
 
@@ -139,6 +166,8 @@ void AmbientSynthEditor::resized()
     header_ = getLocalBounds().removeFromTop(kHeaderH);
     if (master_) master_->setBounds(getWidth() - 84, 4, 76, kHeaderH - 6);
     if (presetBox_) presetBox_->setBounds(200, 8, 190, 24);
+    if (saveButton_) saveButton_->setBounds(398, 8, 64, 24);
+    if (loadButton_) loadButton_->setBounds(468, 8, 64, 24);
 
     int x = kPad, y = kHeaderH + kPad, rowH = 0;
     for (auto& s : sections_) {

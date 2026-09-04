@@ -125,13 +125,41 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+## Cosmos path (science fiction / deep space)
+
+A parallel send off the near bus after the delay; the dry path is untouched
+and *Return* / *To Far* mix the processed signal back into the foreground and
+the background. Chain, in order:
+
+1. **FreqShifter** — single-sideband shifter built from Niemitalo's
+   90° all-pass pair (eight second-order all-passes); measured sideband
+   rejection 44 dB. The right channel is shifted 3 % less than the left, so a
+   200 Hz shift beats at 6 Hz between the ears: alien, but wide.
+2. **CombResonator** — two combs (right 0.3 % longer) tuned to the brain's
+   current root × *Res Pitch*, feedback to 0.97, output normalised by
+   (1 − feedback) so the resonant peak stays near unity gain.
+3. **VowelFilter** — three SVF band-passes (Q 8) on formant tables for
+   a/e/i/o/u, position driven by a `Drifter` at *Vowel Rate*, log-interpolated
+   between neighbouring vowels; right channel 1 % higher.
+4. **Nebula** — STFT (2048/512, Hann) magnitude smoothing with random phases
+   per frame: Paulstretch-style smearing. Update coefficient
+   α = (1 − smear)², so *Smear* = 1 freezes what is in the buffer. Latency
+   2048 samples on this path only. Own FFT (radix-2), no dependencies.
+5. **Shimmer** (in the engine, not the chain) — the far reverb's output is
+   pitch-shifted (granular two-head shifter, 80 ms window) and fed back into
+   the far reverb's input on the next block, low-passed at 4 kHz. The loop is
+   throttled by the reverb's own level (feedback → 0 at a mean level of
+   0.12), so it blooms and then holds; measured: stable at 1.0 for 20 s with
+   the resonator at 0.97 feedback in the same patch.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
 parameter table (choices by name). The engine, the render tool (`--preset`)
-and the plugin's program list all use the same table. Nine so far: Init,
-Sleep Concert, Glass Cathedral, Subharmonic Deep, Breath of Flutes, Bohlen
-Night, Otonal Shimmer, Distant Storm, Dry Foreground Keys.
+and the plugin's program list all use the same table. 128 presets in ten
+families; all 128 render finite with a held chord, levels −29 … −11 dBFS.
+User presets are saved by the plugin as `.ambientsynth` XML files (full
+state including a loaded Scala scale).
 
 ## Plugin shell
 
@@ -147,9 +175,10 @@ Night, Otonal Shimmer, Distant Storm, Dry Foreground Keys.
 
 ## Roadmap
 
-1. **Sound** — a spectral freeze on the far plane, per-voice binaural cues
-   beyond ITD (head-shadow low-pass on the far ear), user presets saved as
-   files, a second delay line in series for longer rhythmic-free echo chains.
+1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow
+   low-pass on the far ear (20 kHz → 3 kHz at full lateral position, scaled
+   by *Time Width*), user preset files. Open: a second delay in series, a
+   granular cloud on the far plane, per-preset random seeds.
 2. **Performance** — Chebyshev sine recurrence when inharmonicity is 0, SIMD
    across partials, voice rendering in parallel on desktop.
 3. **Quest** — CMake toolchain for the Android NDK (arm64-v8a), Oboe for

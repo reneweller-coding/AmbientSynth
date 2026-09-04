@@ -10,6 +10,7 @@
 #include "Tuning.h"
 #include "Voice.h"
 #include "Effects.h"
+#include "Cosmos.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include <atomic>
@@ -68,6 +69,16 @@ private:
     StereoDelay  delay_;
     Reverb       nearReverb_, farReverb_;
     MidSide      midSide_;
+    // Cosmos path (parallel send from the near bus) and the shimmer loop around the far reverb.
+    FreqShifter   shifter_;
+    CombResonator resonator_;
+    VowelFilter   vowel_;
+    Nebula        nebula_;
+    PitchShifter  shimmerL_, shimmerR_;
+    Drifter       shiftDrift_;
+    float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;
+    float         cosmosShimmer_ = 0.0f, shimmerLpL_ = 0.0f, shimmerLpR_ = 0.0f, shimmerEnv_ = 0.0f;
+    std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
     VoiceParams  vp_;
     BrainParams  bp_;
     Drifter      arc_;

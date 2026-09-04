@@ -5,6 +5,7 @@ add_library(AmbientCore STATIC
     src/Effects.cpp
     src/Engine.cpp
     src/Presets.cpp
+    src/Cosmos.cpp
 )
 target_include_directories(AmbientCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(AmbientCore PUBLIC cxx_std_20)

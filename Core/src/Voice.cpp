@@ -129,6 +129,12 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
     itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
     itdRTarget_ = centre < 0.0f ? -centre * maxItd : 0.0f;
+    // Head shadow: the far ear also loses highs (20 kHz -> ~3 kHz at full lateral position).
+    const float shadowOct = 2.7f * p.itd;
+    const float fcL = 20000.0f * std::pow(2.0f, -shadowOct * std::max(centre, 0.0f));
+    const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-centre, 0.0f));
+    shadowCoefL_ = fcL >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcL / static_cast<float>(sr_));
+    shadowCoefR_ = fcR >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcR / static_cast<float>(sr_));
 
     // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
     const float fd = filterDrift_.update(dt, p.driftRate * 0.5f, rng_);
@@ -206,6 +212,8 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 outR = a + f * (b - a);
             }
             ++itdW_;
+            shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
+            shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
             nearL[pos + i] += outL * gNear_;
             nearR[pos + i] += outR * gNear_;
             farL[pos + i]  += outL * gFar_;

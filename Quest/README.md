@@ -35,6 +35,22 @@ audio=1                   # 0 = no on-device audio (pure bridge)
 preset=Sleep Concert      # a full preset by name
 ```
 
+## Preset packs (optional)
+
+`*.ambientpack` files in a `Packs` subfolder of the app's data folder are loaded
+at start and added to the preset list, each pack as its own family. A pack
+preset may name its own sample and wavetable; those are loaded when it is
+applied and take precedence over the folder's `texture.wav` and `wavetable.wav`.
+
+```
+adb push Library/Packs      /sdcard/Android/data/com.reneweller.ambientsynth.quest/files/Packs
+adb push Library/Textures   /sdcard/Android/data/com.reneweller.ambientsynth.quest/files/Textures
+adb push Library/Wavetables /sdcard/Android/data/com.reneweller.ambientsynth.quest/files/Wavetables
+```
+
+The whole library is about 8 GB, so pushing one or two packs and only the
+samples they name is usually the better idea.
+
 ## What it does
 
 * Every frame: hand joints → palm position, pinch (thumb tip to index tip),

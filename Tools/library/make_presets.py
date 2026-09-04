@@ -96,15 +96,68 @@ def logu(rng, lo, hi):
     return math.exp(rng.uniform(math.log(lo), math.log(hi)))
 
 
+# ---------------------------------------------------------------- shades
+#
+# Two hundred presets drawn from one set of ranges would be two hundred variations of the same
+# preset. Each one is therefore pushed into one of eight shades: a nudge on a few parameters
+# and on the chance that an optional block is on. The style stays recognisable, the presets
+# inside it do not collapse into each other.
+
+SHADES = [
+    ("deep",   {"brightness": ("add", -0.18), "cutoff": ("mul", 0.45), "tilt": ("add", 0.45),
+                "far_highcut": ("mul", 0.55), "sub_level": ("add", 0.12), "brain_low": ("add", -5)},
+               {"sub": 0.2}),
+    ("lit",    {"brightness": ("add", 0.18), "cutoff": ("mul", 2.0), "tilt": ("add", -0.3),
+                "far_highcut": ("mul", 1.7), "air": ("add", 0.1), "shimmer": ("add", 0.12)},
+               {"cosmos": 0.1}),
+    ("still",  {"shimmer_rate": ("mul", 0.4), "drift_rate": ("mul", 0.45), "brain_rate": ("mul", 2.2),
+                "ens_depth": ("add", -0.2), "filter_drift": ("add", -0.2), "attack": ("mul", 1.6),
+                "release": ("mul", 1.5)},
+               {"zplane": -0.15, "cloud": -0.1, "coherence": -0.1}),
+    ("astir",  {"shimmer_rate": ("mul", 2.2), "brain_rate": ("mul", 0.5), "ens_depth": ("add", 0.2),
+                "filter_drift": ("add", 0.2), "pan_drift": ("add", 0.15), "rate_wander": ("add", 0.2)},
+               {"zplane": 0.2, "coherence": 0.2, "delay2": 0.1}),
+    ("sparse", {"brain_density": ("add", -2), "partials": ("add", -6), "strands": ("add", -1),
+                "ens_mix": ("add", -0.15), "brain_rate": ("mul", 1.6)},
+               {"src2": -0.25, "src3": -0.2, "cloud": -0.12, "stack": -0.15}),
+    ("massed", {"brain_density": ("add", 2), "partials": ("add", 6), "strands": ("add", 1),
+                "ens_mix": ("add", 0.15), "detune": ("mul", 1.4)},
+               {"src2": 0.25, "src3": 0.15, "stack": 0.25}),
+    ("rough",  {"inharmonic": ("add", 0.2), "fb_drive": ("add", 0.2), "resonance": ("add", 0.12),
+                "air": ("add", 0.08)},
+               {"feedback": 0.3, "cloud": 0.2, "texture": 0.2}),
+    ("clean",  {"inharmonic": ("add", -0.15), "purity": ("add", 0.06), "detune": ("mul", 0.6),
+                "far_damp": ("add", -0.1)},
+               {"feedback": -0.35, "cloud": -0.15, "texture": -0.1}),
+]
+
+
+def apply_shade(p, mod, shade):
+    _, nudges, mods = shade
+    for key, (how, amount) in nudges.items():
+        if key not in p or isinstance(p[key], str):
+            continue
+        v = float(p[key])
+        p[key] = v * amount if how == "mul" else v + amount
+        _, lo, hi, _d = PARAMS[key]
+        p[key] = min(max(p[key], lo), hi)
+        if PARAMS[key][0] and key in ("partials", "strands", "brain_density", "brain_low", "brain_high"):
+            p[key] = int(round(p[key]))
+    out = dict(mod)
+    for key, delta in mods.items():
+        out[key] = min(1.0, max(0.0, out.get(key, 0.0) + delta))
+    return out
+
+
 # ---------------------------------------------------------------- one preset
 
-def make_preset(style, rng, textures, wavetables):
+def make_preset(style, rng, textures, wavetables, shade):
     p = {}
     for key, spec in style["params"].items():
         if key not in PARAMS:
             continue
         p[key] = draw(rng, spec)
-    mod = style["modules"]
+    mod = apply_shade(p, style["modules"], shade)
     on = lambda k: rng.random() < mod.get(k, 0.0)
     texture_file = wavetable_file = ""
 
@@ -466,9 +519,9 @@ def main():
         textures = texture_pool(a.textures, st["name"])
         tables = wavetable_pool(a.wavetables, st)
         rows = []
-        for _ in range(a.per_style):
-            p, tex, tab = make_preset(st, rng, textures, tables)
-            rows.append({"name": name_for(st, rng, used_names), "params": p,
+        for k in range(a.per_style):
+            p, tex, tab = make_preset(st, rng, textures, tables, SHADES[k % len(SHADES)])
+            rows.append({"name": name_for(st, rng, used_names), "params": p, "shade": SHADES[k % len(SHADES)][0],
                          "settings": settings_string(p),
                          "texture": f"../Textures/{tex}" if tex else "",
                          "wavetable": f"../Wavetables/{tab}" if tab else "",

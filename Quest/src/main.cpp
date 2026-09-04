@@ -12,6 +12,7 @@
 //   calib.txt     hand calibration, written after the calibration gesture
 //   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
 //   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)
+//   Packs/*.ambientpack  preset packs loaded at start (see Core/include/ambient/Presets.h)
 //   rec-*.wav     recordings
 
 #include <android/log.h>
@@ -428,11 +429,18 @@ public:
     bool init()
     {
         dataDir_ = app_->activity->externalDataPath ? app_->activity->externalDataPath : "";
+        // Preset packs from <externalDataPath>/Packs, before anything looks a preset up by name.
+        if (!dataDir_.empty()) {
+            const int packs = loadPresetPacksIn((dataDir_ + "/Packs").c_str());
+            if (packs > 0) LOGI("Packs: %d pack(s), %d presets in total", packs, numPresets());
+        }
         config_ = readConfig(dataDir_.c_str());
         if (!config_.preset.empty())
             for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) { engine_.applyPreset(i); presetA_ = presetB_ = i; }
         loadCalibration();
         loadSourceFiles();
+        // After loadSourceFiles, so a pack preset's own sample wins over the folder's texture.wav.
+        if (!config_.preset.empty()) loadPresetFiles(presetA_);
         gestures_.setRestZone(config_.restZone);
         engine_.setRoomMaxSeconds(4.0f);   // a 4 s convolution is about a third of one XR2 core; 8 s would be two thirds
         if (!config_.oscHost.empty()) {
@@ -452,6 +460,22 @@ public:
         }
         if (!calibrated_) { gestures_.startCalibration(8.0f); LOGI("no calibration file: calibrating for 8 s"); }
         return true;
+    }
+
+    // A pack preset may bring its own sample and wavetable; the paths sit next to the pack file.
+    void loadPresetFiles(int index)
+    {
+        std::vector<float> mono; int rate = 0;
+        const char* tex = presetFilePath(index, 0);
+        if (tex != nullptr && *tex && readWavMono(tex, mono, rate)) {
+            const double base = baseHzFromName(tex);
+            engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
+            LOGI("preset texture %s", tex);
+        }
+        const char* tab = presetFilePath(index, 1);
+        if (tab != nullptr && *tab && readWavMono(tab, mono, rate))
+            if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
+                LOGE("%s: needs 2048-sample frames", tab);
     }
 
     // texture.wav (a field recording etc., assumed at C4 for Pitch = Note) and wavetable.wav
@@ -557,7 +581,7 @@ private:
             applyPreset(preset(idx), [&](ParamId id, float v) { values[static_cast<int>(id)] = v; });
             engine_.setMorphSlot(slot, values);
             slotName_[slot] = preset(idx).name;
-            if (engine_.getParam(ParamId::MorphActive) < 0.5f && slot == 0) engine_.applyPreset(idx);   // without morph, A is what plays
+            if (engine_.getParam(ParamId::MorphActive) < 0.5f && slot == 0) { engine_.applyPreset(idx); loadPresetFiles(idx); }   // without morph, A is what plays
             break;
         }
         case MenuAction::ToggleMap: {

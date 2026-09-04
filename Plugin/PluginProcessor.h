@@ -83,6 +83,10 @@ public:
     int  learnTarget() const { return learnTarget_.load(); }
     juce::String userScaleName() const { return userScaleName_; }
 
+    // Favourite presets (browser stars), kept in the plugin state.
+    bool isFavourite(int preset) const { return preset >= 0 && preset < 1024 && favourites_[preset]; }
+    void setFavourite(int preset, bool on) { if (preset >= 0 && preset < 1024) favourites_.setBit(preset, on); }
+
     juce::AudioProcessorValueTreeState apvts;
     ambient::Engine& engine() { return engine_; }
 
@@ -94,6 +98,7 @@ private:
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_, wavetableFile_;
+    juce::BigInteger favourites_;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;

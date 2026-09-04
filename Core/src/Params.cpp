@@ -227,6 +227,11 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::MacroF, "macro_f", "Distance",  "Macros", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::MacroG, "macro_g", "Evolution", "Macros", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::MacroH, "macro_h", "Air",       "Macros", 0.f, 1.f, 0.f, 1.f, ""),
+
+    B(ParamId::MapActive, "map_active", "Active", "Map", false),
+    F(ParamId::MapX,      "map_x",      "X",      "Map", 0.f,   1.f,  0.5f,  1.f, ""),
+    F(ParamId::MapY,      "map_y",      "Y",      "Map", 0.f,   1.f,  0.5f,  1.f, ""),
+    F(ParamId::MapRadius, "map_radius", "Radius", "Map", 0.02f, 0.4f, 0.08f, 1.f, ""),
 }};
 } // namespace
 

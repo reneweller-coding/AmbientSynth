@@ -389,6 +389,57 @@ normalised by √(density · grain length) so density does not change loudness.
 The cloud is added to the far bus only: it exists in the background and the
 far reverb smears it.
 
+## Preset browser and the preset map
+
+Every built-in preset is measured, not described: `Tools/preset_map.py`
+renders each one for 12 s (held chord plus a busy brain) and takes the
+spectral centroid, spectral flatness, spectral flux, stereo width, energy
+below 150 Hz and the mean voice count from the last 8 s, plus flags read
+from the parameters (keys or generative, cosmos, feedback, sources, just
+intonation, sub, stack, air). The result is generated into
+`Core/src/PresetMeta.cpp`: per preset a rank 0..1 for brightness, motion,
+width, noisiness, bass and density, a family index (from the comment
+blocks in `Presets.cpp`), tag bits (quantiles of the ranks plus the flags)
+and a position in a plane — the first two principal components of the
+standardised descriptors, with the flags weighted in so cosmos, feedback
+and source presets form their own clusters, followed by a short repulsion
+pass so no two points overlap. The stub tool mode writes an empty table so
+the core compiles before the first measurement; the self test accepts the
+stub and checks the measured table.
+
+The **Browse** page of the plugin has two views. **Columns** is the
+classic browser (Omnisphere / Absynth style): Family | Character (dark,
+bright, tonal, noisy, wide, bass) | Motion (calm, moving, dense, sparse) |
+Features (keys, generative, cosmos, feedback, sources, just intonation,
+sub, stack, air), each row with the number of presets it leaves; rows in
+one column combine with OR (Ctrl-click), columns with AND, "All" clears;
+below, the result list with family and descriptor bars. **Map** keeps the
+list with tag toggles and shows the plane. Both share text search, sort by
+any descriptor, favourites (a star per row, an "only favourites" filter,
+kept in the plugin state), a click loads, → A / → B fill the morph slots.
+The **map**: points coloured by family,
+sized by density, filtered points bright and the rest dimmed, a hover
+shows name, family and tags, a click loads. With *Map blend* on, the
+cursor (MapX / MapY) is dragged across the plane and the engine plays the
+blend of the presets around it: `PresetMap::neighbours` takes the six
+nearest points with Gaussian weights of the distance (*Radius* = sigma,
+default 0.08 of the plane), `PresetMap::blend` mixes floats in the skew
+domain, rounds ints and takes choices and switches from the strongest
+neighbour, and `Engine::updateBlend` glides every parameter toward that
+blend with the Morph Glide time constant (95 % after *Glide* seconds). On
+a point the blend is that preset; between points it is a sound nobody
+saved. Switching the map off copies the gliding values into the live
+parameters, so the sound stays where the map left it. The map is a
+parameter set (MapActive, MapX, MapY, MapRadius, never part of a preset),
+so MIDI, OSC, automation and the gesture layer can steer it; on the Quest
+the hand menu has MAP ON/OFF and the left hand's reach and height move the
+cursor. `ambient_render --map x y [radius]` renders any cursor position
+offline and prints the neighbours and weights. Measured: on Sleep
+Concert's point the blend reproduces its parameters to 0.1 %; half-way
+between two presets a float lies between their values; the engine glides
+to Distant Storm's far decay within the glide time and reports the value
+through `blendValue`.
+
 ## Morph (the performance control)
 
 Two full parameter snapshots live in the engine (`slotA_`, `slotB_`, atomics

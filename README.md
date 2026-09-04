@@ -68,6 +68,19 @@ switches flip halfway. Morph settings are never part of a preset.
 controller. The label shows the bound CC; right-click again to clear. The
 mapping is saved with the plugin state and in `.ambientsynth` files.
 
+**Browser and preset map.** *Browse* in the header opens the preset
+browser in two views. *Columns* is the classic one: Family, Character
+(dark, bright, tonal, noisy, wide, bass), Motion (calm, moving, dense,
+sparse) and Features (keys, generative, cosmos, feedback, sources, just
+intonation, sub, stack, air) as columns that narrow the list, with search,
+sort by any descriptor and favourites. Every preset was measured by
+rendering it, not tagged by hand. *Map* keeps the list and shows all
+presets as points clustered by what they sound like; click a point to load
+it, or switch on *Map blend* and drag the cursor: the synth glides to the
+blend of the presets around the cursor, so the space between two presets
+becomes playable. The cursor is a parameter, so hands, MIDI, OSC or
+automation can wander the map.
+
 **Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
 until its key is pressed again, and switching Hold off releases everything.
 The eight **macros** (Space, Alien, Motion, Bloom, Density, Distance,

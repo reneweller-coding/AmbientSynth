@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <set>
 
 // The editor groups the sections the way the signal flows:
 //   VOICE (Oscillator, Air, Envelope, Filter, Space) -> FOREGROUND (Ensemble, Delay, Delay 2,
@@ -97,6 +98,72 @@ private:
     std::unique_ptr<PerformView> perform_;
     bool performing_ = false;
     void setPerforming(bool on);
+
+    // Browse page: filterable preset list plus the preset map (points = presets, drag the
+    // cursor to blend between neighbours).
+    struct BrowseView : juce::Component, juce::ListBoxModel, juce::Timer {
+        explicit BrowseView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        void timerCallback() override;
+        // list
+        int  getNumRows() override { return static_cast<int>(filtered.size()); }
+        void paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool selected) override;
+        void listBoxItemClicked(int row, const juce::MouseEvent&) override;
+        void applyFilter();
+        // map
+        struct MapView : juce::Component {
+            explicit MapView(BrowseView& o) : owner(o) {}
+            void paint(juce::Graphics&) override;
+            void mouseDown(const juce::MouseEvent&) override;
+            void mouseDrag(const juce::MouseEvent&) override;
+            void mouseMove(const juce::MouseEvent&) override;
+            void mouseUp(const juce::MouseEvent&) override;
+            int  nearestPreset(juce::Point<float> p, float maxDist) const;
+            juce::Point<float> toScreen(float x, float y) const;
+            juce::Point<float> toMap(juce::Point<float> s) const;
+            BrowseView& owner;
+            int hover = -1;
+            bool dragging = false;
+        };
+        // classic column browser (Omnisphere / Absynth style): each column narrows the list
+        struct Column : juce::ListBoxModel {
+            BrowseView* owner = nullptr;
+            juce::String title;
+            juce::StringArray items;          // items[0] = "All"
+            std::vector<uint32_t> tagBits;    // per item: tag mask (0 for family columns / All)
+            std::vector<int> familyIdx;       // per item: family index or -1
+            std::set<int> chosen;             // chosen rows (empty = All)
+            juce::ListBox box;
+            int  getNumRows() override { return items.size(); }
+            void paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool selected) override;
+            void listBoxItemClicked(int row, const juce::MouseEvent&) override;
+            bool passes(int preset) const;
+        };
+        Column columns[4];
+        void setMode(int m);   // 0 classic columns, 1 map
+        int mode = 0;
+        juce::TextButton modeClassic{ "Columns" }, modeMap{ "Map" }, star{ "Favourite" };
+        juce::ToggleButton onlyFavourites{ "only favourites" };
+
+        AmbientSynthProcessor& proc;
+        juce::TextEditor search;
+        juce::ComboBox family, sort;
+        std::vector<std::unique_ptr<juce::ToggleButton>> tagButtons;
+        juce::ListBox list;
+        MapView map;
+        juce::ToggleButton mapActive;
+        juce::Slider radius;
+        juce::Label info;
+        juce::TextButton toA{ "-> A" }, toB{ "-> B" }, load{ "Load" };
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> mapActiveAttach;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> radiusAttach;
+        std::vector<int> filtered;
+        int selected = -1;
+    };
+    std::unique_ptr<BrowseView> browse_;
+    std::unique_ptr<juce::TextButton> browseButton_;
+    void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();
     juce::Component::SafePointer<juce::TextEditor> mapEditor_;
     juce::String mapText_;

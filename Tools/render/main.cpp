@@ -6,11 +6,13 @@
 //                  [--preset "name"] [--set key=value]... [--notes 45,52,59]
 //                  [--scl file.scl] [--stats] [--list] [--list-presets]
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
+//                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
 #include "ambient/WavFile.h"
 #include "ambient/Sources.h"
+#include "ambient/PresetMap.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -48,7 +50,8 @@ int main(int argc, char** argv)
     std::string out = "ambient.wav";
     double seconds = 60.0;
     int sr = 48000, block = 256;
-    bool stats = false;
+    bool stats = false, dump = false, useMap = false;
+    double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
@@ -61,6 +64,12 @@ int main(int argc, char** argv)
         else if (a == "--sr") sr = std::atoi(next().c_str());
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
+        else if (a == "--dump") dump = true;
+        else if (a == "--map") {   // render at a map position: x y [radius]
+            mapX = std::atof(next().c_str()); mapY = std::atof(next().c_str());
+            if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) mapRadius = std::atof(argv[++i]);
+            useMap = true;
+        }
         else if (a == "--scl") sclPath = next();
         else if (a == "--texture") {
             const std::string path = next();
@@ -160,6 +169,27 @@ int main(int argc, char** argv)
         engine.setUserScale(s);
         engine.setParam(ParamId::Scale, static_cast<float>(kNumScaleChoices - 1));
         std::printf("scale: %s (%d degrees, period %.4f)\n", s.name, s.count, s.period);
+    }
+
+    if (useMap) {
+        engine.setParam(ParamId::MapActive, 1.0f);
+        engine.setParam(ParamId::MapX, static_cast<float>(mapX));
+        engine.setParam(ParamId::MapY, static_cast<float>(mapY));
+        engine.setParam(ParamId::MapRadius, static_cast<float>(mapRadius));
+        engine.setParam(ParamId::MorphGlide, 0.1f);   // arrive at the blend right away
+        PresetMap::warmup();
+        const PresetMap::Blend b = PresetMap::neighbours(static_cast<float>(mapX), static_cast<float>(mapY), static_cast<float>(mapRadius));
+        std::printf("map %.3f %.3f (radius %.3f):", mapX, mapY, mapRadius);
+        for (int k = 0; k < b.count; ++k) std::printf(" %s %.2f;", preset(b.index[k]).name, b.weight[k]);
+        std::printf("\n");
+    }
+    if (dump) {   // every parameter as key = value (choices by name), for tools that analyse presets
+        for (const ParamDesc& d : paramTable()) {
+            const float v = engine.getParam(d.id);
+            if (d.kind == ParamKind::Choice) std::printf("param %s = %s\n", d.key, d.choices[clampv(static_cast<int>(std::lround(v)), 0, d.numChoices - 1)]);
+            else if (d.kind == ParamKind::Bool) std::printf("param %s = %s\n", d.key, v >= 0.5f ? "on" : "off");
+            else std::printf("param %s = %g\n", d.key, v);
+        }
     }
 
     engine.prepare(sr, block);

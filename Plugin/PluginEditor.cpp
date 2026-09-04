@@ -1,6 +1,8 @@
 #include "PluginEditor.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
+#include "ambient/PresetMeta.h"
+#include "ambient/PresetMap.h"
 
 using namespace ambient;
 
@@ -74,10 +76,18 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     performButton_->setTooltip("Only the eight macros and the morph, large: for playing a set");
     performButton_->setClickingTogglesState(true);
     performButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
-    performButton_->onClick = [this] { setPerforming(performButton_->getToggleState()); };
+    performButton_->onClick = [this] { setPage(performButton_->getToggleState() ? 1 : 0); };
     addAndMakeVisible(*performButton_);
     perform_ = std::make_unique<PerformView>(proc_);
     addChildComponent(*perform_);
+    browseButton_ = std::make_unique<juce::TextButton>("Browse");
+    browseButton_->setTooltip("Preset browser: filters, tags, and the map of all presets (drag the cursor to blend)");
+    browseButton_->setClickingTogglesState(true);
+    browseButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    browseButton_->onClick = [this] { setPage(browseButton_->getToggleState() ? 2 : 0); };
+    addAndMakeVisible(*browseButton_);
+    browse_ = std::make_unique<BrowseView>(proc_);
+    addChildComponent(*browse_);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -134,7 +144,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
 
     setResizable(true, true);
     setSize(1500, 920);
-    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPerforming(true);   // open on the perform page
+    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);   // open on the perform page
+    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "").isNotEmpty()) setPage(2);    // open on the browser
     startTimerHz(12);
 }
 
@@ -312,7 +323,9 @@ void AmbientSynthEditor::resized()
     if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
+    if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
     if (perform_) perform_->setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
+    if (browse_) browse_->setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
     if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
@@ -362,13 +375,426 @@ void AmbientSynthEditor::resized()
 
 // ---------------------------------------------------------------- perform page
 
-void AmbientSynthEditor::setPerforming(bool on)
+void AmbientSynthEditor::setPerforming(bool on) { setPage(on ? 1 : 0); }
+
+void AmbientSynthEditor::setPage(int page)
 {
-    performing_ = on;
-    viewport_.setVisible(!on);
-    perform_->setVisible(on);
-    if (performButton_->getToggleState() != on) performButton_->setToggleState(on, juce::dontSendNotification);
+    performing_ = page == 1;
+    viewport_.setVisible(page == 0);
+    perform_->setVisible(page == 1);
+    browse_->setVisible(page == 2);
+    if (performButton_->getToggleState() != (page == 1)) performButton_->setToggleState(page == 1, juce::dontSendNotification);
+    if (browseButton_->getToggleState() != (page == 2)) browseButton_->setToggleState(page == 2, juce::dontSendNotification);
+    if (page == 2) browse_->applyFilter();
 }
+
+// ---------------------------------------------------------------- browse page
+
+namespace {
+const juce::Colour kFamilyColours[] = {
+    juce::Colour(0xff7fb3d5), juce::Colour(0xff8ec9a8), juce::Colour(0xffe0c070), juce::Colour(0xffd08a8a),
+    juce::Colour(0xffb094d8), juce::Colour(0xff70c8c8), juce::Colour(0xffe09a60), juce::Colour(0xffa0b8e0),
+    juce::Colour(0xffc8d870), juce::Colour(0xffd880b8), juce::Colour(0xff90d0f0), juce::Colour(0xffd0d0d0),
+};
+juce::Colour familyColour(int f) { return kFamilyColours[static_cast<size_t>(std::max(f, 0)) % (sizeof(kFamilyColours) / sizeof(kFamilyColours[0]))]; }
+}
+
+AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), map(*this)
+{
+    search.setTextToShowWhenEmpty("search", kDim);
+    search.onTextChange = [this] { applyFilter(); };
+    addAndMakeVisible(search);
+    family.addItem("all families", 1);
+    for (int f = 0; f < numPresetFamilies(); ++f) family.addItem(presetFamilyName(f), f + 2);
+    family.setSelectedId(1, juce::dontSendNotification);
+    family.onChange = [this] { applyFilter(); };
+    addAndMakeVisible(family);
+    sort.addItem("by number", 1); sort.addItem("by name", 2); sort.addItem("dark -> bright", 3); sort.addItem("calm -> moving", 4);
+    sort.addItem("narrow -> wide", 5); sort.addItem("tonal -> noisy", 6); sort.addItem("sparse -> dense", 7);
+    sort.setSelectedId(1, juce::dontSendNotification);
+    sort.onChange = [this] { applyFilter(); };
+    addAndMakeVisible(sort);
+    for (int t = 0; t < kNumPresetTags; ++t) {
+        auto b = std::make_unique<juce::ToggleButton>(presetTagName(t));
+        b->onClick = [this] { applyFilter(); };
+        addAndMakeVisible(*b);
+        tagButtons.push_back(std::move(b));
+    }
+    list.setModel(this);
+    list.setRowHeight(22);
+    list.setColour(juce::ListBox::backgroundColourId, kBg);
+    addAndMakeVisible(list);
+    addAndMakeVisible(map);
+    mapActive.setButtonText("Map blend (drag the cursor)");
+    addAndMakeVisible(mapActive);
+    mapActiveAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.apvts, paramDesc(ParamId::MapActive).key, mapActive);
+    radius.setSliderStyle(juce::Slider::LinearHorizontal);
+    radius.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 18);
+    addAndMakeVisible(radius);
+    radiusAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, paramDesc(ParamId::MapRadius).key, radius);
+    info.setFont(juce::FontOptions(12.0f)); info.setColour(juce::Label::textColourId, kDim);
+    addAndMakeVisible(info);
+    load.onClick = [this] { if (selected >= 0) proc.setCurrentProgram(selected); };
+    toA.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(0, selected); };
+    toB.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(1, selected); };
+    star.onClick = [this] { if (selected >= 0) { proc.setFavourite(selected, !proc.isFavourite(selected)); applyFilter(); } };
+    onlyFavourites.onClick = [this] { applyFilter(); };
+    for (auto* b : { &load, &toA, &toB, &star }) addAndMakeVisible(*b);
+    addAndMakeVisible(onlyFavourites);
+
+    // Classic columns: Family | Character | Motion & density | Features. A click narrows,
+    // several rows in one column combine with OR, columns combine with AND, "All" clears.
+    struct Def { const char* title; std::vector<int> tags; bool families; };
+    const Def defs[4] = {
+        { "Family", {}, true },
+        { "Character", { 0, 1, 4, 5, 6, 7 }, false },            // Dark Bright Tonal Noisy Wide Bass
+        { "Motion", { 2, 3, 8, 9 }, false },                      // Calm Moving Dense Sparse
+        { "Features", { 10, 11, 12, 13, 14, 15, 16, 17, 18 }, false },   // Keys Generative Cosmos Feedback Sources JI Sub Stack Air
+    };
+    for (int c = 0; c < 4; ++c) {
+        Column& col = columns[c];
+        col.owner = this; col.title = defs[c].title;
+        col.items.add("All"); col.tagBits.push_back(0); col.familyIdx.push_back(-1);
+        if (defs[c].families) {
+            for (int f = 0; f < numPresetFamilies(); ++f) { col.items.add(presetFamilyName(f)); col.tagBits.push_back(0); col.familyIdx.push_back(f); }
+        } else {
+            for (int t : defs[c].tags) { col.items.add(presetTagName(t)); col.tagBits.push_back(1u << t); col.familyIdx.push_back(-1); }
+        }
+        col.box.setModel(&col);
+        col.box.setRowHeight(20);
+        col.box.setColour(juce::ListBox::backgroundColourId, kBg);
+        addAndMakeVisible(col.box);
+    }
+    modeClassic.setClickingTogglesState(true); modeMap.setClickingTogglesState(true);
+    modeClassic.setRadioGroupId(77); modeMap.setRadioGroupId(77);
+    modeClassic.setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    modeMap.setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    modeClassic.onClick = [this] { setMode(0); };
+    modeMap.onClick = [this] { setMode(1); };
+    addAndMakeVisible(modeClassic); addAndMakeVisible(modeMap);
+    setMode(0);
+    applyFilter();
+    startTimerHz(15);
+}
+
+void AmbientSynthEditor::BrowseView::setMode(int m)
+{
+    mode = m;
+    modeClassic.setToggleState(m == 0, juce::dontSendNotification);
+    modeMap.setToggleState(m == 1, juce::dontSendNotification);
+    for (auto& c : columns) c.box.setVisible(m == 0);
+    for (auto& b : tagButtons) b->setVisible(m == 1);
+    family.setVisible(m == 1);
+    map.setVisible(m == 1); mapActive.setVisible(m == 1); radius.setVisible(m == 1);
+    resized();
+    applyFilter();
+}
+
+void AmbientSynthEditor::BrowseView::Column::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool)
+{
+    const bool on = (row == 0) ? chosen.empty() : chosen.count(row) > 0;
+    if (on) g.fillAll(kAccent.withAlpha(0.18f));
+    g.setColour(on ? kText : kDim); g.setFont(juce::FontOptions(12.5f));
+    g.drawText(items[row], 8, 0, w - 40, h, juce::Justification::centredLeft);
+    // count of presets this row would leave
+    if (row > 0 && owner != nullptr) {
+        int n = 0;
+        for (int i = 0; i < numPresets(); ++i) {
+            const PresetMeta& m = presetMeta(i);
+            if ((familyIdx[static_cast<size_t>(row)] >= 0 && m.family == familyIdx[static_cast<size_t>(row)]) || (tagBits[static_cast<size_t>(row)] && (m.tags & tagBits[static_cast<size_t>(row)]))) ++n;
+        }
+        g.setColour(kDim.withAlpha(0.7f)); g.setFont(juce::FontOptions(10.5f));
+        g.drawText(juce::String(n), w - 34, 0, 28, h, juce::Justification::centredRight);
+    }
+}
+
+void AmbientSynthEditor::BrowseView::Column::listBoxItemClicked(int row, const juce::MouseEvent& e)
+{
+    if (row == 0) chosen.clear();
+    else if (e.mods.isCommandDown() || e.mods.isCtrlDown()) { if (chosen.count(row)) chosen.erase(row); else chosen.insert(row); }
+    else if (chosen.size() == 1 && chosen.count(row)) chosen.clear();
+    else { chosen.clear(); chosen.insert(row); }
+    box.repaint();
+    if (owner) owner->applyFilter();
+}
+
+bool AmbientSynthEditor::BrowseView::Column::passes(int preset) const
+{
+    if (chosen.empty()) return true;
+    const PresetMeta& m = presetMeta(preset);
+    for (int row : chosen) {
+        const size_t r = static_cast<size_t>(row);
+        if (familyIdx[r] >= 0 && m.family == familyIdx[r]) return true;
+        if (tagBits[r] && (m.tags & tagBits[r])) return true;
+    }
+    return false;
+}
+
+void AmbientSynthEditor::BrowseView::applyFilter()
+{
+    filtered.clear();
+    const juce::String needle = search.getText().trim().toLowerCase();
+    const int fam = family.getSelectedId() - 2;
+    uint32_t need = 0;
+    for (int t = 0; t < kNumPresetTags; ++t) if (tagButtons[static_cast<size_t>(t)]->getToggleState()) need |= (1u << t);
+    for (int i = 0; i < numPresets(); ++i) {
+        const PresetMeta& m = presetMeta(i);
+        if (needle.isNotEmpty() && !juce::String(preset(i).name).toLowerCase().contains(needle)) continue;
+        if (onlyFavourites.getToggleState() && !proc.isFavourite(i)) continue;
+        if (mode == 1) {
+            if (fam >= 0 && m.family != fam) continue;
+            if ((m.tags & need) != need) continue;
+        } else {
+            bool ok = true;
+            for (const auto& c : columns) if (!c.passes(i)) { ok = false; break; }
+            if (!ok) continue;
+        }
+        filtered.push_back(i);
+    }
+    const int s = sort.getSelectedId();
+    auto key = [s](int i) -> float {
+        const PresetMeta& m = presetMeta(i);
+        switch (s) { case 3: return m.bright; case 4: return m.motion; case 5: return m.width; case 6: return m.noisy; case 7: return m.density; default: return 0.0f; }
+    };
+    if (s == 2) std::sort(filtered.begin(), filtered.end(), [](int a, int b) { return juce::String(preset(a).name).compareIgnoreCase(preset(b).name) < 0; });
+    else if (s >= 3) std::stable_sort(filtered.begin(), filtered.end(), [&](int a, int b) { return key(a) < key(b); });
+    list.updateContent();
+    info.setText(juce::String(static_cast<int>(filtered.size())) + " of " + juce::String(numPresets()) + " presets" +
+                 (numPresetMeta() == 0 ? "   (map not measured yet: run Tools/preset_map.py)" : ""), juce::dontSendNotification);
+    map.repaint();
+}
+
+void AmbientSynthEditor::BrowseView::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool sel)
+{
+    if (row < 0 || row >= static_cast<int>(filtered.size())) return;
+    const int i = filtered[static_cast<size_t>(row)];
+    const PresetMeta& m = presetMeta(i);
+    if (sel) g.fillAll(kAccent.withAlpha(0.18f));
+    else if (i == proc.getCurrentProgram()) g.fillAll(kAccent.withAlpha(0.08f));
+    g.setColour(familyColour(m.family)); g.fillEllipse(6.0f, h * 0.5f - 4.0f, 8.0f, 8.0f);
+    g.setColour(proc.isFavourite(i) ? juce::Colour(0xffe0c070) : kSectionFill); g.setFont(juce::FontOptions(13.0f));
+    g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x98\x85")), 18, 0, 16, h, juce::Justification::centred);
+    g.setColour(kText); g.setFont(juce::FontOptions(13.0f));
+    g.drawText(preset(i).name, 38, 0, w - 320, h, juce::Justification::centredLeft);
+    if (mode == 0) { g.setColour(kDim); g.setFont(juce::FontOptions(11.0f)); g.drawText(presetFamilyName(m.family), w - 320, 0, 140, h, juce::Justification::centredLeft); }
+    // small bars: bright, motion, width, density
+    const float vals[4] = { m.bright, m.motion, m.width, m.density };
+    const juce::Colour cols[4] = { juce::Colour(0xffe0c070), juce::Colour(0xff8ec9a8), juce::Colour(0xff7fb3d5), juce::Colour(0xffd08a8a) };
+    for (int k = 0; k < 4; ++k) {
+        const int x = w - 176 + k * 42;
+        g.setColour(kSectionFill); g.fillRect(x, h / 2 - 3, 36, 6);
+        g.setColour(cols[k]); g.fillRect(x, h / 2 - 3, static_cast<int>(36 * vals[k]), 6);
+    }
+}
+
+void AmbientSynthEditor::BrowseView::listBoxItemClicked(int row, const juce::MouseEvent& e)
+{
+    if (row < 0 || row >= static_cast<int>(filtered.size())) return;
+    selected = filtered[static_cast<size_t>(row)];
+    if (e.x >= 16 && e.x < 36) { proc.setFavourite(selected, !proc.isFavourite(selected)); list.repaint(); return; }   // the star
+    if (e.getNumberOfClicks() >= 2 || e.mods.isLeftButtonDown()) proc.setCurrentProgram(selected);
+    if (mapActive.getToggleState()) {   // the cursor jumps to the preset's point
+        const PresetMeta& m = presetMeta(selected);
+        if (auto* px = proc.apvts.getParameter(paramDesc(ParamId::MapX).key)) px->setValueNotifyingHost(m.x);
+        if (auto* py = proc.apvts.getParameter(paramDesc(ParamId::MapY).key)) py->setValueNotifyingHost(m.y);
+    }
+    map.repaint();
+}
+
+void AmbientSynthEditor::BrowseView::timerCallback() { map.repaint(); list.repaint(); }
+
+void AmbientSynthEditor::BrowseView::paint(juce::Graphics& g)
+{
+    g.fillAll(kBg);
+    g.setColour(kGroupFill);
+    g.fillRoundedRectangle(getLocalBounds().reduced(8).toFloat(), 8.0f);
+    g.setColour(kDim); g.setFont(juce::FontOptions(11.0f));
+    g.drawText("bright  motion  width  density", list.getRight() - 176, list.getY() - 16, 176, 14, juce::Justification::centredLeft);
+    if (mode == 0) {
+        g.drawText("preset", list.getX() + 38, list.getY() - 16, 200, 14, juce::Justification::centredLeft);
+        g.drawText("family", list.getRight() - 320, list.getY() - 16, 140, 14, juce::Justification::centredLeft);
+        for (auto& c : columns) {
+            g.setColour(kText); g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+            g.drawText(c.title.toUpperCase(), c.box.getX(), c.box.getY() - 18, c.box.getWidth(), 16, juce::Justification::centredLeft);
+        }
+    }
+}
+
+void AmbientSynthEditor::BrowseView::resized()
+{
+    auto area = getLocalBounds().reduced(16);
+    auto top = area.removeFromTop(26);
+    modeClassic.setBounds(top.removeFromLeft(80)); modeMap.setBounds(top.removeFromLeft(60)); top.removeFromLeft(12);
+    search.setBounds(top.removeFromLeft(180)); top.removeFromLeft(6);
+    if (mode == 1) { family.setBounds(top.removeFromLeft(150)); top.removeFromLeft(6); }
+    sort.setBounds(top.removeFromLeft(150)); top.removeFromLeft(12);
+    onlyFavourites.setBounds(top.removeFromLeft(140));
+    area.removeFromTop(8);
+    auto buttons = area.removeFromBottom(26);
+    load.setBounds(buttons.removeFromLeft(80)); buttons.removeFromLeft(6);
+    toA.setBounds(buttons.removeFromLeft(60)); buttons.removeFromLeft(6);
+    toB.setBounds(buttons.removeFromLeft(60)); buttons.removeFromLeft(6);
+    star.setBounds(buttons.removeFromLeft(90)); buttons.removeFromLeft(12);
+    if (mode == 1) {
+        auto mapControls = buttons.removeFromRight(juce::jmax(300, buttons.getWidth() * 3 / 5));
+        mapActive.setBounds(mapControls.removeFromLeft(220)); mapControls.removeFromLeft(12);
+        radius.setBounds(mapControls);
+    }
+    info.setBounds(buttons);
+    area.removeFromBottom(6);
+
+    if (mode == 0) {
+        // Omnisphere-style: four columns on top, the results below.
+        auto cols = area.removeFromTop(juce::jmax(160, area.getHeight() * 2 / 5));
+        const int colW = cols.getWidth() / 4;
+        for (int c = 0; c < 4; ++c) {
+            auto r = cols.removeFromLeft(colW).reduced(0, 0);
+            r.removeFromTop(18);   // title painted above
+            columns[c].box.setBounds(r.reduced(c == 0 ? 0 : 4, 0).withTrimmedRight(4));
+        }
+        area.removeFromTop(24);    // column header of the result list
+        list.setBounds(area);
+    } else {
+        auto left = area.removeFromLeft(juce::jmax(420, area.getWidth() * 2 / 5));
+        area.removeFromLeft(12);
+        const int perRow = 5, tagH = 22;
+        const int rows = (kNumPresetTags + perRow - 1) / perRow;
+        auto tags = left.removeFromTop(rows * tagH);
+        for (int t = 0; t < kNumPresetTags; ++t) {
+            const int r = t / perRow, c = t % perRow;
+            tagButtons[static_cast<size_t>(t)]->setBounds(tags.getX() + c * (tags.getWidth() / perRow), tags.getY() + r * tagH, tags.getWidth() / perRow, tagH);
+        }
+        left.removeFromTop(18);
+        list.setBounds(left);
+        map.setBounds(area);
+    }
+}
+
+juce::Point<float> AmbientSynthEditor::BrowseView::MapView::toScreen(float x, float y) const
+{
+    const auto r = getLocalBounds().toFloat().reduced(18.0f);
+    return { r.getX() + r.getWidth() * x, r.getBottom() - r.getHeight() * y };
+}
+
+juce::Point<float> AmbientSynthEditor::BrowseView::MapView::toMap(juce::Point<float> s) const
+{
+    const auto r = getLocalBounds().toFloat().reduced(18.0f);
+    return { juce::jlimit(0.0f, 1.0f, (s.x - r.getX()) / juce::jmax(1.0f, r.getWidth())),
+             juce::jlimit(0.0f, 1.0f, (r.getBottom() - s.y) / juce::jmax(1.0f, r.getHeight())) };
+}
+
+int AmbientSynthEditor::BrowseView::MapView::nearestPreset(juce::Point<float> p, float maxDist) const
+{
+    int best = -1; float bd = maxDist * maxDist;
+    for (int i = 0; i < std::min(numPresetMeta(), numPresets()); ++i) {
+        const auto s = toScreen(presetMeta(i).x, presetMeta(i).y);
+        const float d = (s.x - p.x) * (s.x - p.x) + (s.y - p.y) * (s.y - p.y);
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+}
+
+void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
+{
+    g.setColour(kBg.brighter(0.03f));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), 6.0f);
+    g.setColour(kSectionFill);
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 6.0f, 1.0f);
+    if (numPresetMeta() == 0) {
+        g.setColour(kDim); g.setFont(juce::FontOptions(13.0f));
+        g.drawText("The map is not measured yet: run Tools/preset_map.py and rebuild.", getLocalBounds(), juce::Justification::centred);
+        return;
+    }
+    const bool blend = owner.mapActive.getToggleState();
+    const float x = owner.proc.engine().getParam(ParamId::MapX), y = owner.proc.engine().getParam(ParamId::MapY);
+    const float rad = owner.proc.engine().getParam(ParamId::MapRadius);
+    const auto cursor = toScreen(x, y);
+    const auto r = getLocalBounds().toFloat().reduced(18.0f);
+    if (blend) {   // the blend radius as a soft disc
+        const float rr = rad * r.getWidth();
+        g.setColour(kAccent.withAlpha(0.10f)); g.fillEllipse(cursor.x - rr, cursor.y - rr, 2 * rr, 2 * rr);
+        g.setColour(kAccent.withAlpha(0.25f)); g.drawEllipse(cursor.x - rr, cursor.y - rr, 2 * rr, 2 * rr, 1.0f);
+    }
+    // dimmed points first, then the filtered ones, then the current program
+    const int current = owner.proc.getCurrentProgram();
+    std::vector<bool> inFilter(static_cast<size_t>(numPresets()), false);
+    for (int i : owner.filtered) inFilter[static_cast<size_t>(i)] = true;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int i = 0; i < std::min(numPresetMeta(), numPresets()); ++i) {
+            if (inFilter[static_cast<size_t>(i)] != (pass == 1)) continue;
+            const PresetMeta& m = presetMeta(i);
+            const auto s = toScreen(m.x, m.y);
+            const float size = 6.0f + 6.0f * m.density;
+            juce::Colour c = familyColour(m.family);
+            if (pass == 0) c = c.withAlpha(0.18f);
+            g.setColour(c); g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
+            if (i == owner.selected || i == current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
+        }
+    }
+    // neighbour lines while blending
+    if (blend) {
+        const PresetMap::Blend b = PresetMap::neighbours(x, y, rad);
+        for (int k = 0; k < b.count; ++k) {
+            if (b.weight[k] < 0.02f) continue;
+            const PresetMeta& m = presetMeta(b.index[k]);
+            const auto s = toScreen(m.x, m.y);
+            g.setColour(kAccent.withAlpha(0.2f + 0.7f * b.weight[k]));
+            g.drawLine(juce::Line<float>(cursor, s), 1.0f + 2.0f * b.weight[k]);
+            g.setFont(juce::FontOptions(11.0f));
+            g.drawText(juce::String(preset(b.index[k]).name) + " " + juce::String(static_cast<int>(100 * b.weight[k])) + "%", static_cast<int>(s.x) + 8, static_cast<int>(s.y) - 7, 220, 14, juce::Justification::centredLeft);
+        }
+        g.setColour(kText);
+        g.drawLine(cursor.x - 8, cursor.y, cursor.x + 8, cursor.y, 1.2f);
+        g.drawLine(cursor.x, cursor.y - 8, cursor.x, cursor.y + 8, 1.2f);
+    }
+    if (hover >= 0 && hover < numPresets()) {
+        const PresetMeta& m = presetMeta(hover);
+        const auto s = toScreen(m.x, m.y);
+        juce::String tags;
+        for (int t = 0; t < kNumPresetTags; ++t) if (m.tags & (1u << t)) tags += juce::String(presetTagName(t)) + " ";
+        g.setColour(kText); g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawText(preset(hover).name, static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 20, 260, 14, juce::Justification::centredLeft);
+        g.setColour(kDim); g.setFont(juce::FontOptions(10.5f));
+        g.drawText(juce::String(presetFamilyName(m.family)) + "  ·  " + tags.trim(), static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 6, 360, 14, juce::Justification::centredLeft);
+    }
+    // legend
+    g.setFont(juce::FontOptions(10.5f));
+    int lx = 10, ly = getHeight() - 16;
+    for (int f = 0; f < numPresetFamilies(); ++f) {
+        g.setColour(familyColour(f)); g.fillEllipse(static_cast<float>(lx), static_cast<float>(ly) + 3.0f, 7.0f, 7.0f);
+        g.setColour(kDim); g.drawText(presetFamilyName(f), lx + 10, ly, 120, 13, juce::Justification::centredLeft);
+        lx += 14 + 7 * juce::jmin(16, static_cast<int>(std::strlen(presetFamilyName(f))));
+        if (lx > getWidth() - 120) break;
+    }
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseMove(const juce::MouseEvent& e)
+{
+    const int h = nearestPreset(e.position, 10.0f);
+    if (h != hover) { hover = h; repaint(); }
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseDown(const juce::MouseEvent& e)
+{
+    dragging = false;
+    const int h = nearestPreset(e.position, 10.0f);
+    if (h >= 0 && !owner.mapActive.getToggleState()) {   // plain click on a point loads it
+        owner.selected = h; owner.proc.setCurrentProgram(h); owner.list.repaint(); repaint(); return;
+    }
+    mouseDrag(e);
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseDrag(const juce::MouseEvent& e)
+{
+    dragging = true;
+    if (!owner.mapActive.getToggleState()) return;
+    const auto m = toMap(e.position);
+    if (auto* px = owner.proc.apvts.getParameter(paramDesc(ParamId::MapX).key)) px->setValueNotifyingHost(m.x);
+    if (auto* py = owner.proc.apvts.getParameter(paramDesc(ParamId::MapY).key)) py->setValueNotifyingHost(m.y);
+    repaint();
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseUp(const juce::MouseEvent&) { dragging = false; }
 
 AmbientSynthEditor::PerformView::PerformView(AmbientSynthProcessor& p) : proc(p)
 {

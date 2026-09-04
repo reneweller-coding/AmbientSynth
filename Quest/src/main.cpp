@@ -545,6 +545,19 @@ private:
             if (engine_.getParam(ParamId::MorphActive) < 0.5f && slot == 0) engine_.applyPreset(idx);   // without morph, A is what plays
             break;
         }
+        case MenuAction::ToggleMap: {
+            // Map on: the left hand's reach (x) and height (y) steer the cursor over the preset map,
+            // the engine glides toward the blend of the presets around it. Map off: keep what the
+            // map left behind by copying the gliding values into the live parameters.
+            const bool on = engine_.getParam(ParamId::MapActive) >= 0.5f;
+            if (on) {
+                for (const ParamDesc& d : paramTable())
+                    if (!isMapParam(d.id) && !isMorphParam(d.id) && !isMacroParam(d.id)) engine_.setParam(d.id, engine_.blendValue(d.id));
+            }
+            engine_.setParam(ParamId::MapActive, on ? 0.0f : 1.0f);
+            LOGI("preset map %s", on ? "off" : "on");
+            break;
+        }
         case MenuAction::ToggleRecord:
             if (recorder_.recording()) { recorder_.stop(); LOGI("recording stopped, %.1f s", recorder_.seconds()); }
             else if (!dataDir_.empty()) {
@@ -819,6 +832,7 @@ private:
             const MenuAction a = static_cast<MenuAction>(i);
             std::string label = menuLabel(a);
             if (a == MenuAction::ToggleMorph) label += engine_.getParam(ParamId::MorphActive) >= 0.5f ? "  ON" : "  OFF";
+            if (a == MenuAction::ToggleMap) label += engine_.getParam(ParamId::MapActive) >= 0.5f ? "  ON" : "  OFF";
             if (a == MenuAction::ToggleRecord) label += recorder_.recording() ? "  STOP" : "  START";
             scene_.addText(p, 0.0f, -static_cast<float>(i) * 0.05f, cell, label.c_str(), sel ? 1.0f : 0.5f, sel ? 0.9f : 0.55f, sel ? 0.6f : 0.7f, o * (sel ? 1.0f : 0.6f));
         }
@@ -842,6 +856,10 @@ private:
         const MenuAction action = menu_.update(dt, gestures_);
         if (action != MenuAction::None) applyMenu(action);
         gestures_.update(dt, [this](ParamId id, float v) { engine_.setParam(id, v); });
+        if (engine_.getParam(ParamId::MapActive) >= 0.5f && !menu_.isOpen() && !gestures_.calibrating()) {
+            engine_.setParam(ParamId::MapX, clampv(gestures_.input(GestureInput::LeftForward), 0.0f, 1.0f));
+            engine_.setParam(ParamId::MapY, clampv(gestures_.input(GestureInput::LeftHeight), 0.0f, 1.0f));
+        }
         if (wasCalibrating && !gestures_.calibrating()) saveCalibration();
 
         std::vector<XrCompositionLayerProjectionView> projViews;

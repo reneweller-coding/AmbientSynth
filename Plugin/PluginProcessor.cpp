@@ -125,6 +125,16 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
+    // Leaving the preset map: the sound stays where the map left it, so the gliding blend
+    // values become the live parameters (through the host, like a controller would).
+    const bool mapNow = raw_[static_cast<size_t>(ParamId::MapActive)]->load() >= 0.5f;
+    if (!mapNow && engine_.mapActive()) {
+        for (const ParamDesc& d : paramTable()) {
+            if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) continue;
+            if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(engine_.blendValue(d.id)));
+        }
+    }
+
     for (int i = 0; i < kNumParams; ++i)
         engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
 
@@ -356,6 +366,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         state.setProperty("scalaName", userScaleName_, nullptr);
     }
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
+    if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
     if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     juce::ValueTree midi("midi");
@@ -407,8 +418,11 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeChild(tree.getChildWithName("morphB"), nullptr);
             const juce::String texPath = tree.getProperty("textureFile").toString();
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
+            const juce::String favs = tree.getProperty("favourites").toString();
+            if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             tree.removeProperty("textureFile", nullptr);
             tree.removeProperty("wavetableFile", nullptr);
+            tree.removeProperty("favourites", nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
             if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));

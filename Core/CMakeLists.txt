@@ -11,6 +11,8 @@ add_library(AmbientCore STATIC
     src/Recorder.cpp
     src/Sources.cpp
     src/WavFile.cpp
+    src/PresetMeta.cpp
+    src/PresetMap.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

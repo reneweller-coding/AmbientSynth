@@ -61,6 +61,13 @@ public:
     void  morphSlot(int slot, float* out) const;
     float morphPosition() const { return morphCur_.load(std::memory_order_relaxed); }
     float effectiveParam(ParamId id) const;              // what is actually playing
+    // Preset map (MapActive / MapX / MapY / MapRadius): the engine blends the presets around
+    // the cursor at control rate and glides every parameter toward the blend with the Morph
+    // Glide time constant. While active it overrides the live parameters and the morph.
+    // blendValue() is the gliding value the host should copy back into its parameters when
+    // the map is switched off, so the sound stays where the map left it.
+    float blendValue(ParamId id) const { return blendCur_[static_cast<int>(id)].load(std::memory_order_relaxed); }
+    bool  mapActive() const { return blendActive_.load(std::memory_order_relaxed); }
 
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
@@ -87,6 +94,11 @@ private:
     std::atomic<float> params_[kNumParams];
     std::atomic<float> slotA_[kNumParams], slotB_[kNumParams];
     std::atomic<float> morphCur_{ 0.0f };
+    // Preset map blend (audio thread writes, host reads)
+    std::atomic<float> blendCur_[kNumParams];
+    std::atomic<bool>  blendActive_{ false };
+    float              blendTarget_[kNumParams] = {};
+    void updateBlend(int n);
     Voice        voices_[kMaxVoices];
     ClusterBrain brain_;
     Ensemble     ensemble_;

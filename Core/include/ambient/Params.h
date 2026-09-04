@@ -65,6 +65,9 @@ enum class ParamId : int {
     // Macros: eight performance controls routed through the gesture layer (Custom0..7);
     // not part of presets. Named in Rich's vocabulary, not the engine's.
     MacroA, MacroB, MacroC, MacroD, MacroE, MacroF, MacroG, MacroH,
+    // Preset map: a cursor in the plane of all presets blends its neighbours (PresetMap.h);
+    // performance state like the morph, never part of a preset
+    MapActive, MapX, MapY, MapRadius,
     Count
 };
 

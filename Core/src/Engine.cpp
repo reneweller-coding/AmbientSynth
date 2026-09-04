@@ -1,4 +1,6 @@
 #include "ambient/Engine.h"
+#include "ambient/PresetMap.h"
+#include "ambient/PresetMeta.h"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -34,6 +36,9 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
 {
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
+    PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
+    for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
+    blendActive_.store(false, std::memory_order_relaxed);
     for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);
     {
@@ -114,9 +119,50 @@ void Engine::morphSlot(int slot, float* out) const
     for (int i = 0; i < kNumParams; ++i) out[i] = s[i].load(std::memory_order_relaxed);
 }
 
+void Engine::updateBlend(int n)
+{
+    // Map mode: blend the presets around the cursor, glide every parameter toward it.
+    const bool on = getParam(ParamId::MapActive) >= 0.5f && PresetMap::ready() && numPresetMeta() > 0;
+    const bool was = blendActive_.load(std::memory_order_relaxed);
+    if (!on) { if (was) blendActive_.store(false, std::memory_order_relaxed); return; }
+    if (!was) {   // start from what is sounding now: no jump when the map takes over
+        for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(effectiveParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
+        blendActive_.store(true, std::memory_order_relaxed);
+    }
+    const PresetMap::Blend b = PresetMap::neighbours(getParam(ParamId::MapX), getParam(ParamId::MapY), getParam(ParamId::MapRadius));
+    PresetMap::blend(b, blendTarget_);
+    const float glide = std::max(getParam(ParamId::MorphGlide), 0.05f);
+    const float coef = 1.0f - std::exp(-static_cast<float>(n / sr_) / (glide / 3.0f));   // ~95 % after `glide` seconds
+    for (const ParamDesc& d : paramTable()) {
+        const int i = static_cast<int>(d.id);
+        if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) { blendCur_[i].store(getParam(d.id), std::memory_order_relaxed); continue; }
+        const float cur = blendCur_[i].load(std::memory_order_relaxed), tgt = blendTarget_[i];
+        float next;
+        switch (d.kind) {
+        case ParamKind::Float: {
+            const float span = std::max(d.max - d.min, 1e-9f);
+            const float pc = std::pow(clampv((cur - d.min) / span, 0.0f, 1.0f), d.skew);
+            const float pt = std::pow(clampv((tgt - d.min) / span, 0.0f, 1.0f), d.skew);
+            next = d.min + span * std::pow(pc + (pt - pc) * coef, 1.0f / d.skew);
+            break;
+        }
+        case ParamKind::Int:
+            next = cur + (tgt - cur) * coef;
+            break;
+        default:
+            next = tgt;   // choices and switches follow the strongest neighbour
+        }
+        blendCur_[i].store(next, std::memory_order_relaxed);
+    }
+}
+
 float Engine::effectiveParam(ParamId id) const
 {
     const float live = getParam(id);
+    if (blendActive_.load(std::memory_order_relaxed) && !isMapParam(id) && !isMorphParam(id) && !isMacroParam(id)) {
+        const float v = blendCur_[static_cast<int>(id)].load(std::memory_order_relaxed);
+        return paramDesc(id).kind == ParamKind::Int ? static_cast<float>(std::lround(v)) : v;
+    }
     if (isMorphParam(id) || getParam(ParamId::MorphActive) < 0.5f) return live;
     const int i = static_cast<int>(id);
     const float a = slotA_[i].load(std::memory_order_relaxed), b = slotB_[i].load(std::memory_order_relaxed);
@@ -434,6 +480,7 @@ void Engine::process(float* L, float* R, int n)
         }
         morphCur_.store(cur, std::memory_order_relaxed);
     }
+    updateBlend(n);
     readParams();
 
     int pos = 0;

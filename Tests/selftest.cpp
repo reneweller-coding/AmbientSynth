@@ -13,6 +13,8 @@
 #include "ambient/Recorder.h"
 #include "ambient/Sources.h"
 #include "ambient/WavFile.h"
+#include "ambient/PresetMap.h"
+#include "ambient/PresetMeta.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -275,7 +277,7 @@ void testPresets()
         const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
-        CHECK(count == kNumParams - 11, "preset sets every parameter except morph controls and the eight macros");
+        CHECK(count == kNumParams - 15, "preset sets every parameter except morph controls, the eight macros and the map cursor");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");
@@ -430,6 +432,67 @@ void testSources()
         std::vector<float> mono; int rate = 0;
         CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
         std::remove(path);
+    }
+}
+
+// Preset map: neighbours, blend, and the engine's map mode.
+void testPresetMap()
+{
+    PresetMap::warmup();
+    CHECK(PresetMap::ready(), "preset map warmed up");
+    CHECK(numPresetMeta() == 0 || numPresetMeta() == numPresets(), "preset meta covers every preset (or is the stub)");
+    if (numPresetMeta() == 0) { std::printf("  (preset map not measured yet: run Tools/preset_map.py)\n"); return; }
+    for (int i = 0; i < numPresetMeta(); ++i) {
+        const PresetMeta& m = presetMeta(i);
+        CHECK(m.x >= 0.0f && m.x <= 1.0f && m.y >= 0.0f && m.y <= 1.0f, "map position inside the plane");
+        CHECK(m.family >= 0 && m.family < numPresetFamilies(), "family index valid");
+    }
+    {   // On a preset's point the blend is that preset (within the radius the others fade out).
+        const int p = 1;   // Sleep Concert
+        const PresetMeta& m = presetMeta(p);
+        const PresetMap::Blend b = PresetMap::neighbours(m.x, m.y, 0.005f);
+        CHECK(b.count > 0 && b.index[0] == p && b.weight[0] > 0.99f, "cursor on a point selects that preset");
+        float v[kNumParams];
+        PresetMap::blend(b, v);
+        const float* pv = PresetMap::presetValues(p);
+        bool same = true;
+        for (const ParamDesc& d : paramTable()) if (!isMapParam(d.id) && std::fabs(v[static_cast<int>(d.id)] - pv[static_cast<int>(d.id)]) > 1e-3f * std::max(1.0f, std::fabs(pv[static_cast<int>(d.id)]))) same = false;
+        CHECK(same, "blend on a point reproduces the preset's parameters");
+    }
+    {   // Between two points a float parameter lies between the two values.
+        int a = -1, bIdx = -1;
+        for (int i = 0; i < numPresets() && bIdx < 0; ++i) for (int j = i + 1; j < numPresets(); ++j)
+            if (std::fabs(PresetMap::presetValues(i)[static_cast<int>(ParamId::FarDecay)] - PresetMap::presetValues(j)[static_cast<int>(ParamId::FarDecay)]) > 20.0f) { a = i; bIdx = j; break; }
+        CHECK(a >= 0, "two presets with different far decay exist");
+        if (a >= 0) {
+            PresetMap::Blend b; b.count = 2; b.index[0] = a; b.index[1] = bIdx; b.weight[0] = b.weight[1] = 0.5f;
+            float v[kNumParams]; PresetMap::blend(b, v);
+            const float fa = PresetMap::presetValues(a)[static_cast<int>(ParamId::FarDecay)], fb = PresetMap::presetValues(bIdx)[static_cast<int>(ParamId::FarDecay)];
+            const float f = v[static_cast<int>(ParamId::FarDecay)];
+            CHECK(f > std::min(fa, fb) && f < std::max(fa, fb), "half-way blend lies between the two presets");
+        }
+    }
+    {   // Engine map mode: the effective parameters glide to the blend and stay put when the map is left.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.prepare(48000.0, 256);
+        const int p = 7;   // Distant Storm: depth 1, far decay 60
+        const PresetMeta& m = presetMeta(p);
+        const float before = e.effectiveParam(ParamId::FarDecay);
+        e.setParam(ParamId::MorphGlide, 0.5f);
+        e.setParam(ParamId::MapActive, 1.0f); e.setParam(ParamId::MapX, m.x); e.setParam(ParamId::MapY, m.y); e.setParam(ParamId::MapRadius, 0.005f);
+        render(e, 0.05);
+        const float early = e.effectiveParam(ParamId::FarDecay);
+        render(e, 3.0);
+        const float target = PresetMap::presetValues(p)[static_cast<int>(ParamId::FarDecay)];
+        const float late = e.effectiveParam(ParamId::FarDecay);
+        CHECK(e.mapActive(), "map mode active");
+        CHECK(std::fabs(early - before) < std::fabs(late - before), "map glides rather than jumps");
+        CHECK(std::fabs(late - target) < 0.05f * std::max(1.0f, target), "after the glide the engine plays the preset under the cursor");
+        CHECK(std::fabs(e.blendValue(ParamId::FarDecay) - late) < 1e-4f, "blendValue reports the gliding value");
+        e.setParam(ParamId::MapActive, 0.0f);
+        render(e, 0.05);
+        CHECK(!e.mapActive(), "map mode off again");
     }
 }
 
@@ -1154,6 +1217,7 @@ int main()
     testFeedback();
     testStackAndWander();
     testSources();
+    testPresetMap();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

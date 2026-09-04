@@ -79,6 +79,10 @@ def detect_pitch(mono, sr):
         k = int(cands[0]) + first
         while k + 1 < hi and ac[k + 1] > ac[k]:   # walk up to the actual local maximum
             k += 1
+        # Only a real interior peak counts; a candidate sitting on the range edge is noise
+        # that happened to correlate (it produced "2000 Hz" on a hum before this check).
+        if k <= first or k >= hi - 2 or ac[k] < ac[k - 1] or ac[k] < ac[k + 1]:
+            continue
         votes.append(sr / k)
     if len(votes) < 3 or len(votes) < 0.4 * max(1, (len(mono) - frame) // hop):
         return None, None

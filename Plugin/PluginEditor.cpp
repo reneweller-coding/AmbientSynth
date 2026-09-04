@@ -29,7 +29,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setLookAndFeel(&laf_);
 
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
@@ -145,6 +145,7 @@ void AmbientSynthEditor::buildCells()
             Section s; s.name = d.section;
             if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
             if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
+            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 10;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
                     for (auto& n : row) if (n == s.name) s.group = gi;
@@ -193,10 +194,16 @@ void AmbientSynthEditor::buildCells()
         cells_.push_back(std::move(c));
     }
 
-    // Extra cells: Scala loader, morph slot pickers and capture buttons.
+    // Extra cells: Scala loader, source files, morph slot pickers and capture buttons.
     auto scala = std::make_unique<juce::TextButton>("Load Scala...");
     scala->onClick = [this] { chooseScalaFile(); };
     addExtraCell("Tuning", std::move(scala), "User scale", 2);
+    auto table = std::make_unique<juce::TextButton>("Wavetable...");
+    table->onClick = [this] { chooseSourceFile(true); };
+    tableCell_ = addExtraCell("Source 2", std::move(table), "User table", 2);
+    auto texture = std::make_unique<juce::TextButton>("Texture...");
+    texture->onClick = [this] { chooseSourceFile(false); };
+    textureCell_ = addExtraCell("Source 3", std::move(texture), "Texture file", 2);
 
     auto boxA = std::make_unique<juce::ComboBox>();
     boxA->setTextWhenNothingSelected("A: preset");
@@ -390,8 +397,45 @@ void AmbientSynthEditor::timerCallback()
             c.label->setColour(juce::Label::textColourId, (cc >= 0 || learn == c.param) ? kAccent : kDim);
         }
     }
+    updateSourceCells();
     repaint(header_);
     if (Section* m = findSection("Morph")) content_.repaint(m->bounds.withTrimmedTop(-kGroupTitleH));
+}
+
+int AmbientSynthEditor::cellForParam(ParamId id) const
+{
+    for (int i = 0; i < static_cast<int>(cells_.size()); ++i) if (cells_[static_cast<size_t>(i)].param == static_cast<int>(id)) return i;
+    return -1;
+}
+
+void AmbientSynthEditor::updateSourceCells()
+{
+    // The 13 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
+    // 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position 7 pos drift 8 fm ratio 9 fm index
+    // 10 grain 11 density 12 follow. Grey what the chosen type ignores.
+    const ParamId first[2] = { ParamId::Src2Type, ParamId::Src3Type };
+    for (int k = 0; k < 2; ++k) {
+        const int type = static_cast<int>(std::lround(proc_.engine().getParam(first[k])));   // 0 off 1 wavetable 2 fm 3 texture
+        for (int off = 1; off <= 12; ++off) {
+            bool on = type != 0;
+            if (off == 5) on = type == 1;
+            else if (off == 6 || off == 7) on = type == 1 || type == 3 || (off == 7 && type == 2);
+            else if (off == 8 || off == 9) on = type == 2;
+            else if (off >= 10) on = type == 3;
+            const int ci = cellForParam(static_cast<ParamId>(static_cast<int>(first[k]) + off));
+            if (ci < 0) continue;
+            Cell& c = cells_[static_cast<size_t>(ci)];
+            if (c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }
+        }
+    }
+    auto nameCell = [&](int ci, const juce::String& base, const juce::String& file) {
+        if (ci < 0) return;
+        Cell& c = cells_[static_cast<size_t>(ci)];
+        const juce::String text = file.isNotEmpty() ? file : base;
+        if (c.label->getText() != text) c.label->setText(text, juce::dontSendNotification);
+    };
+    nameCell(tableCell_, "User table", proc_.wavetableName());
+    nameCell(textureCell_, "Texture file", proc_.textureName());
 }
 
 void AmbientSynthEditor::showMappingEditor()
@@ -427,6 +471,22 @@ void AmbientSynthEditor::showMappingEditor()
     mapEditor_ = editor;
     mapText_ = editor->getText();
     mapOpen_ = true;
+}
+
+void AmbientSynthEditor::chooseSourceFile(bool wavetable)
+{
+    chooser_ = std::make_unique<juce::FileChooser>(wavetable ? "Load a wavetable (2048-sample frames)" : "Load a texture sample",
+                                                   juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, wavetable](const juce::FileChooser& fc) {
+            const auto file = fc.getResult();
+            if (!file.existsAsFile()) return;
+            const bool ok = wavetable ? proc_.loadWavetableFile(file) : proc_.loadTextureFile(file);
+            if (!ok)
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, wavetable ? "Wavetable" : "Texture",
+                    wavetable ? "Could not read this file as a wavetable (it needs at least one 2048-sample frame)." : "Could not read this audio file.");
+            repaint();
+        });
 }
 
 void AmbientSynthEditor::chooseScalaFile()

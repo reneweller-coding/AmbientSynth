@@ -53,6 +53,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     panCenter_.init(rng_);
     breath_.init(rng_);
     rateWander_.init(rng_);
+    for (auto& s : slots_) s.prepare(sr_, rng_.fork());
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -76,6 +77,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     gFar_   = std::sin(distance_ * 0.5f * kPi);
     gLevel_ = 1.0f - 0.5f * distance_;
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
+    for (auto& s : slots_) s.noteOn(!env_.isActive());
     if (!env_.isActive()) {
         // Fresh start: random phases (no two voices share a waveform), silent partials.
         for (auto& s : strands_) {
@@ -109,6 +111,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // rate by up to +-1 octave, so five minutes never look like the five before.
     const float rw = rateWander_.update(dt, 0.01f, rng_);
     const float rateMul = p.rateWander > 0.0f ? std::pow(2.0f, rw * p.rateWander) : 1.0f;
+    rateMul_ = rateMul;
     const float driftRate = p.driftRate * rateMul, shimmerRate = p.shimmerRate * rateMul;
 
     const float bd = breath_.update(dt, p.breathRate * rateMul, rng_);
@@ -155,7 +158,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         cachedB_ = B;
     }
     const int unison = clampv(p.unison, 1, kMaxStrands);
-    const float norm = 1.0f / std::sqrt(static_cast<float>(unison));
+    const float norm = p.level / std::sqrt(static_cast<float>(unison));
     const double nyq = 0.45 * sr_;
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
@@ -262,10 +265,21 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         control(len, p);
         const int unison = clampv(p.unison, 1, kMaxStrands);
         const bool air = airGain_ > 0.0f;
+        // Extra sources render block-wise into their own buffers, then join the strands
+        // before the filter (they share filter, envelope, distance and ITD with the bank).
+        float slotL[kControlBlock], slotR[kControlBlock];
+        bool anySlot = false;
+        for (int k = 0; k < kSlots; ++k) {
+            const SlotParams& sp = p.slot[k];
+            if (sp.type == SourceType::Off) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
+            if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
+            const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
+            slots_[k].render(slotL, slotR, len, freq_, sp, table, p.texture, p.driftRate * rateMul_);
+        }
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();
             const float th = doFm ? fm[pos + i] * fmScale : 0.0f;
-            float accL = 0.0f, accR = 0.0f;
+            float accL = anySlot ? slotL[i] : 0.0f, accR = anySlot ? slotR[i] : 0.0f;
             for (int si = 0; si < unison; ++si) {
                 Strand& s = strands_[si];
                 float sum = 0.0f;

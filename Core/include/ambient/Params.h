@@ -10,12 +10,17 @@ namespace ambient {
 enum class ParamId : int {
     // Master
     MasterGain,
-    // Oscillator (additive partial bank per strand)
-    Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
+    // Oscillator (additive partial bank per strand = Source 1)
+    OscLevel, Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
     Unison, Detune, Drift, DriftRate, Spread, Bloom, BloomTime,
     // Stack: strands at pure ratios (one key = one just chord) instead of detuned copies;
     // Rate Wander: every voice's drift and shimmer rates themselves wander (nested LFO)
     Stack, RateWander,
+    // Source 2 / Source 3: extra sources per voice (wavetable of spectra, FM pair, texture)
+    Src2Type, Src2Level, Src2Octave, Src2Ratio, Src2Pan, Src2Table, Src2Position, Src2PosDrift,
+    Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2Follow,
+    Src3Type, Src3Level, Src3Octave, Src3Ratio, Src3Pan, Src3Table, Src3Position, Src3PosDrift,
+    Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3Follow,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
     SubLevel, SubOctave, SubGlide, SubBinaural, SubTone, SubSource, PadLowCut,

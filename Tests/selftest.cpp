@@ -11,6 +11,8 @@
 #include "ambient/Osc.h"
 #include "ambient/Menu.h"
 #include "ambient/Recorder.h"
+#include "ambient/Sources.h"
+#include "ambient/WavFile.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -265,7 +267,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(numPresets() == 128, "exactly 128 presets");
+    CHECK(numPresets() == 136, "exactly 136 presets");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
     for (int p = 0; p < numPresets(); ++p) {
@@ -313,6 +315,116 @@ double goertzel(const float* x, int n, double hz, double sr)
     double s0 = 0, s1 = 0, s2 = 0;
     for (int i = 0; i < n; ++i) { s0 = x[i] + c * s1 - s2; s2 = s1; s1 = s0; }
     return s1 * s1 + s2 * s2 - c * s1 * s2;
+}
+
+// Source slots: wavetable of spectra, FM pair, texture grains; WAV reader round trip.
+void testSources()
+{
+    const int sr = 48000;
+    auto quietVoice = [](Engine& e) {   // main bank silent (Source 1 level 0), everything dry
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::OscLevel, 0.0f);
+        e.setParam(ParamId::Attack, 0.2f);
+        e.setParam(ParamId::Scale, 0.0f); e.setParam(ParamId::RootNote, 9.0f);   // 12-TET, A: key 57 = 220 Hz
+        e.setParam(ParamId::Partials, 1.0f); e.setParam(ParamId::Unison, 1.0f);
+        e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f); e.setParam(ParamId::Shimmer, 0.0f);
+        e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Cutoff, 18000.0f); e.setParam(ParamId::FilterDrift, 0.0f); e.setParam(ParamId::FilterEnv, 0.0f);
+        e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::PanDrift, 0.0f); e.setParam(ParamId::Spread, 0.0f);
+        e.setParam(ParamId::Src2Pan, 0.0f); e.setParam(ParamId::Src2PosDrift, 0.0f); e.setParam(ParamId::Src2Level, 1.0f);
+    };
+    auto monoSecond = [&](Engine& e, int note, std::vector<float>& mono) {
+        e.prepare(sr, 256);
+        e.noteOn(note, 0.8f);
+        std::vector<float> cap;
+        render(e, 2.0, &cap);
+        mono.resize(sr);
+        for (int i = 0; i < sr; ++i) mono[static_cast<size_t>(i)] = cap[static_cast<size_t>((sr + i) * 2)];
+    };
+    {   // Wavetable Classic: position 0 is a sine, position 0.5 a saw (second partial at half).
+        std::vector<float> m;
+        Engine sine; quietVoice(sine);
+        sine.setParam(ParamId::Src2Type, 1.0f); sine.setParam(ParamId::Src2Table, 0.0f); sine.setParam(ParamId::Src2Position, 0.0f);
+        monoSecond(sine, 57, m);
+        const double s1 = goertzel(m.data(), sr, 220.0, sr), s2 = goertzel(m.data(), sr, 440.0, sr);
+        CHECK(s1 > 100.0 * s2, "wavetable position 0 (sine) has no second partial");
+        Engine saw; quietVoice(saw);
+        saw.setParam(ParamId::Src2Type, 1.0f); saw.setParam(ParamId::Src2Table, 0.0f); saw.setParam(ParamId::Src2Position, 0.5f);
+        monoSecond(saw, 57, m);
+        const double w1 = goertzel(m.data(), sr, 220.0, sr), w2 = goertzel(m.data(), sr, 440.0, sr), w3 = goertzel(m.data(), sr, 660.0, sr);
+        CHECK(w2 > 0.15 * w1 && w2 < 0.4 * w1 && w3 > 0.05 * w1, "wavetable position 0.5 (saw) has 1/h partials");
+        // Ratio 3/2 and octave +1 move the slot: 220 * 1.5 * 2 = 660 Hz.
+        Engine moved; quietVoice(moved);
+        moved.setParam(ParamId::Src2Type, 1.0f); moved.setParam(ParamId::Src2Position, 0.0f);
+        moved.setParam(ParamId::Src2Ratio, 5.0f); moved.setParam(ParamId::Src2Octave, 1.0f);
+        monoSecond(moved, 57, m);
+        CHECK(goertzel(m.data(), sr, 660.0, sr) > 50.0 * goertzel(m.data(), sr, 440.0, sr), "slot ratio 3/2 and octave +1 land at 660 Hz");
+    }
+    {   // FM: index 0 is a pure carrier, index 3 has sidebands at carrier +- modulator.
+        std::vector<float> m;
+        Engine pure; quietVoice(pure);
+        pure.setParam(ParamId::Src2Type, 2.0f); pure.setParam(ParamId::Src2FmIndex, 0.0f); pure.setParam(ParamId::Src2FmRatio, 2.0f);
+        monoSecond(pure, 57, m);
+        const double c0 = goertzel(m.data(), sr, 220.0, sr), sb0 = goertzel(m.data(), sr, 660.0, sr);
+        CHECK(c0 > 100.0 * sb0, "FM index 0 is a plain sine");
+        Engine fm; quietVoice(fm);
+        fm.setParam(ParamId::Src2Type, 2.0f); fm.setParam(ParamId::Src2FmIndex, 3.0f); fm.setParam(ParamId::Src2FmRatio, 2.0f);
+        monoSecond(fm, 57, m);
+        const double c1 = goertzel(m.data(), sr, 220.0, sr), sb1 = goertzel(m.data(), sr, 660.0, sr);
+        CHECK(sb1 > 0.1 * c1 && sb1 > 100.0 * sb0, "FM index 3 puts energy on the sidebands");
+        // Ratio 1 with a deep index carries a DC term (J1 of the index); the slot must block it.
+        Engine dc; quietVoice(dc);
+        dc.setParam(ParamId::Src2Type, 2.0f); dc.setParam(ParamId::Src2FmIndex, 1.5f); dc.setParam(ParamId::Src2FmRatio, 1.0f);
+        monoSecond(dc, 57, m);
+        double mean = 0; for (float v : m) mean += v; mean /= static_cast<double>(m.size());
+        CHECK(std::fabs(mean) < 0.002, "FM at ratio 1 has no DC offset");
+    }
+    {   // Texture: a 440 Hz sample; Free plays it as is, Note pitches it to the key (A3 = 220 with base C4 = 261.6 -> 370 Hz).
+        std::vector<float> sample(sr * 2);
+        for (int i = 0; i < sr * 2; ++i) sample[static_cast<size_t>(i)] = 0.5f * std::sin(kTwoPi * 440.0f * i / sr);
+        std::vector<float> m;
+        Engine freeT; quietVoice(freeT);
+        freeT.setParam(ParamId::Src2Type, 3.0f); freeT.setParam(ParamId::Src2Follow, 0.0f); freeT.setParam(ParamId::Src2Density, 20.0f);
+        freeT.setTexture(sample.data(), static_cast<int>(sample.size()), sr);
+        monoSecond(freeT, 57, m);
+        const double f440 = goertzel(m.data(), sr, 440.0, sr), f370 = goertzel(m.data(), sr, 370.0, sr);
+        CHECK(f440 > 20.0 * f370 && f440 > 1.0, "texture Free plays the sample at its own pitch");
+        Engine noteT; quietVoice(noteT);
+        noteT.setParam(ParamId::Src2Type, 3.0f); noteT.setParam(ParamId::Src2Follow, 1.0f); noteT.setParam(ParamId::Src2Density, 20.0f);
+        noteT.setTexture(sample.data(), static_cast<int>(sample.size()), sr);
+        monoSecond(noteT, 57, m);
+        const double n440 = goertzel(m.data(), sr, 440.0, sr), n370 = goertzel(m.data(), sr, 370.0, sr);
+        CHECK(n370 > 20.0 * n440, "texture Note pitches the sample to the key");
+        Engine none; quietVoice(none);
+        none.setParam(ParamId::Src2Type, 3.0f);
+        monoSecond(none, 57, m);
+        double sq = 0; for (float v : m) sq += v * v;
+        CHECK(sq < 1e-9, "texture slot without a loaded texture is silent");
+    }
+    {   // User wavetable from frames: frame 0 sine, frame 1 square -> analysed, position 1 shows odd partials.
+        std::vector<float> frames(4096);
+        for (int i = 0; i < 2048; ++i) { frames[static_cast<size_t>(i)] = std::sin(kTwoPi * i / 2048.0f); frames[static_cast<size_t>(2048 + i)] = i < 1024 ? 1.0f : -1.0f; }
+        Wavetable t;
+        CHECK(t.analyse(frames.data(), 4096) && t.frames == 2, "wavetable analysis finds two frames");
+        float spec[kTablePartials]; t.spectrumAt(1.0f, spec);
+        CHECK(spec[0] > 0.5f && spec[2] > 0.25f * spec[0] && spec[1] < 0.05f * spec[0], "square frame has odd partials only");
+        t.spectrumAt(0.0f, spec);
+        CHECK(spec[0] > 0.9f && spec[1] < 0.02f, "sine frame is a single partial");
+    }
+    {   // WAV reader: write with the recorder, read back.
+        const char* path = "selftest_wav_roundtrip.wav";
+        {
+            WavRecorder rec;
+            CHECK(rec.start(path, sr, 2), "recorder starts");
+            std::vector<float> L(4800), R(4800);
+            for (int i = 0; i < 4800; ++i) { L[static_cast<size_t>(i)] = 0.25f; R[static_cast<size_t>(i)] = 0.75f; }
+            rec.write(L.data(), R.data(), 4800);
+            rec.stop();
+        }
+        std::vector<float> mono; int rate = 0;
+        CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
+        std::remove(path);
+    }
 }
 
 // Stack: strands at pure ratios; Rate Wander: the movement rates themselves move.
@@ -1035,6 +1147,7 @@ int main()
     testRichCarving();
     testFeedback();
     testStackAndWander();
+    testSources();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

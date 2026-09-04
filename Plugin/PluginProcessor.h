@@ -40,6 +40,12 @@ public:
 
     // Message thread. Returns false if the file is not a valid Scala scale.
     bool loadScalaText(const juce::String& text, const juce::String& displayName);
+    // Source-slot data: a texture sample (any format JUCE reads; assumed recorded at C4 for
+    // Pitch = Note) and a user wavetable (2048-sample frames). Paths are kept in the state.
+    bool loadTextureFile(const juce::File& file);
+    bool loadWavetableFile(const juce::File& file);
+    juce::String textureName() const  { return textureFile_.existsAsFile() ? textureFile_.getFileNameWithoutExtension() : juce::String(); }
+    juce::String wavetableName() const { return wavetableFile_.existsAsFile() ? wavetableFile_.getFileNameWithoutExtension() : juce::String(); }
     // User presets as files (full state including a loaded Scala scale).
     bool savePresetFile(const juce::File& file);
     bool loadPresetFile(const juce::File& file);
@@ -87,6 +93,8 @@ private:
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
+    juce::File textureFile_, wavetableFile_;
+    bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;
     void applyScoped(const ambient::Preset& p, ambient::PresetScope scope);

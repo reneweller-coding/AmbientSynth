@@ -9,6 +9,8 @@ add_library(AmbientCore STATIC
     src/Gesture.cpp
     src/Osc.cpp
     src/Recorder.cpp
+    src/Sources.cpp
+    src/WavFile.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

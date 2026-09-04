@@ -47,9 +47,9 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in two independent layers that combine
-freely: the **Sound** box (128 presets: voices, space, delays, reverbs, brain,
+freely: the **Sound** box (136 presets: voices, space, delays, reverbs, brain,
 tuning) and the **Cosmos** box (32 presets for the Cosmos section only).
-Loading one layer never touches the other. In a DAW the 128 full presets are
+Loading one layer never touches the other. In a DAW the 136 full presets are
 the plugin's programs (both layers at once). *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
@@ -115,6 +115,14 @@ Sections of the GUI (all parameters are automatable in a DAW):
   major or minor triad, sevenths, harmonics, subharmonics): one key, one
   beat-free chord. *Rate Wander* lets every movement rate itself wander
   slowly, so the drone never repeats its own pace.
+* **Source 2 / Source 3** — two more sources per voice next to the partial
+  bank, each with level, octave, a just ratio to the note and pan, sharing
+  the voice's filter, envelope and distance. *Wavetable* is a table of
+  spectra rendered by the same alias-free partial bank (Classic, Organ,
+  Vocal, Glass, Metal, or a *User* table from a 2048-frame WAV), *Position*
+  morphs and drifts; *FM* is a two-operator pair; *Texture* granulates a
+  loaded sample (field recording, flute air, metal) around a wandering
+  position, free-running or pitched to the key.
 * **Foundation** — a dry sub voice that follows the brain's root one or two
   octaves down and glides between roots (*Glide*); *Binaural* runs the two
   ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends

@@ -5,7 +5,7 @@
 namespace ambient {
 
 namespace {
-// 128 presets in ten families. Unspecified parameters keep their defaults
+// 136 presets in eleven families. Unspecified parameters keep their defaults
 // (see Params.cpp); the Cosmos send is off unless a preset turns it on.
 const Preset kPresets[] = {
     // ---------------------------------------------------------------- 0..9 originals
@@ -379,6 +379,39 @@ const Preset kPresets[] = {
     { "White Storm",
       "air=1;air_color=8;air_q=2;partials=2;brain_density=8;brain_consonance=0;master_gain=-10;far_decay=30;dly_mix=0.3;"
       "dly_feedback=0.7;scale=12-TET" },
+
+    // ---------------------------------------------------------------- 128..135 sources (wavetable, FM, feedback)
+    { "Vocal Morph Choir",
+      "src2_type=Wavetable;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
+      "src3_type=Wavetable;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;src3_octave=-1;"
+      "osc_level=0.5;partials=8;brain_density=4;far_decay=30;far_highcut=4000;scale=JI Major (Ptolemy);root=A" },
+    { "Glass Table Drift",
+      "src2_type=Wavetable;src2_table=Glass;src2_pos=0.3;src2_pos_drift=0.8;src2_level=0.7;src2_octave=1;"
+      "osc_level=0.4;partials=6;tilt=1.5;far_size=3;far_decay=45;far_highcut=8000;brain_low=48;brain_high=88;attack=8;release=20" },
+    { "Organ Mixture Cloud",
+      "src2_type=Wavetable;src2_table=Organ;src2_pos=0.6;src2_pos_drift=0.4;src2_level=0.6;"
+      "src3_type=Wavetable;src3_table=Organ;src3_pos=0.9;src3_level=0.4;src3_octave=-1;src3_ratio=3/2;"
+      "osc_level=0.3;scale=Pythagorean;root=D;near_mix=0.4;near_decay=3;far_level=0.5;brain_density=4;cloud_send=0.3" },
+    { "Metal Field",
+      "src2_type=Wavetable;src2_table=Metal;src2_pos=0.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.5;"
+      "src3_type=Wavetable;src3_table=Metal;src3_pos=0.1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.5;src3_ratio=7/4;src3_octave=-1;"
+      "osc_level=0.3;inharmonic=0.4;partials=12;cutoff=1800;far_decay=40;far_highcut=3000;brain_consonance=0.3;brain_density=5;fb_fm=0.3" },
+    { "FM Bell Drone",
+      "src2_type=FM;src2_fm_ratio=3.5;src2_fm_index=2.5;src2_pos_drift=0.8;src2_level=0.5;src2_octave=1;"
+      "osc_level=0.5;partials=6;attack=2;decay=20;sustain=0.4;release=25;far_decay=35;far_highcut=6000;brain_rate=15;brain_hold_min=10;brain_hold_max=60;"
+      "scale=JI Pentatonic;root=E" },
+    { "Slow FM Tide",
+      "src2_type=FM;src2_fm_ratio=1;src2_fm_index=1.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.4;"
+      "src3_type=FM;src3_fm_ratio=0.5;src3_fm_index=1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.4;src3_octave=-1;"
+      "osc_level=0.4;tilt=1.6;cutoff=1500;arc=0.6;arc_period=30;brain_density=4;far_decay=40;breath=0.4" },
+    { "Feedback Hiss",
+      "fb_bus=0.6;fb_drive=1;fb_tone=3000;fb_fm=0.3;src2_type=Wavetable;src2_table=Classic;src2_pos=0.55;src2_level=0.4;"
+      "osc_level=0.6;partials=10;cutoff=2000;far_decay=30;dly_feedback=0.7;dly_mix=0.3;brain_density=4;master_gain=-9" },
+    { "Three Voices, One Key",
+      "brain_on=off;keys_depth=0;stack=Major;strands=3;detune=0;drift=1;osc_level=0.7;"
+      "src2_type=Wavetable;src2_table=Classic;src2_pos=0.25;src2_level=0.4;src2_octave=-1;"
+      "src3_type=FM;src3_fm_ratio=2;src3_fm_index=0.8;src3_level=0.3;src3_octave=1;src3_ratio=3/2;"
+      "near_mix=0.3;far_level=0.4;attack=2;release=8;presence=2" },
 };
 }
 

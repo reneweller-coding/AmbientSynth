@@ -52,7 +52,7 @@ skeleton; the plan is to keep its structure and replace the demo content:
    close and bright. Hands are drawn as the instrument's handles; the clutch
    state is visible. First version: point sprites / soft discs on GLES, later
    Vulkan.
-4. **Presets and state**: the 128 + 32 presets are compiled in; morph slots
+4. **Presets and state**: the 136 + 32 presets are compiled in; morph slots
    A/B chosen by a menu on the wrist or by voice later.
 5. **Bridge mode**: the same app can send its hand data as OSC to a PC
    (`/ambient/hand/L|R`, `/ambient/head`) so the desktop plugin can be played

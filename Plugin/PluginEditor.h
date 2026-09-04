@@ -24,6 +24,10 @@ public:
 private:
     void timerCallback() override;
     void chooseScalaFile();
+    void chooseSourceFile(bool wavetable);
+    void updateSourceCells();   // greys the cells a slot's type does not use, names the loaded files
+    int  cellForParam(ambient::ParamId id) const;
+    int  tableCell_ = -1, textureCell_ = -1;
     void buildCells();
     int  addExtraCell(const juce::String& section, std::unique_ptr<juce::Component> comp, const juce::String& label, int units);
     void paintRoutingMap(juce::Graphics&, juce::Rectangle<int> area);

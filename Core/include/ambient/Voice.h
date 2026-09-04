@@ -8,6 +8,7 @@
 // is rendered with a true interaural time difference, not only with gain.
 #pragma once
 #include "Dsp.h"
+#include "Sources.h"
 #include <cstdint>
 
 namespace ambient {
@@ -18,6 +19,7 @@ constexpr int kControlBlock = 64;   // samples between control-rate updates (1.3
 constexpr int kItdBuffer    = 256;  // >= 0.7 ms at 192 kHz
 
 struct VoiceParams {
+    float level = 1.0f;         // level of the partial bank (Source 1)
     int   partials = 16;
     float tilt = 1.2f, brightness = 0.7f, oddEven = 0.0f, inharmonic = 0.0f;
     float shimmer = 0.4f, shimmerRate = 0.15f;
@@ -35,6 +37,10 @@ struct VoiceParams {
     float breath = 0.0f, breathRate = 0.03f;   // slow wandering of the distance itself (+-0.35 at 1)
     float lowCut = 0.0f;        // Hz; partials below fall 12 dB/oct, keeping the pads out of the sub's register
     float fmAmount = 0.0f;      // phase modulation of every partial (h times the deviation) by the `fm` signal given to render()
+    // Extra sources (Source 2 / 3) and the data they may need; pointers stay valid for the block.
+    SlotParams       slot[kSlots];
+    const Wavetable* userTable = nullptr;
+    const Texture*   texture = nullptr;
 };
 
 class Voice {
@@ -75,6 +81,8 @@ private:
     void control(int blockLen, const VoiceParams& p);
 
     Strand   strands_[kMaxStrands];
+    SourceSlot slots_[kSlots];
+    float    rateMul_ = 1.0f;
     Envelope env_;
     Svf      filtL_, filtR_;
     Svf      airL_, airR_;

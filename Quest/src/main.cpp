@@ -10,6 +10,8 @@
 // Files in <externalDataPath>:
 //   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert
 //   calib.txt     hand calibration, written after the calibration gesture
+//   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
+//   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)
 //   rec-*.wav     recordings
 
 #include <android/log.h>
@@ -34,12 +36,14 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <memory>
 
 #include "ambient/Engine.h"
 #include "ambient/Gesture.h"
 #include "ambient/Menu.h"
 #include "ambient/Presets.h"
 #include "ambient/Recorder.h"
+#include "ambient/WavFile.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "AmbientSynth", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AmbientSynth", __VA_ARGS__)
@@ -422,6 +426,7 @@ public:
         if (!config_.preset.empty())
             for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) { engine_.applyPreset(i); presetA_ = presetB_ = i; }
         loadCalibration();
+        loadSourceFiles();
         if (!config_.oscHost.empty()) {
             if (osc_.open(config_.oscHost, config_.oscPort)) LOGI("bridge: OSC to %s:%d", config_.oscHost.c_str(), config_.oscPort);
             else LOGE("bridge: bad host %s", config_.oscHost.c_str());
@@ -435,6 +440,22 @@ public:
         if (config_.audio && !audio_.start()) LOGE("audio failed to start");
         if (!calibrated_) { gestures_.startCalibration(8.0f); LOGI("no calibration file: calibrating for 8 s"); }
         return true;
+    }
+
+    // texture.wav (a field recording etc., assumed at C4 for Pitch = Note) and wavetable.wav
+    // (2048-sample frames) in the data folder feed the Texture and User-table source slots.
+    void loadSourceFiles()
+    {
+        if (dataDir_.empty()) return;
+        std::vector<float> mono; int rate = 0;
+        if (readWavMono((dataDir_ + "/texture.wav").c_str(), mono, rate)) {
+            engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate);
+            LOGI("texture.wav: %.1f s @ %d Hz", mono.size() / static_cast<double>(rate), rate);
+        }
+        if (readWavMono((dataDir_ + "/wavetable.wav").c_str(), mono, rate)) {
+            if (engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) LOGI("wavetable.wav: %d frames", engine_.userWavetableFrames());
+            else LOGE("wavetable.wav: needs 2048-sample frames");
+        }
     }
 
     void run()
@@ -921,10 +942,11 @@ void android_main(android_app* app)
     JNIEnv* env = nullptr;
     app->activity->vm->AttachCurrentThread(&env, nullptr);
     {
-        App a(app);
-        if (a.init()) a.run();
+        // On the heap: the engine inside is a few hundred KB, the glue thread's stack is 1 MB.
+        auto a = std::make_unique<App>(app);
+        if (a->init()) a->run();
         else LOGE("init failed");
-        a.shutdown();
+        a->shutdown();
     }
     app->activity->vm->DetachCurrentThread();
 }

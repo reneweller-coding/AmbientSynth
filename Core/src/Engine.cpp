@@ -145,6 +145,36 @@ void Engine::setUserScale(const FixedScale& s)
     userVersion_.fetch_add(1, std::memory_order_release);
 }
 
+void Engine::setUserWavetable(const Wavetable& t)
+{
+    while (tableBusy_.load(std::memory_order_acquire)) { /* audio thread copying, microseconds */ }
+    userTablePending_ = t;
+    userTableFrames_.store(t.frames, std::memory_order_relaxed);
+    tableVersion_.fetch_add(1, std::memory_order_release);
+}
+
+bool Engine::loadUserWavetable(const float* mono, int n, int frameLen)
+{
+    Wavetable t;
+    if (!t.analyse(mono, n, frameLen)) return false;
+    setUserWavetable(t);
+    return true;
+}
+
+void Engine::setTexture(const float* mono, int n, double sampleRate, double baseHz)
+{
+    const int active = textureActive_.load(std::memory_order_acquire);
+    const int target = active < 0 ? 0 : 1 - active;
+    // Wait until the audio thread no longer holds the target buffer (it publishes the index it
+    // used last); bounded, so a host without a running audio thread cannot hang us.
+    for (int spin = 0; spin < 200000 && textureInUse_.load(std::memory_order_acquire) == target; ++spin) { }
+    Texture& t = textures_[target];
+    t.mono.assign(mono, mono + std::max(n, 0));
+    t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
+    textureActive_.store(target, std::memory_order_release);
+}
+
 double Engine::frequencyOf(int note) const
 {
     return scaleFrequency(*scale_, note, rootNote_, refPitch_, snapKeys_);
@@ -220,6 +250,7 @@ void Engine::allNotesOff()
 void Engine::readParams()
 {
     auto g = [this](ParamId id) { return effectiveParam(id); };
+    vp_.level       = g(ParamId::OscLevel);
     vp_.partials    = static_cast<int>(std::lround(g(ParamId::Partials)));
     vp_.tilt        = g(ParamId::Tilt);
     vp_.brightness  = g(ParamId::Brightness);
@@ -236,6 +267,30 @@ void Engine::readParams()
     vp_.bloomTime   = g(ParamId::BloomTime);
     vp_.stack       = static_cast<int>(std::lround(g(ParamId::Stack)));
     vp_.rateWander  = g(ParamId::RateWander);
+    {   // Source slots: 13 parameters each, laid out identically for Source 2 and Source 3.
+        const ParamId first[kSlots] = { ParamId::Src2Type, ParamId::Src3Type };
+        for (int k = 0; k < kSlots; ++k) {
+            auto at = [&](int off) { return g(static_cast<ParamId>(static_cast<int>(first[k]) + off)); };
+            SlotParams& s = vp_.slot[k];
+            s.type          = static_cast<SourceType>(clampv(static_cast<int>(std::lround(at(0))), 0, kNumSourceTypes - 1));
+            s.level         = at(1);
+            s.octave        = static_cast<int>(std::lround(at(2)));
+            s.ratio         = static_cast<int>(std::lround(at(3)));
+            s.pan           = at(4);
+            s.table         = static_cast<int>(std::lround(at(5)));
+            s.position      = at(6);
+            s.positionDrift = at(7);
+            s.fmRatio       = at(8);
+            s.fmIndex       = at(9);
+            s.grainMs       = at(10);
+            s.density       = at(11);
+            s.follow        = at(12) >= 0.5f;
+        }
+        vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
+        const int a = textureActive_.load(std::memory_order_acquire);
+        textureInUse_.store(a, std::memory_order_release);
+        vp_.texture = (a >= 0 && !textures_[a].empty()) ? &textures_[a] : nullptr;
+    }
     subLevel_       = g(ParamId::SubLevel);
     subOctave_      = std::lround(g(ParamId::SubOctave)) == 0 ? 1 : 2;
     subGlide_       = g(ParamId::SubGlide);
@@ -350,13 +405,20 @@ void Engine::process(float* L, float* R, int n)
     const unsigned int savedCsr = _mm_getcsr();
     _mm_setcsr(savedCsr | 0x8040);   // flush-to-zero + denormals-are-zero
 #endif
-    // Pending user scale (written from the message thread).
+    // Pending user scale / wavetable (written from the message thread).
     const int uv = userVersion_.load(std::memory_order_acquire);
     if (uv != userSeen_) {
         userBusy_.store(true, std::memory_order_release);
         scales_[kNumScaleChoices - 1] = userPending_;
         userBusy_.store(false, std::memory_order_release);
         userSeen_ = uv;
+    }
+    const int tv = tableVersion_.load(std::memory_order_acquire);
+    if (tv != tableSeen_) {
+        tableBusy_.store(true, std::memory_order_release);
+        userTable_ = userTablePending_;
+        tableBusy_.store(false, std::memory_order_release);
+        tableSeen_ = tv;
     }
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);

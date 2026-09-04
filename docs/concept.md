@@ -120,7 +120,7 @@ rate), renormalised once per control block so it stays on the unit circle.
 No table lookup and no phase accumulator in the inner loop, and the
 partials are independent of each other, so the loop pipelines and
 vectorises. Measured on one core of an i9-12900K, 48 kHz: the effect chain
-alone costs 1 % of a core; `ambient_render --bench` (all 128 presets, held
+alone costs 1 % of a core; `ambient_render --bench` (all presets, held
 chord plus brain, 256-sample blocks) went from a median of 22× realtime
 (table lookups) to 39×, the slowest preset from 11× to 16×; five voices with
 six strands of 32 partials run at 17× harmonic or inharmonic alike. Two
@@ -190,6 +190,46 @@ remaining), a root note, a timer.
   by 2^(±wander), the nested-LFO idea — the movement itself speeds up and
   slows down, so a stretch of five minutes never resembles the previous
   five.
+
+### Source 2 and Source 3
+
+Every voice has two extra source slots next to the partial bank (Source 1,
+which got its own *Level*). Each slot has a type, level, octave, a just
+ratio to the note (1/1 … 2/1, so a slot can sit a fifth or a seventh above
+the key), and a pan; all of it goes through the voice's filter, envelope,
+distance and ITD like the bank. `Core/include/ambient/Sources.h`.
+
+* **Wavetable** — a table of *spectra*, not of samples: up to 64 frames of
+  32 partial amplitudes. *Position* interpolates between frames, *Pos
+  Drift* lets it wander on a 50-second curve, and the result is rendered by
+  a rotating-phasor bank like the main oscillator. Alias-free, and
+  presence, low cut and the feedback's phase modulation treat it like any
+  other partials. Built-in tables are generated (Classic: sine → triangle
+  → saw → square → pulse; Organ drawbars; Vocal formants a-e-i-o-u; Glass;
+  Metal); *User* is analysed from a WAV with 2048-sample single-cycle
+  frames (the Serum/Vital layout) — FFT per frame, bins 1–32, up to 64
+  frames picked evenly. Measured: Classic at 0 is a sine (no second
+  partial within 100×), at 0.5 a saw (second partial at 1/4 the power,
+  third present); ratio 3/2 with octave +1 puts A3 at 660 Hz.
+* **FM** — carrier at the slot pitch, modulator at *FM Ratio*, *FM Index*
+  up to 8, shrinking above 3 kHz so high notes do not alias; *Pos Drift*
+  wanders the index by up to a factor two. Measured: index 0 is a sine,
+  index 3 puts more than a tenth of the carrier's energy on the sideband.
+* **Texture** — a granular player over a loaded sample: up to 8 Hann grains
+  of *Grain* ms at *Density* per second, around *Position* (wandering with
+  *Pos Drift*, sprayed ±3 %), each grain with its own small pan. *Pitch* =
+  Free plays the sample at its speed (octave and ratio become speed
+  multipliers); Note pitches it to the key, assuming the sample was
+  recorded at C4. The texture is double-buffered in the engine so a new
+  file never touches the buffer the audio thread reads. Measured: a 440 Hz
+  sample plays at 440 Hz in Free and at 370 Hz on A3 in Note; an empty
+  slot is silent.
+
+The plugin loads textures in any format JUCE reads (paths kept in the
+state), the render tool takes `--texture file.wav [baseHz]` and
+`--wavetable file.wav`, and the Quest app picks up `texture.wav` and
+`wavetable.wav` from its data folder. The core has its own WAV reader for
+that (PCM 8–32 and float, any channel count mixed to mono).
 
 ## Foundation, Bloom, Hold, Macros
 
@@ -285,8 +325,8 @@ the same thing. At 0.1 the loop thickens a drone without taking it over.
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
 parameter table (choices by name). The engine, the render tool (`--preset`)
-and the plugin's program list all use the same table. 128 presets in ten
-families; all 128 render finite with a held chord, levels −29 … −11 dBFS.
+and the plugin's program list all use the same table. 136 presets in eleven
+families; all render finite with a held chord, levels −29 … −11 dBFS.
 User presets are saved by the plugin as `.ambientsynth` XML files (full
 state including a loaded Scala scale).
 
@@ -294,7 +334,7 @@ Two layers, loadable independently and combinable (`PresetScope`):
 *Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
 section. Applying a preset in one scope resets only that scope's parameters
 to their defaults and then to the preset's values; the other layer is
-untouched. The 128 full presets serve as the Sound bank (their sound layer)
+untouched. The 136 full presets serve as the Sound bank (their sound layer)
 and as DAW programs (both layers); a separate 32-entry Cosmos bank ("Cosmos
 Off", shifters, resonators, vowels, nebulae, shimmers, the sci-fi
 combinations) serves the Cosmos box. All 160 render finite.

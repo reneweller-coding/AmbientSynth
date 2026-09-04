@@ -1,4 +1,5 @@
 #include "ambient/Params.h"
+#include "ambient/Sources.h"   // choice names of the source slots
 #include <cstring>
 
 namespace ambient {
@@ -54,6 +55,7 @@ constexpr ParamDesc C(ParamId id, const char* key, const char* name, const char*
 const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::MasterGain,  "master_gain",  "Master",        "Master",     -40.f, 12.f,   -6.f,  1.f,  "dB"),
 
+    F(ParamId::OscLevel,    "osc_level",    "Level",         "Oscillator", 0.f,   1.f,    1.f,   1.f,  ""),
     I(ParamId::Partials,    "partials",     "Partials",      "Oscillator", 1.f,   32.f,   16.f),
     F(ParamId::Tilt,        "tilt",         "Spectral Tilt", "Oscillator", 0.3f,  3.f,    1.2f,  1.f,  ""),
     F(ParamId::Brightness,  "brightness",   "Brightness",    "Oscillator", 0.f,   1.f,    0.7f,  1.f,  ""),
@@ -70,6 +72,34 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::BloomTime,   "bloom_time",   "Bloom Time",    "Oscillator", 5.f,   300.f,  60.f,  0.4f, "s"),
     C(ParamId::Stack,       "stack",        "Stack",         "Oscillator", kStackNames, kNumStacks, 0),
     F(ParamId::RateWander,  "rate_wander",  "Rate Wander",   "Oscillator", 0.f,   1.f,    0.3f,  1.f,  ""),
+
+    C(ParamId::Src2Type,     "src2_type",     "Type",      "Source 2", kSourceTypeNames, kNumSourceTypes, 0),
+    F(ParamId::Src2Level,    "src2_level",    "Level",     "Source 2", 0.f,   1.f,    0.5f,   1.f,  ""),
+    I(ParamId::Src2Octave,   "src2_octave",   "Octave",    "Source 2", -2.f,  2.f,    0.f),
+    C(ParamId::Src2Ratio,    "src2_ratio",    "Ratio",     "Source 2", kSlotRatioNames, kNumSlotRatios, 0),
+    F(ParamId::Src2Pan,      "src2_pan",      "Pan",       "Source 2", -1.f,  1.f,    -0.3f,  1.f,  ""),
+    C(ParamId::Src2Table,    "src2_table",    "Table",     "Source 2", kTableNames, kNumTables, 0),
+    F(ParamId::Src2Position, "src2_pos",      "Position",  "Source 2", 0.f,   1.f,    0.3f,   1.f,  ""),
+    F(ParamId::Src2PosDrift, "src2_pos_drift","Pos Drift", "Source 2", 0.f,   1.f,    0.3f,   1.f,  ""),
+    F(ParamId::Src2FmRatio,  "src2_fm_ratio", "FM Ratio",  "Source 2", 0.25f, 8.f,    2.f,    0.5f, "x"),
+    F(ParamId::Src2FmIndex,  "src2_fm_index", "FM Index",  "Source 2", 0.f,   8.f,    1.f,    0.6f, ""),
+    F(ParamId::Src2Grain,    "src2_grain",    "Grain",     "Source 2", 30.f,  1000.f, 200.f,  0.5f, "ms"),
+    F(ParamId::Src2Density,  "src2_density",  "Density",   "Source 2", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    C(ParamId::Src2Follow,   "src2_follow",   "Pitch",     "Source 2", kFollowNames, 2, 0),
+
+    C(ParamId::Src3Type,     "src3_type",     "Type",      "Source 3", kSourceTypeNames, kNumSourceTypes, 0),
+    F(ParamId::Src3Level,    "src3_level",    "Level",     "Source 3", 0.f,   1.f,    0.5f,   1.f,  ""),
+    I(ParamId::Src3Octave,   "src3_octave",   "Octave",    "Source 3", -2.f,  2.f,    0.f),
+    C(ParamId::Src3Ratio,    "src3_ratio",    "Ratio",     "Source 3", kSlotRatioNames, kNumSlotRatios, 0),
+    F(ParamId::Src3Pan,      "src3_pan",      "Pan",       "Source 3", -1.f,  1.f,    0.3f,   1.f,  ""),
+    C(ParamId::Src3Table,    "src3_table",    "Table",     "Source 3", kTableNames, kNumTables, 0),
+    F(ParamId::Src3Position, "src3_pos",      "Position",  "Source 3", 0.f,   1.f,    0.3f,   1.f,  ""),
+    F(ParamId::Src3PosDrift, "src3_pos_drift","Pos Drift", "Source 3", 0.f,   1.f,    0.3f,   1.f,  ""),
+    F(ParamId::Src3FmRatio,  "src3_fm_ratio", "FM Ratio",  "Source 3", 0.25f, 8.f,    2.f,    0.5f, "x"),
+    F(ParamId::Src3FmIndex,  "src3_fm_index", "FM Index",  "Source 3", 0.f,   8.f,    1.f,    0.6f, ""),
+    F(ParamId::Src3Grain,    "src3_grain",    "Grain",     "Source 3", 30.f,  1000.f, 200.f,  0.5f, "ms"),
+    F(ParamId::Src3Density,  "src3_density",  "Density",   "Source 3", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    C(ParamId::Src3Follow,   "src3_follow",   "Pitch",     "Source 3", kFollowNames, 2, 0),
 
     F(ParamId::SubLevel,    "sub_level",    "Level",         "Foundation", 0.f,   1.f,    0.f,   1.f,  ""),
     C(ParamId::SubOctave,   "sub_octave",   "Octave",        "Foundation", kSubOctaveNames, 2, 0),

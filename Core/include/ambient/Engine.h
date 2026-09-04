@@ -43,6 +43,14 @@ public:
 
     // Any thread. Applied at the start of the next block.
     void setUserScale(const FixedScale& s);
+    // User wavetable (Table = User in a source slot) and texture (Type = Texture), message
+    // thread. The texture is double-buffered: the call waits (at most one block) until the
+    // audio thread has left the buffer it is about to overwrite, then swaps.
+    void setUserWavetable(const Wavetable& t);
+    bool loadUserWavetable(const float* mono, int n, int frameLen = 2048);   // analyses frames, then sets
+    void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256);
+    bool hasTexture() const { return textureActive_.load(std::memory_order_relaxed) >= 0; }
+    int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
 
     // Morph: two full parameter snapshots (A = 0, B = 1). While MorphActive is on the
     // engine plays lerp(A, B, position); the position glides toward MorphPos at
@@ -121,6 +129,15 @@ private:
     std::atomic<int>  userVersion_{ 0 };
     std::atomic<bool> userBusy_{ false };
     int               userSeen_ = 0;
+    // User wavetable: pending copy + version (8 KB, copied by the audio thread).
+    Wavetable         userTable_, userTablePending_;
+    std::atomic<int>  tableVersion_{ 0 };
+    std::atomic<bool> tableBusy_{ false };
+    int               tableSeen_ = 0;
+    std::atomic<int>  userTableFrames_{ 0 };
+    // Texture: two buffers, the audio thread reads the active one and publishes which.
+    Texture           textures_[2];
+    std::atomic<int>  textureActive_{ -1 }, textureInUse_{ -1 };
     const FixedScale* scale_ = nullptr;
     int               rootNote_ = 62;
     double            refPitch_ = 440.0;

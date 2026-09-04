@@ -261,6 +261,44 @@ bool AmbientSynthProcessor::loadScalaText(const juce::String& text, const juce::
     return true;
 }
 
+bool AmbientSynthProcessor::readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate)
+{
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(file));
+    if (reader == nullptr || reader->lengthInSamples <= 0) return false;
+    const juce::int64 maxLen = static_cast<juce::int64>(reader->sampleRate * 120.0);   // two minutes is plenty for a texture
+    const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, maxLen));
+    juce::AudioBuffer<float> buf(static_cast<int>(reader->numChannels), n);
+    if (!reader->read(&buf, 0, n, 0, true, true)) return false;
+    mono.assign(static_cast<size_t>(n), 0.0f);
+    const float inv = 1.0f / static_cast<float>(buf.getNumChannels());
+    for (int c = 0; c < buf.getNumChannels(); ++c) {
+        const float* s = buf.getReadPointer(c);
+        for (int i = 0; i < n; ++i) mono[static_cast<size_t>(i)] += s[i] * inv;
+    }
+    sampleRate = reader->sampleRate;
+    return true;
+}
+
+bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
+{
+    std::vector<float> mono; double rate = 0.0;
+    if (!readMono(file, mono, rate)) return false;
+    engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate);
+    textureFile_ = file;
+    return true;
+}
+
+bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
+{
+    std::vector<float> mono; double rate = 0.0;
+    if (!readMono(file, mono, rate)) return false;
+    if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
+    wavetableFile_ = file;
+    return true;
+}
+
 bool AmbientSynthProcessor::savePresetFile(const juce::File& file)
 {
     juce::MemoryBlock block;
@@ -318,6 +356,8 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         state.setProperty("scalaName", userScaleName_, nullptr);
     }
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
+    if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
+    if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     juce::ValueTree midi("midi");
     for (int cc = 0; cc < 128; ++cc) {
         const int target = ccMap_[static_cast<size_t>(cc)].load();
@@ -365,8 +405,14 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeChild(tree.getChildWithName("midi"), nullptr);
             tree.removeChild(tree.getChildWithName("morphA"), nullptr);
             tree.removeChild(tree.getChildWithName("morphB"), nullptr);
+            const juce::String texPath = tree.getProperty("textureFile").toString();
+            const juce::String tabPath = tree.getProperty("wavetableFile").toString();
+            tree.removeProperty("textureFile", nullptr);
+            tree.removeProperty("wavetableFile", nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
+            if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));
+            if (tabPath.isNotEmpty() && juce::File(tabPath).existsAsFile()) loadWavetableFile(juce::File(tabPath));
         }
     }
 }

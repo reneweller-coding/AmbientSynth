@@ -5,9 +5,11 @@
 //   ambient_render [--out file.wav] [--seconds 60] [--sr 48000] [--block 256]
 //                  [--preset "name"] [--set key=value]... [--notes 45,52,59]
 //                  [--scl file.scl] [--stats] [--list] [--list-presets]
+//                  [--texture file.wav [baseHz]] [--wavetable file.wav]
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
+#include "ambient/WavFile.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -59,6 +61,22 @@ int main(int argc, char** argv)
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
         else if (a == "--scl") sclPath = next();
+        else if (a == "--texture") {
+            const std::string path = next();
+            double baseHz = 261.6256;
+            if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) baseHz = std::atof(argv[++i]);
+            std::vector<float> mono; int rate = 0;
+            if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
+            engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz);
+            std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz);
+        }
+        else if (a == "--wavetable") {
+            const std::string path = next();
+            std::vector<float> mono; int rate = 0;
+            if (!readWavMono(path.c_str(), mono, rate) || !engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
+            { std::fprintf(stderr, "cannot read wavetable %s (needs 2048-sample frames)\n", path.c_str()); return 2; }
+            std::printf("wavetable: %s (%d frames)\n", path.c_str(), engine.userWavetableFrames());
+        }
         else if (a == "--notes") {
             std::stringstream ss(next()); std::string tok;
             while (std::getline(ss, tok, ',')) if (!tok.empty()) notes.push_back(std::atoi(tok.c_str()));

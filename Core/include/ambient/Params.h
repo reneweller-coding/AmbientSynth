@@ -70,6 +70,8 @@ enum class ParamId : int {
     // Preset map: a cursor in the plane of all presets blends its neighbours (PresetMap.h);
     // performance state like the morph, never part of a preset
     MapActive, MapX, MapY, MapRadius,
+    // Route: the engine walks a route of waypoints over the map (Route.h); performance state
+    RouteActive, RouteSpeed, RouteLoop,
     Count
 };
 

@@ -12,7 +12,7 @@ namespace ambient {
 
 enum class MenuAction : int {
     None = -1,
-    ToggleMorph, CaptureA, CaptureB, PresetAPrev, PresetANext, PresetBPrev, PresetBNext, ToggleMap, ToggleRecord, Calibrate,
+    ToggleMorph, CaptureA, CaptureB, PresetAPrev, PresetANext, PresetBPrev, PresetBNext, ToggleMap, ToggleRoute, ToggleRecord, Calibrate,
     Count
 };
 constexpr int kMenuItems = static_cast<int>(MenuAction::Count);
@@ -28,6 +28,7 @@ inline const char* menuLabel(MenuAction a)
     case MenuAction::PresetBPrev:  return "B PREV";
     case MenuAction::PresetBNext:  return "B NEXT";
     case MenuAction::ToggleMap:    return "MAP ON/OFF";
+    case MenuAction::ToggleRoute:  return "ROUTE PLAY/STOP";
     case MenuAction::ToggleRecord: return "RECORD";
     case MenuAction::Calibrate:    return "CALIBRATE";
     default: return "";

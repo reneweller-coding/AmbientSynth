@@ -79,7 +79,11 @@ presets as points clustered by what they sound like; click a point to load
 it, or switch on *Map blend* and drag the cursor: the synth glides to the
 blend of the presets around the cursor, so the space between two presets
 becomes playable. The cursor is a parameter, so hands, MIDI, OSC or
-automation can wander the map.
+automation can wander the map. A **route** is a list of waypoints with
+travel and hold times that the synth walks by itself: pick one of the
+twelve route presets (20–40 minute sets) or build your own from the
+cursor, press *Play route*, and the set plays; *Speed* and *Loop* as you
+like. `ambient_render --route "Night Descent"` renders one offline.
 
 **Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
 until its key is pressed again, and switching Hold off releases everything.

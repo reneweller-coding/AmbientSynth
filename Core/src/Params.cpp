@@ -238,6 +238,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::MapX,      "map_x",      "X",      "Map", 0.f,   1.f,  0.5f,  1.f, ""),
     F(ParamId::MapY,      "map_y",      "Y",      "Map", 0.f,   1.f,  0.5f,  1.f, ""),
     F(ParamId::MapRadius, "map_radius", "Radius", "Map", 0.02f, 0.4f, 0.08f, 1.f, ""),
+
+    B(ParamId::RouteActive, "route_active", "Play",  "Route", false),
+    F(ParamId::RouteSpeed,  "route_speed",  "Speed", "Route", 0.25f, 4.f, 1.f, 0.5f, "x"),
+    B(ParamId::RouteLoop,   "route_loop",   "Loop",  "Route", true),
 }};
 } // namespace
 

@@ -85,6 +85,11 @@ public:
     int  learnTarget() const { return learnTarget_.load(); }
     juce::String userScaleName() const { return userScaleName_; }
 
+    // Route over the map (text form, see ambient/Route.h), kept in the plugin state.
+    bool setRouteText(const juce::String& text) { const juce::ScopedLock sl(routeLock_); if (!engine_.route().parse(text.toRawUTF8())) return false; routeText_ = text; return true; }
+    juce::String routeText() const { return routeText_; }
+    void clearRoute() { engine_.route().clear(); routeText_.clear(); }
+    bool addRoutePoint(const ambient::Waypoint& w) { if (!engine_.route().add(w)) return false; char buf[4096]; engine_.route().write(buf, sizeof(buf)); routeText_ = buf; return true; }
     // Favourite presets (browser stars), kept in the plugin state.
     bool isFavourite(int preset) const { return preset >= 0 && preset < 1024 && favourites_[preset]; }
     void setFavourite(int preset, bool on) { if (preset >= 0 && preset < 1024) favourites_.setBit(preset, on); }
@@ -101,6 +106,8 @@ private:
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_, wavetableFile_, impulseFile_;
     juce::BigInteger favourites_;
+    juce::String routeText_;
+    juce::CriticalSection routeLock_;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;

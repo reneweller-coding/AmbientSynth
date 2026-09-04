@@ -130,6 +130,22 @@ void Engine::morphSlot(int slot, float* out) const
     for (int i = 0; i < kNumParams; ++i) out[i] = s[i].load(std::memory_order_relaxed);
 }
 
+bool Engine::routeStep(double dt, float& x, float& y, float& radius)
+{
+    const bool active = getParam(ParamId::RouteActive) >= 0.5f && route_.count() > 0;
+    if (active && !routeWasActive_) {   // (re)start from where the cursor is now
+        route_.start(getParam(ParamId::MapX), getParam(ParamId::MapY), getParam(ParamId::MapRadius), getParam(ParamId::RouteLoop) >= 0.5f);
+    }
+    if (!active && routeWasActive_) route_.stop();
+    routeWasActive_ = active;
+    if (!active) { x = getParam(ParamId::MapX); y = getParam(ParamId::MapY); radius = getParam(ParamId::MapRadius); return false; }
+    const bool running = route_.update(static_cast<float>(dt) * getParam(ParamId::RouteSpeed), x, y, radius);
+    setParam(ParamId::MapX, x); setParam(ParamId::MapY, y); setParam(ParamId::MapRadius, radius);
+    if (getParam(ParamId::MapActive) < 0.5f) setParam(ParamId::MapActive, 1.0f);   // a route always plays through the map
+    if (!running) setParam(ParamId::RouteActive, 0.0f);                              // ended (not looping): the cursor stays
+    return running;
+}
+
 void Engine::updateBlend(int n)
 {
     // Map mode: blend the presets around the cursor, glide every parameter toward it.
@@ -146,7 +162,7 @@ void Engine::updateBlend(int n)
     const float coef = 1.0f - std::exp(-static_cast<float>(n / sr_) / (glide / 3.0f));   // ~95 % after `glide` seconds
     for (const ParamDesc& d : paramTable()) {
         const int i = static_cast<int>(d.id);
-        if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) { blendCur_[i].store(getParam(d.id), std::memory_order_relaxed); continue; }
+        if (isPerformanceParam(d.id)) { blendCur_[i].store(getParam(d.id), std::memory_order_relaxed); continue; }
         const float cur = blendCur_[i].load(std::memory_order_relaxed), tgt = blendTarget_[i];
         float next;
         switch (d.kind) {
@@ -170,7 +186,7 @@ void Engine::updateBlend(int n)
 float Engine::effectiveParam(ParamId id) const
 {
     const float live = getParam(id);
-    if (blendActive_.load(std::memory_order_relaxed) && !isMapParam(id) && !isMorphParam(id) && !isMacroParam(id)) {
+    if (blendActive_.load(std::memory_order_relaxed) && !isPerformanceParam(id)) {
         const float v = blendCur_[static_cast<int>(id)].load(std::memory_order_relaxed);
         return paramDesc(id).kind == ParamKind::Int ? static_cast<float>(std::lround(v)) : v;
     }

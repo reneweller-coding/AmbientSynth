@@ -478,6 +478,30 @@ between two presets a float lies between their values; the engine glides
 to Distant Storm's far decay within the glide time and reports the value
 through `blendValue`.
 
+## Route (the map plays itself)
+
+`Route` (`Core/include/ambient/Route.h`) is a list of up to 32 waypoints
+on the map — position, blend radius, a travel time to reach the point and
+a hold time to stay — walked by the engine: `routeStep` moves the map
+cursor with smoothstep travel between points (no jumps), holds, and either
+loops or stops at the last point and switches itself off, leaving the
+cursor where it is. A route always plays through the map blend, so a whole
+set becomes a path: parameters *Route Play*, *Speed* (0.25–4×) and *Loop*
+are performance state like the map itself. The text form
+`Preset Name|travel|hold[|radius]` (or `x,y|travel|hold[|radius]`) names
+presets rather than coordinates, so routes survive a re-measurement of the
+map; twelve **route presets** (`Core/src/Route.cpp`) are 20–40 minute
+sets — Night Descent from Dawn Drift into Deep Sleep Sub, Glass to Storm,
+Cosmos Crossing, Ninety Minute Arc and so on. The plugin's map view has the
+route strip (route preset, play, loop, speed, *+ point* appends the cursor
+as a waypoint, *Route…* edits the text) and draws the route with numbered
+points and the segment being walked; the Quest hand menu has ROUTE
+PLAY/STOP with the route from `ambient.cfg`; `ambient_render --route
+"Night Descent" 40` renders a set at 40× speed. Measured: every route
+preset parses and round-trips through text, a two-point route reaches the
+smoothstep midpoint half-way through its travel, and at speed 2 the engine
+walks a 12-second route in 6 seconds and switches itself off.
+
 ## Morph (the performance control)
 
 Two full parameter snapshots live in the engine (`slotA_`, `slotB_`, atomics

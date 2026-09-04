@@ -3,6 +3,7 @@
 #include "ambient/Presets.h"
 #include "ambient/PresetMeta.h"
 #include "ambient/PresetMap.h"
+#include "ambient/Route.h"
 
 using namespace ambient;
 
@@ -145,7 +146,12 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     setResizable(true, true);
     setSize(1500, 920);
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);   // open on the perform page
-    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "").isNotEmpty()) setPage(2);    // open on the browser
+    {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
+        const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");
+        if (br.isNotEmpty()) { setPage(2); if (br == "map") browse_->setMode(1); }
+        const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
+        for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
+    }
     startTimerHz(12);
 }
 
@@ -468,6 +474,34 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
         col.box.setColour(juce::ListBox::backgroundColourId, kBg);
         addAndMakeVisible(col.box);
     }
+    // Route strip
+    routeBox.setTextWhenNothingSelected("route preset");
+    for (int r = 0; r < numRoutePresets(); ++r) routeBox.addItem(routePreset(r).name, r + 1);
+    routeBox.onChange = [this] {
+        const int r = routeBox.getSelectedId() - 1;
+        if (r >= 0 && r < numRoutePresets()) { proc.setRouteText(routePreset(r).points); map.repaint(); }
+    };
+    addAndMakeVisible(routeBox);
+    routePlay.setButtonText("Play route"); addAndMakeVisible(routePlay);
+    routePlayAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.apvts, paramDesc(ParamId::RouteActive).key, routePlay);
+    routeLoop.setButtonText("loop"); addAndMakeVisible(routeLoop);
+    routeLoopAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.apvts, paramDesc(ParamId::RouteLoop).key, routeLoop);
+    routeSpeed.setSliderStyle(juce::Slider::LinearHorizontal); routeSpeed.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18); routeSpeed.setTextValueSuffix("x");
+    addAndMakeVisible(routeSpeed);
+    routeSpeedAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, paramDesc(ParamId::RouteSpeed).key, routeSpeed);
+    routeAdd.setTooltip("Append the current cursor (position and radius) as a waypoint: 60 s travel, 60 s hold");
+    routeAdd.onClick = [this] {
+        Waypoint w; w.x = proc.engine().getParam(ParamId::MapX); w.y = proc.engine().getParam(ParamId::MapY); w.radius = proc.engine().getParam(ParamId::MapRadius);
+        w.travel = 60.0f; w.hold = 60.0f;
+        const int near = map.nearestPreset(map.toScreen(w.x, w.y), 8.0f);
+        if (near >= 0) { w.preset = near; w.x = presetMeta(near).x; w.y = presetMeta(near).y; }
+        proc.addRoutePoint(w); routeBox.setSelectedId(0, juce::dontSendNotification); map.repaint();
+    };
+    routeClear.onClick = [this] { proc.clearRoute(); routeBox.setSelectedId(0, juce::dontSendNotification); map.repaint(); };
+    routeEdit.setTooltip("Edit the route as text: preset|travel|hold[|radius] or x,y|travel|hold[|radius], separated by ;");
+    routeEdit.onClick = [this] { showRouteEditor(); };
+    for (auto* b : { &routeAdd, &routeClear, &routeEdit }) addAndMakeVisible(*b);
+
     modeClassic.setClickingTogglesState(true); modeMap.setClickingTogglesState(true);
     modeClassic.setRadioGroupId(77); modeMap.setRadioGroupId(77);
     modeClassic.setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
@@ -489,6 +523,9 @@ void AmbientSynthEditor::BrowseView::setMode(int m)
     for (auto& b : tagButtons) b->setVisible(m == 1);
     family.setVisible(m == 1);
     map.setVisible(m == 1); mapActive.setVisible(m == 1); radius.setVisible(m == 1);
+    for (juce::Component* c : { static_cast<juce::Component*>(&routeBox), static_cast<juce::Component*>(&routePlay), static_cast<juce::Component*>(&routeLoop),
+                                static_cast<juce::Component*>(&routeSpeed), static_cast<juce::Component*>(&routeAdd), static_cast<juce::Component*>(&routeClear), static_cast<juce::Component*>(&routeEdit) })
+        c->setVisible(m == 1);
     resized();
     applyFilter();
 }
@@ -604,7 +641,47 @@ void AmbientSynthEditor::BrowseView::listBoxItemClicked(int row, const juce::Mou
     map.repaint();
 }
 
-void AmbientSynthEditor::BrowseView::timerCallback() { map.repaint(); list.repaint(); }
+void AmbientSynthEditor::BrowseView::timerCallback()
+{
+    map.repaint(); list.repaint();
+    if (routeEditOpen) {   // same pattern as the gesture editor: mirror while open, apply when gone
+        if (routeEditor != nullptr) routeEditText = routeEditor->getText();
+        else {
+            routeEditOpen = false;
+            if (routeEditText.trim().isEmpty()) proc.clearRoute();
+            else if (!proc.setRouteText(routeEditText))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Route", "A point could not be parsed (unknown preset name or malformed); the previous route is kept.");
+            routeBox.setSelectedId(0, juce::dontSendNotification);
+        }
+    }
+}
+
+void AmbientSynthEditor::BrowseView::showRouteEditor()
+{
+    auto* editor = new juce::TextEditor();
+    editor->setMultiLine(true, true);
+    editor->setReturnKeyStartsNewLine(true);
+    editor->setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    editor->setText(proc.routeText().replace(";", ";\n"), false);
+    editor->setSize(560, 320);
+    auto* content = new juce::Component();
+    content->setSize(560, 360);
+    content->addAndMakeVisible(editor);
+    editor->setTopLeftPosition(0, 0);
+    auto* hint = new juce::Label(juce::String(), "one point per line:  Preset Name|travel s|hold s[|radius]   or   x,y|travel|hold[|radius]");
+    hint->setFont(juce::FontOptions(11.0f)); hint->setColour(juce::Label::textColourId, kDim);
+    hint->setBounds(0, 324, 560, 30); content->addAndMakeVisible(hint);
+    juce::DialogWindow::LaunchOptions o;
+    o.content.setOwned(content);
+    o.dialogTitle = "Route over the map";
+    o.componentToCentreAround = this;
+    o.dialogBackgroundColour = kGroupFill;
+    o.escapeKeyTriggersCloseButton = true;
+    o.useNativeTitleBar = true;
+    o.resizable = false;
+    o.launchAsync();
+    routeEditor = editor; routeEditText = editor->getText(); routeEditOpen = true;
+}
 
 void AmbientSynthEditor::BrowseView::paint(juce::Graphics& g)
 {
@@ -645,6 +722,18 @@ void AmbientSynthEditor::BrowseView::resized()
     }
     info.setBounds(buttons);
     area.removeFromBottom(6);
+    if (mode == 1) {   // route strip above the bottom row, on the map side
+        auto strip = area.removeFromBottom(26);
+        strip.removeFromLeft(juce::jmax(420, (getLocalBounds().reduced(16).getWidth()) * 2 / 5) + 12);
+        routeBox.setBounds(strip.removeFromLeft(170)); strip.removeFromLeft(6);
+        routePlay.setBounds(strip.removeFromLeft(96)); strip.removeFromLeft(2);
+        routeLoop.setBounds(strip.removeFromLeft(56)); strip.removeFromLeft(6);
+        routeSpeed.setBounds(strip.removeFromLeft(juce::jmax(120, strip.getWidth() - 250))); strip.removeFromLeft(6);
+        routeAdd.setBounds(strip.removeFromLeft(70)); strip.removeFromLeft(4);
+        routeClear.setBounds(strip.removeFromLeft(56)); strip.removeFromLeft(4);
+        routeEdit.setBounds(strip.removeFromLeft(70));
+        area.removeFromBottom(6);
+    }
 
     if (mode == 0) {
         // Omnisphere-style: four columns on top, the results below.
@@ -732,6 +821,32 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
             if (pass == 0) c = c.withAlpha(0.18f);
             g.setColour(c); g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
             if (i == owner.selected || i == current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
+        }
+    }
+    // the route: numbered points joined by a line, the segment being walked highlighted
+    {
+        const Route& rt = owner.proc.engine().route();
+        if (rt.count() > 0) {
+            const bool running = rt.running();
+            const int seg = rt.segment();
+            for (int i = 0; i < rt.count(); ++i) {
+                const Waypoint& w = rt.point(i);
+                const auto s = toScreen(w.x, w.y);
+                if (i > 0) {
+                    const Waypoint& pw = rt.point(i - 1);
+                    const auto ps = toScreen(pw.x, pw.y);
+                    g.setColour(juce::Colour(0xffe0c070).withAlpha(running && i == seg ? 0.9f : 0.35f));
+                    g.drawLine(juce::Line<float>(ps, s), running && i == seg ? 2.0f : 1.0f);
+                }
+                g.setColour(juce::Colour(0xffe0c070).withAlpha(0.8f));
+                g.drawEllipse(s.x - 9, s.y - 9, 18, 18, 1.2f);
+                g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+                g.drawText(juce::String(i + 1), static_cast<int>(s.x) - 9, static_cast<int>(s.y) - 9, 18, 18, juce::Justification::centred);
+            }
+            if (owner.proc.engine().getParam(ParamId::RouteLoop) >= 0.5f && rt.count() > 1) {
+                g.setColour(juce::Colour(0xffe0c070).withAlpha(0.2f));
+                g.drawLine(juce::Line<float>(toScreen(rt.point(rt.count() - 1).x, rt.point(rt.count() - 1).y), toScreen(rt.point(0).x, rt.point(0).y)), 1.0f);
+            }
         }
     }
     // neighbour lines while blending

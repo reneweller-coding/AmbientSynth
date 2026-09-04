@@ -156,6 +156,16 @@ private:
         juce::ToggleButton mapActive;
         juce::Slider radius;
         juce::Label info;
+        // route strip (map view): preset routes, play/loop/speed, add the cursor as a point, edit the text
+        juce::ComboBox routeBox;
+        juce::ToggleButton routePlay, routeLoop;
+        juce::Slider routeSpeed;
+        juce::TextButton routeAdd{ "+ point" }, routeClear{ "Clear" }, routeEdit{ "Route..." };
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> routePlayAttach, routeLoopAttach;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> routeSpeedAttach;
+        juce::Component::SafePointer<juce::TextEditor> routeEditor;
+        juce::String routeEditText; bool routeEditOpen = false;
+        void showRouteEditor();
         juce::TextButton toA{ "-> A" }, toB{ "-> B" }, load{ "Load" };
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> mapActiveAttach;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> radiusAttach;

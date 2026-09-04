@@ -14,6 +14,7 @@ add_library(AmbientCore STATIC
     src/PresetMeta.cpp
     src/PresetMap.cpp
     src/Convolution.cpp
+    src/Route.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

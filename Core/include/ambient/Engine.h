@@ -12,6 +12,7 @@
 #include "Effects.h"
 #include "Cosmos.h"
 #include "Convolution.h"
+#include "Route.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include <atomic>
@@ -76,6 +77,13 @@ public:
     // the map is switched off, so the sound stays where the map left it.
     float blendValue(ParamId id) const { return blendCur_[static_cast<int>(id)].load(std::memory_order_relaxed); }
     bool  mapActive() const { return blendActive_.load(std::memory_order_relaxed); }
+    // Route over the map. The host calls routeStep() once per block (dt in seconds, before its
+    // own speed scaling): while RouteActive the route moves the cursor and the engine plays the
+    // map blend; the new cursor is returned so the host can mirror it into its parameters.
+    // The route text is performance state (plugin state / OSC / Quest config), not a preset.
+    Route& route() { return route_; }
+    bool routeStep(double dt, float& x, float& y, float& radius);
+    bool routeRunning() const { return route_.running(); }
 
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
@@ -119,6 +127,8 @@ private:
     Convolver    room_;
     bool         userImpulse_ = false;
     float        roomMaxSeconds_ = 8.0f;
+    Route        route_;
+    bool         routeWasActive_ = false;
     float        roomLevel_ = 0.0f, roomLevelCur_ = 0.0f, roomHighcut_ = 5000.0f;
     int          roomSource_ = 0, roomPreDelay_ = 0;
     long         roomTailLeft_ = 0;

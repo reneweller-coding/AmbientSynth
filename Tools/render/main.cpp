@@ -8,6 +8,7 @@
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
 //                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
+//                  [--route "name or text" [speed]] (walk a route over the map; --list-routes)
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
@@ -54,6 +55,7 @@ int main(int argc, char** argv)
     bool stats = false, dump = false, useMap = false;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
+    std::string routeText; double routeSpeed = 1.0;
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
@@ -82,6 +84,14 @@ int main(int argc, char** argv)
             if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
             engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz);
             std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz);
+        }
+        else if (a == "--route") {   // walk a route preset (by name) or a route text over the map
+            const std::string spec = next();
+            int found = -1;
+            for (int r = 0; r < numRoutePresets(); ++r) if (spec == routePreset(r).name) found = r;
+            routeText = found >= 0 ? routePreset(found).points : spec;
+            if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) routeSpeed = std::atof(argv[++i]);
+            std::printf("route: %s (speed %g)\n", found >= 0 ? routePreset(found).name : "custom", routeSpeed);
         }
         else if (a == "--ir") {   // impulse response for the Room (mono or stereo WAV)
             const std::string path = next();
@@ -133,6 +143,10 @@ int main(int argc, char** argv)
         }
         else if (a == "--list-presets") {
             for (int p = 0; p < numPresets(); ++p) std::printf("%s\n", preset(p).name);
+            return 0;
+        }
+        else if (a == "--list-routes") {
+            for (int r = 0; r < numRoutePresets(); ++r) std::printf("%-22s %s\n", routePreset(r).name, routePreset(r).points);
             return 0;
         }
         else if (a == "--list-cosmos-presets") {
@@ -206,6 +220,15 @@ int main(int argc, char** argv)
         std::printf("impulse: %s (%zu ch, %.2f s @ %d Hz -> %.2f s used)\n", irPath.c_str(), irChannels.size(), irChannels[0].size() / static_cast<double>(irRate), irRate, engine.impulseSeconds());
     }
     for (int n : notes) engine.noteOn(n, 0.8f);
+    if (!routeText.empty()) {
+        if (!engine.route().parse(routeText.c_str())) { std::fprintf(stderr, "bad route text (unknown preset name or malformed point)\n"); return 2; }
+        engine.setParam(ParamId::RouteSpeed, static_cast<float>(routeSpeed));
+        engine.setParam(ParamId::RouteLoop, 1.0f);
+        engine.setParam(ParamId::RouteActive, 1.0f);
+        const Waypoint& w0 = engine.route().point(0);
+        engine.setParam(ParamId::MapX, w0.x); engine.setParam(ParamId::MapY, w0.y); engine.setParam(ParamId::MapRadius, w0.radius);   // start on the first point
+        engine.setParam(ParamId::MorphGlide, 20.0f);
+    }
 
     const long total = static_cast<long>(seconds * sr);
     std::vector<float> L(static_cast<size_t>(block)), R(static_cast<size_t>(block));
@@ -218,6 +241,7 @@ int main(int argc, char** argv)
 
     for (long done = 0; done < total; done += block) {
         const int n = static_cast<int>(std::min<long>(block, total - done));
+        if (!routeText.empty()) { float rx, ry, rr; engine.routeStep(static_cast<double>(n) / sr, rx, ry, rr); }
         engine.process(L.data(), R.data(), n);
         for (int i = 0; i < n; ++i) {
             const float l = L[static_cast<size_t>(i)], r = R[static_cast<size_t>(i)];

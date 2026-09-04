@@ -138,6 +138,23 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     for (int i = 0; i < kNumParams; ++i)
         engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
 
+    // Route: the engine walks it and moves the cursor; mirror the cursor (and the switches the
+    // route flips) into the host parameters so the GUI and automation see it.
+    {
+        float rx, ry, rr;
+        const bool wasActive = raw_[static_cast<size_t>(ParamId::RouteActive)]->load() >= 0.5f;
+        engine_.routeStep(buffer.getNumSamples() / getSampleRate(), rx, ry, rr);
+        if (wasActive) {
+            auto mirror = [this](ParamId id) {
+                if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key)) {
+                    const float v = engine_.getParam(id);
+                    if (std::fabs(p->convertFrom0to1(p->getValue()) - v) > 1e-6f) p->setValueNotifyingHost(p->convertTo0to1(v));
+                }
+            };
+            mirror(ParamId::MapX); mirror(ParamId::MapY); mirror(ParamId::MapRadius); mirror(ParamId::MapActive); mirror(ParamId::RouteActive);
+        }
+    }
+
     for (const auto meta : midi) {
         const auto m = meta.getMessage();
         if (m.isNoteOn())            engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity());
@@ -381,6 +398,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     }
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
     if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
+    if (routeText_.isNotEmpty()) state.setProperty("route", routeText_, nullptr);
     if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     if (impulseFile_.existsAsFile())   state.setProperty("impulseFile", impulseFile_.getFullPathName(), nullptr);
@@ -435,7 +453,10 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
             const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
+            const juce::String route = tree.getProperty("route").toString();
             if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
+            if (route.isNotEmpty()) setRouteText(route);
+            tree.removeProperty("route", nullptr);
             tree.removeProperty("textureFile", nullptr);
             tree.removeProperty("wavetableFile", nullptr);
             tree.removeProperty("impulseFile", nullptr);

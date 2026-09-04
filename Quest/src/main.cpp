@@ -8,7 +8,7 @@
 //
 // No game engine: NativeActivity + android_native_app_glue, EGL, OpenXR loader, Oboe, the core.
 // Files in <externalDataPath>:
-//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert
+//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert  route=Night Descent
 //   calib.txt     hand calibration, written after the calibration gesture
 //   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
 //   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)
@@ -236,6 +236,7 @@ struct Config {
     int oscPort = 9000;
     bool audio = true;
     std::string preset;
+    std::string route;   // route preset name or route text for ROUTE PLAY/STOP
 };
 
 Config readConfig(const char* dir)
@@ -256,6 +257,7 @@ Config readConfig(const char* dir)
         else if (k == "osc_port") c.oscPort = std::atoi(v.c_str());
         else if (k == "audio") c.audio = v != "0";
         else if (k == "preset") c.preset = v;
+        else if (k == "route") c.route = v;
     }
     std::fclose(f);
     return c;
@@ -568,6 +570,19 @@ private:
             LOGI("preset map %s", on ? "off" : "on");
             break;
         }
+        case MenuAction::ToggleRoute: {
+            // Plays the route from ambient.cfg (route=<preset name or text>), or the first route preset.
+            if (engine_.route().count() == 0) {
+                const char* text = routePreset(0).points;
+                for (int r = 0; r < numRoutePresets(); ++r) if (config_.route == routePreset(r).name) text = routePreset(r).points;
+                if (!config_.route.empty() && !engine_.route().parse(config_.route.c_str())) engine_.route().parse(text);
+                else if (config_.route.empty()) engine_.route().parse(text);
+            }
+            const bool on = engine_.getParam(ParamId::RouteActive) >= 0.5f;
+            engine_.setParam(ParamId::RouteActive, on ? 0.0f : 1.0f);
+            LOGI("route %s (%d points)", on ? "stopped" : "playing", engine_.route().count());
+            break;
+        }
         case MenuAction::ToggleRecord:
             if (recorder_.recording()) { recorder_.stop(); LOGI("recording stopped, %.1f s", recorder_.seconds()); }
             else if (!dataDir_.empty()) {
@@ -843,6 +858,7 @@ private:
             std::string label = menuLabel(a);
             if (a == MenuAction::ToggleMorph) label += engine_.getParam(ParamId::MorphActive) >= 0.5f ? "  ON" : "  OFF";
             if (a == MenuAction::ToggleMap) label += engine_.getParam(ParamId::MapActive) >= 0.5f ? "  ON" : "  OFF";
+            if (a == MenuAction::ToggleRoute) label += engine_.getParam(ParamId::RouteActive) >= 0.5f ? "  PLAYING" : "  STOPPED";
             if (a == MenuAction::ToggleRecord) label += recorder_.recording() ? "  STOP" : "  START";
             scene_.addText(p, 0.0f, -static_cast<float>(i) * 0.05f, cell, label.c_str(), sel ? 1.0f : 0.5f, sel ? 0.9f : 0.55f, sel ? 0.6f : 0.7f, o * (sel ? 1.0f : 0.6f));
         }
@@ -866,9 +882,13 @@ private:
         const MenuAction action = menu_.update(dt, gestures_);
         if (action != MenuAction::None) applyMenu(action);
         gestures_.update(dt, [this](ParamId id, float v) { engine_.setParam(id, v); });
-        if (engine_.getParam(ParamId::MapActive) >= 0.5f && !menu_.isOpen() && !gestures_.calibrating()) {
-            engine_.setParam(ParamId::MapX, clampv(gestures_.input(GestureInput::LeftForward), 0.0f, 1.0f));
-            engine_.setParam(ParamId::MapY, clampv(gestures_.input(GestureInput::LeftHeight), 0.0f, 1.0f));
+        {
+            float rx, ry, rr;
+            const bool routing = engine_.routeStep(dt, rx, ry, rr);
+            if (!routing && engine_.getParam(ParamId::MapActive) >= 0.5f && !menu_.isOpen() && !gestures_.calibrating()) {
+                engine_.setParam(ParamId::MapX, clampv(gestures_.input(GestureInput::LeftForward), 0.0f, 1.0f));
+                engine_.setParam(ParamId::MapY, clampv(gestures_.input(GestureInput::LeftHeight), 0.0f, 1.0f));
+            }
         }
         if (wasCalibrating && !gestures_.calibrating()) saveCalibration();
 

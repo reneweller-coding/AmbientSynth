@@ -16,6 +16,7 @@
 #include "ambient/PresetMap.h"
 #include "ambient/PresetMeta.h"
 #include "ambient/Convolution.h"
+#include "ambient/Route.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -278,7 +279,7 @@ void testPresets()
         const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
-        CHECK(count == kNumParams - 15, "preset sets every parameter except morph controls, the eight macros and the map cursor");
+        CHECK(count == kNumParams - 18, "preset sets every parameter except morph, macros, map cursor and route");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");
@@ -433,6 +434,53 @@ void testSources()
         std::vector<float> mono; int rate = 0;
         CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
         std::remove(path);
+    }
+}
+
+// Route over the map: parsing, timing, and the engine walking it.
+void testRoute()
+{
+    if (numPresetMeta() == 0) { std::printf("  (route test needs the measured map)\n"); return; }
+    for (int r = 0; r < numRoutePresets(); ++r) {
+        Route rt;
+        CHECK(rt.parse(routePreset(r).points), "route preset parses and every preset name resolves");
+        CHECK(rt.count() >= 3, "route preset has at least three points");
+        char buf[2048];
+        CHECK(rt.write(buf, sizeof(buf)) > 0, "route writes back to text");
+        Route again; CHECK(again.parse(buf) && again.count() == rt.count(), "route text round-trips");
+    }
+    {
+        Route rt;
+        CHECK(rt.parse("0.2,0.2|10|5|0.1;0.8,0.8|10|5|0.1"), "coordinate route parses");
+        CHECK(!rt.parse("No Such Preset|10|5"), "unknown preset name is rejected");
+        CHECK(rt.parse("0.2,0.2|10|5|0.1;0.8,0.8|10|5|0.1"), "route parses again after a rejected text");
+        rt.start(0.5f, 0.5f, 0.08f, false);
+        float x, y, rad;
+        rt.update(5.0f, x, y, rad);
+        CHECK(std::fabs(x - 0.35f) < 1e-3f && std::fabs(y - 0.35f) < 1e-3f, "half-way through the first travel the cursor sits at the smoothstep midpoint");
+        rt.update(5.0f, x, y, rad);
+        CHECK(std::fabs(x - 0.2f) < 1e-3f && rt.segment() == 0, "first point reached, holding");
+        rt.update(5.0f, x, y, rad);     // hold over -> next segment starts
+        rt.update(10.0f, x, y, rad);    // travel to the second point
+        CHECK(std::fabs(x - 0.8f) < 1e-3f && rt.segment() == 1, "second point reached");
+        const bool still = rt.update(5.0f, x, y, rad);
+        CHECK(!still && !rt.running() && std::fabs(x - 0.8f) < 1e-3f, "route ends at the last point when not looping, cursor stays");
+    }
+    {   // Engine: the route moves MapX and turns the map on; speed scales time.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.prepare(48000.0, 256);
+        CHECK(e.route().parse("0.1,0.5|4|2|0.1;0.9,0.5|4|2|0.1"), "engine route set");
+        e.setParam(ParamId::MapX, 0.1f); e.setParam(ParamId::MapY, 0.5f);
+        e.setParam(ParamId::RouteSpeed, 2.0f); e.setParam(ParamId::RouteLoop, 0.0f);
+        e.setParam(ParamId::RouteActive, 1.0f);
+        float x, y, r;
+        double t = 0.0;
+        while (t < 5.0) { e.routeStep(256.0 / 48000.0, x, y, r); float L[256], R[256]; e.process(L, R, 256); t += 256.0 / 48000.0; }
+        CHECK(e.getParam(ParamId::MapActive) >= 0.5f, "a route switches the map on");
+        CHECK(std::fabs(e.getParam(ParamId::MapX) - 0.9f) < 1e-3f, "at speed 2 the second point (10 s of route) is reached after 5 s");
+        while (t < 7.0) { e.routeStep(256.0 / 48000.0, x, y, r); float L[256], R[256]; e.process(L, R, 256); t += 256.0 / 48000.0; }   // the last hold (2 s route = 1 s)
+        CHECK(e.getParam(ParamId::RouteActive) < 0.5f && !e.routeRunning(), "a finished route switches itself off");
     }
 }
 
@@ -1283,6 +1331,7 @@ int main()
     testSources();
     testPresetMap();
     testRoom();
+    testRoute();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

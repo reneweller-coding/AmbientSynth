@@ -1,0 +1,5 @@
+add_executable(ambient_render main.cpp)
+target_link_libraries(ambient_render PRIVATE AmbientCore)
+if(MSVC)
+    target_compile_options(ambient_render PRIVATE /W4 /permissive- /utf-8)
+endif()

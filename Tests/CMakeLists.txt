@@ -1,0 +1,6 @@
+add_executable(ambient_selftest selftest.cpp)
+target_link_libraries(ambient_selftest PRIVATE AmbientCore)
+if(MSVC)
+    target_compile_options(ambient_selftest PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME selftest COMMAND ambient_selftest)

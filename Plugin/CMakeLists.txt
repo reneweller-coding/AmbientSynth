@@ -1,0 +1,34 @@
+juce_add_plugin(AmbientSynth
+    COMPANY_NAME                "Rene Weller"
+    BUNDLE_ID                   "com.reneweller.ambientsynth"
+    IS_SYNTH                    TRUE
+    NEEDS_MIDI_INPUT            TRUE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    COPY_PLUGIN_AFTER_BUILD     FALSE
+    PLUGIN_MANUFACTURER_CODE    Rnwl
+    PLUGIN_CODE                 Ambs
+    FORMATS                     VST3 Standalone
+    VST3_CATEGORIES             Instrument Synth
+    PRODUCT_NAME                "AmbientSynth")
+
+target_sources(AmbientSynth PRIVATE
+    PluginProcessor.cpp
+    PluginEditor.cpp)
+
+target_compile_definitions(AmbientSynth PUBLIC
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_REPORT_APP_USAGE=0)
+
+target_link_libraries(AmbientSynth
+    PRIVATE
+        AmbientCore
+        juce::juce_audio_utils
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)

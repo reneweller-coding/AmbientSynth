@@ -47,6 +47,8 @@ enum class ParamId : int {
     // into the near bus before the filters and effects, and/or as phase modulation of every
     // partial. Throttled by the output level so it hisses and holds instead of running away.
     FeedbackBus, FeedbackFm, FeedbackTone, FeedbackDrive,
+    // Room: convolution reverb with a loaded (or generated) impulse, in parallel on the far plane
+    RoomLevel, RoomSource, RoomPreDelay, RoomHighcut,
     // Cosmos: science-fiction / deep-space path (send from the near bus)
     CosmosSend, CosmosShift, CosmosShiftDrift, CosmosRes, CosmosResPitch, CosmosResFeedback,
     CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,
@@ -103,6 +105,7 @@ extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
+extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 constexpr int kNumStacks = 8;
 extern const char* const kStackNames[kNumStacks];   // Detune, Octaves, Fifths, Major, Minor, Seventh, Harmonics, Subharmonics
 extern const double kStackRatios[kNumStacks][6];    // ratio of strand 0..5 to the note (Detune = all 1)

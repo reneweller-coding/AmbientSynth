@@ -13,6 +13,7 @@ add_library(AmbientCore STATIC
     src/WavFile.cpp
     src/PresetMeta.cpp
     src/PresetMap.cpp
+    src/Convolution.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

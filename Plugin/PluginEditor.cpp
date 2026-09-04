@@ -33,7 +33,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     groups_ = {
         { "VOICE",      kVoice,     { { "Oscillator", "Air", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Filter", "Space" }, { "Foundation" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback" } }, {}, 0 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } }, {}, 0 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
         { "MORPH",      kMorph,     { { "Morph" }, { "Macros" } }, {}, 1 },
@@ -224,6 +224,9 @@ void AmbientSynthEditor::buildCells()
     auto texture = std::make_unique<juce::TextButton>("Texture...");
     texture->onClick = [this] { chooseSourceFile(false); };
     textureCell_ = addExtraCell("Source 3", std::move(texture), "Texture file", 2);
+    auto impulse = std::make_unique<juce::TextButton>("Impulse...");
+    impulse->onClick = [this] { chooseImpulseFile(); };
+    impulseCell_ = addExtraCell("Room", std::move(impulse), "Dark Hall (built in)", 2);
 
     auto boxA = std::make_unique<juce::ComboBox>();
     boxA->setTextWhenNothingSelected("A: preset");
@@ -951,6 +954,7 @@ void AmbientSynthEditor::updateSourceCells()
     };
     nameCell(tableCell_, "User table", proc_.wavetableName());
     nameCell(textureCell_, "Texture file", proc_.textureName());
+    nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());
 }
 
 void AmbientSynthEditor::showMappingEditor()
@@ -1000,6 +1004,19 @@ void AmbientSynthEditor::chooseSourceFile(bool wavetable)
             if (!ok)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, wavetable ? "Wavetable" : "Texture",
                     wavetable ? "Could not read this file as a wavetable (it needs at least one 2048-sample frame)." : "Could not read this audio file.");
+            repaint();
+        });
+}
+
+void AmbientSynthEditor::chooseImpulseFile()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Load an impulse response (mono or stereo)", juce::File(), "*.wav;*.aif;*.aiff;*.flac");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc) {
+            const auto file = fc.getResult();
+            if (!file.existsAsFile()) return;
+            if (!proc_.loadImpulseFile(file))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Impulse", "Could not read this audio file.");
             repaint();
         });
 }

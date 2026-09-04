@@ -24,6 +24,7 @@ const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" }
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
+const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kStackNames[kNumStacks] = { "Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics" };
 // Strand ratios, ordered so that fewer strands still make sense (2 = root + fifth, 3 = a triad...).
 const double kStackRatios[kNumStacks][6] = {
@@ -171,6 +172,11 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FeedbackFm,    "fb_fm",    "To Pitch", "Feedback", 0.f,   1.f,     0.f,    1.f,  ""),
     F(ParamId::FeedbackTone,  "fb_tone",  "Tone",     "Feedback", 200.f, 8000.f,  1500.f, 0.4f, "Hz"),
     F(ParamId::FeedbackDrive, "fb_drive", "Drive",    "Feedback", 0.f,   1.f,     0.5f,   1.f,  ""),
+
+    F(ParamId::RoomLevel,    "room_level",    "Level",     "Room", 0.f,   1.f,     0.f,    1.f,  ""),
+    C(ParamId::RoomSource,   "room_source",   "Source",    "Room", kRoomSourceNames, 2, 0),
+    F(ParamId::RoomPreDelay, "room_predelay", "Pre-Delay", "Room", 0.f,   300.f,   20.f,   0.5f, "ms"),
+    F(ParamId::RoomHighcut,  "room_highcut",  "Tail Cut",  "Room", 500.f, 16000.f, 5000.f, 0.3f, "Hz"),
 
     F(ParamId::CosmosSend,        "cosmos_send",        "Send",        "Cosmos", 0.f,    1.f,    0.f,   1.f,  ""),
     F(ParamId::CosmosShift,       "cosmos_shift",       "Shift",       "Cosmos", -300.f, 300.f,  0.f,   1.f,  "Hz"),

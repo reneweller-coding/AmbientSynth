@@ -7,6 +7,7 @@
 //                  [--scl file.scl] [--stats] [--list] [--list-presets]
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
+//                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
 #include "ambient/Engine.h"
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
@@ -52,6 +53,7 @@ int main(int argc, char** argv)
     int sr = 48000, block = 256;
     bool stats = false, dump = false, useMap = false;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
+    std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
@@ -80,6 +82,12 @@ int main(int argc, char** argv)
             if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
             engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz);
             std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz);
+        }
+        else if (a == "--ir") {   // impulse response for the Room (mono or stereo WAV)
+            const std::string path = next();
+            std::vector<std::vector<float>> ch; int rate = 0;
+            if (!readWavChannels(path.c_str(), ch, rate) || ch.empty()) { std::fprintf(stderr, "cannot read impulse %s\n", path.c_str()); return 2; }
+            irChannels = ch; irRate = rate; irPath = path;
         }
         else if (a == "--wavetable") {
             const std::string path = next();
@@ -193,6 +201,10 @@ int main(int argc, char** argv)
     }
 
     engine.prepare(sr, block);
+    if (!irChannels.empty()) {   // after prepare: the convolver's buffers exist now
+        engine.setImpulse(irChannels[0].data(), irChannels.size() > 1 ? irChannels[1].data() : nullptr, static_cast<int>(irChannels[0].size()), irRate);
+        std::printf("impulse: %s (%zu ch, %.2f s @ %d Hz -> %.2f s used)\n", irPath.c_str(), irChannels.size(), irChannels[0].size() / static_cast<double>(irRate), irRate, engine.impulseSeconds());
+    }
     for (int n : notes) engine.noteOn(n, 0.8f);
 
     const long total = static_cast<long>(seconds * sr);

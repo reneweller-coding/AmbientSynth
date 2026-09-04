@@ -39,8 +39,19 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
-    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_ })
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_,
+                     &roomInL_, &roomInR_, &roomOutL_, &roomOutR_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);
+    {   // Room: pre-delay ring (>= 300 ms) and the convolver with a generated hall unless a file was set
+        int ring = 1; while (ring < static_cast<int>(0.32 * sr_) + maxBlock_) ring <<= 1;
+        roomDelayL_.assign(static_cast<size_t>(ring), 0.0f); roomDelayR_.assign(static_cast<size_t>(ring), 0.0f);
+        roomDelayMask_ = ring - 1; roomDelayW_ = 0; roomLpL_ = roomLpR_ = 0.0f; roomLevelCur_ = 0.0f; roomTailLeft_ = 0;
+        const bool keepUser = userImpulse_ && room_.hasImpulse() && std::fabs(room_.impulseSeconds()) > 0.0f;
+        std::vector<float> keepL, keepR;   // a user impulse survives a sample-rate change only through the host reloading it
+        room_.prepare(sr_, roomMaxSeconds_);
+        if (!keepUser) { room_.generateDefault(static_cast<uint64_t>(seed_) + 7); userImpulse_ = false; }
+        (void)keepL; (void)keepR;
+    }
     {
         int ring = 1; while (ring < 2 * maxBlock_) ring <<= 1;
         fbRingL_.assign(static_cast<size_t>(ring), 0.0f);
@@ -401,6 +412,10 @@ void Engine::readParams()
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
+    roomLevel_    = g(ParamId::RoomLevel);
+    roomSource_   = static_cast<int>(std::lround(g(ParamId::RoomSource)));
+    roomPreDelay_ = static_cast<int>(g(ParamId::RoomPreDelay) * 0.001f * static_cast<float>(sr_));
+    roomHighcut_  = g(ParamId::RoomHighcut);
     fbBus_   = g(ParamId::FeedbackBus);
     fbFm_    = g(ParamId::FeedbackFm);
     fbTone_  = g(ParamId::FeedbackTone);
@@ -616,6 +631,21 @@ void Engine::renderChunk(float* L, float* R, int n)
     float* sl = shimL_.data(); float* sr = shimR_.data();
     if (cosmosShimmer_ > 0.0f)
         for (int i = 0; i < n; ++i) { fl[i] += sl[i]; fr[i] += sr[i]; }
+    // Room: the convolution reverb hears the far sends (before the FDN) or the finished
+    // near bus, through a pre-delay; it keeps running for one impulse length after its
+    // level reaches zero so the tail can finish, and costs nothing while silent.
+    const bool roomOn = roomLevel_ > 0.0005f || roomLevelCur_ > 0.0005f || roomTailLeft_ > 0;
+    float* rl = roomInL_.data(); float* rr = roomInR_.data();
+    if (roomOn) {
+        const float* srcL = roomSource_ == 0 ? fl : nl; const float* srcR = roomSource_ == 0 ? fr : nr;
+        for (int i = 0; i < n; ++i) {
+            roomDelayL_[static_cast<size_t>(roomDelayW_)] = srcL[i]; roomDelayR_[static_cast<size_t>(roomDelayW_)] = srcR[i];
+            const int rd = (roomDelayW_ - roomPreDelay_) & roomDelayMask_;
+            rl[i] = roomDelayL_[static_cast<size_t>(rd)]; rr[i] = roomDelayR_[static_cast<size_t>(rd)];
+            roomDelayW_ = (roomDelayW_ + 1) & roomDelayMask_;
+        }
+        roomTailLeft_ = roomLevel_ > 0.0005f ? static_cast<long>(room_.impulseSeconds() * sr_) + Convolver::kBlock : std::max(0L, roomTailLeft_ - n);
+    }
     farReverb_.process(fl, fr, n);
     if (cosmosShimmer_ > 0.0f) {
         shimmerL_.process(fl, sl, n);
@@ -645,6 +675,25 @@ void Engine::renderChunk(float* L, float* R, int n)
     for (int i = 0; i < n; ++i) {
         L[i] = nl[i] + fl[i] * farLevel_;
         R[i] = nr[i] + fr[i] * farLevel_;
+    }
+    if (roomOn) {
+        float* ol = roomOutL_.data(); float* orr = roomOutR_.data();
+        room_.process(rl, rr, ol, orr, n);
+        const float lpc = 1.0f - std::exp(-kTwoPi * roomHighcut_ / static_cast<float>(sr_));
+        const float levelC = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));
+        // An energy-normalised impulse returns the far sends at their own power, which is far
+        // louder than the FDN's output at Far Level 1; 0.35 puts Room Level 1 in the same league
+        // (measured: -15.8 dBFS raw vs. -23 dBFS for the FDN on the default patch).
+        const float roomGain = 0.35f;
+        for (int i = 0; i < n; ++i) {
+            roomLevelCur_ += (roomLevel_ - roomLevelCur_) * levelC;
+            roomLpL_ += lpc * (ol[i] - roomLpL_);
+            roomLpR_ += lpc * (orr[i] - roomLpR_);
+            L[i] += roomLpL_ * roomLevelCur_ * roomGain;
+            R[i] += roomLpR_ * roomLevelCur_ * roomGain;
+        }
+    } else {
+        roomLpL_ = roomLpR_ = 0.0f;
     }
 
     // Feedback loop, output side: the mix (before mid/side, sub and master) goes into the ring,

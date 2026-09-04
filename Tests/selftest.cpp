@@ -15,6 +15,7 @@
 #include "ambient/WavFile.h"
 #include "ambient/PresetMap.h"
 #include "ambient/PresetMeta.h"
+#include "ambient/Convolution.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -432,6 +433,69 @@ void testSources()
         std::vector<float> mono; int rate = 0;
         CHECK(readWavMono(path, mono, rate) && rate == sr && mono.size() == 4800 && std::fabs(mono[100] - 0.5f) < 1e-6f, "WAV reader mixes a float file to mono");
         std::remove(path);
+    }
+}
+
+// Convolution room: partitioned convolution against known impulses, then in the engine.
+void testRoom()
+{
+    const int sr = 48000;
+    {   // A unit impulse response reproduces the input one block late; two taps give two copies.
+        Convolver c; c.prepare(sr, 2.0f);
+        std::vector<float> ir(4000, 0.0f); ir[0] = 1.0f;
+        c.setImpulse(ir.data(), nullptr, 4000, sr);
+        const int n = 8 * Convolver::kBlock;   // room for the second tap at 1500 + latency
+        std::vector<float> inL(n, 0.0f), inR(n, 0.0f), outL(n), outR(n);
+        inL[100] = 1.0f; inR[100] = 0.5f;
+        c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
+        int peakAt = 0; for (int i = 1; i < n; ++i) if (std::fabs(outL[static_cast<size_t>(i)]) > std::fabs(outL[static_cast<size_t>(peakAt)])) peakAt = i;
+        CHECK(peakAt == 100 + Convolver::kBlock, "unit impulse comes back one block late");
+        // energy normalisation keeps a unit impulse at unity
+        CHECK(std::fabs(std::fabs(outL[static_cast<size_t>(peakAt)]) - 1.0f) < 1e-3f && std::fabs(std::fabs(outR[static_cast<size_t>(peakAt)]) - 0.5f) < 1e-3f, "unit impulse passes the level and both channels");
+        double other = 0; for (int i = 0; i < n; ++i) if (i != peakAt) other += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)];
+        CHECK(other < 1e-6, "nothing but the impulse comes out");
+        std::vector<float> ir2(4000, 0.0f); ir2[0] = 1.0f; ir2[1500] = 1.0f;   // two taps: second one spans partitions
+        c.setImpulse(ir2.data(), nullptr, 4000, sr);
+        c.reset();
+        c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
+        const float a = std::fabs(outL[static_cast<size_t>(100 + Convolver::kBlock)]), b = std::fabs(outL[static_cast<size_t>(1600 + Convolver::kBlock)]);
+        CHECK(std::fabs(a - b) < 1e-3f && a > 0.5f, "a second tap in a later partition arrives at the right place");
+    }
+    {   // The generated hall decays and is stereo.
+        Convolver c; c.prepare(sr, 8.0f);
+        c.generateDefault(5, 4.0f);
+        CHECK(c.impulseSeconds() > 3.9f && c.impulseSeconds() < 4.2f, "default hall is four seconds");
+        const int n = sr * 5;
+        std::vector<float> inL(n, 0.0f), inR(n, 0.0f), outL(n), outR(n);
+        inL[0] = inR[0] = 1.0f;
+        c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
+        auto energy = [&](int from, int to) { double e = 0; for (int i = from; i < to; ++i) e += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)]; return e; };
+        CHECK(energy(0, sr) > 10.0 * energy(2 * sr, 3 * sr) && energy(2 * sr, 3 * sr) > energy(4 * sr, 5 * sr), "hall decays");
+        double dot = 0, el = 0, er = 0;
+        for (int i = 0; i < sr; ++i) { dot += outL[static_cast<size_t>(i)] * outR[static_cast<size_t>(i)]; el += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)]; er += outR[static_cast<size_t>(i)] * outR[static_cast<size_t>(i)]; }
+        CHECK(std::fabs(dot / std::sqrt(el * er + 1e-12)) < 0.3, "hall is decorrelated between the ears");
+    }
+    {   // In the engine: Room level 0 costs nothing and changes nothing; level 1 adds a tail after the note.
+        auto tailEnergy = [&](float level) {
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.1f);
+            e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::DelayToFar, 0.0f); e.setParam(ParamId::Delay2ToFar, 0.0f);
+            e.setParam(ParamId::KeysDepth, 1.0f);   // everything goes to the far sends
+            e.setParam(ParamId::RoomLevel, level);
+            e.prepare(sr, 256);
+            e.noteOn(57, 0.8f);
+            render(e, 0.5);
+            e.noteOff(57);
+            render(e, 0.5);
+            std::vector<float> cap;
+            Stats s = render(e, 1.5, &cap);
+            double sq = 0; for (float v : cap) sq += v * v;
+            return std::make_pair(sq, s.nonFinite);
+        };
+        const auto off = tailEnergy(0.0f), on = tailEnergy(1.0f);
+        CHECK(off.second == 0 && on.second == 0, "room renders finite");
+        CHECK(on.first > 20.0 * (off.first + 1e-9), "room level 1 leaves a tail after the note where level 0 leaves silence");
     }
 }
 
@@ -1218,6 +1282,7 @@ int main()
     testStackAndWander();
     testSources();
     testPresetMap();
+    testRoom();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

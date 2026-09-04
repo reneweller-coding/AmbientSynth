@@ -325,6 +325,44 @@ the background. Chain, in order:
    0.12), so it blooms and then holds; measured: stable at 1.0 for 20 s with
    the resonator at 0.97 feedback in the same patch.
 
+## Room (convolution reverb, optional and additional)
+
+A third reverb next to the near room and the far FDN: `Convolver`
+(`Core/include/ambient/Convolution.h`) plays an impulse response by
+uniform partitioned convolution — input blocks of 512 samples, each
+block's spectrum into a frequency-domain delay line, every output block
+the sum over all partitions of input spectrum × impulse-partition
+spectrum, one inverse FFT per block, overlap-add. Latency is one block,
+which the far plane does not notice. Real input, so only bins 0…N/2 are
+multiplied and the mirror is rebuilt before the inverse transform.
+True-stereo impulses keep L and R apart, a mono impulse serves both
+channels with their own inputs. Impulses are double-buffered like
+textures, resampled to the engine rate and energy-normalised, so a room
+never changes the level of what it reverberates; the maximum is 8 s.
+Without a file, `generateDefault` builds a dark hall at `prepare` (three
+noise bands with RT60 5 / 3 / 1.2 s, a 20 ms diffuse onset, eight early
+reflections, independent noise per ear), so the Room works out of the box.
+
+Parameters (section Room): *Level* (0 = off and no CPU; the convolver
+keeps running for one impulse length after the level reaches zero so the
+tail can finish), *Source* (Far = the far sends before the FDN, Near = the
+finished foreground), *Pre-Delay*, *Tail Cut*. Files: the plugin's
+*Impulse…* (mono or stereo, path in the state), `ambient_render --ir`,
+`impulse.wav` on the Quest (applied once the engine is prepared). Measured:
+a unit impulse comes back one block late at unity, a tap 1500 samples in
+lands at the right place across partitions, the default hall decays by
+more than 10 dB per two seconds with an ear correlation below 0.3, Room
+level 1 leaves a tail after a note where level 0 leaves silence.
+
+**Where impulses come from: `Tools/ImpulseGen`.** Design (per-band RT60,
+size, pre-delay, width, tone, modulation; eight room presets from dark
+cathedral to infinite plate), Recording (onset, trim, floor, tail
+extension for cut-off renders), Prompt (a TextureGen model renders a clap
+in a described room, which is then cut — text-to-audio models do not know
+impulse responses but they know claps in cathedrals), Hybrid (a
+recording's spectrum colours noise, the designed decay shapes it). GUI and
+CLI, energy decay curve and a chord preview.
+
 ## Feedback loop (the sound feeds itself)
 
 Rich's drones are not a chain but a circle: what comes out of the reverb

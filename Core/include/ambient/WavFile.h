@@ -8,5 +8,7 @@ namespace ambient {
 
 // Returns false if the file is missing or not a WAV the reader understands.
 bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate);
+// All channels, deinterleaved (impulse responses keep their stereo).
+bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels, int& sampleRate);
 
 } // namespace ambient

@@ -11,6 +11,7 @@
 #include "Voice.h"
 #include "Effects.h"
 #include "Cosmos.h"
+#include "Convolution.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include <atomic>
@@ -50,6 +51,13 @@ public:
     bool loadUserWavetable(const float* mono, int n, int frameLen = 2048);   // analyses frames, then sets
     void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256);
     bool hasTexture() const { return textureActive_.load(std::memory_order_relaxed) >= 0; }
+    // Convolution room: a stereo (R may be null) impulse response, message thread.
+    void  setImpulse(const float* L, const float* R, int n, double sampleRate) { room_.setImpulse(L, R, n, sampleRate); userImpulse_ = true; }
+    float impulseSeconds() const { return room_.impulseSeconds(); }
+    bool  hasUserImpulse() const { return userImpulse_; }
+    // Longest impulse the Room keeps (memory and CPU grow with it); call before prepare().
+    // 8 s on the desktop; the Quest app uses 4 s (a 4 s hall costs about a third of one of its cores).
+    void  setRoomMaxSeconds(float s) { roomMaxSeconds_ = clampv(s, 0.5f, 12.0f); }
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
 
     // Morph: two full parameter snapshots (A = 0, B = 1). While MorphActive is on the
@@ -107,6 +115,16 @@ private:
     float        delay2Mix_ = 0.0f, delay2ToFar_ = 0.5f, cloudSend_ = 0.0f;
     Reverb       nearReverb_, farReverb_;
     MidSide      midSide_;
+    // Room (convolution) on the far plane: level, source, pre-delay ring, tail low-pass
+    Convolver    room_;
+    bool         userImpulse_ = false;
+    float        roomMaxSeconds_ = 8.0f;
+    float        roomLevel_ = 0.0f, roomLevelCur_ = 0.0f, roomHighcut_ = 5000.0f;
+    int          roomSource_ = 0, roomPreDelay_ = 0;
+    long         roomTailLeft_ = 0;
+    std::vector<float> roomInL_, roomInR_, roomOutL_, roomOutR_, roomDelayL_, roomDelayR_;
+    int          roomDelayW_ = 0, roomDelayMask_ = 0;
+    float        roomLpL_ = 0.0f, roomLpR_ = 0.0f;
     // Cosmos path (parallel send from the near bus) and the shimmer loop around the far reverb.
     FreqShifter   shifter_;
     CombResonator resonator_;

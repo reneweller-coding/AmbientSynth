@@ -44,6 +44,8 @@ public:
     // Pitch = Note) and a user wavetable (2048-sample frames). Paths are kept in the state.
     bool loadTextureFile(const juce::File& file);
     bool loadWavetableFile(const juce::File& file);
+    bool loadImpulseFile(const juce::File& file);   // convolution room, mono or stereo
+    juce::String impulseName() const { return impulseFile_.existsAsFile() ? impulseFile_.getFileNameWithoutExtension() : juce::String(); }
     juce::String textureName() const  { return textureFile_.existsAsFile() ? textureFile_.getFileNameWithoutExtension() : juce::String(); }
     juce::String wavetableName() const { return wavetableFile_.existsAsFile() ? wavetableFile_.getFileNameWithoutExtension() : juce::String(); }
     // User presets as files (full state including a loaded Scala scale).
@@ -97,7 +99,7 @@ private:
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
-    juce::File textureFile_, wavetableFile_;
+    juce::File textureFile_, wavetableFile_, impulseFile_;
     juce::BigInteger favourites_;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;

@@ -7,7 +7,17 @@ namespace ambient {
 
 bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
 {
-    mono.clear();
+    std::vector<std::vector<float>> ch;
+    if (!readWavChannels(path, ch, sampleRate) || ch.empty()) { mono.clear(); return false; }
+    mono.assign(ch[0].size(), 0.0f);
+    const float inv = 1.0f / static_cast<float>(ch.size());
+    for (const auto& c : ch) for (size_t i = 0; i < mono.size() && i < c.size(); ++i) mono[i] += c[i] * inv;
+    return true;
+}
+
+bool readWavChannels(const char* path, std::vector<std::vector<float>>& channelsOut, int& sampleRate)
+{
+    channelsOut.clear();
     FILE* f = std::fopen(path, "rb");
     if (!f) return false;
     auto rd32 = [&](uint32_t& v) { return std::fread(&v, 4, 1, f) == 1; };
@@ -30,12 +40,11 @@ bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
         } else if (std::memcmp(tag, "data", 4) == 0 && haveFmt) {
             const int bytes = bits / 8;
             const uint32_t frames = size / static_cast<uint32_t>(bytes * channels);
-            mono.resize(frames);
+            channelsOut.assign(channels, std::vector<float>(frames, 0.0f));
             std::vector<unsigned char> buf(static_cast<size_t>(bytes * channels));
-            const float inv = 1.0f / static_cast<float>(channels);
+            uint32_t got = frames;
             for (uint32_t i = 0; i < frames; ++i) {
-                if (std::fread(buf.data(), 1, buf.size(), f) != buf.size()) { mono.resize(i); break; }
-                float sum = 0.0f;
+                if (std::fread(buf.data(), 1, buf.size(), f) != buf.size()) { got = i; break; }
                 for (int c = 0; c < channels; ++c) {
                     const unsigned char* p = buf.data() + c * bytes;
                     float v = 0.0f;
@@ -44,12 +53,12 @@ bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
                     else if (bits == 16) v = static_cast<int16_t>(p[0] | (p[1] << 8)) / 32768.0f;
                     else if (bits == 24) { int32_t s = (p[0] << 8) | (p[1] << 16) | (p[2] << 24); v = static_cast<float>(s >> 8) / 8388608.0f; }
                     else if (bits == 32) { int32_t s; std::memcpy(&s, p, 4); v = static_cast<float>(s) / 2147483648.0f; }
-                    sum += v;
+                    channelsOut[static_cast<size_t>(c)][i] = v;
                 }
-                mono[i] = sum * inv;
             }
+            for (auto& c : channelsOut) c.resize(got);
             sampleRate = static_cast<int>(rate);
-            ok = !mono.empty();
+            ok = got > 0;
             break;
         }
         if (std::fseek(f, next, SEEK_SET) != 0) break;

@@ -429,6 +429,7 @@ public:
             for (int i = 0; i < numPresets(); ++i) if (config_.preset == preset(i).name) { engine_.applyPreset(i); presetA_ = presetB_ = i; }
         loadCalibration();
         loadSourceFiles();
+        engine_.setRoomMaxSeconds(4.0f);   // a 4 s convolution is about a third of one XR2 core; 8 s would be two thirds
         if (!config_.oscHost.empty()) {
             if (osc_.open(config_.oscHost, config_.oscPort)) LOGI("bridge: OSC to %s:%d", config_.oscHost.c_str(), config_.oscPort);
             else LOGE("bridge: bad host %s", config_.oscHost.c_str());
@@ -440,6 +441,10 @@ public:
         if (!initHands()) LOGE("hand tracking unavailable");
         if (!scene_.init()) return false;
         if (config_.audio && !audio_.start()) LOGE("audio failed to start");
+        if (!pendingIr_.empty()) {   // the engine is prepared now; the convolver has its buffers
+            engine_.setImpulse(pendingIr_[0].data(), pendingIr_.size() > 1 ? pendingIr_[1].data() : nullptr, static_cast<int>(pendingIr_[0].size()), pendingIrRate_);
+            pendingIr_.clear();
+        }
         if (!calibrated_) { gestures_.startCalibration(8.0f); LOGI("no calibration file: calibrating for 8 s"); }
         return true;
     }
@@ -463,6 +468,11 @@ public:
             const double base = baseHzFromName(texPath.c_str());
             engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
             LOGI("%s: %.1f s @ %d Hz, base %.1f Hz", texPath.c_str(), mono.size() / static_cast<double>(rate), rate, base > 0.0 ? base : 261.6256);
+        }
+        std::vector<std::vector<float>> ir;
+        if (readWavChannels((dataDir_ + "/impulse.wav").c_str(), ir, rate) && !ir.empty()) {
+            pendingIr_ = ir; pendingIrRate_ = rate;   // set after the engine is prepared (audio start)
+            LOGI("impulse.wav: %zu ch, %.2f s @ %d Hz", ir.size(), ir[0].size() / static_cast<double>(rate), rate);
         }
         if (readWavMono((dataDir_ + "/wavetable.wav").c_str(), mono, rate)) {
             if (engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) LOGI("wavetable.wav: %d frames", engine_.userWavetableFrames());
@@ -924,6 +934,7 @@ private:
 
     android_app* app_;
     std::string dataDir_;
+    std::vector<std::vector<float>> pendingIr_; int pendingIrRate_ = 48000;
     Config config_;
     Engine engine_;
     GestureLayer gestures_;

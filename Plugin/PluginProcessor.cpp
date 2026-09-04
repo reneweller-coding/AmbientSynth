@@ -300,6 +300,20 @@ bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
     return true;
 }
 
+bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file)
+{
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(file));
+    if (reader == nullptr || reader->lengthInSamples <= 0) return false;
+    const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 12.0)));
+    juce::AudioBuffer<float> buf(static_cast<int>(reader->numChannels), n);
+    if (!reader->read(&buf, 0, n, 0, true, true)) return false;
+    engine_.setImpulse(buf.getReadPointer(0), buf.getNumChannels() > 1 ? buf.getReadPointer(1) : nullptr, n, reader->sampleRate);
+    impulseFile_ = file;
+    return true;
+}
+
 bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
 {
     std::vector<float> mono; double rate = 0.0;
@@ -369,6 +383,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
     if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
+    if (impulseFile_.existsAsFile())   state.setProperty("impulseFile", impulseFile_.getFullPathName(), nullptr);
     juce::ValueTree midi("midi");
     for (int cc = 0; cc < 128; ++cc) {
         const int target = ccMap_[static_cast<size_t>(cc)].load();
@@ -419,14 +434,17 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String texPath = tree.getProperty("textureFile").toString();
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
             const juce::String favs = tree.getProperty("favourites").toString();
+            const juce::String irPath = tree.getProperty("impulseFile").toString();
             if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             tree.removeProperty("textureFile", nullptr);
             tree.removeProperty("wavetableFile", nullptr);
+            tree.removeProperty("impulseFile", nullptr);
             tree.removeProperty("favourites", nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
             if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));
             if (tabPath.isNotEmpty() && juce::File(tabPath).existsAsFile()) loadWavetableFile(juce::File(tabPath));
+            if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile()) loadImpulseFile(juce::File(irPath));
         }
     }
 }

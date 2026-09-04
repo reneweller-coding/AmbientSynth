@@ -178,6 +178,12 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*
   (low-pass on the tail: distance darkens), *Freeze*.
+* **Room** — a third reverb, optional and additional: a convolution reverb
+  on the far plane playing an impulse response (*Impulse…* loads a mono or
+  stereo file, a built-in dark hall plays without one). *Level*, *Source*
+  (far sends or the finished foreground), *Pre-Delay*, *Tail Cut*.
+  `Tools/ImpulseGen` designs rooms from numbers, cuts impulses out of
+  recordings or AI renders of a clap in a described room, and blends both.
 * **Feedback** — the sound feeds itself: the output mix returns, low-passed
   (*Tone*) and softly saturated (*Drive*), either into the foreground bus
   before the effects (*To Bus*) or as phase modulation of every partial (*To

@@ -93,6 +93,37 @@ const Wavetable& builtinTable(int index)
     return builtins().t[clampv(index, 0, kNumTables - 2)];
 }
 
+double baseHzFromName(const char* fileName)
+{
+    if (fileName == nullptr) return 0.0;
+    // Strip directories and the extension.
+    const char* base = fileName;
+    for (const char* p = fileName; *p; ++p) if (*p == '/' || *p == '\\') base = p + 1;
+    int len = static_cast<int>(std::strlen(base));
+    for (int i = len - 1; i > 0; --i) if (base[i] == '.') { len = i; break; }
+    // The last token after '_', '-' or ' ': letter, optional #/b, octave digit(s).
+    int start = len;
+    while (start > 0 && base[start - 1] != '_' && base[start - 1] != '-' && base[start - 1] != ' ') --start;
+    const char* t = base + start;
+    const int tlen = len - start;
+    if (tlen < 2 || tlen > 4) return 0.0;
+    int pc = -1;
+    switch (t[0]) { case 'C': pc = 0; break; case 'D': pc = 2; break; case 'E': pc = 4; break; case 'F': pc = 5; break;
+                    case 'G': pc = 7; break; case 'A': pc = 9; break; case 'B': pc = 11; break; default: return 0.0; }
+    int i = 1;
+    if (t[i] == '#') { pc += 1; ++i; }
+    else if (t[i] == 'b') { pc -= 1; ++i; }
+    if (i >= tlen) return 0.0;
+    int octave = 0; bool neg = false;
+    if (t[i] == '-') { neg = true; ++i; }
+    if (i >= tlen) return 0.0;
+    for (; i < tlen; ++i) { if (t[i] < '0' || t[i] > '9') return 0.0; octave = octave * 10 + (t[i] - '0'); }
+    if (neg) octave = -octave;
+    const int midi = (octave + 1) * 12 + pc;
+    if (midi < 0 || midi > 127) return 0.0;
+    return 440.0 * std::pow(2.0, (midi - 69) / 12.0);
+}
+
 void Wavetable::spectrumAt(float pos, float* out) const
 {
     if (frames <= 0) { std::memset(out, 0, sizeof(float) * kTablePartials); return; }

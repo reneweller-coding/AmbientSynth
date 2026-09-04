@@ -411,6 +411,12 @@ void testSources()
         t.spectrumAt(0.0f, spec);
         CHECK(spec[0] > 0.9f && spec[1] < 0.02f, "sine frame is a single partial");
     }
+    {   // Base pitch from a TextureGen file name.
+        CHECK(std::fabs(baseHzFromName("C:\\Textures\\bowed_metal_sao_123_A3.wav") - 220.0) < 1e-6, "_A3 suffix -> 220 Hz");
+        CHECK(std::fabs(baseHzFromName("flute-C#4.wav") - 277.1826) < 1e-3, "C#4 -> 277.18 Hz");
+        CHECK(std::fabs(baseHzFromName("drone Bb2.wav") - 116.5409) < 1e-3, "Bb2 -> 116.54 Hz");
+        CHECK(baseHzFromName("rain_on_roof_sao_77.wav") == 0.0 && baseHzFromName("x_G.wav") == 0.0 && baseHzFromName("") == 0.0, "no note token -> 0");
+    }
     {   // WAV reader: write with the recorder, read back.
         const char* path = "selftest_wav_roundtrip.wav";
         {

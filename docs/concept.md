@@ -227,9 +227,23 @@ distance and ITD like the bank. `Core/include/ambient/Sources.h`.
 
 The plugin loads textures in any format JUCE reads (paths kept in the
 state), the render tool takes `--texture file.wav [baseHz]` and
-`--wavetable file.wav`, and the Quest app picks up `texture.wav` and
+`--wavetable file.wav`, and the Quest app picks up `texture*.wav` and
 `wavetable.wav` from its data folder. The core has its own WAV reader for
-that (PCM 8–32 and float, any channel count mixed to mono).
+that (PCM 8–32 and float, any channel count mixed to mono). A note token
+at the end of the file name (`bowed_metal_sao_123_A3.wav`, also `C#4`,
+`Bb2`) sets the texture's base pitch; without one, C4 is assumed.
+
+**Where textures come from: `Tools/TextureGen`.** A PySide6 program with a
+prompt, model choice, length, steps, guidance, seed and a variation count;
+the models run in a child process that stays loaded between jobs (torch
+never inside a Qt thread). Models: Stable Audio Open 1.0 (44.1 kHz stereo,
+≤ 47 s — the first choice for textures, field recordings, metal, air;
+gated on Hugging Face), MusicGen Large/Medium/Small (32 kHz, tonal drones
+and choirs), AudioLDM 2 Large (16 kHz, dark effects). Output is 32-bit
+float WAV at −6 dBFS peak, plus a `.txt` with the settings; the worker
+detects the base pitch by autocorrelation and appends the note to the
+file name only when the clip is clearly periodic, so rain stays unpitched
+and a bowed plate becomes `…_A3.wav`.
 
 ## Foundation, Bloom, Hold, Macros
 

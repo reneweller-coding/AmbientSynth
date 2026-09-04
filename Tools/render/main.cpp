@@ -10,6 +10,7 @@
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
 #include "ambient/WavFile.h"
+#include "ambient/Sources.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -63,7 +64,8 @@ int main(int argc, char** argv)
         else if (a == "--scl") sclPath = next();
         else if (a == "--texture") {
             const std::string path = next();
-            double baseHz = 261.6256;
+            double baseHz = baseHzFromName(path.c_str());   // "_A3" suffix (TextureGen), else C4
+            if (baseHz <= 0.0) baseHz = 261.6256;
             if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) baseHz = std::atof(argv[++i]);
             std::vector<float> mono; int rate = 0;
             if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }

@@ -44,6 +44,8 @@
 #include "ambient/Presets.h"
 #include "ambient/Recorder.h"
 #include "ambient/WavFile.h"
+#include "ambient/Sources.h"
+#include <dirent.h>
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "AmbientSynth", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AmbientSynth", __VA_ARGS__)
@@ -448,9 +450,19 @@ public:
     {
         if (dataDir_.empty()) return;
         std::vector<float> mono; int rate = 0;
-        if (readWavMono((dataDir_ + "/texture.wav").c_str(), mono, rate)) {
-            engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate);
-            LOGI("texture.wav: %.1f s @ %d Hz", mono.size() / static_cast<double>(rate), rate);
+        // texture.wav, or any texture*.wav (a "_A3" suffix from TextureGen sets the base pitch).
+        std::string texPath;
+        if (DIR* d = opendir(dataDir_.c_str())) {
+            while (dirent* e = readdir(d)) {
+                const std::string n = e->d_name;
+                if (n.rfind("texture", 0) == 0 && n.size() > 4 && n.compare(n.size() - 4, 4, ".wav") == 0) { texPath = dataDir_ + "/" + n; if (n == "texture.wav") break; }
+            }
+            closedir(d);
+        }
+        if (!texPath.empty() && readWavMono(texPath.c_str(), mono, rate)) {
+            const double base = baseHzFromName(texPath.c_str());
+            engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
+            LOGI("%s: %.1f s @ %d Hz, base %.1f Hz", texPath.c_str(), mono.size() / static_cast<double>(rate), rate, base > 0.0 ? base : 261.6256);
         }
         if (readWavMono((dataDir_ + "/wavetable.wav").c_str(), mono, rate)) {
             if (engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) LOGI("wavetable.wav: %d frames", engine_.userWavetableFrames());

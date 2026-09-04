@@ -125,7 +125,9 @@ Sections of the GUI (all parameters are automatable in a DAW):
   Vocal, Glass, Metal, or a *User* table from a 2048-frame WAV), *Position*
   morphs and drifts; *FM* is a two-operator pair; *Texture* granulates a
   loaded sample (field recording, flute air, metal) around a wandering
-  position, free-running or pitched to the key.
+  position, free-running or pitched to the key. `Tools/TextureGen` makes
+  such samples from a text prompt (Stable Audio Open, MusicGen, AudioLDM 2)
+  and writes the detected base pitch into the file name.
 * **Foundation** — a dry sub voice that follows the brain's root one or two
   octaves down and glides between roots (*Glide*); *Binaural* runs the two
   ears a few Hz apart for a slow beat in the delta/theta range; *Tone* blends

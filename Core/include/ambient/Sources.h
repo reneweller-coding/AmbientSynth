@@ -51,6 +51,10 @@ struct Wavetable {
 
 const Wavetable& builtinTable(int index);   // 0 .. kNumTables-2 (the last index is the user slot)
 
+// Base pitch from a texture file name: a trailing "_A3" / "-C#4" / " Bb2" note token before
+// the extension (as written by Tools/TextureGen) gives the frequency at A4 = 440 Hz; 0 if none.
+double baseHzFromName(const char* fileName);
+
 struct Texture {
     std::vector<float> mono;
     double sampleRate = 48000.0;

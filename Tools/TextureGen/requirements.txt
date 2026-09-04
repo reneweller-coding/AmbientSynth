@@ -1,0 +1,10 @@
+diffusers>=0.32
+transformers>=4.45
+accelerate
+soundfile
+numpy
+scipy
+sentencepiece
+protobuf
+huggingface_hub
+PySide6

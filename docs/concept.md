@@ -571,8 +571,14 @@ host's business; the burst on map exit is the one place where it is more than a 
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
 parameter table (choices by name). The engine, the render tool (`--preset`)
-and the plugin's program list all use the same table. 148 presets in twelve
+and the plugin's program list all use the same table. 158 presets in thirteen
 families; all render finite with a held chord, levels −29 … −11 dBFS.
+
+The granular family (148..157) sets the Texture slot up and keeps the partial
+bank sounding, so the preset makes sense before a clip is loaded and gains its
+granular layer the moment one is. In the grain-forward ones the layer carries
+the sound: measured against the same preset without a clip, it sits 0.9 dB
+below the whole in *Grain Swarm* and 1.5 dB in *Pulverised*.
 User presets are saved by the plugin as `.ambientsynth` XML files (full
 state including a loaded Scala scale).
 

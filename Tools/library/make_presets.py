@@ -112,24 +112,41 @@ SHADES = [
                {"cosmos": 0.1}),
     ("still",  {"shimmer_rate": ("mul", 0.4), "drift_rate": ("mul", 0.45), "brain_rate": ("mul", 2.2),
                 "ens_depth": ("add", -0.2), "filter_drift": ("add", -0.2), "attack": ("mul", 1.6),
-                "release": ("mul", 1.5)},
+                "release": ("mul", 1.5), "src2_spread": ("mul", 0.35), "src3_spread": ("mul", 0.35)},
                {"zplane": -0.15, "cloud": -0.1, "coherence": -0.1}),
     ("astir",  {"shimmer_rate": ("mul", 2.2), "brain_rate": ("mul", 0.5), "ens_depth": ("add", 0.2),
-                "filter_drift": ("add", 0.2), "pan_drift": ("add", 0.15), "rate_wander": ("add", 0.2)},
+                "filter_drift": ("add", 0.2), "pan_drift": ("add", 0.15), "rate_wander": ("add", 0.2),
+                "src2_spread": ("mul", 2.2), "src3_spread": ("mul", 2.2)},
                {"zplane": 0.2, "coherence": 0.2, "delay2": 0.1}),
     ("sparse", {"brain_density": ("add", -2), "partials": ("add", -6), "strands": ("add", -1),
-                "ens_mix": ("add", -0.15), "brain_rate": ("mul", 1.6)},
+                "ens_mix": ("add", -0.15), "brain_rate": ("mul", 1.6),
+                "src2_grains": ("mul", 0.7), "src3_grains": ("mul", 0.7)},
                {"src2": -0.25, "src3": -0.2, "cloud": -0.12, "stack": -0.15}),
     ("massed", {"brain_density": ("add", 2), "partials": ("add", 6), "strands": ("add", 1),
-                "ens_mix": ("add", 0.15), "detune": ("mul", 1.4)},
+                "ens_mix": ("add", 0.15), "detune": ("mul", 1.4),
+                "src2_grains": ("mul", 1.6), "src3_grains": ("mul", 1.6)},
                {"src2": 0.25, "src3": 0.15, "stack": 0.25}),
     ("rough",  {"inharmonic": ("add", 0.2), "fb_drive": ("add", 0.2), "resonance": ("add", 0.12),
-                "air": ("add", 0.08)},
+                "air": ("add", 0.08), "src2_spread": ("mul", 1.8), "src3_spread": ("mul", 1.8)},
                {"feedback": 0.3, "cloud": 0.2, "texture": 0.2}),
     ("clean",  {"inharmonic": ("add", -0.15), "purity": ("add", 0.06), "detune": ("mul", 0.6),
                 "far_damp": ("add", -0.1)},
                {"feedback": -0.35, "cloud": -0.15, "texture": -0.1}),
 ]
+
+
+def apply_shade_granular(p, shade):
+    """The granular parameters are set when a slot is filled, which happens after the shade pass,
+    so the shade's nudges to them are applied here instead."""
+    _, nudges, _ = shade
+    for key in ("src2_spread", "src3_spread", "src2_grains", "src3_grains"):
+        if key not in p or key not in nudges:
+            continue
+        how, amount = nudges[key]
+        v = float(p[key]) * amount if how == "mul" else float(p[key]) + amount
+        _, lo, hi, _d = PARAMS[key]
+        v = min(max(v, lo), hi)
+        p[key] = int(round(v)) if key.endswith("grains") else v
 
 
 def apply_shade(p, mod, shade):
@@ -141,7 +158,8 @@ def apply_shade(p, mod, shade):
         p[key] = v * amount if how == "mul" else v + amount
         _, lo, hi, _d = PARAMS[key]
         p[key] = min(max(p[key], lo), hi)
-        if PARAMS[key][0] and key in ("partials", "strands", "brain_density", "brain_low", "brain_high"):
+        if key in ("partials", "strands", "brain_density", "brain_low", "brain_high",
+                   "src2_grains", "src3_grains"):
             p[key] = int(round(p[key]))
     out = dict(mod)
     for key, delta in mods.items():
@@ -214,8 +232,21 @@ def make_preset(style, rng, textures, wavetables, shade):
             p[pre + "fm_ratio"] = rng.choice([0.5, 1.0, 1.5, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0])
             p[pre + "fm_index"] = logu(rng, 0.3, 3.5)
         else:                                            # Texture
-            p[pre + "grain"] = logu(rng, 60.0, 800.0)
-            p[pre + "density"] = logu(rng, 3.0, 40.0)
+            grain_ms = logu(rng, 60.0, 800.0)
+            density = logu(rng, 3.0, 40.0)
+            p[pre + "grain"] = grain_ms
+            p[pre + "density"] = density
+            # Grains: enough for the overlap the density and length ask for, plus headroom and the
+            # style's bias. Too few and the slot drops grains, which made more density quieter
+            # instead of denser -- the ceiling used to be eight for everyone.
+            gran = style["granular"]
+            overlap = max(1.0, density * grain_ms / 1000.0)
+            p[pre + "grains"] = int(min(64, max(4, math.ceil(overlap * 1.8 * gran["grains"]) + 4)))
+            # Spread: the window the start points are drawn from. Near zero the same fragment
+            # repeats and the clip freezes into a drone; near one a grain may come from anywhere.
+            p[pre + "spread"] = math.exp(u(rng, math.log(gran["spread"][0]), math.log(gran["spread"][1])))
+            # A texture slot is now level-matched to the other two, so it needs less than before.
+            p[pre + "level"] = u(rng, 0.12, 0.42)
             if not texture_file and textures:
                 texture_file = textures[rng.randrange(len(textures))]
             # Only a clip with a detected pitch (TextureGen puts the note in the name) can be
@@ -227,6 +258,7 @@ def make_preset(style, rng, textures, wavetables, shade):
         fill_slot(2)
     if on("src3"):
         fill_slot(3)
+    apply_shade_granular(p, shade)
 
     # Z-plane morphing filter -------------------------------------------------------------
     if on("zplane"):

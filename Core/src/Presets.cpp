@@ -453,6 +453,56 @@ const Preset kPresets[] = {
     { "Endless Resonance",
       "z_mode=Series;z_shape=Infinite;z_x=0.4;z_y=0.3;z_rate=0.004;z_depth=1;z_res=0.6;z_mix=0.6;z_keytrack=0.5;"
       "partials=12;tilt=1.4;brain_density=3;brain_hold_min=90;brain_hold_max=300;far_decay=60;far_highcut=3000;attack=15;release=40;master_gain=-9" },
+
+    // ---------------------------------------------------------------- 148..157 granular
+    // These set up the Texture slot and keep the partial bank sounding, so the preset makes sense
+    // before a clip is loaded and gains its granular layer the moment one is (Texture... in the
+    // Source 3 panel, or a pack preset that brings its own). Grains is set from the overlap the
+    // density and the grain length ask for: too few and the slot drops grains, which used to make
+    // more density quieter instead of denser.
+    { "Frozen Grain",
+      "src3_type=Texture;src3_level=0.55;src3_grain=600;src3_density=8;src3_grains=12;src3_spread=0.004;"
+      "src3_follow=Note;src3_pan=0.2;src3_pos=0.35;src3_pos_drift=0.05;"
+      "osc_level=0.55;partials=12;brightness=0.5;attack=12;release=25;far_decay=35;depth=0.8;master_gain=-11" },
+    { "Grain Field",
+      "src3_type=Texture;src3_level=0.75;src3_grain=180;src3_density=28;src3_grains=32;src3_spread=0.85;"
+      "src3_follow=Free;src3_pan=-0.2;src3_pos=0.5;src3_pos_drift=0.6;"
+      "osc_level=0.22;partials=10;tilt=1.6;brightness=0.4;air=0.25;far_decay=25;depth=0.9;master_gain=-10" },
+    { "Grain Swarm",
+      "src2_type=Texture;src2_level=0.7;src2_grain=90;src2_density=45;src2_grains=56;src2_spread=0.35;"
+      "src2_follow=Free;src2_pan=-0.5;src3_type=Texture;src3_level=0.7;src3_grain=110;src3_density=40;"
+      "src3_grains=56;src3_spread=0.45;src3_follow=Free;src3_pan=0.5;"
+      "osc_level=0.18;partials=8;brain_density=4;far_decay=30;width=1.5;master_gain=-10" },
+    { "Slow Scatter",
+      "src3_type=Texture;src3_level=0.55;src3_grain=800;src3_density=4;src3_grains=8;src3_spread=0.6;"
+      "src3_follow=Free;src3_pos_drift=0.8;"
+      "osc_level=0.5;partials=14;attack=20;release=40;brain_rate=90;brain_hold_min=90;far_decay=45;master_gain=-11" },
+    { "Grain Choir",
+      "src3_type=Texture;src3_level=0.55;src3_grain=400;src3_density=14;src3_grains=24;src3_spread=0.02;"
+      "src3_follow=Note;src3_ratio=3/2;"
+      "osc_level=0.5;partials=18;scale=JI 7-limit;root=G;stack=Fifths;strands=4;ens_mix=0.5;far_decay=40;master_gain=-11" },
+    { "Pulverised",
+      "src2_type=Texture;src2_level=0.8;src2_grain=45;src2_density=55;src2_grains=64;src2_spread=1;"
+      "src2_follow=Free;osc_level=0.15;partials=8;inharmonic=0.4;cutoff=1400;"
+      "cloud_send=0.3;cloud_density=25;cloud_size=120;far_decay=25;master_gain=-10" },
+    { "Grain Cavern",
+      "src3_type=Texture;src3_level=0.55;src3_grain=500;src3_density=10;src3_grains=16;src3_spread=0.05;"
+      "src3_follow=Note;src3_octave=-1;"
+      "osc_level=0.45;partials=10;tilt=2;brightness=0.25;cutoff=800;sub_level=0.4;far_size=3;far_decay=60;"
+      "far_highcut=1600;depth=1;master_gain=-10" },
+    { "Grain Shimmer",
+      "src3_type=Texture;src3_level=0.5;src3_grain=250;src3_density=20;src3_grains=28;src3_spread=0.12;"
+      "src3_follow=Note;osc_level=0.5;partials=22;brightness=0.85;shimmer=0.6;"
+      "cosmos_send=0.35;cosmos_shimmer=0.5;cosmos_shimmer_pitch=+12;cosmos_return=0.6;far_decay=35;master_gain=-11" },
+    { "Grain Tape",
+      "src3_type=Texture;src3_level=0.55;src3_grain=320;src3_density=16;src3_grains=22;src3_spread=0.2;"
+      "src3_follow=Free;osc_level=0.45;partials=14;"
+      "fb_bus=0.12;fb_drive=0.7;fb_tape=0.6;fb_tone=2000;dly_mix=0.3;dly_feedback=0.7;far_decay=28;master_gain=-11" },
+    { "Grain Horizon",
+      "src2_type=Texture;src2_level=0.45;src2_grain=700;src2_density=6;src2_grains=10;src2_spread=0.008;"
+      "src2_follow=Note;src2_pan=-0.6;src3_type=Texture;src3_level=0.45;src3_grain=650;src3_density=6;"
+      "src3_grains=10;src3_spread=0.008;src3_follow=Note;src3_pan=0.6;src3_ratio=3/2;"
+      "osc_level=0.4;partials=16;attack=18;release=35;arc=0.6;arc_period=90;far_decay=50;depth=0.95;master_gain=-11" },
 };
 }
 

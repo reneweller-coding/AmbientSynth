@@ -118,6 +118,61 @@ void StereoDelay::process(const float* inL, const float* inR, float* wetL, float
     }
 }
 
+// ---------------------------------------------------------------- Diffuser
+
+void Diffuser::prepare(double sampleRate)
+{
+    sr_ = sampleRate;
+    const int size = 1 << 13;
+    // Lengths in the ratio of small primes, so the four stages never line up and the field stays
+    // dense instead of ringing.
+    const double ms[kStages] = { 13.7, 21.3, 33.1, 47.9 };
+    for (int k = 0; k < kStages; ++k) {
+        len_[k] = static_cast<int>(ms[k] * 0.001 * sr_);
+        for (int c = 0; c < 2; ++c) buf_[c][k].assign(static_cast<size_t>(size), 0.0f);
+    }
+    mask_ = size - 1;
+    w_ = 0;
+}
+
+void Diffuser::reset()
+{
+    for (int c = 0; c < 2; ++c) for (int k = 0; k < kStages; ++k) std::fill(buf_[c][k].begin(), buf_[c][k].end(), 0.0f);
+    w_ = 0;
+}
+
+void Diffuser::set(float amount) { amount_ = clampv(amount, 0.0f, 1.0f); }
+
+void Diffuser::process(float* L, float* R, int n)
+{
+    if (amount_ <= 0.0f) return;
+    const float g = 0.5f + 0.35f * amount_;      // all-pass coefficient: denser the further it goes
+    const float wet = amount_;
+    const float modDepth = 0.0004f * static_cast<float>(sr_) * amount_;
+    for (int i = 0; i < n; ++i) {
+        for (int c = 0; c < 2; ++c) {
+            float x = c == 0 ? L[i] : R[i];
+            const float dry = x;
+            for (int k = 0; k < kStages; ++k) {
+                // A slowly moving read point keeps the field from settling into a comb; the two
+                // channels take opposite sides of the modulation, which widens the swell.
+                const double inc = (0.031 + 0.017 * k) / sr_;
+                if (c == 0) { modPh_[k] += inc; if (modPh_[k] >= 1.0) modPh_[k] -= 1.0; }
+                const float m = modDepth * sin01(c == 0 ? modPh_[k] : 1.0 - modPh_[k]);
+                const float delay = static_cast<float>(len_[k]) + m + 1.0f;
+                float* b = buf_[c][k].data();
+                const float d = ringRead(b, mask_, w_, delay);
+                const float y = d - g * x;
+                b[static_cast<size_t>(w_ & mask_)] = x + g * y;
+                x = y;
+            }
+            const float out = dry + (x - dry) * wet;
+            if (c == 0) L[i] = out; else R[i] = out;
+        }
+        ++w_;
+    }
+}
+
 // ---------------------------------------------------------------- Unmask
 
 void Unmask::prepare(double sampleRate)
@@ -443,8 +498,25 @@ void MidSide::set(float bassMonoHz, float sideAirDb, float width)
     width_ = clampv(width, 0.0f, 2.0f);
 }
 
+void MidSide::setTilt(float dB, float pivotHz)
+{
+    tiltOn_ = std::fabs(dB) > 0.05f;
+    if (!tiltOn_) { tiltLo_ = tiltHi_ = 1.0f; return; }
+    // Half the tilt each way, so the level through the middle stays where it was.
+    tiltLo_ = std::pow(10.0f, -0.5f * dB / 20.0f);
+    tiltHi_ = std::pow(10.0f,  0.5f * dB / 20.0f);
+    tiltC_ = 1.0f - std::exp(-kTwoPi * clampv(pivotHz, 20.0f, 0.45f * static_cast<float>(sr_)) / static_cast<float>(sr_));
+}
+
 void MidSide::process(float* L, float* R, int n)
 {
+    if (tiltOn_)
+        for (int i = 0; i < n; ++i) {
+            tiltState_[0] += tiltC_ * (L[i] - tiltState_[0]);
+            tiltState_[1] += tiltC_ * (R[i] - tiltState_[1]);
+            L[i] = tiltState_[0] * tiltLo_ + (L[i] - tiltState_[0]) * tiltHi_;
+            R[i] = tiltState_[1] * tiltLo_ + (R[i] - tiltState_[1]) * tiltHi_;
+        }
     for (int i = 0; i < n; ++i) {
         const float m = 0.5f * (L[i] + R[i]);
         float s = 0.5f * (L[i] - R[i]);

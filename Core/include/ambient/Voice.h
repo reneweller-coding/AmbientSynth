@@ -42,6 +42,7 @@ struct VoiceParams {
     float pressDistance = 0.0f, pressBright = 0.0f, pressLevel = 0.0f;
     float slideCutoff = 0.0f, slideZ = 0.0f;
     float externalise = 0.0f;   // pinna notch + shoulder reflection, for headphones
+    float sympathy = 0.0f;      // how much of the other voices this one hears, through its own filter
     float pitchMul = 1.0f;
     float strikeLevel = 0.0f, strikeDecay = 0.4f, strikeDamp = 0.5f;
     int   strikeType = 0;       // String, Wood, Metal
@@ -116,7 +117,10 @@ public:
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
     // may be null) phase-modulates the partials when p.fmAmount > 0 (the feedback loop).
-    void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p, const float* fm = nullptr);
+    // `couple` (n samples, may be null) is the previous block's foreground, mixed into this
+    // voice's own filter input when p.sympathy > 0 -- strings on a shared soundboard.
+    void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p,
+                const float* fm = nullptr, const float* couple = nullptr);
 
 private:
     struct Strand {

@@ -121,10 +121,34 @@ class MidSide {
 public:
     void prepare(double sampleRate);
     void set(float bassMonoHz, float sideAirDb, float width);
+    // Tilt: a see-saw around the pivot -- one first-order low pass and its complement, weighted
+    // against each other. Flat at 0 dB and then not computed at all.
+    void setTilt(float dB, float pivotHz);
     void process(float* L, float* R, int n);
 private:
     Svf    hp_, air_;
     float  airGain_ = 0.0f, width_ = 1.0f;
+    float  tiltLo_ = 1.0f, tiltHi_ = 1.0f, tiltC_ = 0.1f, tiltState_[2] = {};
+    bool   tiltOn_ = false;
+    double sr_ = 48000.0;
+};
+
+// A diffusion field: four modulated all-passes that turn an impulse into a swell before the
+// reverb ever sees it. A feedback network answers immediately by construction; this is what
+// gives a tail the slow arrival a large room has.
+class Diffuser {
+public:
+    void prepare(double sampleRate);
+    void set(float amount);
+    void process(float* L, float* R, int n);
+    void reset();
+private:
+    static constexpr int kStages = 4;
+    std::vector<float> buf_[2][kStages];
+    int    len_[kStages] = {};
+    int    mask_ = 0, w_ = 0;
+    double modPh_[kStages] = { 0.0, 0.3, 0.6, 0.85 };
+    float  amount_ = 0.0f;
     double sr_ = 48000.0;
 };
 

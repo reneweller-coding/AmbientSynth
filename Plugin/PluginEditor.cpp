@@ -289,7 +289,8 @@ void AmbientSynthEditor::buildCells()
             s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
-            if (s.name == "Far Reverb") s.maxUnits = 10;                     // one row with Rotate and Unmask
+            if (s.name == "Far Reverb") s.maxUnits = 11;                     // one row with Rotate, Unmask and Diffuse
+            if (s.name == "Master") s.maxUnits = 5;
             if (s.name == "Body") s.maxUnits = 7;                            // one row
             if (s.name == "Room") s.maxUnits = 9;                            // one row with Morph and both impulses
             if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;

@@ -264,6 +264,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     B(ParamId::FarFreeze,   "far_freeze",   "Freeze",    "Far Reverb", false),
     F(ParamId::FarRotate,   "far_rotate",   "Rotate",    "Far Reverb", 0.f,  1.f, 0.f,  1.f,  ""),
     F(ParamId::FarUnmask,   "far_unmask",   "Unmask",    "Far Reverb", 0.f,  1.f, 0.f,  1.f,  ""),
+    F(ParamId::FarDiffuse,  "far_diffuse",  "Diffuse",   "Far Reverb", 0.f,  1.f, 0.f,  1.f,  ""),
 
     F(ParamId::FeedbackBus,   "fb_bus",   "To Bus",   "Feedback", 0.f,   1.f,     0.f,    1.f,  ""),
     F(ParamId::FeedbackFm,    "fb_fm",    "To Pitch", "Feedback", 0.f,   1.f,     0.f,    1.f,  ""),
@@ -311,6 +312,9 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::PatinaHiss,   "patina_hiss",   "Hiss",     "Patina", 0.f,   1.f,    0.2f,  1.f,  ""),
     F(ParamId::PatinaAge,    "patina_age",    "Age",      "Patina", 0.f,   1.f,    0.3f,  1.f,  ""),
 
+    F(ParamId::Tilt2,        "master_tilt",   "Tilt",     "Master", -6.f,  6.f,    0.f,   1.f,  "dB"),
+    F(ParamId::TiltPivot,    "tilt_pivot",    "Pivot",    "Master", 100.f, 4000.f, 700.f, 0.4f, "Hz"),
+
     F(ParamId::BassMono, "bass_mono", "Bass Mono", "Master", 40.f, 300.f, 150.f, 0.5f, "Hz"),
     F(ParamId::SideAir,  "side_air",  "Side Air",  "Master", 0.f,  6.f,   2.f,   1.f,  "dB"),
     F(ParamId::Width,    "width",     "Width",     "Master", 0.f,  2.f,   1.2f,  1.f,  ""),
@@ -357,6 +361,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Coherence,     "coherence",    "Coherence",    "Coherence",  0.f,   1.f,   0.f,   1.f,  ""),
     F(ParamId::CoherenceDepth,"coherence_depth","Depth",      "Coherence",  0.f,   1.f,   0.f,   1.f,  ""),
     F(ParamId::CoherenceRate, "coherence_rate","Rate",        "Coherence",  0.2f,  5.f,   1.f,   0.5f, "x"),
+    F(ParamId::Sympathy,      "sympathy",     "Sympathy",     "Coherence",  0.f,   1.f,   0.f,  1.f,  ""),
 
     C(ParamId::Lfo1Shape, "lfo1_shape", "Shape", "LFO 1", kLfoShapeNames, kNumLfoShapes, 0),
     F(ParamId::Lfo1Rate,  "lfo1_rate",  "Rate",  "LFO 1", 0.0008f, 20.f, 0.0300f, 0.25f, "Hz"),

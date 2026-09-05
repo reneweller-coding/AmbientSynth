@@ -162,6 +162,7 @@ const HelpEntry kHelp[] = {
     { "patina_wow", "Depth of the wow and flutter: a wavering pitch, slow and irregular with a little 6 Hz on top." },
     { "patina_hiss", "The noise floor, a touch louder when the tape is carrying more (that is modulation noise, and it is what makes a floor sound like tape rather than like dither)." },
     { "patina_age", "How much top end the machine has lost: from untouched down to about 4 kHz." },
+    { "far_diffuse", "Modulated all-passes in front of the far reverb: the tail arrives instead of starting. At zero the reverb answers immediately, as it always has; turned up, the first reflections smear into a slow swell that takes a second to become a room." },
     { "far_rotate", "The whole background slowly turns: the far field's left and right rotate into each other on a minute-scale curve. Depth of the turn." },
     { "blur_mix", "A spectral smear on the near bus itself, ahead of the effects: every attack is wiped into texture, notes flow into each other. Mix of the blurred signal (latency 43 ms on the blurred part)." },
     { "blur_smear", "How much the blur smears: 0 follows the input closely, 1 is a spectral freeze that only lets new energy in slowly." },
@@ -206,6 +207,8 @@ const HelpEntry kHelp[] = {
     { "cloud_level", "Level of the cloud, dropped into the far reverb." },
 
     // ---- master
+    { "master_tilt", "One broad see-saw around the pivot: turn it down and the whole instrument leans dark, up and it leans open. A single tilt does more for an ambient mix than any equaliser with more knobs, because it never carves a hole." },
+    { "tilt_pivot", "The frequency the tilt turns around: everything below moves one way, everything above the other." },
     { "bass_mono", "Below this frequency the side channel is removed: a mono low end, the foundation of a wide picture." },
     { "side_air", "A broad bell at 3 kHz on the side channel, up to +6 dB: air in the width." },
     { "width", "Stereo width: 1 as recorded, above widens, 0 mono." },
@@ -263,6 +266,7 @@ const HelpEntry kHelp[] = {
     // ---- coherence
     { "coherence", "Coupling of four slow Kuramoto oscillators: at 0 they run free, near 1 they fall into step. Their sines are the KURA modulation sources." },
     { "coherence_depth", "How much the ring moves brightness, depth, pan and the z-plane point on its own." },
+    { "sympathy", "The voices hear each other: the previous block's foreground is fed back into every voice at low level, through that voice's own filter. Strings on one soundboard do this, and with the Comb or Formant model it is unmistakable -- each voice rings at what it is tuned to when another plays. Kept small on purpose; it is a loop." },
     { "coherence_rate", "Base speed of the ring." },
 
     // ---- LFOs (shared)

@@ -229,7 +229,8 @@ void Engine::renderChunk(float* L, float* R, int n)
             }
         }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
-        for (auto& v : voices_) if (v.isActive()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm); }
+        const float* couple = sympathy_ > 0.0f ? coupleBuf_.data() + p : nullptr;
+        for (auto& v : voices_) if (v.isActive()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm, couple); }
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
@@ -314,6 +315,7 @@ void Engine::renderChunk(float* L, float* R, int n)
         }
         roomTailLeft_ = roomLevel_ > 0.0005f ? static_cast<long>(room_.impulseSeconds() * sr_) + Convolver::kBlock : std::max(0L, roomTailLeft_ - n);
     }
+    diffuser_.process(fl, fr, n);
     farReverb_.process(fl, fr, n);
     if (farRotate_ > 0.0f) {   // the background slowly turns: left and right rotate into each other
         const float a = rotDrift_.value() * farRotate_ * 0.6f, c = std::cos(a), sn = std::sin(a);
@@ -346,6 +348,10 @@ void Engine::renderChunk(float* L, float* R, int n)
     // Unmasking: the background gives way to the foreground band by band, before the two planes
     // are summed (the near bus is the side chain, and it is finished by now).
     unmask_.process(nl, nr, fl, fr, n);
+    // Sympathy: this block's foreground is what the voices will hear of each other in the next
+    // one. A block of delay is what makes the loop safe, and at these depths inaudible.
+    if (sympathy_ > 0.0f && static_cast<int>(coupleBuf_.size()) >= n)
+        for (int i = 0; i < n; ++i) coupleBuf_[static_cast<size_t>(i)] = 0.5f * (nl[i] + nr[i]);
 
     const float master = dbToGain(masterGain_);
     for (int i = 0; i < n; ++i) {

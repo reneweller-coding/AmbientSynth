@@ -420,6 +420,10 @@ void Engine::readParams()
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
+    midSide_.setTilt(g(ParamId::Tilt2), g(ParamId::TiltPivot));
+    diffuser_.set(g(ParamId::FarDiffuse));
+    sympathy_ = g(ParamId::Sympathy);
+    vp_.sympathy = sympathy_;
     roomLevel_    = g(ParamId::RoomLevel);
     roomSource_   = static_cast<int>(std::lround(g(ParamId::RoomSource)));
     roomPreDelay_ = static_cast<int>(g(ParamId::RoomPreDelay) * 0.001f * static_cast<float>(sr_));

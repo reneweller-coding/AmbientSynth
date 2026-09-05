@@ -66,6 +66,9 @@ enum class ParamId : int {
     BlurMix, BlurSmear,
     // Far reverb (the infinite background)
     FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze, FarRotate, FarUnmask,
+    // Diffusion: modulated all-passes in front of the reverb, so the tail arrives instead
+    // of starting; and the sympathetic coupling of the voices through each other's filters
+    FarDiffuse,
     // Feedback: the mixed output (before the master) returns, low-passed and saturated,
     // into the near bus before the filters and effects, and/or as phase modulation of every
     // partial. Throttled by the output level so it hisses and holds instead of running away.
@@ -82,6 +85,9 @@ enum class ParamId : int {
     BodyLevel, BodyMaterial, BodyPitch, BodyDecay, BodyTone, BodySpread,
     // Patina: the master's age -- tape wow, lost highs, a noise floor, gentle saturation
     PatinaAmount, PatinaWow, PatinaHiss, PatinaAge,
+    // Master tilt: one broad see-saw around a pivot -- the move an ambient mix asks for
+    // more than any other, and the one thing the master stage did not have
+    Tilt2, TiltPivot,
     // Mid/side master stage
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)
@@ -108,7 +114,7 @@ enum class ParamId : int {
     FeedbackTape,
     // Coherence: four slow Kuramoto oscillators, coupled by Coherence, modulating brightness,
     // depth, pan drift and the z-plane point by Depth
-    Coherence, CoherenceDepth, CoherenceRate,
+    Coherence, CoherenceDepth, CoherenceRate, Sympathy,
     // Modulation: eight free LFOs and six multi-segment envelopes. Their shapes and the matrix
     // rows are data, not parameters (see Modulation.h); what sits here is what a host automates.
     Lfo1Shape, Lfo1Rate, Lfo1Phase, Lfo1Depth, Lfo1Mode, Lfo1Table, Lfo1Sync,

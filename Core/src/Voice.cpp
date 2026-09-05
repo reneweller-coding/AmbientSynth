@@ -433,8 +433,12 @@ void Voice::control(int blockLen, const VoiceParams& p)
     }
 }
 
-void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p, const float* fm)
+void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p,
+                   const float* fm, const float* couple)
 {
+    // The coupling is capped low and enters before the filter, so what comes back is not the
+    // other voices but this voice's answer to them.
+    const float sympathy = couple != nullptr ? clampv(p.sympathy, 0.0f, 1.0f) * 0.12f : 0.0f;
     const bool doFm = fm != nullptr && p.fmAmount > 0.0f;
     const float fmScale = p.fmAmount * 3.0f;   // radians at the fundamental per unit of feedback signal
     fmHpCoef_ = 1.0f - kTwoPi * 10.0f / static_cast<float>(sr_);
@@ -469,6 +473,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             const float e = env_.process();
             const float th = doFm ? fm[pos + i] * fmScale : 0.0f;
             float accL = anySlot ? slotL[i] : 0.0f, accR = anySlot ? slotR[i] : 0.0f;
+            if (sympathy > 0.0f) { const float c = couple[pos + i] * sympathy * e; accL += c; accR += c; }
             for (int si = 0; si < unison; ++si) {
                 Strand& s = strands_[si];
                 float sum = 0.0f;

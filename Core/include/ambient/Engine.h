@@ -206,6 +206,9 @@ private:
     GrainCloud   cloud_;
     float        delay2Mix_ = 0.0f, delay2ToFar_ = 0.5f, cloudSend_ = 0.0f;
     Reverb       nearReverb_, farReverb_;
+    Diffuser     diffuser_;
+    std::vector<float> coupleBuf_;      // the previous block's foreground, for the sympathetic coupling
+    float        sympathy_ = 0.0f;
     Unmask       unmask_;
     Body         body_;
     Patina       patina_;

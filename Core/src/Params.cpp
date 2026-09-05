@@ -2,6 +2,7 @@
 #include "ambient/Filter.h"
 #include "ambient/Clock.h"
 #include "ambient/Body.h"
+#include "ambient/ClusterBrain.h"
 #include "ambient/Sources.h"   // choice names of the source slots
 #include "ambient/ZPlane.h"    // choice names of the z-plane filter
 #include "ambient/Modulation.h"  // choice names of the LFOs and envelopes
@@ -31,6 +32,7 @@ const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
+const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
 const char* const kStrikeWhoNames[2] = { "Keys", "Keys + Brain" };
 const char* const kStackNames[kNumStacks] = { "Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics" };
@@ -331,6 +333,14 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::BrainWander,     "brain_wander",     "Wander",     "Cluster Brain", 0.f,  1.f,   0.3f, 1.f, ""),
     C(ParamId::BrainQuantize, "brain_quantize", "Quantize", "Cluster Brain", kSyncDivNames, kNumSyncDivs, 0),
 
+    C(ParamId::AutoMode,      "auto_mode",     "Autoplay",  "Autoplay", kBrainModeNames, kNumBrainModes, 0),
+    F(ParamId::AutoRate,      "auto_rate",     "Every",     "Autoplay", 2.f,   900.f, 45.f, 0.4f, "s"),
+    C(ParamId::AutoSync,      "auto_sync",     "Sync",      "Autoplay", kSyncDivNames, kNumSyncDivs, 0),
+    F(ParamId::AutoLead,      "auto_lead",     "Voice Lead","Autoplay", 1.f,   24.f,  7.f,  0.6f, "st"),
+    F(ParamId::AutoTension,   "auto_tension",  "Tension",   "Autoplay", 0.f,   1.f,   0.f,  1.f,  ""),
+    F(ParamId::AutoRootMove,  "auto_root_move","Root Move", "Autoplay", 0.f,   1.f,   0.2f, 1.f,  ""),
+    B(ParamId::AutoStep,      "auto_step",     "Step",      "Autoplay", false),
+
     B(ParamId::Brain2On,        "brain2_on",       "Active",    "Brain 2", false),
     I(ParamId::Brain2Density,   "brain2_density",  "Density",   "Brain 2", 1.f,   12.f,  3.f),
     F(ParamId::Brain2Rate,      "brain2_rate",     "Event Rate","Brain 2", 2.f,   600.f, 60.f, 0.4f, "s"),
@@ -507,6 +517,7 @@ const SectionName kSections[] = {
     { "Blur", ParamSection::Blur }, { "Feedback", ParamSection::Feedback }, { "Room", ParamSection::Room },
     { "Body", ParamSection::Body }, { "Patina", ParamSection::Patina }, { "Cosmos", ParamSection::Cosmos },
     { "Cloud", ParamSection::Cloud }, { "Cluster Brain", ParamSection::ClusterBrain }, { "Brain 2", ParamSection::Brain2 },
+    { "Autoplay", ParamSection::Autoplay },
     { "Tuning", ParamSection::Tuning }, { "Coherence", ParamSection::Coherence }, { "Clock", ParamSection::Clock },
     { "Morph", ParamSection::Morph }, { "Macros", ParamSection::Macros }, { "Map", ParamSection::Map },
     { "Route", ParamSection::Route },

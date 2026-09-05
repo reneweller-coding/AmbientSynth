@@ -37,7 +37,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1 },
     };
     tabRows_ = {
         { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" } } },
@@ -45,7 +45,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Body", "Patina" } } },
-        { 5, 0, { "BRAIN", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
+        { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
     };
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
@@ -203,6 +203,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     source3View_ = std::make_unique<SourceView>(proc_, 3);
     brainView_ = std::make_unique<BrainView>(proc_);
     brainView2_ = std::make_unique<BrainView>(proc_);
+    brainView3_ = std::make_unique<BrainView>(proc_);
     stageView_ = std::make_unique<StageView>(proc_);
     cosmosView_ = std::make_unique<CosmosView>(proc_);
     envView_ = std::make_unique<EnvView>(proc_);
@@ -210,6 +211,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
                                 static_cast<juce::Component*>(source1View_.get()), static_cast<juce::Component*>(brainView_.get()),
                                 static_cast<juce::Component*>(brainView2_.get()),
+                                static_cast<juce::Component*>(brainView3_.get()),
                                 static_cast<juce::Component*>(stageView_.get()), static_cast<juce::Component*>(cosmosView_.get()),
                                 static_cast<juce::Component*>(envView_.get()) })
         content_.addAndMakeVisible(*c);
@@ -221,7 +223,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
         groups_[4].displays = { cosmosView_.get() };                    // COSMOS
     }
-    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
+    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -258,8 +260,18 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         if (hv > 0) { setPage(3); if (help_) help_->topics.selectRow(hv - 1); }
         const juce::String sc = juce::SystemStats::getEnvironmentVariable("AMBIENT_SCROLL", "");
         if (sc.isNotEmpty()) juce::MessageManager::callAsync([this, y = sc.getIntValue()] { viewport_.setViewPosition(0, y); });
+        // AMBIENT_TAB=<row>,<page>[;<row>,<page>...]: open tabbed rows on a given page, so a page
+        // that is not the first one can be photographed at all. Rows count from the top, pages
+        // from the left, both from zero.
+        for (const auto& one : juce::StringArray::fromTokens(juce::SystemStats::getEnvironmentVariable("AMBIENT_TAB", ""), ";", "")) {
+            const auto rc = juce::StringArray::fromTokens(one, ",", "");
+            const int r = rc.size() == 2 ? rc[0].getIntValue() : -1, pg = rc.size() == 2 ? rc[1].getIntValue() : -1;
+            if (r >= 0 && r < static_cast<int>(tabRows_.size()) && pg >= 0 && pg < static_cast<int>(tabRows_[static_cast<size_t>(r)].names.size()))
+                tabRows_[static_cast<size_t>(r)].active = pg;
+        }
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
         for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
+        rebuildLayout();
     }
     startTimerHz(12);
 }
@@ -294,6 +306,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Body") s.maxUnits = 7;                            // one row
             if (s.name == "Room") s.maxUnits = 9;                            // one row with Morph and both impulses
             if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;
+            if (s.name == "Autoplay") s.maxUnits = 12;   // the seven controls and the button in one row
             if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
@@ -360,6 +373,12 @@ void AmbientSynthEditor::buildCells()
     auto texture = std::make_unique<juce::TextButton>("Texture...");
     texture->onClick = [this] { chooseSourceFile(false); };
     textureCell_ = addExtraCell("Source 3", std::move(texture), "Texture file", 2);
+    // Autoplay's trigger as a button of its own: the parameter is a switch a host can automate,
+    // but by hand you want one press, not a switch you have to put back.
+    auto step = std::make_unique<juce::TextButton>("Step now");
+    step->setTooltip("Exchange one voice of the cluster now, whatever the interval says");
+    step->onClick = [this] { proc_.engine().autoplayStep(); };
+    addExtraCell("Autoplay", std::move(step), "by hand", 2);
     auto impulse = std::make_unique<juce::TextButton>("Impulse A...");
     impulse->onClick = [this] { chooseImpulseFile(false); };
     impulseCell_ = addExtraCell("Room", std::move(impulse), "Dark Hall (built in)", 2);

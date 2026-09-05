@@ -93,6 +93,9 @@ enum class ParamId : int {
     // Cluster brain (generative sleep-concert mode)
     BrainOn, BrainDensity, BrainRate, BrainSync, BrainHoldMin, BrainHoldMax,
     BrainLow, BrainHigh, BrainConsonance, BrainWander, BrainQuantize,
+    // Autoplay: instead of notes coming and going, the cluster stays full and one voice at a
+    // time is exchanged, so the chord travels. Step is a trigger, not a level.
+    AutoMode, AutoRate, AutoSync, AutoLead, AutoTension, AutoRootMove, AutoStep,
     // A second conductor for the background: its own register, pace and plane, on the
     // first one's root (plus an interval), so the two play a slow counterpoint
     Brain2On, Brain2Density, Brain2Rate, Brain2HoldMin, Brain2HoldMax,
@@ -192,7 +195,7 @@ const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for 
 enum class ParamSection : int {
     Master, Source1, Strands, Source2, Source3, Strike, Foundation, Air, Envelope, Filter, ZPlane,
     Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
-    Patina, Cosmos, Cloud, ClusterBrain, Brain2, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
+    Patina, Cosmos, Cloud, ClusterBrain, Brain2, Autoplay, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
     Macros, Map, Route, Unknown
 };
 ParamSection sectionOf(const char* sectionName);

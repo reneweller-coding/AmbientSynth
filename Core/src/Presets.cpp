@@ -625,6 +625,30 @@ const Preset kPresets[] = {
       "brain_on=off;keys_depth=0.7;press_distance=0.8;press_bright=0.4;press_level=0.5;slide_cutoff=2;"
       "slide_z=0.6;bend_range=12;mpe=on;attack=1.5;release=8;osc_level=0.7;partials=20;brightness=0.4;"
       "z_mode=Series;z_shape=Vowel Morph;z_mix=0.6;far_decay=25;master_gain=-11" },
+
+    // ---------------------------------------------------------------- 187..190 autoplay / progressions
+    // The conductor in Chords mode: the cluster stays full and one voice at a time is exchanged,
+    // so the harmony travels. Four paces, from a minute apart to only when you ask.
+    { "Slow Progression",
+      "auto_mode=Chords;auto_rate=60;auto_lead=3;auto_tension=0.15;auto_root_move=0.25;"
+      "brain_density=5;brain_low=45;brain_high=76;brain_consonance=0.8;osc_level=0.55;partials=18;"
+      "tilt=1.3;brightness=0.5;attack=14;release=40;far_size=2.4;far_decay=45;far_level=0.9;"
+      "depth=0.85;dly_mix=0.2;master_gain=-12" },
+    { "Turning Harmony",
+      "auto_mode=Chords;auto_rate=35;auto_lead=7;auto_tension=0.5;auto_root_move=0.8;"
+      "brain_density=6;brain_low=40;brain_high=79;brain_consonance=0.55;osc_level=0.5;partials=20;"
+      "inharmonic=0.12;brightness=0.6;attack=10;release=32;shimmer=0.25;far_size=2.8;far_decay=55;"
+      "far_level=1;depth=0.9;dly_mix=0.25;dly_to_far=0.6;master_gain=-12" },
+    { "Chord Ladder",
+      "auto_mode=Chords;auto_sync=4 bars;auto_lead=12;auto_tension=0.7;auto_root_move=0.5;"
+      "tempo=64;brain_density=5;brain_low=48;brain_high=84;brain_consonance=0.4;osc_level=0.5;"
+      "partials=16;brightness=0.65;attack=6;release=20;dly_mix=0.35;dly_sync_l=1/2;dly_sync_r=3/4;"
+      "dly_feedback=0.55;far_decay=35;depth=0.75;master_gain=-12" },
+    { "By Hand",
+      "auto_mode=Chords;auto_rate=900;auto_lead=5;auto_tension=0.25;auto_root_move=0.35;"
+      "brain_density=5;brain_low=43;brain_high=74;brain_consonance=0.75;osc_level=0.6;partials=18;"
+      "tilt=1.5;brightness=0.45;attack=18;release=45;body_level=0.35;body_material=Wood;body_decay=4;"
+      "far_size=2.2;far_decay=40;depth=0.8;master_gain=-12" },
 };
 }
 

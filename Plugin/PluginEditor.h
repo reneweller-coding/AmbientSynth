@@ -394,7 +394,9 @@ private:
         int head = 0;
         int lo = 36, hi = 84;                             // the note range in view, widened as notes arrive
     };
-    std::unique_ptr<BrainView> brainView_, brainView2_;
+    // Three rolls: the conductor's, the second conductor's, and one on the Autoplay tab, where
+    // watching the chord travel one voice at a time is the whole point of the mode.
+    std::unique_ptr<BrainView> brainView_, brainView2_, brainView3_;
     // The stereo stage: every sounding voice as a dot, left-right by its pan, near-far by its
     // plane, size by its envelope -- the spatial model (concept.md) as a picture, moving.
     struct StageView : juce::Component, juce::Timer {

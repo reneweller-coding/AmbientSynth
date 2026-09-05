@@ -47,6 +47,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <set>
 
 using namespace ambient;
 
@@ -280,7 +281,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(builtinPresetCount() == 187, "exactly 187 built-in presets");
+    CHECK(builtinPresetCount() == 191, "exactly 191 built-in presets");
     CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
@@ -1843,6 +1844,120 @@ void testParamTable()
 // channel is what the master stage leaves alone (its side high-pass is the whole difference, and
 // it lives below 50 Hz), so that is what this compares.
 // A score: the text form, the ramp in the parameter's own domain, and what it does when played.
+// Autoplay: the conductor in Chords mode. Descriptors cannot show whether a chord is voice-led --
+// they are averages over a minute -- so this drives the brain directly and looks at the events.
+void testAutoplay()
+{
+    auto freqOf = [](int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); };
+    BrainParams p;
+    p.on = true;
+    p.mode = BrainMode::Chords;
+    p.density = 5;
+    p.rateSeconds = 10.0f;
+    p.low = 40; p.high = 76;
+    p.voiceLead = 3.0f;
+    p.consonance = 0.7f;
+
+    ClusterBrain b;
+    b.reset(1234, 48);
+    std::vector<std::pair<bool, int>> ev;   // (isOn, note)
+    auto emit = [&](const BrainEvent& e) { ev.emplace_back(e.type == BrainEvent::Type::NoteOn, e.note); };
+
+    // Filling: one note at a time until the chord is full, and then it stays full.
+    for (int i = 0; i < 600; ++i) b.update(0.5, p, -1, freqOf, emit);   // 300 s
+    CHECK(b.activeCount() == p.density, "the chord fills up and stays full");
+    int ons = 0, offs = 0;
+    for (auto& e : ev) (e.first ? ons : offs)++;
+    CHECK(ons >= p.density, "notes were started");
+    CHECK(offs > 0, "and voices were exchanged");
+    CHECK(ons - offs == p.density, "every exchange is one voice out and one in");
+
+    // Voice leading: each exchange must move within the allowance. The events come in pairs
+    // (off then on) once the chord is full.
+    int pairs = 0, tooFar = 0;
+    for (size_t i = 1; i < ev.size(); ++i)
+        if (!ev[i - 1].first && ev[i].first) {
+            ++pairs;
+            if (std::abs(ev[i].second - ev[i - 1].second) > static_cast<int>(p.voiceLead)) ++tooFar;
+        }
+    CHECK(pairs >= 5, "several exchanges happened");
+    CHECK(tooFar == 0, "no exchange moves a voice further than Voice Lead allows");
+
+    // A wider allowance really is used: the same seed with twelve semitones must move further.
+    ClusterBrain w;
+    w.reset(1234, 48);
+    BrainParams q = p;
+    q.voiceLead = 12.0f;
+    std::vector<std::pair<bool, int>> ew;
+    auto emitW = [&](const BrainEvent& e) { ew.emplace_back(e.type == BrainEvent::Type::NoteOn, e.note); };
+    for (int i = 0; i < 600; ++i) w.update(0.5, q, -1, freqOf, emitW);
+    int maxNarrow = 0, maxWide = 0;
+    for (size_t i = 1; i < ev.size(); ++i) if (!ev[i - 1].first && ev[i].first) maxNarrow = std::max(maxNarrow, std::abs(ev[i].second - ev[i - 1].second));
+    for (size_t i = 1; i < ew.size(); ++i) if (!ew[i - 1].first && ew[i].first) maxWide = std::max(maxWide, std::abs(ew[i].second - ew[i - 1].second));
+    CHECK(maxWide > maxNarrow, "a wider allowance lets the harmony travel further");
+
+    // The Step trigger: an exchange happens at once, long before the timer would have fired.
+    ClusterBrain t;
+    t.reset(99, 48);
+    std::vector<std::pair<bool, int>> et;
+    auto emitT = [&](const BrainEvent& e) { et.emplace_back(e.type == BrainEvent::Type::NoteOn, e.note); };
+    BrainParams r = p;
+    r.rateSeconds = 600.0f;                 // ten minutes: nothing should happen on its own
+    for (int i = 0; i < 40; ++i) t.update(1.0, r, -1, freqOf, emitT);   // fill it (one per tick is gated by the timer)
+    while (t.activeCount() < r.density) { t.requestStep(); t.update(0.05, r, -1, freqOf, emitT); }
+    const size_t before = et.size();
+    for (int i = 0; i < 20; ++i) t.update(1.0, r, -1, freqOf, emitT);
+    CHECK(et.size() == before, "nothing moves on its own while the interval is long");
+    t.requestStep();
+    t.update(0.05, r, -1, freqOf, emitT);
+    CHECK(et.size() == before + 2, "Step exchanges one voice at once");
+
+    // Free mode is untouched: notes still come and go on their own timers.
+    ClusterBrain f;
+    f.reset(7, 48);
+    BrainParams fp = p;
+    fp.mode = BrainMode::Free;
+    fp.rateSeconds = 4.0f;
+    fp.holdMin = 6.0f; fp.holdMax = 12.0f;
+    int fon = 0, foff = 0;
+    auto emitF = [&](const BrainEvent& e) { (e.type == BrainEvent::Type::NoteOn ? fon : foff)++; };
+    for (int i = 0; i < 400; ++i) f.update(0.5, fp, -1, freqOf, emitF);
+    CHECK(fon > 5 && foff > 5, "the free conductor still starts and stops notes of its own accord");
+
+    // A chain, not a pendulum. The obvious way for this mode to fail is to keep picking up the
+    // note it has just put down -- the nearest candidate, and it fitted a moment ago -- so that
+    // an hour of music is two chords traded back and forth. Over an hour at the default settings
+    // it must visit a new chord nearly every time, never return to the one two exchanges back,
+    // and the whole harmony must have moved in pitch rather than sat still.
+    ClusterBrain ch;
+    ch.reset(0x51ee7, 48);
+    BrainParams cp = p;
+    cp.rateSeconds = 40.0f; cp.voiceLead = 5.0f; cp.chordTension = 0.25f; cp.rootMove = 0.35f;
+    cp.density = 5; cp.low = 40; cp.high = 79;
+    std::set<int> sounding;
+    std::vector<std::vector<int>> seq;
+    for (int i = 0; i < 72000; ++i) {   // 3600 s at 20 Hz
+        bool changed = false;
+        ch.update(0.05, cp, -1, freqOf, [&](const BrainEvent& e) {
+            if (e.type == BrainEvent::Type::NoteOn) sounding.insert(e.note); else sounding.erase(e.note);
+            changed = true;
+        });
+        if (changed && static_cast<int>(sounding.size()) == cp.density) {
+            std::vector<int> now(sounding.begin(), sounding.end());
+            if (seq.empty() || seq.back() != now) seq.push_back(now);   // off + on are one chord
+        }
+    }
+    std::set<std::vector<int>> uniq(seq.begin(), seq.end());
+    int pendulum = 0;
+    for (size_t i = 2; i < seq.size(); ++i) if (seq[i] == seq[i - 2]) ++pendulum;
+    double lo = 1e9, hi = -1e9;
+    for (const auto& c : seq) { double m = 0; for (int n : c) m += n; m /= static_cast<double>(c.size()); lo = std::min(lo, m); hi = std::max(hi, m); }
+    CHECK(seq.size() > 60, "an hour of autoplay is dozens of exchanges");
+    CHECK(pendulum == 0, "the harmony never swings back to the chord two exchanges ago");
+    CHECK(static_cast<double>(uniq.size()) > 0.9 * static_cast<double>(seq.size()), "nearly every exchange reaches a chord it has not been in before");
+    CHECK(hi - lo > 2.0, "the chord travels in pitch over the hour rather than circling one voicing");
+}
+
 void testScore()
 {
     Score sc;
@@ -2302,6 +2417,7 @@ int main()
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
     testParamTable();
+    testAutoplay();
     testScore();
     testStems();
     testSampleRates();

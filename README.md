@@ -51,7 +51,7 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in two independent layers that combine
-freely: the **Sound** box (187 built-in presets: voices, space, delays,
+freely: the **Sound** box (191 built-in presets: voices, space, delays,
 reverbs, brain, tuning) and the **Cosmos** box (32 presets for the Cosmos
 section only). Loading one layer never touches the other. In a DAW the full
 presets are the plugin's programs (both layers at once).
@@ -298,6 +298,20 @@ Sections of the GUI (all parameters are automatable in a DAW):
   No compressor: dynamics are left alone.
 * **Cluster Brain** — density, event rate, hold time range, register range,
   *Consonance* (1 = only simple ratios to the root, 0 = clusters), *Wander*.
+* **Autoplay** — an optional second way for the conductor to work. *Free*
+  (default) is the Cluster Brain as it always was: notes start and stop on
+  their own timers. *Chords* keeps the cluster full and exchanges one voice at
+  a time, so the harmony travels instead of churning: *Every* (seconds) or
+  *Sync* (on the clock) sets the pace, *Step* and the panel's **Step now**
+  button do it by hand, *Voice Lead* limits how far the exchanged voice may
+  move (small = the chord shifts, large = it jumps), *Tension* how strictly
+  the arriving note has to fit the ones that stay, *Root Move* how often the
+  exchange takes the root with it. The last eight notes to leave carry a
+  fading penalty, so the harmony does not keep picking up what it has just put
+  down: measured over an hour at the default settings it reaches a chord it
+  has never been in nearly every time and never swings back to the one two
+  exchanges ago. Four presets use it: *Slow Progression*, *Turning Harmony*,
+  *Chord Ladder* (on the clock) and *By Hand* (only when you press Step).
 * **Tuning** — 11 built-in scales plus *Load Scala…*; *Keys*: "Snap to 12
   keys" (default) or "Consecutive degrees"; root, A4, random seed. *Purity*
   blends every note between 12-TET and the chosen scale, so you can hear the

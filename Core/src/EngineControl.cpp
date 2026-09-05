@@ -369,6 +369,19 @@ void Engine::readParams()
     bp_.consonance  = g(ParamId::BrainConsonance);
     bp_.wander      = g(ParamId::BrainWander);
     brainQuant_     = clampv(static_cast<int>(std::lround(g(ParamId::BrainQuantize))), 0, kNumSyncDivs - 1);
+    // Autoplay. In Chords the conductor keeps the cluster full and exchanges one voice at a time;
+    // the rate can come from the clock instead of the seconds knob.
+    bp_.mode         = static_cast<BrainMode>(clampv(static_cast<int>(std::lround(g(ParamId::AutoMode))), 0, kNumBrainModes - 1));
+    bp_.voiceLead    = g(ParamId::AutoLead);
+    bp_.chordTension = g(ParamId::AutoTension);
+    bp_.rootMove     = g(ParamId::AutoRootMove);
+    if (bp_.mode == BrainMode::Chords) bp_.rateSeconds = syncedSeconds(ParamId::AutoSync, g(ParamId::AutoRate));
+    {   // Step is a trigger: it fires on the rising edge and the host's switch is left alone.
+        const bool now = g(ParamId::AutoStep) >= 0.5f;
+        if (now && !autoStepWas_) brain_.requestStep();
+        autoStepWas_ = now;
+        if (autoStepAsked_.exchange(false, std::memory_order_relaxed)) brain_.requestStep();
+    }
     vp_.pressDistance = g(ParamId::PressDistance);
     vp_.pressBright   = g(ParamId::PressBright);
     vp_.pressLevel    = g(ParamId::PressLevel);

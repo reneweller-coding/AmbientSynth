@@ -42,6 +42,8 @@ public:
     void noteOn(int note, float velocity);
     void noteOff(int note);
     void allNotesOff();
+    // Autoplay: exchange a voice of the cluster now, whatever its timer says. Any thread.
+    void autoplayStep() { autoStepAsked_.store(true, std::memory_order_relaxed); }
     // Per-note expression (MPE, polyphonic aftertouch, CC 74). `note` < 0 addresses every
     // sounding voice, which is what a plain keyboard's channel pressure and wheel mean.
     void setPressure(int note, float v);
@@ -208,6 +210,8 @@ private:
     int          brain2Interval_ = 0;
     bool         brain2On_ = false;
     int          brainQuant_ = 0;      // SyncDiv: the conductor's decisions land on the grid
+    std::atomic<bool> autoStepAsked_{ false };   // the Step trigger, from the panel or a controller
+    bool         autoStepWas_ = false;           // the parameter's previous state, for the rising edge
     double       quantAcc_ = 0.0, lastBeat_ = 0.0;
     float        bendRange_ = 2.0f;
     Ensemble     ensemble_;

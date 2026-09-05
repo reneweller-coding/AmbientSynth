@@ -242,6 +242,75 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+### Autoplay: Free and Chords
+
+The conductor above is *Free*, and Free stays the default: notes come and go
+on their own timers, which makes the cluster breathe but never really move --
+after ten minutes it is the same harmony, differently arranged.
+
+*Chords* keeps the cluster **full** and exchanges exactly **one voice at a
+time**. Every *Every* seconds (or on the clock, via *Sync*, or the moment
+somebody presses *Step* / the panel's button / a mapped controller) the voice
+that has been sounding longest leaves and one note takes its place. The
+candidate is scored for three things at once:
+
+* **How it sits against the voices that stay** -- the mean consonance with
+  each of them and with the root, not just with the root. That is what makes
+  the result a chord rather than a heap. *Tension* is the exponent on that
+  term: at 0 only notes that fit the whole chord are considered, turned up the
+  progression is allowed to lean.
+* **How far that voice has to travel** -- *Voice Lead*, in semitones, is both
+  a hard limit and a preference within it. Small is voice leading: the note
+  that leaves is replaced by a near neighbour, and the ear hears the chord
+  shift rather than one note being cut and another started. Large lets the
+  harmony jump.
+* **Doubling** -- an octave of a pitch class already sounding scores ×0.2, the
+  root's own class ×0.5, so an exchange brings a new colour instead of
+  thickening one that is already there.
+
+* **What left recently** -- the last eight notes to leave carry a penalty that fades with age
+  (×0.12 the moment they go, back to full after eight exchanges). Without it the harmony keeps
+  picking up the note it has just put down: it is the nearest candidate and it fitted a moment
+  ago, so it wins again. Nothing is banned, only postponed.
+
+*Root Move* decides how often the exchange moves the root as well (the same
+`wanderRoot` the Free mode uses); without it the harmony circles one centre
+for ever, with it the piece travels. A small random factor (0.85–1.15) sits on
+the final score so the same chord does not always resolve the same way.
+
+The note being replaced is removed from the cluster **before** the candidates
+are scored, so it does not vote on its own successor -- and is itself excluded
+from the running, because at zero distance it would always win and the chord
+would never move. That was a real bug; the self test caught it, and the
+descriptor oracle never would have, because both modes render sound that
+measures the same.
+
+Filling an empty cluster adds one note per tick rather than all of them at
+once, so the first minutes are an entrance and not a chord.
+
+**Does it actually form chains?** Measured over an hour of simulated time, per
+setting: how many exchanges happen, how many of the resulting chords are ones
+it has never been in, how often it swings back to the chord two exchanges ago
+(that would be a pendulum), and how far the mean pitch of the chord travels.
+
+| Setting | Exchanges | New chords | Pendulum | Drift |
+| --- | --- | --- | --- | --- |
+| Lead 3, Tension 0.15, Root Move 0.25 | 56 | 56 | 0 | 6.4 st |
+| Lead 7, Tension 0.5, Root Move 0.8 | 98 | 98 | 0 | 5.7 st |
+| Lead 12, Tension 0.7, Root Move 0.5 | 116 | 116 | 0 | 6.0 st |
+| Lead 5, Tension 0.25, Root Move 0.35 | 86 | 83 | 0 | 3.6 st |
+| Lead 2, Tension 0, Root Move 0 | 116 | 35 | 0 | 2.6 st |
+
+The last row is the corner where everything is set to its tightest: the root
+is pinned, a voice may move two semitones, and only notes that fit the whole
+chord are allowed. There the harmonic field really is finite, and circling it
+is the correct answer rather than a fault -- *Root Move* is what opens it, and
+its default is 0.2, not 0. (Before the recent-notes penalty that row managed
+35 chords in name only: 18, with 98 revisits.) The self test holds the
+property for the default range: over an hour, dozens of exchanges, nearly all
+of them into a chord it has not been in, never one two steps back, and a chord
+that has moved in pitch.
+
 ### Filter models
 
 `Core/include/ambient/Filter.h`. The voice filter is one of nine models
@@ -746,6 +815,9 @@ off by default and were measured sound-neutral there.
   channel pressure apply to every sounding voice. Everything is smoothed inside the voice.
 * **Brain Quantize**: the conductor's decisions wait for the next note value of the clock, and
   all of the waiting time is handed over at the tick, so the mean rate is unchanged.
+* **Autoplay**: the conductor in *Chords* mode keeps the cluster full and exchanges one voice at
+  a time, on a timer, on the clock or by hand (see above). *Free* -- the original conductor -- is
+  the default and is not going anywhere.
 * **Brain 2**: a second conductor with its own register, pace, density and plane, on the first
   one's root plus an interval, with its own random stream. Two of them play a slow counterpoint
   neither would play alone.

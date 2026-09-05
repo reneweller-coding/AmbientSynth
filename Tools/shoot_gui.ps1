@@ -2,13 +2,14 @@
 # imagined. Starts the app, waits for the window, captures it, closes it again.
 #
 #   powershell -File Tools\shoot_gui.ps1 -Out docs\screenshot.png [-Width 1500] [-Height 920]
-#                                        [-Wait 6] [-Page ""|perform|browse|browse-map]
+#                                        [-Wait 6] [-Page ""|perform|browse|browse-map] [-Tab "5,1"]
 param(
     [string]$Out = "docs\screenshot.png",
     [int]$Width = 0,
     [int]$Height = 0,
     [int]$Wait = 6,
     [string]$Page = "",
+    [string]$Tab = "",      # "<row>,<page>[;...]": open a tabbed row on one of its later pages
     [switch]$Fresh          # forget the standalone's saved window size, so it opens at its own fit
 )
 $ErrorActionPreference = "Stop"
@@ -21,6 +22,7 @@ if ($Page -eq "perform") { $env:AMBIENT_PERFORM = "1" } else { Remove-Item env:A
 if ($Page -eq "browse") { $env:AMBIENT_BROWSE = "1" }
 elseif ($Page -eq "browse-map") { $env:AMBIENT_BROWSE = "map" }
 else { Remove-Item env:AMBIENT_BROWSE -ErrorAction SilentlyContinue }
+if ($Tab) { $env:AMBIENT_TAB = $Tab } else { Remove-Item env:AMBIENT_TAB -ErrorAction SilentlyContinue }
 if ($Page -eq "mod") { $env:AMBIENT_MOD = "1" } else { Remove-Item env:AMBIENT_MOD -ErrorAction SilentlyContinue }
 
 if ($Fresh) {

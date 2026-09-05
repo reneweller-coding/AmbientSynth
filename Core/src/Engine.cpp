@@ -22,6 +22,9 @@ namespace ambient {
 
 Engine::Engine()
 {
+    // The envelopes start from a usable shape rather than from nothing.
+    for (auto& e : envPending_) e.parse("0:0/1:1/4:0");
+    for (auto& e : envShape_) e.parse("0:0/1:1/4:0");
     for (int i = 0; i < kNumParams; ++i) {
         const float def = paramTable()[static_cast<size_t>(i)].def;
         params_[i].store(def, std::memory_order_relaxed);
@@ -108,13 +111,19 @@ void Engine::reset()
 bool Engine::applyPreset(int index)
 {
     if (index < 0 || index >= numPresets()) return false;
-    return ambient::applyPreset(preset(index), [this](ParamId id, float v) { setParam(id, v); });
+    const Preset& p = preset(index);
+    const bool ok = ambient::applyPreset(p, [this](ParamId id, float v) { setParam(id, v); });
+    return applyPresetModulation(p) && ok;
 }
 
 bool Engine::applySoundPreset(int index)
 {
     if (index < 0 || index >= numPresets()) return false;
-    return ambient::applyPreset(preset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Sound);
+    const Preset& p = preset(index);
+    // Modulation belongs to the sound layer, not to Cosmos: loading a sound preset brings its
+    // matrix and its envelope shapes with it.
+    const bool ok = ambient::applyPreset(p, [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Sound);
+    return applyPresetModulation(p) && ok;
 }
 
 bool Engine::applyCosmosPreset(int index)
@@ -327,6 +336,12 @@ Voice* Engine::allocate(int note, int owner)
 void Engine::startNote(int note, float velocity, int owner, float distance)
 {
     if (note < 0 || note > 127) return;
+    // The modulation envelopes run on a phrase clock: it restarts when a note arrives into
+    // silence, not on every note of a cluster, or a slow shape would never get anywhere.
+    bool anySounding = false;
+    for (const auto& v : voices_) if (v.isActive()) { anySounding = true; break; }
+    if (!anySounding) envTime_ = 0.0;
+    randomPerNote_ = rng_.bipolar();
     Voice* v = allocate(note, owner);
     v->order = ++order_;
     const double hz = frequencyOf(note);
@@ -370,6 +385,126 @@ void Engine::allNotesOff()
 
 // ---------------------------------------------------------------- parameters
 
+
+// ---------------------------------------------------------------- modulation
+
+void Engine::resetModulation()
+{
+    matrixPending_.clear();
+    // A default shape every envelope starts from: up over a quarter of its length, down over the
+    // rest. Time is scaled by the envelope's own Time parameter, so this is a shape, not a length.
+    for (auto& e : envPending_) e.parse("0:0/1:1/4:0");
+    modVersion_.fetch_add(1, std::memory_order_release);
+}
+
+bool Engine::applyPresetModulation(const Preset& p)
+{
+    resetModulation();
+    bool ok = true;
+    if (p.mod != nullptr && *p.mod) ok = matrixPending_.parse(p.mod) && ok;
+    if (p.envs != nullptr && *p.envs) {
+        const char* s = p.envs;
+        for (int i = 0; i < kNumModEnvs && *s; ++i) {
+            const char* end = s;
+            while (*end && *end != '~') ++end;
+            if (end > s) {
+                char buf[256];
+                const size_t len = static_cast<size_t>(end - s);
+                if (len < sizeof(buf)) {
+                    std::memcpy(buf, s, len);
+                    buf[len] = 0;
+                    ok = envPending_[i].parse(buf) && ok;
+                }
+            }
+            s = (*end == '~') ? end + 1 : end;
+        }
+    }
+    modVersion_.fetch_add(1, std::memory_order_release);
+    return ok;
+}
+
+bool Engine::setModMatrixText(const char* text)
+{
+    if (!matrixPending_.parse(text)) return false;
+    modVersion_.fetch_add(1, std::memory_order_release);
+    return true;
+}
+
+bool Engine::setEnvShape(int index, const char* text)
+{
+    if (index < 0 || index >= kNumModEnvs) return false;
+    if (!envPending_[index].parse(text)) return false;
+    modVersion_.fetch_add(1, std::memory_order_release);
+    return true;
+}
+
+int Engine::writeEnvShape(int index, char* buf, size_t cap) const
+{
+    if (index < 0 || index >= kNumModEnvs) return 0;
+    return envPending_[index].write(buf, cap);
+}
+
+// One step of every modulator, then the matrix summed into modOut_. Called once per block, before
+// readParams, so the values the parameters are read with already carry the modulation.
+void Engine::stepModulation(float dt)
+{
+    // Pick up matrix or shape edits made on the message thread (fixed-size objects, no allocation).
+    const int mv = modVersion_.load(std::memory_order_acquire);
+    if (mv != modSeen_) {
+        matrix_ = matrixPending_;
+        for (int i = 0; i < kNumModEnvs; ++i) envShape_[i] = envPending_[i];
+        modSeen_ = mv;
+    }
+
+    for (int i = 0; i < kNumLfos; ++i) {
+        const int base = static_cast<int>(ParamId::Lfo1Shape) + i * 6;
+        LfoSpec& sp = lfoSpec_[i];
+        sp.shape  = static_cast<LfoShape>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumLfoShapes - 1));
+        sp.rateHz = getParam(static_cast<ParamId>(base + 1));
+        sp.phase  = getParam(static_cast<ParamId>(base + 2));
+        sp.depth  = getParam(static_cast<ParamId>(base + 3));
+        sp.mode   = static_cast<LfoMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 4)))), 0, kNumLfoModes - 1));
+        sp.table  = static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 5))));
+        const Wavetable* table = userTable_.frames > 0 ? &userTable_ : nullptr;
+        modSrc_[static_cast<int>(ModSource::Lfo1) + i] = lfo_[i].step(dt, sp, table);
+    }
+
+    envTime_ += dt;
+    envHeld_ = false;
+    for (const auto& v : voices_) if (v.isActive() && !v.isReleasing()) { envHeld_ = true; break; }
+    for (int i = 0; i < kNumModEnvs; ++i) {
+        const int base = static_cast<int>(ParamId::Env1Mode) + i * 3;
+        ModEnvSpec& sp = envSpec_[i];
+        sp.mode      = static_cast<EnvMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumEnvModes - 1));
+        sp.timeScale = std::max(0.01f, getParam(static_cast<ParamId>(base + 1)));
+        sp.depth     = getParam(static_cast<ParamId>(base + 2));
+        const float t = static_cast<float>(envTime_) / sp.timeScale;
+        modSrc_[static_cast<int>(ModSource::Env1) + i] = envShape_[i].at(t, sp.mode, envHeld_) * sp.depth;
+    }
+
+    // Everything else that can drive something. Sources are bipolar; the ones that are naturally
+    // 0..1 are mapped to -1..1 here, and a route's "unipolar" flag maps them back.
+    const Voice* loud = loudestVoice();
+    auto uni = [](float v) { return 2.0f * clampv(v, 0.0f, 1.0f) - 1.0f; };
+    modSrc_[static_cast<int>(ModSource::Amp)] = uni(loud ? loud->level() : 0.0f);
+    for (int m = 0; m < 8; ++m)
+        modSrc_[static_cast<int>(ModSource::MacroA) + m] = uni(getParam(static_cast<ParamId>(static_cast<int>(ParamId::MacroA) + m)));
+    for (int k = 0; k < 4; ++k)
+        modSrc_[static_cast<int>(ModSource::Kura1) + k] = std::sin(kuraPhase_[k]);
+    modSrc_[static_cast<int>(ModSource::Note)] = uni(loud ? (loud->note() - 24) / 84.0f : 0.5f);
+    modSrc_[static_cast<int>(ModSource::Velocity)] = uni(loud ? loud->level() : 0.0f);
+    modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
+    modSrc_[static_cast<int>(ModSource::RandomPerNote)] = randomPerNote_;
+    modSrc_[static_cast<int>(ModSource::None)] = 0.0f;
+
+    std::memset(modOut_, 0, sizeof(modOut_));
+    matrix_.apply(modSrc_, modOut_);
+    // Performance state is never a target: modulating the morph position or the map cursor from
+    // inside would fight the hand that is holding them.
+    for (const ParamDesc& d : paramTable())
+        if (isPerformanceParam(d.id)) modOut_[static_cast<int>(d.id)] = 0.0f;
+}
+
 void Engine::readParams()
 {
     // Inertia: every float parameter glides to its effective value with the Inertia time
@@ -380,12 +515,18 @@ void Engine::readParams()
         const float target = effectiveParam(id);
         const int i = static_cast<int>(id);
         const ParamDesc& d = paramDesc(id);
-        if (inertiaCoef >= 1.0f || d.kind != ParamKind::Float || isPerformanceParam(id)) { inertiaCur_[i] = target; return target; }
+        // Modulation is added after the inertia glide: a modulator moves at its own rate, it is
+        // not slewed by the setting that exists to slow down the performer's hand.
+        const float mod = modOut_[i];
+        if (inertiaCoef >= 1.0f || d.kind != ParamKind::Float || isPerformanceParam(id)) {
+            inertiaCur_[i] = target;
+            return mod != 0.0f ? clampv(target + mod, d.min, d.max) : target;
+        }
         const float span = std::max(d.max - d.min, 1e-9f);
         const float pc = std::pow(clampv((inertiaCur_[i] - d.min) / span, 0.0f, 1.0f), d.skew);
         const float pt = std::pow(clampv((target - d.min) / span, 0.0f, 1.0f), d.skew);
         inertiaCur_[i] = d.min + span * std::pow(pc + (pt - pc) * inertiaCoef, 1.0f / d.skew);
-        return inertiaCur_[i];
+        return mod != 0.0f ? clampv(inertiaCur_[i] + mod, d.min, d.max) : inertiaCur_[i];
     };
     vp_.level       = g(ParamId::OscLevel);
     vp_.partials    = static_cast<int>(std::lround(g(ParamId::Partials)));
@@ -633,6 +774,7 @@ void Engine::process(float* L, float* R, int n)
         morphCur_.store(cur, std::memory_order_relaxed);
     }
     updateBlend(n);
+    stepModulation(static_cast<float>(n / sr_));
     readParams();
     if (retune_)   // tuning purity / drift: every sounding voice glides to its current frequency
         for (auto& v : voices_) if (v.isActive()) v.setTargetFrequency(frequencyOf(v.note()));

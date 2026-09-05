@@ -13,6 +13,7 @@
 #include "Cosmos.h"
 #include "Convolution.h"
 #include "Route.h"
+#include "Modulation.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include <atomic>
@@ -96,6 +97,25 @@ public:
     bool routeRunning() const { return route_.running(); }
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
     float coherencePhase(int i) const { return kuraPhase_[i & 3]; }   // Kuramoto oscillator phases, for pictures
+
+    // ---- modulation (message thread for the setters; see Modulation.h for the text forms)
+    // The matrix rows and the envelope shapes are data, published the way the route and the user
+    // scale are: written into a pending copy and picked up at the next block.
+    void resetModulation();          // the matrix cleared, the six envelopes back to default
+    bool applyPresetModulation(const Preset& p);   // the mod and envs fields of a preset
+    bool setModMatrixText(const char* text);
+    int  writeModMatrix(char* buf, size_t cap) const { return matrixPending_.write(buf, cap); }
+    const ModMatrix& modMatrix() const { return matrixPending_; }
+    bool setEnvShape(int index, const char* text);
+    int  writeEnvShape(int index, char* buf, size_t cap) const;
+    const ModEnv& envShape(int index) const { return envPending_[index < 0 ? 0 : (index >= kNumModEnvs ? kNumModEnvs - 1 : index)]; }
+    // For the displays: the current value of every source, and each LFO's phase.
+    float modSource(int source) const { return (source >= 0 && source < kNumModSources) ? modSrc_[source] : 0.0f; }
+    float lfoPhase(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)].phase(); }
+    const Lfo& lfo(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)]; }
+    float envTime() const { return static_cast<float>(envTime_); }
+    // How much the matrix is currently adding to a parameter, in that parameter's own units.
+    float modAmount(ParamId id) const { return modOut_[static_cast<int>(id)]; }
     // Partial amplitudes of the loudest sounding voice, for the oscillator display. Returns how
     // many were written, 0 when nothing sounds. Message thread, no synchronisation (see Voice.h).
     int  displayPartials(float* out, int maxCount) const;
@@ -144,6 +164,21 @@ private:
     Convolver    room_;
     bool         userImpulse_ = false;
     float        roomMaxSeconds_ = 8.0f;
+    // modulation
+    Lfo          lfo_[kNumLfos];
+    LfoSpec      lfoSpec_[kNumLfos];
+    ModEnv       envShape_[kNumModEnvs], envPending_[kNumModEnvs];
+    ModEnvSpec   envSpec_[kNumModEnvs];
+    ModMatrix    matrix_, matrixPending_;
+    std::atomic<int> modVersion_{ 0 };
+    int          modSeen_ = 0;
+    float        modSrc_[kNumModSources] = {};
+    float        modOut_[kNumParams] = {};
+    double       envTime_ = 0.0;
+    bool         envHeld_ = false;
+    float        randomPerNote_ = 0.0f;
+    void         stepModulation(float dt);
+
     Route        route_, routePending_;
     std::atomic<int> routeVersion_{ 0 };
     int          routeSeen_ = 0;

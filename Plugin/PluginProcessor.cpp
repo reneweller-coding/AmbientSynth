@@ -287,6 +287,9 @@ void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
         if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
             p->setValueNotifyingHost(p->convertTo0to1(v));
     }, scope);
+    // The matrix rows and the envelope shapes are data, not parameters, so they do not travel
+    // through the parameter tree: the engine takes them straight from the preset.
+    if (scope != PresetScope::Cosmos) engine_.applyPresetModulation(pr);
 }
 
 void AmbientSynthProcessor::setCurrentProgram(int index)
@@ -479,6 +482,16 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         state.setProperty("scalaName", userScaleName_, nullptr);
     }
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
+    {   // modulation: the matrix and the six envelope shapes (see ambient/Modulation.h)
+        char buf[4096];
+        if (engine_.writeModMatrix(buf, sizeof(buf)) > 0) state.setProperty("modMatrix", juce::String(buf), nullptr);
+        juce::String envs;
+        for (int i = 0; i < ambient::kNumModEnvs; ++i) {
+            if (engine_.writeEnvShape(i, buf, sizeof(buf)) > 0) envs += juce::String(buf);
+            if (i + 1 < ambient::kNumModEnvs) envs += "~";
+        }
+        state.setProperty("modEnvs", envs, nullptr);
+    }
     if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
     if (routeText_.isNotEmpty()) state.setProperty("route", routeText_, nullptr);
     if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
@@ -536,6 +549,14 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
             const juce::String route = tree.getProperty("route").toString();
+            const juce::String modMatrix = tree.getProperty("modMatrix").toString();
+            const juce::String modEnvs = tree.getProperty("modEnvs").toString();
+            if (modMatrix.isNotEmpty()) engine_.setModMatrixText(modMatrix.toRawUTF8());
+            if (modEnvs.isNotEmpty()) {
+                const juce::StringArray parts = juce::StringArray::fromTokens(modEnvs, "~", "");
+                for (int i = 0; i < juce::jmin(parts.size(), ambient::kNumModEnvs); ++i)
+                    if (parts[i].isNotEmpty()) engine_.setEnvShape(i, parts[i].toRawUTF8());
+            }
             if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             if (route.isNotEmpty()) setRouteText(route);
             tree.removeProperty("route", nullptr);

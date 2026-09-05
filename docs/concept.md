@@ -567,6 +567,42 @@ gesture layer, the route cursor and, on the block where the map is switched off,
 parameter at once. JUCE allows this from the audio thread, but what a host does with it is the
 host's business; the burst on map exit is the one place where it is more than a handful.
 
+## Modulation
+
+`Core/{include/ambient/Modulation.h, src/Modulation.cpp}`. Until this existed, every modulator in
+the instrument was soldered to one destination and carried its own depth and rate: the pitch
+drifter to pitch, the filter drifter to the cutoff, the Kuramoto ring to brightness, distance,
+pan and the z-plane point. Adding a source always meant adding another pair of knobs. This is the
+general form; the soldered drifters stay, because they are per-partial and per-strand and a
+matrix row cannot reach in there.
+
+**Eight LFOs**, shapes Sine, Triangle, Ramp Up/Down, Square, Random, Steps and Table. Rates from
+one cycle in twenty minutes to 20 Hz. The square's edges are ramped over 7 % of a cycle and the
+random shapes interpolate: the standing rule that a modulator may not step holds here too. `Table`
+reads a frame of the loaded wavetable, so any of the generated tables -- and any curve drawn into
+one -- is an LFO shape, without a second mechanism for drawable modulators.
+
+**Six envelopes**, up to sixteen breakpoints each, a curve per segment, an optional sustain point
+and an optional loop between two points. Their clock is a phrase clock: it restarts when a note
+arrives into silence, not on every note of a cluster, or a shape spanning a minute would never
+get anywhere.
+
+**A matrix** of thirty-two rows, `source -> target x depth`, with an optional second source as the
+amount and a unipolar flag. Depth is a fraction of the target's own range, so the same number
+means the same thing on a cutoff in hertz and on a mix in 0..1. One source may appear in as many
+rows as it likes -- that is the whole point, and what the soldered drifters could never do.
+Performance state (morph, macros, the map cursor, the route) is never a target: modulating the
+morph position from inside would fight the hand holding it.
+
+The LFO settings and the envelope times are parameters, so a host automates them. The shapes and
+the matrix rows are **data**, the way a Scala scale and the gesture mappings already are: a text
+form that travels in the preset (fields 7 and 8 of a pack line), in `.ambientsynth` files and in
+the plugin state. Thirty-two rows as four parameters each would put a hundred and twenty entries
+into the automation list for very little gain.
+
+Modulation is added after the inertia glide: a modulator moves at its own rate, it is not slewed
+by the setting that exists to slow the performer's hand down.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

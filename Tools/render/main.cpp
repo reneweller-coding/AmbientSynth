@@ -6,6 +6,7 @@
 //                  [--preset "name"] [--set key=value]... [--notes 45,52,59]
 //                  [--scl file.scl] [--stats] [--list] [--list-presets]
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
+//                  [--mod "lfo1>cutoff:0.4;..."] [--env 1 "0:0/2:1/8:0"]
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
 //                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
 //                  [--route "name or text" [speed]] (walk a route over the map; --list-routes)
@@ -104,6 +105,17 @@ int main(int argc, char** argv)
             for (int k = 0; k < numPresetPacks(); ++k) std::printf("%s\n", presetPackName(k));
             std::printf("%d presets total (%d built in)\n", numPresets(), builtinPresetCount());
             return 0;
+        }
+        else if (a == "--mod") {   // modulation matrix, see Core/include/ambient/Modulation.h
+            const std::string text = next();
+            if (!engine.setModMatrixText(text.c_str())) { std::fprintf(stderr, "bad matrix text\n"); return 2; }
+            std::printf("matrix: %d route(s)\n", engine.modMatrix().count());
+        }
+        else if (a == "--env") {   // --env <1..6> "<breakpoints>"
+            const int idx = std::atoi(next().c_str()) - 1;
+            const std::string text = next();
+            if (!engine.setEnvShape(idx, text.c_str())) { std::fprintf(stderr, "bad envelope %d\n", idx + 1); return 2; }
+            std::printf("env %d: %d points\n", idx + 1, engine.envShape(idx).count());
         }
         else if (a == "--set-file") {   // play a recorded set (.ambientset) while rendering; length defaults to the set's
             const std::string path = next();

@@ -1608,7 +1608,7 @@ void testPresetPacks()
         f << "# a comment line\n";
         f << "pack Pack Under Test\n";
         f << "\n";
-        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav|ir/c.wav\n";
+        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav|ir/c.wav|lfo1>cutoff:0.4;lfo2>air:0.2|0:0/2:1/5:0~0:0/1:-1/3:0\n";
         f << "Pack Beta|sub_level=0.5\n";
     }
     CHECK(loadPresetPack(file.string().c_str()), "pack file loads");
@@ -1637,6 +1637,17 @@ void testPresetPacks()
     CHECK(std::string(presetFilePath(base + 1, 2)).empty(), "and no impulse either");
     CHECK(std::string(presetFilePath(0, 0)).empty(), "built-in presets carry no pack files");
 
+    {   // The pack's modulation travels with the preset, like its sample does.
+        Engine me;
+        CHECK(me.applyPreset(base), "apply the pack preset with its modulation");
+        CHECK(me.modMatrix().count() == 2, "the pack preset's matrix arrived");
+        CHECK(me.modMatrix().route(0).target == ParamId::Cutoff, "and its first route");
+        CHECK(me.envShape(0).count() == 3 && me.envShape(1).count() == 3, "and two envelope shapes");
+        CHECK(std::fabs(me.envShape(1).at(1.0f, EnvMode::OneShot, true) + 1.0f) < 1e-4f,
+              "the second shape dips to -1");
+        CHECK(me.applyPreset(0), "a preset without modulation");
+        CHECK(me.modMatrix().count() == 0, "clears the matrix instead of inheriting it");
+    }
     CHECK(numPresetFamilies() == baseFamilies + 1, "the pack adds one family");
     if (numPresetMeta() > 0) {
         const PresetMeta& m = presetMeta(base);
@@ -1789,6 +1800,111 @@ void testModulation()
     }
 }
 
+
+void testModulationEngine()
+{
+    const int sr = 48000, block = 256;
+    std::vector<float> l(block), r(block);
+    auto run = [&](Engine& e, double seconds, float& lo, float& hi, ParamId target) {
+        lo = 1e9f; hi = -1e9f;
+        const int blocks = static_cast<int>(seconds * sr / block);
+        for (int i = 0; i < blocks; ++i) {
+            e.process(l.data(), r.data(), block);
+            const float m = e.modAmount(target);
+            lo = std::min(lo, m); hi = std::max(hi, m);
+        }
+    };
+    const ParamDesc& cut = paramDesc(ParamId::Cutoff);
+    const float span = cut.max - cut.min;
+
+    {   // An LFO on the cutoff swings by depth x the parameter's own range, both ways.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        CHECK(e.setModMatrixText("lfo1>cutoff:0.5"), "engine takes a matrix");
+        e.setParam(ParamId::Lfo1Shape, 0.0f);          // sine
+        e.setParam(ParamId::Lfo1Rate, 2.0f);
+        e.setParam(ParamId::Lfo1Depth, 1.0f);
+        e.prepare(sr, block);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 1.0, lo, hi, ParamId::Cutoff);
+        CHECK(hi > 0.45f * span && hi < 0.55f * span, "an LFO route reaches its positive depth");
+        CHECK(lo < -0.45f * span && lo > -0.55f * span, "and its negative depth");
+    }
+    {   // Depth zero is silence, and a route nobody set does nothing.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.prepare(sr, block);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 0.3, lo, hi, ParamId::Cutoff);
+        CHECK(std::fabs(lo) < 1e-6f && std::fabs(hi) < 1e-6f, "no matrix, no modulation");
+    }
+    {   // Unipolar: the same route only ever adds.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        CHECK(e.setModMatrixText("lfo1>cutoff:0.5:none:u"), "unipolar route");
+        e.setParam(ParamId::Lfo1Rate, 2.0f);
+        e.prepare(sr, block);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 1.0, lo, hi, ParamId::Cutoff);
+        CHECK(lo > -1e-4f * span, "a unipolar route never subtracts");
+        CHECK(hi > 0.45f * span, "and still reaches its depth");
+    }
+    {   // One source, several targets: what the soldered drifters could never do.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        CHECK(e.setModMatrixText("lfo1>cutoff:0.4;lfo1>dly_mix:0.3;lfo1>shimmer:0.2"), "three targets");
+        e.setParam(ParamId::Lfo1Rate, 2.0f);
+        e.prepare(sr, block);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 1.0, lo, hi, ParamId::DelayMix);
+        const ParamDesc& dm = paramDesc(ParamId::DelayMix);
+        CHECK(hi > 0.25f * (dm.max - dm.min), "the second target moves too");
+        run(e, 1.0, lo, hi, ParamId::Shimmer);
+        CHECK(hi > 0.15f, "and the third");
+    }
+    {   // Performance state is never a target: the morph position belongs to the hand holding it.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        CHECK(e.setModMatrixText("lfo1>morph:1"), "a route to the morph position parses");
+        e.setParam(ParamId::Lfo1Rate, 4.0f);
+        e.prepare(sr, block);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 0.5, lo, hi, ParamId::MorphPos);
+        CHECK(std::fabs(lo) < 1e-6f && std::fabs(hi) < 1e-6f, "but it never moves performance state");
+    }
+    {   // An envelope drives a target and follows its shape; the clock starts with the phrase.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        CHECK(e.setEnvShape(0, "0:0/1:1/2:0"), "engine takes an envelope shape");
+        CHECK(e.setModMatrixText("env1>cutoff:0.5"), "envelope route");
+        e.setParam(ParamId::Env1Mode, 0.0f);
+        e.setParam(ParamId::Env1Time, 1.0f);
+        e.prepare(sr, block);
+        e.noteOn(48, 0.8f);
+        float lo = 0.0f, hi = 0.0f;
+        run(e, 0.4, lo, hi, ParamId::Cutoff);            // still climbing
+        const float early = hi;
+        run(e, 0.7, lo, hi, ParamId::Cutoff);            // past the peak at one second
+        CHECK(early > 0.1f * span && early < 0.45f * span, "the envelope is on its way up");
+        CHECK(hi > 0.45f * span, "and reaches its peak");
+        run(e, 2.0, lo, hi, ParamId::Cutoff);            // the fall from the peak to the end
+        run(e, 0.5, lo, hi, ParamId::Cutoff);            // past the end: the last value is held
+        CHECK(std::fabs(hi) < 0.02f * span, "and comes back down");
+    }
+    {   // Matrix and shapes survive the text form the preset and the plugin state use.
+        Engine e;
+        CHECK(e.setModMatrixText("lfo2>far_decay:0.3;env3>air:-0.2:macro_b"), "matrix set");
+        char buf[512];
+        CHECK(e.writeModMatrix(buf, sizeof(buf)) > 0, "matrix writes");
+        Engine f;
+        CHECK(f.setModMatrixText(buf) && f.modMatrix().count() == 2, "matrix round trip through the engine");
+        CHECK(e.setEnvShape(2, "0:0/3:1:0.5/9:0|s1"), "shape set");
+        CHECK(e.writeEnvShape(2, buf, sizeof(buf)) > 0, "shape writes");
+        CHECK(f.setEnvShape(2, buf) && f.envShape(2).count() == 3 && f.envShape(2).sustain() == 1,
+              "shape round trip through the engine");
+    }
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -1809,6 +1925,7 @@ int main()
     testPresets();
     testPresetPacks();
     testModulation();
+    testModulationEngine();
     testSpace();
     testRichCarving();
     testFeedback();

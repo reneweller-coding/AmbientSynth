@@ -15,7 +15,7 @@ namespace ambient {
 namespace {
 
 struct PackEntry {
-    std::string name, settings, texture, wavetable, impulse;
+    std::string name, settings, texture, wavetable, impulse, mod, envs;
     PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };
 };
 struct Pack {
@@ -38,7 +38,9 @@ void rebuildViews()
             views().push_back(Preset{ e.name.c_str(), e.settings.c_str(),
                                       e.texture.empty() ? nullptr : e.texture.c_str(),
                                       e.wavetable.empty() ? nullptr : e.wavetable.c_str(),
-                                      e.impulse.empty() ? nullptr : e.impulse.c_str() });
+                                      e.impulse.empty() ? nullptr : e.impulse.c_str(),
+                                      e.mod.empty() ? nullptr : e.mod.c_str(),
+                                      e.envs.empty() ? nullptr : e.envs.c_str() });
             const std::filesystem::path dir(pk.dir);
             auto resolve = [&dir](const std::string& rel) {
                 return rel.empty() ? std::string() : (dir / rel).lexically_normal().string();
@@ -103,6 +105,8 @@ bool loadPresetPack(const char* path)
         if (fields.size() > 3) e.texture = trim(fields[3]);
         if (fields.size() > 4) e.wavetable = trim(fields[4]);
         if (fields.size() > 5) e.impulse = trim(fields[5]);
+        if (fields.size() > 6) e.mod = trim(fields[6]);
+        if (fields.size() > 7) e.envs = trim(fields[7]);
         pack.entries.push_back(std::move(e));
     }
     if (pack.entries.empty()) return false;

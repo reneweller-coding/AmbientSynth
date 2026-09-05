@@ -78,6 +78,22 @@ enum class ParamId : int {
     // Coherence: four slow Kuramoto oscillators, coupled by Coherence, modulating brightness,
     // depth, pan drift and the z-plane point by Depth
     Coherence, CoherenceDepth, CoherenceRate,
+    // Modulation: eight free LFOs and six multi-segment envelopes. Their shapes and the matrix
+    // rows are data, not parameters (see Modulation.h); what sits here is what a host automates.
+    Lfo1Shape, Lfo1Rate, Lfo1Phase, Lfo1Depth, Lfo1Mode, Lfo1Table,
+    Lfo2Shape, Lfo2Rate, Lfo2Phase, Lfo2Depth, Lfo2Mode, Lfo2Table,
+    Lfo3Shape, Lfo3Rate, Lfo3Phase, Lfo3Depth, Lfo3Mode, Lfo3Table,
+    Lfo4Shape, Lfo4Rate, Lfo4Phase, Lfo4Depth, Lfo4Mode, Lfo4Table,
+    Lfo5Shape, Lfo5Rate, Lfo5Phase, Lfo5Depth, Lfo5Mode, Lfo5Table,
+    Lfo6Shape, Lfo6Rate, Lfo6Phase, Lfo6Depth, Lfo6Mode, Lfo6Table,
+    Lfo7Shape, Lfo7Rate, Lfo7Phase, Lfo7Depth, Lfo7Mode, Lfo7Table,
+    Lfo8Shape, Lfo8Rate, Lfo8Phase, Lfo8Depth, Lfo8Mode, Lfo8Table,
+    Env1Mode, Env1Time, Env1Depth,
+    Env2Mode, Env2Time, Env2Depth,
+    Env3Mode, Env3Time, Env3Depth,
+    Env4Mode, Env4Time, Env4Depth,
+    Env5Mode, Env5Time, Env5Depth,
+    Env6Mode, Env6Time, Env6Depth,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
     // Macros: eight performance controls routed through the gesture layer (Custom0..7);

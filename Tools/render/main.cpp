@@ -157,6 +157,16 @@ int main(int argc, char** argv)
             if (!d) { std::fprintf(stderr, "unknown parameter '%s'\n", kv.substr(0, eq).c_str()); return 2; }
             engine.setParam(d->id, paramValueFromText(*d, kv.substr(eq + 1).c_str()));
         }
+        else if (a == "--list-choices") {
+            // Every choice parameter with its value names, so a tool never has to keep its own copy.
+            for (const auto& d : paramTable()) {
+                if (d.kind != ParamKind::Choice) continue;
+                std::printf("%s:", d.key);
+                for (int c = 0; c < d.numChoices; ++c) std::printf("%s%s", c ? "|" : "", d.choices[c]);
+                std::printf("\n");
+            }
+            return 0;
+        }
         else if (a == "--list") {
             for (const auto& d : paramTable())
                 std::printf("%-18s %-14s [%g .. %g] default %g %s\n", d.key, d.section, d.min, d.max, d.def, d.unit);

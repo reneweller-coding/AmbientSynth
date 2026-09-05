@@ -114,8 +114,9 @@ public:
     // Value at a time, following the mode. `held` is whether the note is still down.
     float at(float seconds, EnvMode mode, bool held) const;
 
-    // Text form: "t:v:c/t:v:c/...", optionally followed by "|s<index>" for the sustain point and
-    // "|l<from>-<to>" for the loop. Times in seconds.
+    // Text form: "t:v:c/t:v:c/...", optionally followed by "!s<index>" for the sustain point and
+    // "!l<from>-<to>" for the loop. Times in seconds. The marker is '!' and not '|' because a
+    // pack line splits its fields on '|' -- an envelope with a loop used to tear the line apart.
     bool parse(const char* text);
     int  write(char* buf, size_t cap) const;
 

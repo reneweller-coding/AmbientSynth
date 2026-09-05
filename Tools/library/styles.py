@@ -104,7 +104,7 @@ BASE = {
 
 MODULES_BASE = {
     "zplane": 0.35, "cosmos": 0.20, "cloud": 0.15, "feedback": 0.12,
-    "src2": 0.45, "src3": 0.25, "sub": 0.45, "stack": 0.35, "room": 0.15,
+    "src2": 0.45, "src3": 0.25, "sub": 0.45, "stack": 0.35, "room": 0.45,
     "texture": 0.20, "usertable": 0.20, "keys": 0.10, "delay2": 0.20,
     "coherence": 0.15, "portamento": 0.10,
 }
@@ -117,12 +117,19 @@ COMMON_SECOND = ["Drift", "Field", "Bloom", "Veil", "Hollow", "Expanse", "Passag
 # Default granular character: a moderate scatter, no extra grains beyond what the density needs.
 GRANULAR_BASE = {"spread": (0.02, 0.35), "grains": 1.0}
 
+# Which of the 200 generated impulses suit a style (name prefixes, see Tools/library/make_impulses.py)
+# and which noise colours belong to it.
+IMPULSES_BASE = ["room_hall", "room_chamber", "spectral"]
+NOISE_BASE = ["Pink", "Brown", "White", "Wind"]
 
-def S(name, inspiration, params, modules=None, words=None, prompts=None, tables=None, granular=None):
+
+def S(name, inspiration, params, modules=None, words=None, prompts=None, tables=None, granular=None,
+      impulses=None, noise=None):
     st = {"name": name, "inspiration": inspiration, "params": dict(BASE), "modules": dict(MODULES_BASE),
           "words": words or (["Slow", "Long", "Deep"], COMMON_SECOND),
           "prompts": prompts or [], "tables": tables or ["Tilt walk", "Random walk"],
-          "granular": dict(GRANULAR_BASE)}
+          "granular": dict(GRANULAR_BASE),
+          "impulses": impulses or list(IMPULSES_BASE), "noise": noise or list(NOISE_BASE)}
     if granular:
         st["granular"].update(granular)
     st["params"].update(params)
@@ -154,7 +161,8 @@ STYLES = [
                "deep binaural sine bed with faint overtone shimmer",
                "gentle overtone singing bowl cloud, very slow"],
       tables=["Glass thinning", "Odd breathing", "Formant sweep"],
-      granular={"spread": (0.004, 0.05), "grains": 1.3}),
+      granular={"spread": (0.004, 0.05), "grains": 1.3},
+      impulses=['tuned', 'room_cathedral', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
 
     S("Deep Earth", "Lustmord",
       {"master_gain": (-13.0, -8.0),
@@ -175,7 +183,8 @@ STYLES = [
                "monolithic bass drone, black and slow",
                "tectonic low frequency shudder, long decay"],
       tables=["Tilt walk", "Random walk", "Comb"],
-      granular={"spread": (0.006, 0.08), "grains": 1.2}),
+      granular={"spread": (0.006, 0.08), "grains": 1.2},
+      impulses=['room_cavern', 'room_bunker', 'spectral'], noise=['Brown', 'Pink']),
 
     S("Permafrost", "Thomas Koener",
       {"master_gain": (-15.0, -10.0),
@@ -198,7 +207,8 @@ STYLES = [
                "muffled low rumble under snow, no melody",
                "black glacial drone, barely moving"],
       tables=["Random walk", "Tilt walk"],
-      granular={"spread": (0.2, 0.8), "grains": 1.4}),
+      granular={"spread": (0.2, 0.8), "grains": 1.4},
+      impulses=['room_cavern', 'room_bunker', 'spectral', 'scatter'], noise=['Brown', 'Wind', 'Pink']),
 
     S("Field Absence", "Francisco Lopez",
       {"master_gain": (-18.0, -12.0),
@@ -218,7 +228,8 @@ STYLES = [
                "granular noise bed, unidentifiable source, very quiet",
                "hum of a large empty building, air conditioning"],
       tables=["Random walk", "Comb", "Glass thinning"],
-      granular={"spread": (0.35, 1.0), "grains": 1.8}),
+      granular={"spread": (0.35, 1.0), "grains": 1.8},
+      impulses=['scatter', 'comb', 'spectral', 'room_chamber'], noise=['White', 'Crackle', 'Digital', 'Wind']),
 
     S("Aldebaran", "Inade",
       {"brightness": (0.2, 0.5), "inharmonic": (0.2, 0.5), "partials": ("int", 10, 22),
@@ -237,7 +248,8 @@ STYLES = [
                "dark ceremonial drone with distant choir",
                "interstellar wind with ringing metal"],
       tables=["Glass thinning", "Comb", "Formant sweep"],
-      granular={"spread": (0.02, 0.3), "grains": 1.2}),
+      granular={"spread": (0.02, 0.3), "grains": 1.2},
+      impulses=['modal', 'tuned', 'room_cathedral'], noise=['Brown', 'Wind', 'Pink']),
 
     S("Ritual Machine", "Deutsch Nepal",
       {"master_gain": (-13.0, -9.0),
@@ -257,7 +269,8 @@ STYLES = [
                "slow mechanical churn, saturated and dirty",
                "ominous metal scrape over a low hum"],
       tables=["Comb", "Saw to square", "Random walk"],
-      granular={"spread": (0.05, 0.4), "grains": 1.1}),
+      granular={"spread": (0.05, 0.4), "grains": 1.1},
+      impulses=['comb', 'modal', 'scatter'], noise=['White', 'Crackle', 'Digital']),
 
     S("Planetary", "Michael Stearns",
       {"scale": ["Harmonic 8-16", "Otonality 1-11", "JI Major (Ptolemy)", "JI 7-limit"],
@@ -276,7 +289,8 @@ STYLES = [
                "solar wind choir, bright and endless",
                "huge harmonic series pad with slow shimmer"],
       tables=["Formant sweep", "Glass thinning", "Odd breathing"],
-      granular={"spread": (0.01, 0.15), "grains": 1.4}),
+      granular={"spread": (0.01, 0.15), "grains": 1.4},
+      impulses=['shimmer', 'tuned', 'room_cathedral'], noise=['Violet', 'Blue', 'Grey']),
 
     S("Temple of Air", "Ooephoi",
       {"master_gain": (-15.0, -10.0),
@@ -299,7 +313,8 @@ STYLES = [
                "glass bowl choir, immaculate and unmoving",
                "deep ceremonial breath tone, no vibrato"],
       tables=["Glass thinning", "Odd breathing", "Formant sweep"],
-      granular={"spread": (0.003, 0.04), "grains": 1.5}),
+      granular={"spread": (0.003, 0.04), "grains": 1.5},
+      impulses=['tuned', 'room_cathedral', 'shimmer'], noise=['Grey', 'Pink', 'Blue']),
 
     S("Vast Chord", "Mathias Grassow",
       {"scale": ["JI Major (Ptolemy)", "JI Minor", "JI 7-limit", "Pythagorean"],
@@ -319,7 +334,8 @@ STYLES = [
                "thick overtone chord, slowly beating",
                "warm analog string mass, cathedral sized"],
       tables=["Odd breathing", "Formant sweep", "Tilt walk"],
-      granular={"spread": (0.004, 0.06), "grains": 1.6}),
+      granular={"spread": (0.004, 0.06), "grains": 1.6},
+      impulses=['tuned', 'room_cathedral', 'room_hall'], noise=['Pink', 'Grey']),
 
     S("Desert Ember", "Steve Roach",
       {"brightness": (0.35, 0.7), "tilt": (1.0, 2.0), "partials": ("int", 10, 22),
@@ -339,7 +355,8 @@ STYLES = [
                "slow tribal ambient bed, no beat, warm",
                "dry desert wind with distant flute"],
       tables=["Tilt walk", "Saw to square", "Odd breathing"],
-      granular={"spread": (0.03, 0.35), "grains": 1.1}),
+      granular={"spread": (0.03, 0.35), "grains": 1.1},
+      impulses=['room_hall', 'tuned', 'room_plate'], noise=['Brown', 'Pink', 'Wind']),
 
     S("Modular Nocturne", "Ian Boddy",
       {"brightness": (0.45, 0.85), "partials": ("int", 8, 20), "resonance": (0.2, 0.6),
@@ -358,7 +375,8 @@ STYLES = [
                "cold analog bell tones in a long delay",
                "buchla-like burbling texture, sparse and dark"],
       tables=["Saw to square", "Formant sweep", "Comb", "Tilt walk"],
-      granular={"spread": (0.05, 0.45), "grains": 1.0}),
+      granular={"spread": (0.05, 0.45), "grains": 1.0},
+      impulses=['comb', 'reverse', 'room_plate'], noise=['White', 'Digital', 'Band']),
 
     S("Millstone", "Jonathan Coleclough",
       {"master_gain": (-16.0, -11.0),
@@ -378,7 +396,8 @@ STYLES = [
                "burning wood crackle stretched into a drone",
                "low acoustic hum with rough granular surface"],
       tables=["Random walk", "Comb", "Tilt walk"],
-      granular={"spread": (0.25, 0.9), "grains": 1.5}),
+      granular={"spread": (0.25, 0.9), "grains": 1.5},
+      impulses=['scatter', 'comb', 'modal'], noise=['Crackle', 'Brown', 'White']),
 
     S("Slow Carousel", "Mimir",
       {"brightness": (0.4, 0.75), "partials": ("int", 8, 18), "inharmonic": (0.1, 0.35),
@@ -397,7 +416,8 @@ STYLES = [
                "gentle bell loop under a blanket of hiss",
                "old reel to reel loop of a small ensemble"],
       tables=["Odd breathing", "Glass thinning", "Comb"],
-      granular={"spread": (0.008, 0.12), "grains": 1.2}),
+      granular={"spread": (0.008, 0.12), "grains": 1.2},
+      impulses=['reverse', 'comb', 'room_plate'], noise=['Crackle', 'Pink']),
 
     S("Glass Vitrine", "Mirror",
       {"master_gain": (-16.0, -11.0),
@@ -416,7 +436,8 @@ STYLES = [
                "hiss and faint bowed glass, spectral",
                "victorian parlour recording, degraded and ghostly"],
       tables=["Glass thinning", "Random walk", "Formant sweep"],
-      granular={"spread": (0.1, 0.6), "grains": 1.3}),
+      granular={"spread": (0.1, 0.6), "grains": 1.3},
+      impulses=['reverse', 'shimmer', 'room_chamber'], noise=['Pink', 'Crackle', 'Grey']),
 
     S("Chamber Grey", "In Camera",
       {"master_gain": (-17.0, -12.0),
@@ -435,7 +456,8 @@ STYLES = [
                "close bowed object in a dry room, intimate",
                "gentle indoor hum with distant traffic"],
       tables=["Tilt walk", "Odd breathing"],
-      granular={"spread": (0.1, 0.5), "grains": 1.0}),
+      granular={"spread": (0.1, 0.5), "grains": 1.0},
+      impulses=['room_chamber', 'room_bunker'], noise=['Grey', 'Pink', 'Crackle']),
 
     S("Painted Field", "Andrew Chalk",
       {"master_gain": (-16.0, -11.0),
@@ -455,7 +477,8 @@ STYLES = [
                "warm analog wash with soft hiss, pastoral",
                "slow melting chord, gauzy and bright"],
       tables=["Odd breathing", "Formant sweep", "Tilt walk"],
-      granular={"spread": (0.006, 0.1), "grains": 1.4}),
+      granular={"spread": (0.006, 0.1), "grains": 1.4},
+      impulses=['shimmer', 'room_hall', 'tuned'], noise=['Pink', 'Grey']),
 
     S("Loop Studio", "Colin Potter",
       {"brightness": (0.35, 0.7), "partials": ("int", 8, 20), "inharmonic": (0.1, 0.4),
@@ -473,7 +496,8 @@ STYLES = [
                "old spring reverb over a slow synth loop",
                "reel to reel feedback loop, growing and dying"],
       tables=["Comb", "Saw to square", "Random walk"],
-      granular={"spread": (0.02, 0.25), "grains": 1.1}),
+      granular={"spread": (0.02, 0.25), "grains": 1.1},
+      impulses=['comb', 'reverse', 'room_plate'], noise=['White', 'Crackle', 'Pink']),
 
     S("Ghost Signal", "Bass Communion",
       {"brightness": (0.3, 0.7), "inharmonic": (0.2, 0.55), "partials": ("int", 10, 26),
@@ -491,7 +515,8 @@ STYLES = [
                "dark widescreen drone with grain and hiss",
                "reversed cymbal wash stretched to a minute"],
       tables=["Random walk", "Glass thinning", "Comb"],
-      granular={"spread": (0.2, 0.9), "grains": 1.7}),
+      granular={"spread": (0.2, 0.9), "grains": 1.7},
+      impulses=['scatter', 'spectral', 'comb'], noise=['White', 'Wind', 'Digital']),
 
     S("Sustain", "Paul Bradley",
       {"master_gain": (-15.0, -10.0),
@@ -512,7 +537,8 @@ STYLES = [
                "stretched cello note, endless",
                "smooth wide pad, imperceptible change"],
       tables=["Tilt walk", "Odd breathing"],
-      granular={"spread": (0.003, 0.03), "grains": 1.5}),
+      granular={"spread": (0.003, 0.03), "grains": 1.5},
+      impulses=['tuned', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
 
     S("Hull Rumble", "SleepResearch_Facility",
       {"master_gain": (-14.0, -9.0),
@@ -534,7 +560,8 @@ STYLES = [
                "static machine bass with faint metallic ring",
                "submarine hull under pressure, deep and constant"],
       tables=["Tilt walk", "Random walk"],
-      granular={"spread": (0.004, 0.05), "grains": 1.1}),
+      granular={"spread": (0.004, 0.05), "grains": 1.1},
+      impulses=['room_bunker', 'room_cavern', 'spectral'], noise=['Brown', 'Pink']),
 
     S("Corridor", "Kammarheit",
       {"master_gain": (-15.0, -10.0),
@@ -554,7 +581,8 @@ STYLES = [
                "hollow reverberant drone, sparse and uneasy",
                "distant door slam tail in a huge concrete space"],
       tables=["Random walk", "Comb", "Tilt walk"],
-      granular={"spread": (0.15, 0.7), "grains": 1.3}),
+      granular={"spread": (0.15, 0.7), "grains": 1.3},
+      impulses=['room_cavern', 'room_bunker', 'comb', 'scatter'], noise=['Brown', 'Wind', 'Crackle']),
 
     S("Northern Dark", "Gustaf Hildebrand",
       {"brightness": (0.2, 0.5), "partials": ("int", 8, 20), "tilt": (1.3, 2.4),
@@ -573,7 +601,8 @@ STYLES = [
                "brooding orchestral drone, low and wide",
                "aurora shimmer over deep bass, cinematic"],
       tables=["Tilt walk", "Formant sweep", "Glass thinning"],
-      granular={"spread": (0.02, 0.3), "grains": 1.3}),
+      granular={"spread": (0.02, 0.3), "grains": 1.3},
+      impulses=['room_cavern', 'room_cathedral', 'spectral'], noise=['Brown', 'Wind', 'Pink']),
 
     S("Void Station", "Tholen",
       {"brightness": (0.3, 0.65), "partials": ("int", 6, 16), "tilt": (1.0, 2.0),
@@ -592,7 +621,8 @@ STYLES = [
                "vacuum hum with faint radio artefacts",
                "deep space monitoring room, quiet and tense"],
       tables=["Comb", "Formant sweep", "Random walk"],
-      granular={"spread": (0.1, 0.6), "grains": 1.2}),
+      granular={"spread": (0.1, 0.6), "grains": 1.2},
+      impulses=['comb', 'spectral', 'modal'], noise=['Band', 'Digital', 'Wind']),
 
     S("Strings at Rest", "Stars of the Lid",
       {"master_gain": (-15.0, -10.0),
@@ -613,7 +643,8 @@ STYLES = [
                "soft brass and string pad, elegiac",
                "gentle string quartet stretched into ambience"],
       tables=["Odd breathing", "Formant sweep", "Tilt walk"],
-      granular={"spread": (0.004, 0.06), "grains": 1.5}),
+      granular={"spread": (0.004, 0.06), "grains": 1.5},
+      impulses=['room_hall', 'tuned', 'shimmer'], noise=['Pink', 'Grey']),
 
     S("Tape Saturation", "Tim Hecker",
       {"master_gain": (-13.0, -9.0),
@@ -634,5 +665,6 @@ STYLES = [
                "clipped orchestral swell smeared into noise",
                "loud degraded drone, bright saturated haze"],
       tables=["Saw to square", "Comb", "Formant sweep", "Random walk"],
-      granular={"spread": (0.03, 0.4), "grains": 1.4}),
+      granular={"spread": (0.03, 0.4), "grains": 1.4},
+      impulses=['comb', 'scatter', 'modal', 'room_plate'], noise=['White', 'Violet', 'Digital']),
 ]

@@ -175,7 +175,7 @@ bool ModEnv::parse(const char* text)
     EnvPoint pts[kMaxEnvPoints];
     int n = 0, sus = -1, from = -1, to = -1;
     const char* s = text;
-    while (*s && *s != '|') {
+    while (*s && *s != '!') {
         if (n >= kMaxEnvPoints) return false;
         char* endp = nullptr;
         pts[n].time = static_cast<float>(std::strtod(s, &endp));
@@ -195,7 +195,7 @@ bool ModEnv::parse(const char* text)
         if (*s == '/') ++s;
         else break;
     }
-    while (*s == '|') {
+    while (*s == '!') {
         ++s;
         if (*s == 's') sus = std::atoi(s + 1);
         else if (*s == 'l') {
@@ -203,7 +203,7 @@ bool ModEnv::parse(const char* text)
             const char* dash = std::strchr(s, '-');
             if (dash != nullptr) to = std::atoi(dash + 1);
         }
-        while (*s && *s != '|') ++s;
+        while (*s && *s != '!') ++s;
     }
     if (!set(pts, n)) return false;
     sustain_ = (sus >= 0 && sus < count_) ? sus : -1;
@@ -223,12 +223,12 @@ int ModEnv::write(char* buf, size_t cap) const
         len += w;
     }
     if (sustain_ >= 0) {
-        const int w = std::snprintf(buf + len, cap - static_cast<size_t>(len), "|s%d", sustain_);
+        const int w = std::snprintf(buf + len, cap - static_cast<size_t>(len), "!s%d", sustain_);
         if (w < 0 || static_cast<size_t>(len + w) >= cap) return 0;
         len += w;
     }
     if (loopFrom_ >= 0 && loopTo_ > loopFrom_) {
-        const int w = std::snprintf(buf + len, cap - static_cast<size_t>(len), "|l%d-%d", loopFrom_, loopTo_);
+        const int w = std::snprintf(buf + len, cap - static_cast<size_t>(len), "!l%d-%d", loopFrom_, loopTo_);
         if (w < 0 || static_cast<size_t>(len + w) >= cap) return 0;
         len += w;
     }

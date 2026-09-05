@@ -20,29 +20,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_render.exe")
 
-# Choice values the table cannot tell us, keyed by parameter.
-CHOICES = {
-    "stack": ["Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics"],
-    "src2_type": ["Off", "Wavetable", "FM", "Texture"], "src3_type": ["Off", "Wavetable", "FM", "Texture"],
-    "src2_table": ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"],
-    "src3_table": ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"],
-    "src2_ratio": ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"],
-    "src3_ratio": ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"],
-    "src2_follow": ["Free", "Note"], "src3_follow": ["Free", "Note"],
-    "z_mode": ["Off", "Series", "Replace"],
-    "z_shape": ["Vowel Morph", "Choir", "Nasal", "Low Sweep", "High Sweep", "Band Sweep", "Phaser",
-                "Comb", "Flanger", "Notch Cluster", "Strings", "Metal Bars", "Wood", "Glass",
-                "Peaks", "Infinite"],
-    "sub_octave": ["-1", "-2"], "sub_source": ["Root", "Difference"], "room_source": ["Far", "Near"],
-    "air_mode": ["Band", "Ghost"], "keymap": ["Snap to 12 keys", "Consecutive degrees"],
-    "cosmos_shimmer_pitch": ["+12", "+7", "+5", "+19", "-12", "+24"],
-    "root": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
-    "scale": ["12-TET", "JI Major (Ptolemy)", "JI Minor", "JI 7-limit", "Pythagorean", "JI Pentatonic",
-              "Harmonic 8-16", "Subharmonic 16-8", "Slendro (JI)", "Bohlen-Pierce (JI)",
-              "Otonality 1-11", "User (Scala)"],
-}
 BOOLS = {"on", "off", "true", "false", "yes", "no"}
+SOURCES = ({"none", "amp", "note", "velocity", "distance", "random"}
+           | {f"lfo{i}" for i in range(1, 9)} | {f"env{i}" for i in range(1, 7)}
+           | {f"macro_{c}" for c in "abcdefgh"} | {f"kura{i}" for i in range(1, 5)})
 PERFORMANCE = ("morph", "macro_", "map_", "route_", "inertia")
+
+
+def choice_table():
+    """key -> the value names, straight from the synth (--list-choices). A hand-kept copy here
+    drifts the moment a parameter gains a value -- which is exactly what happened."""
+    out = subprocess.run([RENDER, "--list-choices"], capture_output=True, text=True, encoding="utf-8").stdout
+    table = {}
+    for line in out.splitlines():
+        if ":" in line:
+            key, values = line.split(":", 1)
+            table[key.strip()] = values.strip().split("|")
+    return table
 
 
 def param_table():
@@ -62,6 +56,7 @@ def main():
     ap.add_argument("--packs", default=os.path.join(ROOT, "Library", "Packs"))
     a = ap.parse_args()
     params = param_table()
+    CHOICES = choice_table()
     problems = []
     names = collections.Counter()
     cells = collections.Counter()
@@ -78,6 +73,8 @@ def main():
             total += 1
             where = f"{fname}:{ln}"
             f = t.split("|")
+            if len(f) > 8:
+                problems.append(f"{where}: {len(f)} fields, at most 8 (a '|' inside a field?)")
             if len(f) < 2:
                 problems.append(f"{where}: no settings field")
                 continue
@@ -125,7 +122,51 @@ def main():
                         if any(v < -1e-6 or v > 1 + 1e-6 for v in vals):
                             problems.append(f"{where}: metadata outside 0..1")
                         cells[(round(vals[0], 3), round(vals[1], 3))] += 1
-            for which, field in (("texture", 3), ("wavetable", 4)):
+            if len(f) > 6 and f[6].strip():          # modulation matrix
+                for row in f[6].split(";"):
+                    row = row.strip()
+                    if not row:
+                        continue
+                    m = re.match(r"^([a-z0-9_]+)>([a-z0-9_]+):(-?[\d.]+)((?::[a-z0-9_]+)*)$", row)
+                    if not m:
+                        problems.append(f"{where}: matrix row '{row}' is malformed")
+                        continue
+                    if m.group(1) not in SOURCES:
+                        problems.append(f"{where}: unknown modulation source '{m.group(1)}'")
+                    if m.group(2) not in params:
+                        problems.append(f"{where}: unknown modulation target '{m.group(2)}'")
+                    for extra in [x for x in m.group(4).split(":") if x]:
+                        if extra != "u" and extra not in SOURCES:
+                            problems.append(f"{where}: unknown via source '{extra}'")
+            if len(f) > 7 and f[7].strip("~ "):      # envelope shapes
+                shapes = f[7].split("~")
+                if len(shapes) > 6:
+                    problems.append(f"{where}: {len(shapes)} envelope shapes, at most 6")
+                for si, sh in enumerate(shapes):
+                    sh = sh.strip()
+                    if not sh:
+                        continue
+                    body = sh.split("!")[0]
+                    pts = body.split("/")
+                    if len(pts) > 16:
+                        problems.append(f"{where}: envelope {si + 1} has {len(pts)} points, at most 16")
+                    last = None
+                    for pt in pts:
+                        bits = pt.split(":")
+                        if len(bits) not in (2, 3):
+                            problems.append(f"{where}: envelope point '{pt}' is malformed")
+                            break
+                        try:
+                            t = float(bits[0]); v = float(bits[1])
+                        except ValueError:
+                            problems.append(f"{where}: envelope point '{pt}' is not numeric")
+                            break
+                        if last is not None and t < last:
+                            problems.append(f"{where}: envelope times go backwards at '{pt}'")
+                        last = t
+                        if v < -1.0001 or v > 1.0001:
+                            problems.append(f"{where}: envelope value {v} outside -1..1")
+            for which, field in (("texture", 3), ("wavetable", 4), ("impulse", 5)):
                 if len(f) > field and f[field].strip():
                     ref = os.path.normpath(os.path.join(a.packs, f[field].strip()))
                     if not os.path.isfile(ref):

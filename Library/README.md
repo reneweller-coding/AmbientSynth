@@ -12,15 +12,26 @@ Library/
   Packs/*.ambientpack     25 files, 200 presets each   (in git)
   Textures/*.wav          1200 granular source clips   (generated)
   Wavetables/*.wav        608 wavetables               (generated)
+  Impulses/*.wav          200 impulse responses        (generated)
 ```
+
+A pack line carries eight fields: name, settings, metadata, and then the three files a preset
+brings with it (texture, wavetable, impulse) plus its modulation -- the matrix rows and the six
+envelope shapes. Everything after the settings is optional.
 
 ## Building it
 
-Wavetables first; they take about a minute and need nothing but numpy and soundfile.
+Wavetables and impulses first; together about two minutes, CPU only.
 
 ```
 Tools/TextureGen/.venv/Scripts/python Tools/library/make_wavetables.py --per-recipe 32
+Tools/TextureGen/.venv/Scripts/python Tools/library/make_impulses.py
 ```
+
+The impulses are not room simulations for their own sake -- a convolution reverb fed a drone is a
+resonator you can shape. Eight families: designed rooms, tuned partial banks that ring in key,
+inharmonic modal metal, reversed swells, combs and pipes, thinning scatter, octave-up shimmer,
+and spectral bands with different decay times.
 
 Then the textures. This is the long one: three text-to-audio models, roughly four hours on an
 RTX 5090. It runs below normal priority, stops on its own after `--max-minutes`, and `--resume`

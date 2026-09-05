@@ -1747,12 +1747,12 @@ void testModulation()
         CHECK(e.parse("0:0:0.8/4:1/8:0"), "curved envelope parses");
         CHECK(e.at(2.0f, EnvMode::OneShot, true) < 0.4f, "a positive curve dwells at the start");
         ModEnv s;
-        CHECK(s.parse("0:0/1:1/5:0.5/9:0|s2"), "envelope with a sustain point");
+        CHECK(s.parse("0:0/1:1/5:0.5/9:0!s2"), "envelope with a sustain point");
         CHECK(s.sustain() == 2, "sustain point read");
         CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, true) - 0.5f) < 1e-4f, "held at the sustain point");
         CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, false)) < 1e-4f, "released, it runs to the end");
         ModEnv l;
-        CHECK(l.parse("0:0/2:1/4:0|l0-2"), "envelope with a loop");
+        CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");
         CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");
         CHECK(std::fabs(l.at(1.0f, EnvMode::Loop, true) - l.at(3.0f, EnvMode::Loop, true)) < 1e-4f,
               "the loop repeats its segment");
@@ -1898,7 +1898,7 @@ void testModulationEngine()
         CHECK(e.writeModMatrix(buf, sizeof(buf)) > 0, "matrix writes");
         Engine f;
         CHECK(f.setModMatrixText(buf) && f.modMatrix().count() == 2, "matrix round trip through the engine");
-        CHECK(e.setEnvShape(2, "0:0/3:1:0.5/9:0|s1"), "shape set");
+        CHECK(e.setEnvShape(2, "0:0/3:1:0.5/9:0!s1"), "shape set");
         CHECK(e.writeEnvShape(2, buf, sizeof(buf)) > 0, "shape writes");
         CHECK(f.setEnvShape(2, buf) && f.envShape(2).count() == 3 && f.envShape(2).sustain() == 1,
               "shape round trip through the engine");

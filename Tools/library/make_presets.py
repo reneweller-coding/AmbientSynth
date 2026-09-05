@@ -36,7 +36,7 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 
 # Choice names, exactly as Core/src/Params.cpp, Sources.cpp and ZPlane.cpp spell them.
 STACKS = ["Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics"]
-SOURCE_TYPES = ["Wavetable", "FM", "Texture"]
+SOURCE_TYPES = ["Wavetable", "FM", "Texture", "Noise", "Noise"]   # noise twice: an ambient synth lives in it
 TABLES = ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"]
 SLOT_RATIOS = ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"]
 Z_SHAPES = ["Vowel Morph", "Choir", "Nasal", "Low Sweep", "High Sweep", "Band Sweep", "Phaser",
@@ -167,9 +167,128 @@ def apply_shade(p, mod, shade):
     return out
 
 
+
+# ---------------------------------------------------------------- modulation
+#
+# Every preset gets a small matrix. The depths are fractions of the target's own range, so they
+# have to be read per target: 0.3 on a mix is a third of it, 0.3 on the cutoff is 5.4 kHz. The
+# rates are drone rates -- a cycle between eight seconds and forty minutes, not the tenths of a
+# second an LFO usually lives at.
+
+# target -> (depth lo, depth hi, needs which module or None)
+MOD_TARGETS = [
+    ("cutoff",        0.04, 0.14, None),
+    ("brightness",    0.08, 0.28, None),
+    ("shimmer",       0.10, 0.35, None),
+    ("air",           0.08, 0.25, None),
+    ("detune",        0.05, 0.25, None),
+    ("purity",        0.04, 0.16, None),
+    ("depth",         0.06, 0.22, None),
+    ("pan_drift",     0.08, 0.30, None),
+    ("width",         0.05, 0.18, None),
+    ("ens_depth",     0.10, 0.35, None),
+    ("near_mix",      0.06, 0.20, None),
+    ("far_decay",     0.05, 0.20, None),
+    ("far_highcut",   0.05, 0.18, None),
+    ("far_size",      0.06, 0.22, None),
+    ("dly_feedback",  0.04, 0.14, None),
+    ("dly_mix",       0.05, 0.18, None),
+    ("resonance",     0.06, 0.22, None),
+    ("z_x",           0.15, 0.45, "zplane"),
+    ("z_y",           0.15, 0.45, "zplane"),
+    ("z_res",         0.08, 0.25, "zplane"),
+    ("cosmos_shift",  0.04, 0.16, "cosmos"),
+    ("cosmos_smear",  0.10, 0.30, "cosmos"),
+    ("cosmos_nebula", 0.10, 0.30, "cosmos"),
+    ("cloud_density", 0.10, 0.30, "cloud"),
+    ("cloud_size",    0.10, 0.30, "cloud"),
+    ("cloud_pitch",   0.08, 0.25, "cloud"),
+    ("fb_tone",       0.06, 0.20, "feedback"),
+    ("room_level",    0.05, 0.18, "room"),
+]
+# Targets that only make sense for a slot that is actually running, keyed by the slot's type.
+MOD_SLOT_TARGETS = {
+    "Wavetable": [("{p}pos", 0.10, 0.40), ("{p}level", 0.08, 0.25)],
+    "FM":        [("{p}fm_index", 0.08, 0.30), ("{p}level", 0.08, 0.25)],
+    "Texture":   [("{p}pos", 0.10, 0.40), ("{p}density", 0.08, 0.25), ("{p}spread", 0.10, 0.35),
+                  ("{p}level", 0.08, 0.25)],
+    "Noise":     [("{p}pos", 0.12, 0.45), ("{p}level", 0.08, 0.25), ("{p}noise_q", 0.10, 0.35)],
+}
+LFO_SHAPES = ["Sine", "Sine", "Sine", "Triangle", "Random", "Random", "Steps", "Table", "Ramp Up"]
+
+
+def modulation_for(p, style, rng, shade_name):
+    """Builds the matrix rows, the envelope shapes and the LFO parameters for one preset.
+    Returns (matrix text, env text). Writes the LFO and envelope parameters into `p`."""
+    # Which targets are available depends on what this preset actually switched on.
+    on = lambda key: {
+        "zplane":  p.get("z_mode", "Off") in ("Series", "Replace"),
+        "cosmos":  float(p.get("cosmos_send", 0) or 0) > 0.05,
+        "cloud":   float(p.get("cloud_send", 0) or 0) > 0.05,
+        "feedback": float(p.get("fb_bus", 0) or 0) > 0.02,
+        "room":    float(p.get("room_level", 0) or 0) > 0.02,
+    }.get(key, True)
+    pool = [(t, lo, hi) for t, lo, hi, need in MOD_TARGETS if need is None or on(need)]
+    for n in (2, 3):
+        kind = p.get(f"src{n}_type", "Off")
+        for tpl, lo, hi in MOD_SLOT_TARGETS.get(kind, []):
+            pool.append((tpl.format(p=f"src{n}_"), lo, hi))
+
+    # A still preset gets fewer and slower routes, an astir one more and faster.
+    count = {"still": (1, 3), "sparse": (1, 3), "clean": (2, 4), "deep": (2, 4),
+             "lit": (2, 5), "massed": (3, 5), "rough": (3, 6), "astir": (4, 7)}.get(shade_name, (2, 5))
+    n_routes = rng.randint(*count)
+    rate_mul = {"still": 0.4, "sparse": 0.6, "astir": 2.6, "rough": 1.8}.get(shade_name, 1.0)
+
+    rng.shuffle(pool)
+    rows, used_lfo = [], []
+    for i in range(min(n_routes, len(pool), 8)):
+        target, lo, hi = pool[i]
+        lfo = i % 8 + 1
+        if lfo not in used_lfo:
+            used_lfo.append(lfo)
+            # Period from eight seconds to forty minutes; the slow end is where a drone lives.
+            period = math.exp(u(rng, math.log(8.0), math.log(2400.0))) / rate_mul
+            p[f"lfo{lfo}_rate"] = 1.0 / period
+            p[f"lfo{lfo}_shape"] = LFO_SHAPES[rng.randrange(len(LFO_SHAPES))]
+            p[f"lfo{lfo}_phase"] = round(u(rng, 0.0, 1.0), 3)
+            p[f"lfo{lfo}_depth"] = round(u(rng, 0.6, 1.0), 3)
+            if p[f"lfo{lfo}_shape"] == "Table":
+                p[f"lfo{lfo}_table"] = rng.randrange(0, 32)
+        depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
+        row = f"lfo{lfo}>{target}:{depth:.3f}"
+        # Now and then a macro decides how much of the route gets through.
+        if rng.random() < 0.18:
+            row += ":macro_" + "abcdefgh"[rng.randrange(8)]
+        elif rng.random() < 0.15:
+            row += ":none:u"
+        rows.append(row)
+
+    # One or two envelopes, slow and usually looping: a shape generator, not an attack.
+    envs = ["", "", "", "", "", ""]
+    for e in range(rng.randint(0, 2)):
+        pts, t = [], 0.0
+        n_pts = rng.randint(3, 6)
+        for k in range(n_pts):
+            v = 0.0 if k in (0, n_pts - 1) else round(u(rng, -1.0, 1.0), 3)
+            pts.append(f"{t:.3g}:{v:g}:{round(u(rng, -0.6, 0.6), 2):g}")
+            t += u(rng, 0.6, 3.0)
+        text = "/".join(pts)
+        if rng.random() < 0.6 and n_pts >= 4:
+            text += f"!l0-{n_pts - 2}"          # loop everything but the tail
+        envs[e] = text
+        p[f"env{e+1}_time"] = round(math.exp(u(rng, math.log(2.0), math.log(20.0))), 3)
+        p[f"env{e+1}_mode"] = "Loop" if "!l" in text else "One Shot"
+        p[f"env{e+1}_depth"] = round(u(rng, 0.5, 1.0), 3)
+        if pool:
+            target, lo, hi = pool[rng.randrange(len(pool))]
+            rows.append(f"env{e+1}>{target}:{u(rng, lo, hi) * (1.0 if rng.random() < 0.7 else -1.0):.3f}")
+
+    return ";".join(rows), "~".join(envs).rstrip("~")
+
 # ---------------------------------------------------------------- one preset
 
-def make_preset(style, rng, textures, wavetables, shade):
+def make_preset(style, rng, textures, wavetables, impulses, shade):
     p = {}
     for key, spec in style["params"].items():
         if key not in PARAMS:
@@ -228,6 +347,15 @@ def make_preset(style, rng, textures, wavetables, shade):
                 p[pre + "table"] = TABLES[rng.randrange(len(TABLES) - 1)]
             p[pre + "pos"] = u(rng, 0.0, 1.0)
             p[pre + "pos_drift"] = u(rng, 0.05, 0.7)
+        elif kind == "Noise":
+            p[pre + "noise"] = style["noise"][rng.randrange(len(style["noise"]))]
+            p[pre + "noise_q"] = u(rng, 0.15, 0.85)
+            p[pre + "pos"] = u(rng, 0.05, 0.9)          # band centre / colour
+            p[pre + "pos_drift"] = u(rng, 0.05, 0.8)
+            p[pre + "level"] = u(rng, 0.12, 0.45)
+            if p[pre + "noise"] == "Crackle":
+                p[pre + "density"] = logu(rng, 1.5, 30.0)
+            p[pre + "follow"] = "Note" if (p[pre + "noise"] in ("Band", "Wind") and rng.random() < 0.4) else "Free"
         elif kind == "FM":
             p[pre + "fm_ratio"] = rng.choice([0.5, 1.0, 1.5, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0])
             p[pre + "fm_index"] = logu(rng, 0.3, 3.5)
@@ -326,11 +454,13 @@ def make_preset(style, rng, textures, wavetables, shade):
         p["dly2_feedback"] = u(rng, 0.3, 0.75)
         p["dly2_cross"] = u(rng, 0.2, 0.9)
         p["dly2_damp"] = u(rng, 0.4, 0.9)
-    if on("room"):
+    impulse_file = ""
+    if on("room") and impulses:
         p["room_level"] = u(rng, 0.15, 0.6)
         p["room_source"] = "Far" if rng.random() < 0.6 else "Near"
         p["room_predelay"] = logu(rng, 5.0, 150.0)
         p["room_highcut"] = logu(rng, 1500.0, 9000.0)
+        impulse_file = impulses[rng.randrange(len(impulses))]
     if on("coherence"):
         p["coherence"] = u(rng, 0.2, 0.8)
         p["coherence_depth"] = u(rng, 0.2, 0.8)
@@ -351,7 +481,8 @@ def make_preset(style, rng, textures, wavetables, shade):
         p["brain_high"] = p["brain_low"] + 12
     if "brain_hold_min" in p and "brain_hold_max" in p and p["brain_hold_max"] < p["brain_hold_min"] * 1.5:
         p["brain_hold_max"] = p["brain_hold_min"] * 2.0
-    return p, texture_file, wavetable_file
+    matrix, envs = modulation_for(p, style, rng, shade[0])
+    return p, texture_file, wavetable_file, impulse_file, matrix, envs
 
 
 def settings_string(p):
@@ -522,6 +653,13 @@ def texture_pool(dirname, style_name, rejected):
     return own or files
 
 
+def impulse_pool(dirname, style):
+    """Impulses whose name starts with one of the style's families (see make_impulses.py)."""
+    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
+    own = [f for f in files if any(f.startswith(pre) for pre in style["impulses"])]
+    return own or files
+
+
 def wavetable_pool(dirname, style):
     slugs = [re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_") for t in style["tables"]]
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
@@ -557,6 +695,7 @@ def main():
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "Library", "Packs"))
     ap.add_argument("--textures", default=os.path.join(ROOT, "Library", "Textures"))
     ap.add_argument("--wavetables", default=os.path.join(ROOT, "Library", "Wavetables"))
+    ap.add_argument("--impulses", default=os.path.join(ROOT, "Library", "Impulses"))
     a = ap.parse_args()
     PARAMS = param_table()
     os.makedirs(a.out_dir, exist_ok=True)
@@ -573,13 +712,17 @@ def main():
         rng = random.Random(a.seed * 104729 + si)
         textures = texture_pool(a.textures, st["name"], rejects)
         tables = wavetable_pool(a.wavetables, st)
+        impulses = impulse_pool(a.impulses, st)
         rows = []
         for k in range(a.per_style):
-            p, tex, tab = make_preset(st, rng, textures, tables, SHADES[k % len(SHADES)])
+            p, tex, tab, imp, matrix, envs = make_preset(st, rng, textures, tables, impulses,
+                                                        SHADES[k % len(SHADES)])
             rows.append({"name": name_for(st, rng, used_names), "params": p, "shade": SHADES[k % len(SHADES)][0],
                          "settings": settings_string(p),
                          "texture": f"../Textures/{tex}" if tex else "",
                          "wavetable": f"../Wavetables/{tab}" if tab else "",
+                         "impulse": f"../Impulses/{imp}" if imp else "",
+                         "mod": matrix, "envs": envs,
                          "desc": descriptors(p)})
         packs.append((st, rows))
 
@@ -600,12 +743,14 @@ def main():
         with open(path, "w", encoding="utf-8") as f:
             f.write(f"# {st['name']} -- {len(rows)} presets for AmbientSynth, generated by Tools/library/make_presets.py\n")
             f.write(f"# In the spirit of {st['inspiration']}. Not affiliated with, sampled from or endorsed by anyone.\n")
-            f.write("# Format: name|settings|x y bright motion width noisy bass density tags|texture|wavetable\n")
+            f.write("# Format: name|settings|x y bright motion width noisy bass density tags|"
+                    "texture|wavetable|impulse|mod matrix|env shapes\n")
             f.write(f"pack {st['name']}\n")
             for r in rows:
                 d = r["desc"]
                 meta = " ".join(f"{v:.3f}" for v in (r["xy"][0], r["xy"][1], d[0], d[1], d[2], d[3], d[4], d[5]))
-                f.write(f"{r['name']}|{r['settings']}|{meta} {r['tags']}|{r['texture']}|{r['wavetable']}\n")
+                f.write(f"{r['name']}|{r['settings']}|{meta} {r['tags']}|{r['texture']}|"
+                        f"{r['wavetable']}|{r['impulse']}|{r['mod']}|{r['envs']}\n")
         total += len(rows)
         print(f"{len(rows):5d}  {path}")
     print(f"{total} presets in {len(packs)} packs -> {a.out_dir}")

@@ -4,6 +4,8 @@
 #include "PluginProcessor.h"
 #include "AmbientLookAndFeel.h"
 #include "ambient/Modulation.h"
+#include "ambient/ZPlane.h"
+#include "ambient/Sources.h"
 #include <vector>
 #include <memory>
 #include <map>
@@ -60,6 +62,7 @@ private:
         std::vector<std::vector<juce::String>> rows;   // section names per row
         juce::Rectangle<int> bounds;
         int column = 0;
+        std::vector<juce::Component*> displays;        // per row: a display that fills the leftover width, or null
     };
 
     Section* findSection(const juce::String& name);
@@ -270,6 +273,29 @@ public:
     int cellParamAt(juce::Point<int> screenPos) const;
     juce::Rectangle<int> cellScreenBounds(int cellIndex) const;
 private:
+    // Displays that live inside the grid, one per section row, filling the room the knobs leave.
+    // The grid used to leave that room empty; the displays are what a Pigments-style layout puts
+    // there, and each one is drawn from the numbers the engine is using, not from an illustration.
+
+    // The two filters as a frequency response: the state-variable filter in the voice's colour,
+    // the z-plane cascade in the accent, and what a note actually meets after both.
+    struct FilterView : juce::Component, juce::Timer {
+        explicit FilterView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+    };
+    // One source slot: the wavetable frame, the FM cycle, the clip with its grain window, or the
+    // colour of the noise -- whichever the slot is set to.
+    struct SourceView : juce::Component, juce::Timer {
+        SourceView(AmbientSynthProcessor& p, int s) : proc(p), slot(s) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+        int slot;   // 2 or 3
+    };
+    std::unique_ptr<FilterView> filterView_;
+    std::unique_ptr<SourceView> source2View_, source3View_;
     std::unique_ptr<juce::TextButton> browseButton_;
     void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();

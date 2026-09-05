@@ -61,6 +61,10 @@ public:
     // 8 s on the desktop; the Quest app uses 4 s (a 4 s hall costs about a third of one of its cores).
     void  setRoomMaxSeconds(float s) { roomMaxSeconds_ = clampv(s, 0.5f, 12.0f); }
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
+    // For the displays (message thread, no synchronisation -- a torn read costs a pixel).
+    const Wavetable* userWavetable() const { return userTable_.frames > 0 ? &userTable_ : nullptr; }
+    const Texture*   displayTexture() const
+    { const int a = textureActive_.load(std::memory_order_relaxed); return a >= 0 ? &textures_[a] : nullptr; }
 
     // Morph: two full parameter snapshots (A = 0, B = 1). While MorphActive is on the
     // engine plays lerp(A, B, position); the position glides toward MorphPos at

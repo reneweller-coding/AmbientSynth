@@ -162,8 +162,24 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     mod_ = std::make_unique<ModView>(proc_, *this);
     addAndMakeVisible(*mod_);
 
+    // Displays inside the grid: each fills the room its row leaves after the knobs.
     scope_ = std::make_unique<ScopeView>(proc_);
-    addAndMakeVisible(*scope_);
+    filterView_ = std::make_unique<FilterView>(proc_);
+    source2View_ = std::make_unique<SourceView>(proc_, 2);
+    source3View_ = std::make_unique<SourceView>(proc_, 3);
+    for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
+                                static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()) })
+        content_.addAndMakeVisible(*c);
+    if (!groups_.empty()) {   // VOICE rows: {Oscillator, Envelope}, {Source 2}, {Source 3}, {Air, Filter}, {Space}, {Z-Plane}, {Foundation}
+        Group& voice = groups_[0];
+        voice.displays.assign(voice.rows.size(), nullptr);
+        if (voice.rows.size() > 3) {
+            voice.displays[0] = scope_.get();
+            voice.displays[1] = source2View_.get();
+            voice.displays[2] = source3View_.get();
+            voice.displays[3] = filterView_.get();
+        }
+    }
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -424,9 +440,7 @@ void AmbientSynthEditor::resized()
     const int stripH = juce::jlimit(210, 340, (H - kHeaderH) * 34 / 100);
     if (mod_) { mod_->setBounds(0, H - stripH, W, stripH); mod_->toFront(false); }
     routing_ = { 12, 40, 900, kHeaderH - 46 };
-    const int scopeX = 930, scopeR = W - 300;
-    if (scope_) scope_->setBounds(scopeX, 38, juce::jmax(160, scopeR - scopeX), kHeaderH - 46);
-    keys_ = { scopeX, kHeaderH - 12, juce::jmax(160, scopeR - scopeX), 7 };
+    keys_ = { 930, 42, juce::jmax(160, W - 930 - 340), 26 };
     if (master_) master_->setBounds(W - 74, 6, 66, 52);
 
     // The Master section (mid/side) sits in the header, left of the master knob.
@@ -461,7 +475,8 @@ void AmbientSynthEditor::layoutBody()
     for (auto& g : groups_) {
         const int x0 = colX[g.column];
         int y = colY[g.column] + kGroupTitleH;
-        for (auto& row : g.rows) {
+        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+            auto& row = g.rows[ri];
             int x = x0 + kPad, rowH = 0;
             for (auto& n : row) {
                 Section* s = findSection(n);
@@ -469,6 +484,13 @@ void AmbientSynthEditor::layoutBody()
                 layoutSection(*s, x, y);
                 x += s->bounds.getWidth() + kPad;
                 rowH = std::max(rowH, s->bounds.getHeight());
+            }
+            // Whatever the row leaves free goes to its display -- that room used to stay empty.
+            juce::Component* disp = ri < g.displays.size() ? g.displays[ri] : nullptr;
+            if (disp != nullptr) {
+                const int right = x0 + colWidth[g.column] - kPad;
+                if (right - x >= 120 && rowH > 0) { disp->setBounds(x, y, right - x, rowH); disp->setVisible(true); }
+                else disp->setVisible(false);
             }
             y += rowH + kPad;
         }
@@ -999,6 +1021,229 @@ void AmbientSynthEditor::ModView::resized()
         clearMatrix.setBounds(bottom.removeFromLeft(70)); bottom.removeFromLeft(10);
         matrixInfo.setBounds(bottom);
     }
+}
+
+// ---------------------------------------------------------------- in-grid displays
+
+namespace {
+float rawParam(AmbientSynthProcessor& proc, const char* key)
+{
+    auto* v = proc.apvts.getRawParameterValue(key);
+    return v != nullptr ? v->load() : 0.0f;
+}
+
+void displayFrame(juce::Graphics& g, juce::Rectangle<int> r, const juce::String& title, juce::Colour c)
+{
+    g.setColour(ui::bg0.withAlpha(0.55f));
+    g.fillRoundedRectangle(r.toFloat(), 6.0f);
+    g.setColour(ui::cardEdge);
+    g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 6.0f, 1.0f);
+    g.setColour(c.withAlpha(0.8f));
+    g.setFont(ui::title(10.5f));
+    g.drawText(title, r.reduced(9, 5), juce::Justification::topLeft, false);
+}
+
+// Log-frequency axis with a few labelled lines, 20 Hz .. 20 kHz.
+float xForHz(juce::Rectangle<float> plot, float hz)
+{
+    const float t = (std::log(juce::jmax(20.0f, hz)) - std::log(20.0f)) / (std::log(20000.0f) - std::log(20.0f));
+    return plot.getX() + juce::jlimit(0.0f, 1.0f, t) * plot.getWidth();
+}
+float yForDb(juce::Rectangle<float> plot, float db)
+{
+    const float t = (db + 36.0f) / 48.0f;   // -36 .. +12 dB
+    return plot.getBottom() - juce::jlimit(0.0f, 1.0f, t) * plot.getHeight();
+}
+void drawAxes(juce::Graphics& g, juce::Rectangle<float> plot)
+{
+    g.setColour(ui::track.withAlpha(0.55f));
+    for (float hz : { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f })
+        g.drawVerticalLine(juce::roundToInt(xForHz(plot, hz)), plot.getY(), plot.getBottom());
+    g.setColour(ui::track.withAlpha(0.9f));
+    g.drawHorizontalLine(juce::roundToInt(yForDb(plot, 0.0f)), plot.getX(), plot.getRight());
+    g.setColour(ui::faint);
+    g.setFont(ui::body(9.0f));
+    for (float hz : { 100.0f, 1000.0f, 10000.0f })
+        g.drawText(hz >= 1000.0f ? juce::String(hz / 1000.0f, 0) + "k" : juce::String(hz, 0),
+                   juce::roundToInt(xForHz(plot, hz)) - 14, juce::roundToInt(plot.getBottom()) - 11, 28, 10,
+                   juce::Justification::centred, false);
+}
+}
+
+void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds();
+    displayFrame(g, r, "FILTER RESPONSE", ui::voiceCol);
+    const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
+    drawAxes(g, plot);
+
+    const float sr = static_cast<float>(juce::jmax(8000.0, proc.getSampleRate() > 0 ? proc.getSampleRate() : 48000.0));
+    const float cutoff = rawParam(proc, "cutoff"), res = rawParam(proc, "resonance");
+    const int zMode = static_cast<int>(std::lround(rawParam(proc, "z_mode")));
+    const int zShape = juce::jlimit(0, ambient::kZShapes - 1, static_cast<int>(std::lround(rawParam(proc, "z_shape"))));
+    const float zMix = rawParam(proc, "z_mix");
+
+    // The state-variable low pass, from its own coefficients: g = tan(pi fc/sr), damping k.
+    const float gc = std::tan(juce::MathConstants<float>::pi * juce::jlimit(10.0f, sr * 0.45f, cutoff) / sr);
+    const float k = 2.0f - 1.9f * juce::jlimit(0.0f, 1.0f, res);
+    // The z-plane cascade, from the frame the engine would build at this point.
+    ambient::ZBiquad zb[ambient::kZSections];
+    float zNorm = 1.0f; int zUsed = 0;
+    if (zMode != 0) {
+        const ambient::ZFrame frame = ambient::zInterpolate(zShape, rawParam(proc, "z_x"), rawParam(proc, "z_y"));
+        zNorm = ambient::zBuildCascade(frame, zb, sr);
+        zUsed = frame.used;
+    }
+
+    juce::Path svf, zp, both;
+    const int steps = juce::jmax(64, static_cast<int>(plot.getWidth()));
+    for (int i = 0; i <= steps; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(steps);
+        const float hz = 20.0f * std::pow(1000.0f, t);
+        const float w = juce::MathConstants<float>::twoPi * hz / sr;
+        const float tt = std::tan(0.5f * w) / gc;
+        const float hs = 1.0f / std::sqrt(juce::jmax(1.0e-9f, (1.0f - tt * tt) * (1.0f - tt * tt) + (k * tt) * (k * tt)));
+        float hz_ = 1.0f;
+        if (zUsed > 0) { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
+        float combined = hs;
+        if (zMode == 1) combined = hs * ((1.0f - zMix) + zMix * hz_);           // series: dry/wet of the z stage
+        else if (zMode == 2) combined = (1.0f - zMix) * 1.0f + zMix * hz_;      // replace: the SVF is out of the path
+        const float x = plot.getX() + t * plot.getWidth();
+        auto db = [](float m) { return 20.0f * std::log10(juce::jmax(m, 1.0e-6f)); };
+        if (i == 0) { svf.startNewSubPath(x, yForDb(plot, db(hs))); zp.startNewSubPath(x, yForDb(plot, db(hz_))); both.startNewSubPath(x, yForDb(plot, db(combined))); }
+        else        { svf.lineTo(x, yForDb(plot, db(hs)));           zp.lineTo(x, yForDb(plot, db(hz_)));           both.lineTo(x, yForDb(plot, db(combined))); }
+    }
+    if (zMode != 2) { g.setColour(ui::voiceCol.withAlpha(0.55f)); g.strokePath(svf, juce::PathStrokeType(1.2f)); }
+    if (zUsed > 0)  { g.setColour(ui::accent.withAlpha(0.55f));   g.strokePath(zp,  juce::PathStrokeType(1.2f)); }
+    g.setColour(ui::text.withAlpha(0.25f));
+    g.strokePath(both, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(ui::text);
+    g.strokePath(both, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    g.setColour(ui::dim);
+    g.setFont(ui::body(10.0f));
+    juce::String legend = juce::String(cutoff, cutoff < 1000.0f ? 0 : 0) + " Hz";
+    if (zMode != 0) legend += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (zMode == 2 ? "  (replace)" : "  (series)");
+    g.drawText(legend, r.reduced(9, 5), juce::Justification::topRight, false);
+}
+
+void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds();
+    const juce::String pre = "src" + juce::String(slot) + "_";
+    const int type = static_cast<int>(std::lround(rawParam(proc, (pre + "type").toRawUTF8())));
+    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR" };
+    displayFrame(g, r, kTitles[juce::jlimit(0, 4, type)], ui::voiceCol);
+    const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
+    const float cy = plot.getCentreY(), hh = plot.getHeight() * 0.42f;
+    g.setColour(ui::track.withAlpha(0.6f));
+    g.drawHorizontalLine(juce::roundToInt(cy), plot.getX(), plot.getRight());
+    if (type == 0) {
+        g.setColour(ui::faint); g.setFont(ui::body(11.0f));
+        g.drawText("choose a type to the left", plot, juce::Justification::centred, false);
+        return;
+    }
+
+    juce::Path p;
+    const int steps = juce::jmax(64, static_cast<int>(plot.getWidth()));
+    auto plotWave = [&](auto valueAt) {
+        for (int i = 0; i <= steps; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(steps);
+            const float y = cy - juce::jlimit(-1.0f, 1.0f, valueAt(t)) * hh;
+            const float x = plot.getX() + t * plot.getWidth();
+            if (i == 0) p.startNewSubPath(x, y); else p.lineTo(x, y);
+        }
+    };
+
+    if (type == 1) {   // wavetable: one cycle of the frame at Position, resynthesised from its spectrum
+        const int table = static_cast<int>(std::lround(rawParam(proc, (pre + "table").toRawUTF8())));
+        const float pos = rawParam(proc, (pre + "pos").toRawUTF8());
+        const ambient::Wavetable* wt = table >= ambient::kNumTables - 1 ? proc.engine().userWavetable()
+                                                                        : &ambient::builtinTable(table);
+        float spec[ambient::kTablePartials] = {};
+        if (wt != nullptr && wt->frames > 0) wt->spectrumAt(pos, spec);
+        float norm = 0.0f; for (float a : spec) norm += a;
+        plotWave([&](float t) {
+            float v = 0.0f;
+            for (int h = 0; h < ambient::kTablePartials; ++h)
+                if (spec[h] > 1.0e-5f) v += spec[h] * std::sin(juce::MathConstants<float>::twoPi * (h + 1) * t);
+            return norm > 1.0e-6f ? v / norm * 1.4f : 0.0f;
+        });
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        g.drawText(juce::String(ambient::kTableNames[juce::jlimit(0, ambient::kNumTables - 1, table)]) + "  pos " + juce::String(pos, 2),
+                   r.reduced(9, 5), juce::Justification::topRight, false);
+    } else if (type == 2) {   // FM: carrier phase-modulated by the modulator at the ratio and index
+        const float ratio = rawParam(proc, (pre + "fm_ratio").toRawUTF8()), idx = rawParam(proc, (pre + "fm_index").toRawUTF8());
+        plotWave([&](float t) {
+            const float ph = juce::MathConstants<float>::twoPi * t;
+            return std::sin(ph + idx * std::sin(ph * ratio));
+        });
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        g.drawText("ratio " + juce::String(ratio, 2) + "   index " + juce::String(idx, 2), r.reduced(9, 5), juce::Justification::topRight, false);
+    } else if (type == 3) {   // texture: the clip's envelope, and the window the grains are drawn from
+        const ambient::Texture* tex = proc.engine().displayTexture();
+        if (tex == nullptr || tex->empty()) {
+            g.setColour(ui::faint); g.setFont(ui::body(11.0f));
+            g.drawText("no clip loaded -- Texture... below, or a pack preset", plot, juce::Justification::centred, false);
+            return;
+        }
+        const int n = static_cast<int>(tex->mono.size());
+        const int cols = juce::jmax(32, static_cast<int>(plot.getWidth()));
+        g.setColour(ui::voiceCol.withAlpha(0.55f));
+        for (int c = 0; c < cols; ++c) {
+            const int a = static_cast<int>(static_cast<long long>(c) * n / cols), b = juce::jmax(a + 1, static_cast<int>(static_cast<long long>(c + 1) * n / cols));
+            float peak = 0.0f;
+            const int stride = juce::jmax(1, (b - a) / 64);
+            for (int i = a; i < b; i += stride) peak = juce::jmax(peak, std::fabs(tex->mono[static_cast<size_t>(i)]));
+            const float x = plot.getX() + c * plot.getWidth() / cols;
+            g.drawVerticalLine(juce::roundToInt(x), cy - peak * hh * 2.0f, cy + peak * hh * 2.0f);
+        }
+        const float pos = rawParam(proc, (pre + "pos").toRawUTF8()), spread = rawParam(proc, (pre + "spread").toRawUTF8());
+        const float x0 = plot.getX() + juce::jlimit(0.0f, 1.0f, pos - spread) * plot.getWidth();
+        const float x1 = plot.getX() + juce::jlimit(0.0f, 1.0f, pos + spread) * plot.getWidth();
+        g.setColour(ui::live.withAlpha(0.18f));
+        g.fillRect(x0, plot.getY(), juce::jmax(2.0f, x1 - x0), plot.getHeight());
+        g.setColour(ui::live);
+        g.drawVerticalLine(juce::roundToInt(plot.getX() + pos * plot.getWidth()), plot.getY(), plot.getBottom());
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        g.drawText(juce::String(tex->mono.size() / juce::jmax(1.0, tex->sampleRate), 1) + " s   base " + juce::String(tex->baseHz, 1) + " Hz",
+                   r.reduced(9, 5), juce::Justification::topRight, false);
+        return;
+    } else {   // noise: the colour as a spectral slope, plus the band centre for Band and Wind
+        const int kind = static_cast<int>(std::lround(rawParam(proc, (pre + "noise").toRawUTF8())));
+        static const float kSlope[] = { 0.0f, -3.0f, -6.0f, 3.0f, 6.0f, 0.0f, 0.0f, 0.0f, -2.0f, -6.0f };
+        const float slope = kSlope[juce::jlimit(0, 9, kind)];
+        const auto sp = plot;
+        g.setColour(ui::track.withAlpha(0.5f));
+        for (float hz : { 100.0f, 1000.0f, 10000.0f }) g.drawVerticalLine(juce::roundToInt(xForHz(sp, hz)), sp.getY(), sp.getBottom());
+        juce::Path line;
+        const bool banded = (kind == 6 || kind == 7);
+        const float posN = rawParam(proc, (pre + "pos").toRawUTF8());
+        const float centre = 40.0f * std::pow(300.0f, posN);
+        const float q = rawParam(proc, (pre + "noise_q").toRawUTF8());
+        for (int i = 0; i <= steps; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(steps);
+            const float hz = 20.0f * std::pow(1000.0f, t);
+            float db = slope * std::log2(hz / 1000.0f);
+            if (kind == 5) db -= 6.0f * std::exp(-std::pow(std::log2(hz / 3000.0f), 2.0f) / 0.9f);   // grey: the dip at 3 kHz
+            if (banded) {
+                const float width = 0.15f + 2.2f * (1.0f - q);
+                db = -30.0f + 30.0f * std::exp(-std::pow(std::log2(hz / centre) / width, 2.0f));
+            }
+            const float x = sp.getX() + t * sp.getWidth();
+            const float y = yForDb(sp, juce::jlimit(-36.0f, 12.0f, db - 6.0f));
+            if (i == 0) line.startNewSubPath(x, y); else line.lineTo(x, y);
+        }
+        g.setColour(ui::voiceCol.withAlpha(0.25f)); g.strokePath(line, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour(ui::voiceCol);                  g.strokePath(line, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        g.drawText(juce::String(ambient::kNoiseKindNames[juce::jlimit(0, ambient::kNumNoiseKinds - 1, kind)])
+                       + (banded ? "   " + juce::String(centre, 0) + " Hz" : juce::String()),
+                   r.reduced(9, 5), juce::Justification::topRight, false);
+        return;
+    }
+    g.setColour(ui::voiceCol.withAlpha(0.25f)); g.strokePath(p, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(ui::voiceCol);                  g.strokePath(p, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 // ---------------------------------------------------------------- browse page

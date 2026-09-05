@@ -22,15 +22,12 @@ import random
 import re
 import subprocess
 import sys
-import tempfile
 
-import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_render.exe")
 sys.path.insert(0, HERE)
-from analyze import read_wav  # noqa: E402
 
 LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": -60.0, "mono_loss": 6.0}
 
@@ -39,32 +36,35 @@ LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": 
 LOW_PRIORITY = {"creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {}
 
 
+MEASURE = re.compile(r"^measure: (.*)$", re.M)
+NONFINITE = re.compile(r"non-finite (\d+)")
+
+
 def check_preset(name, seconds, packs=None):
-    with tempfile.TemporaryDirectory() as td:
-        wav = os.path.join(td, "p.wav")
-        cmd = [RENDER]
-        if packs:
-            cmd += ["--packs", packs]
-        cmd += ["--preset", name, "--seconds", str(seconds), "--notes", "45,52,59", "--set", "brain_rate=6", "--out", wav]
-        res = subprocess.run(cmd,
-                             capture_output=True, text=True, encoding="utf-8", errors="replace",
-                             **LOW_PRIORITY)
-        if res.returncode != 0 or not os.path.isfile(wav):
-            return {"name": name, "error": (res.stderr or res.stdout).strip()[-200:], "fail": ["render"]}
-        m = re.search(r"non-finite (\d+)", res.stdout)
-        nonfinite = int(m.group(1)) if m else 0
-        x, sr = read_wav(wav)
-    mono = x.mean(axis=1)
-    tail = x[int(len(x) * 0.5):]   # judge the second half: the chord and brain have settled
-    rms_db = float(20 * np.log10(np.sqrt((tail ** 2).mean()) + 1e-12))
-    peak = float(np.abs(x).max())
-    jump = float(np.abs(np.diff(mono)).max())
-    dc = float(abs(mono[int(len(mono) * 0.5):].mean()))
-    # Mono compatibility: how much level the stereo image loses when it is summed to mono.
-    # A wide drone loses 1-3 dB; more than that means the sides are cancelling the centre.
-    st = float(np.sqrt((tail ** 2).mean()))
-    mn = float(np.sqrt((tail.mean(axis=1) ** 2).mean()))
-    mono_loss = float(20 * np.log10((st + 1e-12) / (mn + 1e-12)))
+    """The synth measures its own render (--measure) and prints one line: no temporary WAV is
+    written and read back, which used to cost the machine 1.8 MB of file cache per preset."""
+    cmd = [RENDER]
+    if packs:
+        cmd += ["--packs", packs]
+    cmd += ["--preset", name, "--seconds", str(seconds), "--notes", "45,52,59", "--set", "brain_rate=6", "--measure"]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", **LOW_PRIORITY)
+    m = MEASURE.search(res.stdout or "")
+    if res.returncode != 0 and not m:
+        return {"name": name, "error": (res.stderr or res.stdout).strip()[-200:], "fail": ["render"]}
+    if not m:
+        return {"name": name, "error": "no measurement line", "fail": ["render"]}
+    d = {}
+    for tok in m.group(1).split():
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            try:
+                d[k] = float(v)
+            except ValueError:
+                pass
+    nf = NONFINITE.search(res.stdout or "")
+    nonfinite = int(nf.group(1)) if nf else 0
+    rms_db = d.get("rms", -120.0)
+    peak, jump, dc, mono_loss = d.get("peak", 0.0), d.get("jump", 0.0), d.get("dc", 0.0), d.get("monoloss", 0.0)
     fails = []
     if rms_db > LIMITS["rms_db"]: fails.append(f"loud {rms_db:.1f} dBFS")
     if peak > LIMITS["peak"]: fails.append(f"peak {peak:.2f}")

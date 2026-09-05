@@ -90,7 +90,7 @@ void fft(std::vector<float>& re, std::vector<float>& im)
 void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, int voices)
 {
     const size_t n = L.size();
-    if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%d\n", voices); return; }
+    if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%d peak=0 jump=0 dc=0 monoloss=0\n", voices); return; }
     const size_t half = n / 2;
     const int win = 2048, hop = 1024;
     std::vector<float> re(win), im(win), mag(win / 2 + 1), prev(win / 2 + 1, 0.0f), hann(win);
@@ -133,9 +133,25 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
     for (size_t i = half; i < n; ++i) { const double a = L[i] - ml, b = R[i] - mr; vl += a * a; vr += b * b; cov += a * b; }
     const double corr = (vl > 1e-18 && vr > 1e-18) ? cov / std::sqrt(vl * vr) : 1.0;
     const double rms = std::sqrt(sq / (2.0 * cnt));
-    std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d\n",
+    // The sound test's numbers as well: peak, the largest sample-to-sample step (a click), the
+    // offset of the settled half, and how much level the mono sum loses against the stereo signal.
+    double peak = 0.0, jump = 0.0, monoSq = 0.0, stSq = 0.0;
+    float pl = 0.0f, pr = 0.0f;
+    for (size_t i = 0; i < n; ++i) {
+        const float l = L[i], r = R[i];
+        peak = std::max(peak, static_cast<double>(std::max(std::fabs(l), std::fabs(r))));
+        const float m = 0.5f * (l + r), pm = 0.5f * (pl + pr);
+        if (i > 0) jump = std::max(jump, static_cast<double>(std::fabs(m - pm)));
+        pl = l; pr = r;
+        if (i >= half) { monoSq += m * m; stSq += 0.5 * (l * l + r * r); }
+    }
+    const double dc = std::fabs(0.5 * (ml + mr));
+    const double monoLoss = 20.0 * std::log10((std::sqrt(stSq / cnt) + 1e-12) / (std::sqrt(monoSq / cnt) + 1e-12));
+    std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d "
+                "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f\n",
                 20.0 * std::log10(rms + 1e-12), centroid * inv, flatness * inv,
-                frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices);
+                frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices,
+                peak, jump, dc, monoLoss);
 }
 
 } // namespace

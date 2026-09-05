@@ -64,15 +64,32 @@ state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.
 
+**Three sources.** Every voice has three equal source slots. Each is one of
+Additive (a 32-partial bank shaped by tilt, brightness, odd/even, inharmonic
+stretch and shimmer -- in Source 1 the classic strand bank with unison,
+detune and stacks), Wavetable (a table of spectra), FM, Texture (granular,
+up to 64 grains) or Noise (ten colours); so three additive banks, three
+granular players or any mix are a matter of three choices. **Nine filter
+models** sit behind the same knobs: LP 6/12/24, HP, BP, notch, peak, a
+saturating ladder and a tuned comb, with Drive ahead of them. **Clock.**
+Every rate that wants the grid -- the eight LFOs, the six envelopes, both
+delays, ensemble, cloud, brain, arc, grain density -- has a Sync choice from
+64 bars to 1/32 next to its free knob. The tempo comes from the DAW's play
+head, from MIDI clock at the input, or from the synth's own clock (Tempo /
+Run in the Conductor's CLOCK tab), which is what the standalone runs on.
+
 **The editor.** One page, nothing scrolls, the corner zooms: two columns of
-sections, and rows of a kind -- the three sources, the two filters, the effect
+sections, and rows of a kind -- the three sources, the filters, the effect
 pairs, the conductor's tables, morph and macros -- page through tabs. Each
-row's spare room is a live display (oscillator cycle and partials, the source
-slot's table or grain window, filter response, the conductor's notes as a
-roll). The strip along the bottom holds the modulators: drag a card onto a
-knob to route it, right-click a card or a knob to see and remove routes, and
-the LFO / ENVELOPES / MATRIX tabs edit the sources. A modulated knob wears a
-ring in its source's colour and shows the modulation moving it.
+row's spare room is a live display drawn from the engine's numbers: the
+source's bank as partials and cycle, the grains reading the clip, the chosen
+filter model's response, the amp envelope with the live level, the stage with
+every voice as a dot (left-right by pan, near-far by plane), the Cosmos
+return's spectrum, the conductor's notes as a roll. The strip along the
+bottom holds the modulators: drag a card onto a knob to route it, right-click
+a card or a knob to see and remove routes, and the LFO / ENVELOPES / MATRIX
+tabs edit the sources. A modulated knob wears a ring in its source's colour
+and shows the modulation moving it.
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

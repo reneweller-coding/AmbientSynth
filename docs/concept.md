@@ -242,6 +242,25 @@ remaining), a root note, a timer.
   shifts density by up to ±2 voices, brightness by ±25 % and depth by ±30 %,
   so an all-night run has tides instead of a flat sea.
 
+### Filter models
+
+`Core/include/ambient/Filter.h`. The voice filter is one of nine models
+behind the same five knobs (*Model*, *Cutoff*, *Resonance*, *Env Amount*,
+*Drift*, *Key Track*, plus *Drive*): LP 6 (one pole), LP 12 (the
+state-variable low pass the instrument always had, bit-identical), LP 24 (two
+stages, shared resonance), HP 12, BP 12 (unity at the cutoff), Notch, Peak (a
+bell of up to +14 dB, narrower with resonance), Ladder (four one-poles with
+the last fed back through a soft saturation; the corner sits 1.55× above the
+knob so the -3 dB point lands near Cutoff; resonance squared, because the
+interesting range is at the top) and Comb (a feedback comb tuned to Cutoff
+with a low pass in the loop, output scaled by 1 - fb so the peaks stay at
+unity and Resonance deepens the dips instead of raising the level -- on a
+sustained cluster less a filter than a second resonating body). *Drive* is a
+soft saturation ahead of the filter, level-compensated. Every model reports
+its own magnitude response (`VoiceFilter::magnitude`, the same maths as the
+audio path), which is what the filter display draws. A model change resets the
+filter states, since they mean different things in different models.
+
 ### Z-plane filter
 
 After the idea Dave Rossum built into the E-mu Morpheus: four filter
@@ -305,10 +324,23 @@ preset (23× → 21× realtime).
   slows down, so a stretch of five minutes never resembles the previous
   five.
 
-### Source 2 and Source 3
+### Three sources
 
-Every voice has two extra source slots next to the partial bank (Source 1,
-which got its own *Level*). Each slot has a type, level, octave, a just
+Every voice has three equal source slots. Source 1's *Type* defaults to
+**Additive**, which is the strand bank described above (unison, detune,
+stacks, bloom -- the classic Oscillator; its Octave, Ratio and Pan move the
+whole bank); set to anything else the bank falls silent and the slot renders
+in its place, so a voice can be three granular players or three FM pairs.
+Additive in Source 2 or 3 is a single 32-partial bank inside the slot with
+the same spectrum formula (partials, tilt, brightness window, odd/even,
+inharmonic stretch, per-partial shimmer) -- one strand, the cost of a
+wavetable slot. The type index for Additive sits last so the indices the
+five thousand presets store for the other types did not move; the switch was
+measured sound-neutral on 37 presets (identical descriptors, because the new
+random streams are seeded from side streams and never touch the voice's).
+
+Each slot has a type, level, octave, a just
+ratio to the note (1/1 … 2/1, so a slot can sit a fifth or a seventh above Each slot has a type, level, octave, a just
 ratio to the note (1/1 … 2/1, so a slot can sit a fifth or a seventh above
 the key), and a pan; all of it goes through the voice's filter, envelope,
 distance and ITD like the bank. `Core/include/ambient/Sources.h`.
@@ -614,6 +646,30 @@ sets of the applications on screen and switching between them stuttered. The WAV
 for `FILE_FLAG_SEQUENTIAL_SCAN`, so the clips it reads are aged out of the cache instead of kept.
 Measured afterwards: a full pass grows the standby list by well under a gigabyte instead of
 tens of them.
+
+## Clock and sync
+
+`Core/include/ambient/Clock.h`. Where the tempo comes from is one setting,
+*Clock Source*: **Internal** (the *Tempo* parameter, counting beats while *Run*
+is on -- the standalone's own clock), **Host** (the DAW's play head: tempo,
+position in quarter notes, playing; the plugin hands it over once per block),
+or **MIDI** (MIDI clock at the input, 24 ticks a quarter; the tempo settles
+over a beat's worth of ticks so interface jitter does not wobble every synced
+LFO; Start/Continue/Stop; two seconds without a tick and it falls back). Host
+and MIDI fall back to the internal clock when nothing arrives. The clock's
+parameters are performance state like the morph: no preset touches the tempo.
+
+Every rate that wants the grid keeps its free knob and gains a *Sync* choice
+(Free, 64 bars … 1 bar, 1/2 … 1/32 with dotted and triplet values); when set,
+the division at the current tempo replaces the knob: the eight LFOs (one
+cycle per division, and the phase follows the beat position, so a synced LFO
+stays on the grid however long it runs and wherever the transport jumps), the
+six envelopes (the whole shape spans one division), both delays' left and
+right times, the ensemble rate, the cloud's grain rate, the brain's event
+rate, the arc period, and each source slot's grain density. Measured: a delay
+on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
+changes the render between 90 and 180 bpm; every preset (all Free) is
+unchanged.
 
 ## Presets
 

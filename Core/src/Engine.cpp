@@ -253,6 +253,7 @@ void Engine::setTexture(const float* mono, int n, double sampleRate, double base
     t.mono.assign(mono, mono + std::max(n, 0));
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
+    t.measure();
     textureActive_.store(target, std::memory_order_release);
 }
 
@@ -392,6 +393,8 @@ void Engine::readParams()
             s.grainMs       = at(10);
             s.density       = at(11);
             s.follow        = at(12) >= 0.5f;
+            s.grains        = static_cast<int>(std::lround(at(13)));
+            s.spread        = at(14);
         }
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
         const int a = textureActive_.load(std::memory_order_acquire);

@@ -297,6 +297,17 @@ void SourceSlot::renderFm(float* out, int n, double hz, const SlotParams& p, flo
     }
 }
 
+void Texture::measure()
+{
+    // The wavetable and FM slots normalise themselves to unity, so a Texture slot has to be
+    // brought to the same reference or Level means something different in each slot: a field
+    // recording at -25 dBFS RMS entered the mix twenty decibels below its neighbours.
+    double sq = 0.0;
+    for (float v : mono) sq += static_cast<double>(v) * v;
+    const double rms = mono.empty() ? 0.0 : std::sqrt(sq / static_cast<double>(mono.size()));
+    gain = rms > 1e-6 ? static_cast<float>(clampv(0.3 / rms, 0.5, 16.0)) : 1.0f;
+}
+
 void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt)
 {
     // outL receives the left channel, scratch_ the right (the caller adds both).
@@ -305,14 +316,15 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
     const float* s = tex->mono.data();
     const int len = static_cast<int>(tex->mono.size());
     const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.15f * p.positionDrift;
+    const int maxGrains = clampv(p.grains, 1, kSlotGrains);
 
     // Spawn grains at Density per second (jittered), around Position.
     spawnIn_ -= dt;
     while (spawnIn_ <= 0.0) {
         spawnIn_ += (1.0 / std::max(p.density, 0.1f)) * (0.7 + 0.6 * rng_.uniform());
         Grain* g = nullptr;
-        for (auto& c : grains_) if (!c.on) { g = &c; break; }
-        if (g == nullptr) continue;
+        for (int c = 0; c < maxGrains; ++c) if (!grains_[c].on) { g = &grains_[c]; break; }
+        if (g == nullptr) continue;   // the slot is full: this grain is dropped
         const double resample = tex->sampleRate / sr_;
         // Note: the sample is pitched to the note (recorded at baseHz). Free: original speed,
         // with octave and ratio acting as a playback-speed multiplier.
@@ -321,26 +333,43 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         const double span = static_cast<double>(len) - static_cast<double>(glen) * rate - 2.0;
         if (span <= 0.0) continue;
         const double centre = clampv(static_cast<double>(p.position) + wander, 0.0, 1.0) * span;
-        double start = centre + (rng_.bipolar() * 0.03) * len;
+        // Spread scatters the start point around Position; at 1 a grain may come from anywhere.
+        double start = centre + (rng_.bipolar() * clampv(p.spread, 0.0f, 1.0f)) * len;
         start = clampv(start, 0.0, span);
-        const float norm = 0.7f / std::sqrt(std::max(1.0f, p.density * p.grainMs * 0.001f));
+        // Overlap normalisation, capped by the grains actually available: asking for more overlap
+        // than the slot can hold used to make the sound quieter instead of denser.
+        const float overlap = std::min(std::max(1.0f, p.density * p.grainMs * 0.001f),
+                                       static_cast<float>(maxGrains));
+        // For a Hann-windowed stream at overlap N the sum has RMS sqrt(N)*0.612*source, so the
+        // constant that returns the source's own level is 1/0.612 = 1.63, not the 0.7 that stood
+        // here -- which is where the missing 7.4 dB were.
+        const float norm = 1.63f / std::sqrt(overlap);
         const float pan = clampv(p.pan + 0.3f * rng_.bipolar(), -1.0f, 1.0f);
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         g->pos = start; g->rate = rate; g->len = glen; g->age = 0; g->on = true;
-        g->gain = p.level * norm;
-        g->pan = angle;
+        g->gain = p.level * norm * tex->gain;
+        g->gl = g->gain * std::cos(angle); g->gr = g->gain * std::sin(angle);
+        // Hann window as a rotating phasor: w = 0.5 - 0.5*wc, advanced by one grain-length step.
+        g->wc = 1.0f; g->ws = 0.0f;
+        phasorFrom(1.0 / static_cast<double>(glen), g->rc, g->rs);
     }
-    for (auto& g : grains_) {
+    for (int c = 0; c < maxGrains; ++c) {
+        Grain& g = grains_[c];
         if (!g.on) continue;
-        const float gL = g.gain * std::cos(g.pan), gR = g.gain * std::sin(g.pan);
-        const float invLen = kTwoPi / static_cast<float>(g.len);
+        {   // keep the window phasor on the unit circle (a grain can run for 48000 samples)
+            const float r2 = g.wc * g.wc + g.ws * g.ws, fix = 1.5f - 0.5f * r2;
+            g.wc *= fix; g.ws *= fix;
+        }
         for (int i = 0; i < n; ++i) {
             if (g.age >= g.len || g.pos >= len - 2 || g.pos < 0.0) { g.on = false; break; }
             const int ip = static_cast<int>(g.pos); const float f = static_cast<float>(g.pos - ip);
             const float v = s[ip] + f * (s[ip + 1] - s[ip]);
-            const float w = 0.5f * (1.0f - std::cos(invLen * static_cast<float>(g.age)));
-            outL[i] += v * w * gL;
-            scratch_[i] += v * w * gR;
+            const float w = 0.5f - 0.5f * g.wc;
+            outL[i] += v * w * g.gl;
+            scratch_[i] += v * w * g.gr;
+            const float nc = g.wc * g.rc - g.ws * g.rs;
+            g.ws = g.ws * g.rc + g.wc * g.rs;
+            g.wc = nc;
             g.pos += g.rate; ++g.age;
         }
     }

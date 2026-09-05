@@ -565,6 +565,25 @@ and as DAW programs (both layers); a separate 32-entry Cosmos bank ("Cosmos
 Off", shifters, resonators, vowels, nebulae, shimmers, the sci-fi
 combinations) serves the Cosmos box. All 160 render finite.
 
+### Texture slot (granular)
+
+Not a sample player: grains are spawned at exponentially distributed intervals around *Density*,
+each with its own start point, playback rate, Hann window and pan, and they overlap freely.
+*Grains* (1..64) is the ceiling on how many a slot may have sounding at once; *Spread* scatters
+the start point around *Position*, from a 0.1 % window up to the whole clip. The window runs as
+a rotating phasor rather than a `std::cos` per sample -- at 64 grains that call was the most
+expensive thing in the voice.
+
+Two things were wrong here and are worth writing down. A clip enters at its own level, while the
+wavetable and FM slots normalise themselves to unity, so `Texture::measure()` now sets a reading
+gain from the clip's RMS. And the overlap normalisation was `0.7/sqrt(N)`: a Hann-windowed stream
+at overlap N has RMS `sqrt(N)*0.612*source`, so the constant that returns the source's own level
+is `1/0.612 = 1.63`. Together those two were 22 dB: at the same *Level*, a Texture slot was
+inaudible next to a Wavetable slot. All three source types now land within 0.8 dB of each other.
+
+Cost, measured: eight voices with both slots granular at 60 grains/s and 800 ms grains --
+1024 concurrent grains -- render at 6.5x realtime with *Grains* at 64, 8.6x at 32 and 16x at 8.
+
 ### GrainCloud
 
 History ring of 4 s fed from the near bus × *Send*. Grains are spawned at

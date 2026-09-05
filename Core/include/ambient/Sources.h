@@ -25,7 +25,7 @@ namespace ambient {
 constexpr int kSlots         = 2;
 constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
-constexpr int kSlotGrains    = 8;
+constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use
 
 enum class SourceType : int { Off = 0, Wavetable, Fm, Texture };
 
@@ -59,7 +59,11 @@ struct Texture {
     std::vector<float> mono;
     double sampleRate = 48000.0;
     double baseHz = 261.6256;   // assumed pitch of the sample for Follow = Note
+    // Reading gain, from the clip's own RMS: the wavetable and FM slots normalise themselves to
+    // unity, so without this a quiet recording enters the mix 20 dB below them at the same Level.
+    float  gain = 1.0f;
     bool empty() const { return mono.size() < 64; }
+    void measure();             // sets gain from mono
 };
 
 struct SlotParams {
@@ -76,6 +80,8 @@ struct SlotParams {
     float grainMs = 200.0f;
     float density = 12.0f;       // grains per second
     bool  follow = false;        // texture pitched to the note
+    int   grains = 16;           // how many grains this slot may have sounding at once, 1..kSlotGrains
+    float spread = 0.03f;        // start-point scatter around Position, as a fraction of the clip
 };
 
 class SourceSlot {
@@ -101,7 +107,10 @@ private:
     double phC_ = 0.0, phM_ = 0.0;
     float  hpX_ = 0.0f, hpY_ = 0.0f;   // DC blocker state
     // Texture grains
-    struct Grain { double pos = 0.0; double rate = 1.0; int len = 0; int age = 0; float gain = 0.0f; float pan = 0.0f; bool on = false; };
+    // The window is a rotating phasor, not a cosine call: at 64 grains a std::cos per sample per
+    // grain is the single most expensive thing in the voice.
+    struct Grain { double pos = 0.0; double rate = 1.0; int len = 0; int age = 0; float gain = 0.0f;
+                   float gl = 0.0f, gr = 0.0f; float wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; bool on = false; };
     Grain  grains_[kSlotGrains];
     double spawnIn_ = 0.0;   // seconds until the next grain
     Drifter posDrift_, idxDrift_;

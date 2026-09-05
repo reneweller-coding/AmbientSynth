@@ -190,7 +190,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
             if (s.name == "Tuning") s.maxUnits = 9;
             if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
-            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 10;
+            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 11;
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -1140,13 +1140,13 @@ int AmbientSynthEditor::cellForParam(ParamId id) const
 
 void AmbientSynthEditor::updateSourceCells()
 {
-    // The 13 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
+    // The 15 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
     // 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position 7 pos drift 8 fm ratio 9 fm index
-    // 10 grain 11 density 12 follow. Grey what the chosen type ignores.
+    // 10 grain 11 density 12 follow 13 grains 14 spread. Grey what the chosen type ignores.
     const ParamId first[2] = { ParamId::Src2Type, ParamId::Src3Type };
     for (int k = 0; k < 2; ++k) {
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(first[k])));   // 0 off 1 wavetable 2 fm 3 texture
-        for (int off = 1; off <= 12; ++off) {
+        for (int off = 1; off <= 14; ++off) {
             bool on = type != 0;
             if (off == 5) on = type == 1;
             else if (off == 6 || off == 7) on = type == 1 || type == 3 || (off == 7 && type == 2);

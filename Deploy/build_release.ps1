@@ -1,0 +1,133 @@
+# AmbientSynth -- build the binaries other people get, and wrap them in a setup.
+#
+#   powershell -File Deploy\build_release.ps1 [-Version 1.0.0] [-SkipBuild] [-NoSetup]
+#
+# Three things make this build different from an everyday one:
+#
+#   * the MSVC runtime is linked in (AMBIENT_STATIC_RUNTIME), so nothing has to be installed
+#     first -- no redistributable, no DLL beside the executable;
+#   * AVX2 is off. The instrument runs at roughly 39x realtime without it and 52x with it (both
+#     measured), and neither number is anywhere near the 1x that matters, so a build for other
+#     people takes compatibility with every x86-64 machine over a speed nobody can hear. Anyone
+#     building for their own computer can turn it back on with -DAMBIENT_AVX2=ON;
+#   * it builds in its own folder, so the everyday build tree is left alone.
+#
+# The result is Deploy\out\AmbientSynth-<version>-Setup.exe plus Deploy\out\AmbientSynth-<version>-portable.zip
+# for people who would rather not run an installer at all.
+param(
+    [string]$Version = "",
+    [switch]$SkipBuild,       # reuse whatever is in build-release already
+    [switch]$NoSetup          # stage and zip, but do not call the Inno compiler
+)
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+Set-Location $root
+
+if (-not $Version) {
+    $m = Select-String -Path (Join-Path $root "CMakeLists.txt") -Pattern 'project\(AmbientSynth VERSION ([0-9.]+)'
+    if (-not $m) { throw "no version in CMakeLists.txt and none given" }
+    $Version = $m.Matches[0].Groups[1].Value
+}
+Write-Host "AmbientSynth $Version" -ForegroundColor Cyan
+
+$buildDir = Join-Path $root "build-release"
+$stage = Join-Path $root "Deploy\stage"
+$out = Join-Path $root "Deploy\out"
+
+if (-not $SkipBuild) {
+    # A build for other people is not worth having in a hurry: -j 2 leaves the machine usable.
+    cmake -S . -B $buildDir -G "Visual Studio 18 2026" -A x64 `
+        -DAMBIENT_STATIC_RUNTIME=ON -DAMBIENT_AVX2=OFF -DAMBIENT_BUILD_TOOLS=ON `
+        "-DFETCHCONTENT_SOURCE_DIR_JUCE=$root/build/_deps/juce-src"   # the JUCE already fetched
+    if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+    cmake --build $buildDir --config Release --parallel 2
+    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+    # The tests are built in the same configuration that ships, and have to pass in it: a static
+    # runtime and a missing AVX2 are exactly the kind of change that is fine until it is not.
+    & (Join-Path $buildDir "Tests\Release\ambient_selftest.exe")
+    if ($LASTEXITCODE -ne 0) { throw "self test failed in the release configuration" }
+    & (Join-Path $buildDir "Tests\Release\ambient_hosttest.exe")
+    if ($LASTEXITCODE -ne 0) { throw "host test failed in the release configuration" }
+}
+
+$art = Join-Path $buildDir "Plugin\AmbientSynth_artefacts\Release"
+$exe = Join-Path $art "Standalone\AmbientSynth.exe"
+$vst = Join-Path $art "VST3\AmbientSynth.vst3"
+foreach ($p in @($exe, $vst)) { if (-not (Test-Path $p)) { throw "missing build output: $p" } }
+
+# ---------------------------------------------------------------- what must not be there
+# A binary that still wants the Visual C++ runtime would fail on a machine without it, and the
+# failure looks like "the app just does not start". Checked here rather than discovered later.
+$dumpbin = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" -ErrorAction SilentlyContinue |
+           Select-Object -First 1 -ExpandProperty FullName
+if ($dumpbin) {
+    foreach ($bin in @($exe, (Join-Path $vst "Contents\x86_64-win\AmbientSynth.vst3"))) {
+        $deps = & $dumpbin /dependents $bin | Select-String -Pattern '^\s+\S+\.dll' | ForEach-Object { $_.Line.Trim() }
+        $bad = $deps | Where-Object { $_ -match '^(VCRUNTIME|MSVCP|CONCRT|api-ms-win-crt)' }
+        if ($bad) { throw "$([System.IO.Path]::GetFileName($bin)) still needs the Visual C++ runtime: $($bad -join ', ')" }
+        Write-Host ("  {0}: {1} system DLLs, none of them a redistributable" -f [System.IO.Path]::GetFileName($bin), $deps.Count)
+    }
+} else {
+    Write-Warning "dumpbin not found -- the runtime check was skipped"
+}
+
+# ---------------------------------------------------------------- stage
+if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stage, $out | Out-Null
+Copy-Item $exe $stage
+Copy-Item $vst (Join-Path $stage "AmbientSynth.vst3") -Recurse
+Copy-Item (Join-Path $root "docs\logo.ico") $stage
+Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")
+New-Item -ItemType Directory -Force -Path (Join-Path $stage "Packs") | Out-Null
+Copy-Item (Join-Path $root "Library\Packs\*.ambientpack") (Join-Path $stage "Packs")
+$packCount = (Get-ChildItem (Join-Path $stage "Packs") -Filter *.ambientpack).Count
+if ($packCount -lt 1) { throw "no preset packs staged" }
+
+@"
+AmbientSynth $Version
+=====================
+
+A drone and ambient synthesiser: three source slots, two filters, a resonating body, delays, a
+convolution room, a far reverb, the Cosmos feedback network, and a conductor that plays it.
+
+WHAT IS HERE
+
+  AmbientSynth.exe        the standalone instrument. Nothing else needs to be installed.
+  AmbientSynth.vst3       the plug-in. Copy the whole folder to
+                          C:\Program Files\Common Files\VST3\ and rescan in your DAW.
+  Packs\                  $packCount preset packs. Copy them to
+                          C:\ProgramData\AmbientSynth\Packs (for everyone on the machine) or
+                          Documents\AmbientSynth\Packs (just for you). The instrument reads both.
+
+The setup does all of that for you; this archive is for anyone who would rather it did not.
+
+FIRST RUN
+
+Start it and wait: the conductor begins a piece within a few seconds. Point at any control to
+read what it does; Help (or F1) opens the manual. The standalone comes back the way you left it
+-- the Recall button in the header turns that off.
+
+The preset library that the packs name (samples, wavetables and impulse responses) is a separate
+download; presets that cannot find their sample fall back to the built-in sources and still play.
+
+$(Get-Content (Join-Path $root "LICENSE") -TotalCount 1)
+"@ | Set-Content (Join-Path $stage "README.txt") -Encoding utf8
+
+# ---------------------------------------------------------------- portable archive
+$zip = Join-Path $out "AmbientSynth-$Version-portable.zip"
+if (Test-Path $zip) { Remove-Item $zip -Force }
+Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip -CompressionLevel Optimal
+Write-Host ("  portable zip: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
+
+# ---------------------------------------------------------------- setup
+if (-not $NoSetup) {
+    $iscc = Get-ChildItem "C:\Program Files\Inno Setup *\ISCC.exe", "C:\Program Files (x86)\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+    if (-not $iscc) { throw "Inno Setup not found. winget install JRSoftware.InnoSetup, or run with -NoSetup." }
+    & $iscc "/DVersion=$Version" (Join-Path $root "Deploy\AmbientSynth.iss")
+    if ($LASTEXITCODE -ne 0) { throw "the installer failed to build" }
+    $setup = Join-Path $out "AmbientSynth-$Version-Setup.exe"
+    Write-Host ("  setup: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB)) -ForegroundColor Green
+}
+Get-ChildItem $out | Format-Table Name, @{n="MB";e={"{0:N1}" -f ($_.Length/1MB)}}, LastWriteTime

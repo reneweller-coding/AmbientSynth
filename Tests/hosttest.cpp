@@ -123,6 +123,42 @@ int main()
         check(mw == 0, "a morph snapshot survives a state round trip");
     }
 
+    // ---------------------------------------------------------------- which preset it says it is
+    // The state carried every knob but never the name of the preset they came from, so a restored
+    // session played the right sound under the label "Init" and looked like a feature that did
+    // not work. The name is stored, not the index: a pack added between two sessions renumbers
+    // every preset behind it.
+    {
+        auto a = std::make_unique<AmbientSynthProcessor>();
+        a->prepareToPlay(48000.0, 256);
+        int which = -1;
+        for (int i = 0; i < numPresets(); ++i) if (juce::String(preset(i).name) == "Cathedral Bell") which = i;
+        check(which > 0, "the preset the round trip is built on exists");
+        a->applySoundPreset(which);
+        a->applyCosmosPreset(3);
+        juce::MemoryBlock blob;
+        a->getStateInformation(blob);
+
+        auto b = std::make_unique<AmbientSynthProcessor>();
+        b->prepareToPlay(48000.0, 256);
+        b->setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+        check(b->soundPresetIndex() == which, "a restored session still knows which sound preset it holds");
+        check(b->cosmosPresetIndex() == 3, "a restored session still knows which cosmos preset it holds");
+
+        // A state from before the names existed must not blank the boxes: no name means keep
+        // whatever the default is, not "nothing selected".
+        auto xml = juce::AudioProcessor::getXmlFromBinary(blob.getData(), static_cast<int>(blob.getSize()));
+        check(xml != nullptr, "the state is readable as XML");
+        xml->removeAttribute("soundPreset");
+        xml->removeAttribute("cosmosPreset");
+        juce::MemoryBlock old;
+        juce::AudioProcessor::copyXmlToBinary(*xml, old);
+        auto c = std::make_unique<AmbientSynthProcessor>();
+        c->prepareToPlay(48000.0, 256);
+        c->setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+        check(c->soundPresetIndex() >= 0 && c->cosmosPresetIndex() >= 0, "a state without preset names leaves the boxes on their default");
+    }
+
     // ---------------------------------------------------------------- programs while playing
     {
         auto p = std::make_unique<AmbientSynthProcessor>();

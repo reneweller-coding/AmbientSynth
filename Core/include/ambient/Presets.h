@@ -64,7 +64,10 @@ inline bool inScope(ParamId id, PresetScope scope)
 // which the host loads when the preset is applied. Message thread only.
 bool loadPresetPack(const char* path);      // false if the file is missing or a line is malformed
 int  loadPresetPacksIn(const char* dir);    // every *.ambientpack in a directory; returns how many loaded
-int  loadDefaultPresetPacks();              // $AMBIENT_PACKS (';'-separated), else ~/Documents/AmbientSynth/Packs
+// $AMBIENT_PACKS (';'-separated) if it finds anything, else the user's own
+// Documents/AmbientSynth/Packs and the folders an installer writes to (Windows: ProgramData and
+// LocalAppData; elsewhere /usr/local/share and /usr/share). A pack found twice loads once.
+int  loadDefaultPresetPacks();
 void clearPresetPacks();
 int  numPresetPacks();
 const char* presetPackName(int pack);

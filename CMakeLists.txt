@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(AmbientSynth VERSION 0.1.0 LANGUAGES C CXX)
+project(AmbientSynth VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,14 @@ set(AMBIENT_JUCE_TAG "9.0.1" CACHE STRING "JUCE git tag to fetch")
 
 if(MSVC)
     add_compile_options(/MP)
+endif()
+
+# A build meant for other people has to run on a machine that has never seen a compiler, so the
+# runtime is linked in rather than looked up: no "VCRUNTIME140.dll is missing" for anybody. Off
+# for everyday builds, where the shared runtime links faster and debugs better.
+option(AMBIENT_STATIC_RUNTIME "Link the MSVC runtime statically (for distribution)" OFF)
+if(AMBIENT_STATIC_RUNTIME AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # Link-time optimisation, off by default: measured on MSVC over a cloud- and sub-heavy render it

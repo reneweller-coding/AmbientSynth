@@ -58,7 +58,7 @@ private:
     void     doUndo();
     void     doRedo();
     void     swapAB();
-    std::unique_ptr<juce::TextButton> undoButton_, redoButton_, abButton_, compactButton_;
+    std::unique_ptr<juce::TextButton> undoButton_, redoButton_, abButton_, compactButton_, recallButton_;
     // Compact: the widest rows wrap into two, so the page is narrower and taller. Everything is
     // still on one page; only the shape changes. Kept in the plugin state.
     bool compact_ = false;

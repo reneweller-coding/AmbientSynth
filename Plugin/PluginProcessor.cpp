@@ -1,4 +1,10 @@
 #include "PluginProcessor.h"
+// For the standalone's settings file: the same one JUCE saves the state into when the window is
+// closed. Reaching it here is what lets the session be written while the app is still running.
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_utils/juce_audio_utils.h>
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
 #include "ambient/PresetMeta.h"
 #include "PluginEditor.h"
 #include "ambient/Tuning.h"
@@ -58,7 +64,66 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     loadDefaultPresetPacks();
     // OSC on 9000; a second instance in a DAW simply reports the port as taken.
     osc_.start(9000, *this, gestures_);
+    // Session recall. The switch lives in the same settings file as the state, so turning it off
+    // survives a restart; off also drops the stored state, before JUCE can read it back -- this
+    // constructor runs from the holder's, ahead of its reloadPluginState().
+    if (auto* settings = standaloneSettings()) {
+        sessionRecall_ = settings->getBoolValue("sessionRecall", true);
+        if (!sessionRecall_) settings->removeValue("filterState");
+        else startTimer(15000);
+    }
 }
+
+AmbientSynthProcessor::~AmbientSynthProcessor()
+{
+    stopTimer();
+    saveSession();
+}
+
+// The standalone's settings, or nothing at all when this is a plugin: there the host owns the
+// state, saves it with the project and hands it back, and a synth that quietly loaded somebody
+// else's last session into a fresh instance would be a bug, not a feature.
+juce::PropertySet* AmbientSynthProcessor::standaloneSettings()
+{
+   #if JucePlugin_Build_Standalone
+    if (auto* holder = juce::StandalonePluginHolder::getInstance()) return holder->settings.get();
+   #endif
+    return nullptr;
+}
+
+bool AmbientSynthProcessor::sessionRecallAvailable() { return standaloneSettings() != nullptr; }
+
+void AmbientSynthProcessor::setSessionRecall(bool on)
+{
+    sessionRecall_ = on;
+    auto* settings = standaloneSettings();
+    if (settings == nullptr) return;
+    settings->setValue("sessionRecall", on);
+    if (on) { savedStateHash_ = 0; startTimer(15000); saveSession(); }
+    else    { stopTimer(); settings->removeValue("filterState"); }
+    if (auto* file = dynamic_cast<juce::PropertiesFile*>(settings)) file->saveIfNeeded();
+}
+
+// Writes the state only when it has actually changed, so an instrument left running all night
+// touches the disk once. Hashing the block is cheaper than deciding what counts as a change:
+// every knob, the matrix, the tuning and the loaded files are in there already.
+void AmbientSynthProcessor::saveSession()
+{
+    auto* settings = standaloneSettings();
+    if (settings == nullptr || !sessionRecall_) return;
+    juce::MemoryBlock data;
+    getStateInformation(data);
+    if (data.getSize() == 0) return;
+    juce::uint32 hash = 2166136261u;                     // FNV-1a over the block
+    for (const auto* b = static_cast<const juce::uint8*>(data.getData()), *e = b + data.getSize(); b != e; ++b)
+        hash = (hash ^ *b) * 16777619u;
+    if (hash == savedStateHash_) return;
+    savedStateHash_ = hash;
+    settings->setValue("filterState", data.toBase64Encoding());
+    if (auto* file = dynamic_cast<juce::PropertiesFile*>(settings)) file->saveIfNeeded();
+}
+
+void AmbientSynthProcessor::timerCallback() { saveSession(); }
 
 // ---------------------------------------------------------------- OSC sink + gestures
 
@@ -331,6 +396,7 @@ void AmbientSynthProcessor::setCurrentProgram(int index)
     if (index < 0 || index >= numPresets()) return;
     currentProgram_ = index;
     soundIndex_ = index;
+    soundName_ = preset(index).name;
     cosmosIndex_ = -1;   // the program brought its own Cosmos layer
     applyScoped(preset(index), PresetScope::Full);
     loadPresetFiles(index);
@@ -340,6 +406,7 @@ void AmbientSynthProcessor::applySoundPreset(int index)
 {
     if (index < 0 || index >= numPresets()) return;
     soundIndex_ = index;
+    soundName_ = preset(index).name;
     applyScoped(preset(index), PresetScope::Sound);
     loadPresetFiles(index);
     applyLevelMatch(index);
@@ -365,6 +432,7 @@ void AmbientSynthProcessor::applyCosmosPreset(int index)
 {
     if (index < 0 || index >= numCosmosPresets()) return;
     cosmosIndex_ = index;
+    cosmosName_ = cosmosPreset(index).name;
     applyScoped(cosmosPreset(index), PresetScope::Cosmos);
 }
 
@@ -551,6 +619,9 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     if (impulseFile_.existsAsFile())   state.setProperty("impulseFile", impulseFile_.getFullPathName(), nullptr);
     if (impulseBFile_.existsAsFile())  state.setProperty("impulseBFile", impulseBFile_.getFullPathName(), nullptr);
+    // The names of the two loaded presets, so the boxes still say what is loaded after a restart.
+    if (soundName_.isNotEmpty())  state.setProperty("soundPreset", soundName_, nullptr);
+    if (cosmosName_.isNotEmpty()) state.setProperty("cosmosPreset", cosmosName_, nullptr);
     if (compact_) state.setProperty("compact", 1, nullptr);          // how the editor is laid out
     if (levelMatch_) state.setProperty("levelMatch", 1, nullptr);
     juce::ValueTree midi("midi");
@@ -605,6 +676,19 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
             const juce::String irBPath = tree.getProperty("impulseBFile").toString();
+            // Which presets the two boxes should say are loaded. Looked up by name, and simply
+            // not selected when the pack that held it is gone -- the sound is in the state
+            // either way, only the label would have been a lie.
+            soundName_  = tree.getProperty("soundPreset").toString();
+            cosmosName_ = tree.getProperty("cosmosPreset").toString();
+            if (soundName_.isNotEmpty()) {
+                soundIndex_ = -1;
+                for (int i = 0; i < numPresets(); ++i) if (soundName_ == preset(i).name) { soundIndex_ = i; break; }
+            }
+            if (cosmosName_.isNotEmpty()) {
+                cosmosIndex_ = -1;
+                for (int i = 0; i < numCosmosPresets(); ++i) if (cosmosName_ == cosmosPreset(i).name) { cosmosIndex_ = i; break; }
+            }
             compact_ = static_cast<int>(tree.getProperty("compact", 0)) != 0;
             levelMatch_ = static_cast<int>(tree.getProperty("levelMatch", 0)) != 0;
             const juce::String route = tree.getProperty("route").toString();
@@ -623,6 +707,8 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeProperty("wavetableFile", nullptr);
             tree.removeProperty("impulseFile", nullptr);
             tree.removeProperty("favourites", nullptr);
+            tree.removeProperty("soundPreset", nullptr);
+            tree.removeProperty("cosmosPreset", nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
             if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));

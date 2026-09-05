@@ -134,6 +134,17 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         rebuildLayout();
     };
     addAndMakeVisible(*compactButton_);
+    // Session recall, and the switch for it. Only in the standalone: in a plugin the host saves
+    // the state with the project, which is what a plugin is supposed to do.
+    if (AmbientSynthProcessor::sessionRecallAvailable()) {
+        recallButton_ = std::make_unique<juce::TextButton>("Recall");
+        recallButton_->setTooltip("Start where you left off: the whole state is kept while the instrument runs and comes back next time. Off means it always starts at Init, and what was stored is forgotten.");
+        recallButton_->setClickingTogglesState(true);
+        recallButton_->setToggleState(proc_.sessionRecall(), juce::dontSendNotification);
+        recallButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+        recallButton_->onClick = [this] { proc_.setSessionRecall(recallButton_->getToggleState()); };
+        addAndMakeVisible(*recallButton_);
+    }
     outputView_ = std::make_unique<OutputView>(proc_);
     addAndMakeVisible(*outputView_);
     tooltips_ = std::make_unique<juce::TooltipWindow>(nullptr, 600);
@@ -528,6 +539,7 @@ void AmbientSynthEditor::resized()
     if (redoButton_) redoButton_->setBounds(1316, 8, 50, 24);
     if (abButton_) abButton_->setBounds(1370, 8, 52, 24);
     if (compactButton_) compactButton_->setBounds(1426, 8, 70, 24);
+    if (recallButton_) recallButton_->setBounds(1500, 8, 62, 24);
 
     const int W = designW_, H = designH_;
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);

@@ -28,6 +28,7 @@ Licence: AGPL-3.0 (see `LICENSE`).
 | `Tools/analyze.py` | Measures a WAV (level, clicks, stereo correlation, spectral centroid, peaks). | numpy |
 | `Tests/` | `ambient_selftest`: tuning, envelope, engine, brain, delay, mid/side, presets, space, determinism. | Core |
 | `Quest/` | Native Meta Quest app: OpenXR + hand tracking → gesture layer → engine, Oboe audio, GLES scene, OSC bridge; Gradle-free APK build. Compiles and packages, not yet run on a headset. | NDK, OpenXR loader, Oboe (fetched by script) |
+| `Deploy/` | The installer: `build_release.ps1` (a self-contained build, staged, checked and zipped) and `AmbientSynth.iss` for Inno Setup. | Inno Setup 6+ |
 | `docs/concept.md` | Sound-design and architecture notes, roadmap to the Quest. | |
 
 ## Build (Windows, Visual Studio 2026)
@@ -47,7 +48,44 @@ Outputs:
 The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 `-DAMBIENT_BUILD_PLUGIN=OFF` builds only the core and the tools, which needs no JUCE.
 
+## Installing (what other people get)
+
+```powershell
+powershell -File Deployuild_release.ps1
+```
+
+Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<version>-Setup.exe`**
+(9 MB) and a portable **`.zip`** (10 MB) for anyone who would rather not run an installer.
+
+Nothing has to be installed first. The runtime is linked in
+(`-DAMBIENT_STATIC_RUNTIME=ON`), so there is no Visual C++ redistributable to chase — the script
+checks that with `dumpbin` and refuses to package a binary that still asks for one. AVX2 is off in
+this build: the instrument runs at about 39x realtime without it and 52x with it, and since
+neither is anywhere near the 1x that matters, a build for other people takes compatibility with
+every x86-64 machine over a speed nobody can hear. Build with `-DAMBIENT_AVX2=ON` for your own.
+
+The setup installs, each with its own checkbox:
+
+* the **standalone** (always) into Program Files, with a Start-menu entry,
+* the **VST3** into `Common Files\VST3`,
+* the **preset library** (25 packs, 5000 presets) into `ProgramData\AmbientSynth\Packs` — on by
+  default.
+
+It runs for everybody on the machine by default and asks for administrator rights once; without
+them, "just for me" (or `/CURRENTUSER`) installs into your own folders instead. The instrument
+reads packs from the installer's folders *and* from your `Documents\AmbientSynth\Packs`, and a
+pack that sits in two of them loads once. Uninstalling removes what the installer put there and
+nothing else. The sample library the packs name is a separate download; a preset whose sample is
+missing falls back to the built-in sources and still plays.
+
 ## Using it
+
+The standalone **starts where you left off**: the whole state is written whenever it changes, so
+a crash or a kill loses nothing, and the next start brings back the same sound, the same
+modulation, the same tuning and the same preset name in the box. **Recall** in the header turns
+that off and forgets what was stored. The plug-in does not do this on purpose: there the host
+saves the state with the project, and a fresh instance quietly loading somebody else's last
+session would be a bug rather than a feature.
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in two independent layers that combine

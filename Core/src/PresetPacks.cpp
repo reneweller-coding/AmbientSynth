@@ -111,6 +111,10 @@ bool loadPresetPack(const char* path)
         pack.entries.push_back(std::move(e));
     }
     if (pack.entries.empty()) return false;
+    // The same pack can sit in two of the searched folders at once -- one copy put there by the
+    // installer for everybody, one in the user's own Documents. Loading it twice would double
+    // every preset in it, so the first one found wins.
+    for (const Pack& have : packs()) if (have.name == pack.name) return false;
     // Every preset of a pack belongs to that pack's family, appended after the built-in families.
     const int family = builtinPresetFamilyCount() + static_cast<int>(packs().size());
     for (PackEntry& e : pack.entries) e.meta.family = family;
@@ -135,18 +139,32 @@ int loadPresetPacksIn(const char* dir)
 
 int loadDefaultPresetPacks()
 {
-    // AMBIENT_PACKS wins (a folder, or several separated by ';'), otherwise the user's
-    // Documents/AmbientSynth/Packs. Nothing there simply means no packs.
+    // AMBIENT_PACKS wins (a folder, or several separated by ';'). Otherwise two places are read,
+    // the user's own first: Documents/AmbientSynth/Packs, and the shared folder an installer can
+    // write to for everybody on the machine. A pack that is in both loads once (see above), and
+    // nothing anywhere simply means no packs.
     if (const char* env = std::getenv("AMBIENT_PACKS")) {
         int n = 0;
         for (const std::string& dir : split(env, ';')) if (!dir.empty()) n += loadPresetPacksIn(dir.c_str());
         if (n > 0) return n;
     }
+    int n = 0;
     const char* home = std::getenv("USERPROFILE");
     if (home == nullptr) home = std::getenv("HOME");
-    if (home == nullptr) return 0;
-    const std::string dir = (std::filesystem::path(home) / "Documents" / "AmbientSynth" / "Packs").string();
-    return loadPresetPacksIn(dir.c_str());
+    if (home != nullptr)
+        n += loadPresetPacksIn((std::filesystem::path(home) / "Documents" / "AmbientSynth" / "Packs").string().c_str());
+#if defined(_WIN32)
+    // Where an installer puts them: ProgramData when it ran for everybody, LocalAppData when it
+    // ran for one user without administrator rights.
+    if (const char* shared = std::getenv("ProgramData"))
+        n += loadPresetPacksIn((std::filesystem::path(shared) / "AmbientSynth" / "Packs").string().c_str());
+    if (const char* local = std::getenv("LOCALAPPDATA"))
+        n += loadPresetPacksIn((std::filesystem::path(local) / "AmbientSynth" / "Packs").string().c_str());
+#else
+    n += loadPresetPacksIn("/usr/local/share/AmbientSynth/Packs");
+    n += loadPresetPacksIn("/usr/share/AmbientSynth/Packs");
+#endif
+    return n;
 }
 
 void clearPresetPacks() { packs().clear(); rebuildViews(); }

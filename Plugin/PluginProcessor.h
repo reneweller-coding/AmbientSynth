@@ -9,11 +9,11 @@
 #include <array>
 #include <atomic>
 
-class AmbientSynthProcessor : public juce::AudioProcessor, private ambient::OscSink
+class AmbientSynthProcessor : public juce::AudioProcessor, private ambient::OscSink, private juce::Timer
 {
 public:
     AmbientSynthProcessor();
-    ~AmbientSynthProcessor() override = default;
+    ~AmbientSynthProcessor() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -64,6 +64,15 @@ public:
     // Independent layers: the sound chain (everything but Cosmos) and the Cosmos chain.
     void applySoundPreset(int index);
     void applyCosmosPreset(int index);
+    // Session recall (standalone). JUCE writes the whole state into its settings file when the
+    // window is closed and reads it back on the next start -- but only then, so a crash, a kill
+    // or a power cut loses the evening. The timer here writes it whenever it has actually
+    // changed, and the switch turns the whole thing off and forgets what was stored.
+    void setSessionRecall(bool on);
+    bool sessionRecall() const { return sessionRecall_; }
+    static bool sessionRecallAvailable();      // false in a plugin: there the host owns the state
+    void saveSession();
+
     int  soundPresetIndex() const  { return soundIndex_; }
     int  cosmosPresetIndex() const { return cosmosIndex_; }
 
@@ -136,6 +145,13 @@ private:
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
     int soundIndex_ = 0, cosmosIndex_ = 0;
+    // The names, not the indices: a pack added or removed between two sessions renumbers every
+    // preset behind it, and an index would then name a different sound.
+    juce::String soundName_, cosmosName_;
+    static juce::PropertySet* standaloneSettings();
+    void timerCallback() override;             // session recall: save when the state has changed
+    bool sessionRecall_ = true;
+    juce::uint32 savedStateHash_ = 0;
     void applyScoped(const ambient::Preset& p, ambient::PresetScope scope);
     void loadPresetFiles(int index);   // a pack preset's own sample and wavetable
     std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none

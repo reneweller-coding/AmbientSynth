@@ -25,3 +25,5 @@ Library/Impulses/
 /ambient.wav
 /build-android/
 /build-noavx/
+Deploy/stage/
+Deploy/out/

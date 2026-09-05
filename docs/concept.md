@@ -1129,6 +1129,40 @@ arm64-v8a. Details in `docs/quest-plan.md`.
 * MIDI note on/off and all-notes-off; sample-accurate splitting is
   deliberately absent (nothing here is faster than a control block).
 * Programs = presets; state = APVTS XML + Scala text + display name.
+
+* **Session recall** (standalone only). JUCE writes the whole state into the
+  standalone's settings file when the window is closed and reads it back on the
+  next start. Two things were wrong with that as a feature. It only happens on a
+  clean exit, so a crash, a kill or a power cut loses the evening; and the state
+  carried every knob but never the *name* of the preset they came from, so a
+  restored session played the right sound under the label "Init" and looked
+  like a feature that did not work. Now a timer writes the state whenever it
+  has actually changed -- the block is hashed, which is cheaper and safer than
+  deciding what counts as a change -- and the two preset names travel with it.
+  The names, not the indices: a pack added between two sessions renumbers every
+  preset behind it, and an index would then name a different sound. **Recall**
+  in the header switches it off and drops what was stored; the switch lives in
+  the same settings file, and is read before JUCE gets the chance to restore
+  anything. The plug-in deliberately has none of this: there the host saves the
+  state with the project, and a fresh instance quietly loading somebody else's
+  last session would be a bug.
+
+* **Deployment** (`Deploy/`). The build that other people get differs from the
+  everyday one in three ways, each for a reason worth writing down. The MSVC
+  runtime is linked in, so there is no redistributable to chase -- and the
+  release script proves it with `dumpbin` rather than trusting the flag: it
+  refuses to package a binary whose imports still name `VCRUNTIME`. AVX2 is
+  off, because 39x realtime and 52x realtime are both so far past the 1x that
+  matters that compatibility with every x86-64 machine is worth more than the
+  difference. And it builds in its own tree, so the everyday one is left alone.
+  The tests are run in that configuration, not in the developer's: a static
+  runtime and a missing AVX2 are exactly the kind of change that is fine until
+  it is not. The setup itself (Inno Setup) installs the standalone, the VST3
+  and the preset packs, each with its own checkbox, for the machine or -- for
+  anyone without administrator rights -- for one user, the same script either
+  way because every path in it is an `{auto...}` one. The packs go into a
+  folder of the installer's own rather than into Documents, so that removing
+  them again can never take a pack the user put there themselves with it.
 * Editor: sections flow-laid-out from the table (knobs, toggles, combo boxes),
   header with preset box, voice count, brain root, scale, arc value and a
   keyboard strip where near notes are bright and far notes dim; *Load Scala…*

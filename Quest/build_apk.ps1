@@ -37,10 +37,14 @@ New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item (Join-Path $build "libambientquest.so") $libDir -Force
 Copy-Item (Join-Path $root "ThirdParty\openxr-loader\prefab\modules\openxr_loader\libs\android.arm64-v8a\libopenxr_loader.so") $libDir -Force
 
-# 3. manifest -> base.apk (no resources, no code)
+# 3. resources (the launcher icon, five densities) -> compiled, then manifest -> base.apk (no code)
+$resZip = Join-Path $out "res.zip"
+if (Test-Path $resZip) { Remove-Item $resZip -Force }
+& (Join-Path $bt "aapt2.exe") compile --dir (Join-Path $quest "res") -o $resZip
+if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
 $base = Join-Path $out "base.apk"
 if (Test-Path $base) { Remove-Item $base -Force }
-& (Join-Path $bt "aapt2.exe") link -o $base --manifest (Join-Path $quest "AndroidManifest.xml") -I $androidJar --min-sdk-version 29 --target-sdk-version 32
+& (Join-Path $bt "aapt2.exe") link -o $base --manifest (Join-Path $quest "AndroidManifest.xml") -R $resZip -I $androidJar --min-sdk-version 29 --target-sdk-version 32
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 
 # 4. add the libraries (jar keeps the zip valid; extractNativeLibs=true allows compressed .so)

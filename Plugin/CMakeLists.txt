@@ -11,6 +11,8 @@ juce_add_plugin(AmbientSynth
     PLUGIN_CODE                 Ambs
     FORMATS                     VST3 Standalone
     VST3_CATEGORIES             Instrument Synth
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/../docs/logo-256.png"
+    ICON_SMALL                  "${CMAKE_CURRENT_SOURCE_DIR}/../docs/logo-64.png"
     PRODUCT_NAME                "AmbientSynth")
 
 target_sources(AmbientSynth PRIVATE

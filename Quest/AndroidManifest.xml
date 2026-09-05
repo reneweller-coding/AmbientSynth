@@ -15,6 +15,7 @@
 
     <application
         android:label="AmbientSynth"
+        android:icon="@mipmap/ic_launcher"
         android:hasCode="false"
         android:allowBackup="false"
         android:extractNativeLibs="true">
@@ -25,6 +26,7 @@
         <activity
             android:name="android.app.NativeActivity"
             android:label="AmbientSynth"
+            android:icon="@mipmap/ic_launcher"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode|density"

@@ -194,16 +194,29 @@ def write_icon(fn, out_base):
     return f"{out_base}.ico"
 
 
+def write_android(fn, res_dir):
+    """The launcher icon in the densities Android asks for, ready for aapt2."""
+    for folder, px in (("mipmap-mdpi", 48), ("mipmap-hdpi", 72), ("mipmap-xhdpi", 96),
+                       ("mipmap-xxhdpi", 144), ("mipmap-xxxhdpi", 192)):
+        d = os.path.join(res_dir, folder)
+        os.makedirs(d, exist_ok=True)
+        fn(px).save(os.path.join(d, "ic_launcher.png"))
+    return res_dir
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pick", choices=sorted(CANDIDATES))
     ap.add_argument("--out", default=os.path.join("docs", "logo"))
     ap.add_argument("--sheet", default=os.path.join("docs", "logo-candidates.png"))
+    ap.add_argument("--android", help="also write the Android launcher densities into this res/ directory")
     a = ap.parse_args()
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     if a.pick:
         fn = CANDIDATES[a.pick]
         print("wrote", write_icon(fn, a.out))
+        if a.android:
+            print("wrote", write_android(fn, a.android))
     else:
         print("wrote", contact_sheet(a.sheet))
 

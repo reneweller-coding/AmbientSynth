@@ -1,3 +1,5 @@
+<img src="docs/logo-128.png" width="96" align="left" alt="AmbientSynth" />
+
 # AmbientSynth
 
 A drone-ambient software synthesizer for slowly evolving polyphonic sound
@@ -11,6 +13,8 @@ Runs as a **VST3 plugin** and as a **standalone application** (Windows now;
 the DSP core is framework-free so it can move to Android/Quest later).
 
 Licence: AGPL-3.0 (see `LICENSE`).
+
+<br clear="left" />
 
 ![AmbientSynth standalone](docs/screenshot.png)
 

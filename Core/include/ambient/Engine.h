@@ -96,6 +96,11 @@ public:
     bool routeRunning() const { return route_.running(); }
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
     float coherencePhase(int i) const { return kuraPhase_[i & 3]; }   // Kuramoto oscillator phases, for pictures
+    // Partial amplitudes of the loudest sounding voice, for the oscillator display. Returns how
+    // many were written, 0 when nothing sounds. Message thread, no synchronisation (see Voice.h).
+    int  displayPartials(float* out, int maxCount) const;
+    float displayFrequency() const;   // that voice's frequency in Hz, 0 when nothing sounds
+
 
     const FixedScale& scale() const { return *scale_; }
     double frequencyOf(int note) const;
@@ -227,6 +232,7 @@ private:
     Smoother smDelayMix_, smDelayToFar_, smDelay2Mix_, smDelay2ToFar_, smCloudSend_, smCosmosSend_, smCosmosReturn_, smCosmosToFar_, smFarLevel_;
 
     std::atomic<uint64_t> mask_[2]{ 0, 0 };
+    const Voice* loudestVoice() const;
     std::atomic<int> activeVoices_{ 0 };
     std::atomic<int> brainRoot_{ 50 };
     std::atomic<float> arcValue_{ 0.0f };

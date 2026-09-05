@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "PluginProcessor.h"
+#include "AmbientLookAndFeel.h"
 #include <vector>
 #include <memory>
 #include <map>
@@ -31,6 +32,7 @@ private:
     int  cellForParam(ambient::ParamId id) const;
     int  tableCell_ = -1, textureCell_ = -1, impulseCell_ = -1;
     void buildCells();
+    void colourCellsByGroup();
     int  addExtraCell(const juce::String& section, std::unique_ptr<juce::Component> comp, const juce::String& label, int units);
     void paintRoutingMap(juce::Graphics&, juce::Rectangle<int> area);
 
@@ -65,12 +67,30 @@ private:
     void     layoutSection(Section&, int x, int y);
 
     AmbientSynthProcessor& proc_;
-    juce::LookAndFeel_V4 laf_;
+    AmbientLookAndFeel laf_;
+    float scale_ = 1.0f;   // window size / design size
+    int   designW_ = 1400, designH_ = 820;   // measured from the layout, not guessed
+    int   bodyW_ = 0, bodyH_ = 0;
+    void  layoutBody();
     std::vector<Cell> cells_;
     std::vector<Section> sections_;
     std::vector<Group> groups_;
     std::map<juce::Component*, int> cellOf_;
     std::unique_ptr<juce::Slider> master_;
+
+    // Live picture of the oscillator: one cycle built from the partial amplitudes the loudest
+    // voice is summing right now, plus those partials as a spectrum. It moves because the
+    // shimmer and the drift move -- it is the sound, not an illustration of it.
+    struct ScopeView : juce::Component, juce::Timer {
+        explicit ScopeView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(30); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+        float amp[ambient::kMaxPartials] = {};   // smoothed towards the engine's values
+        int   count = 0;
+        bool  mode = false;                      // false = waveform, true = spectrum
+    };
+    std::unique_ptr<ScopeView> scope_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttach_;
     // Everything below the header lives in a scrollable content component.
     struct Content : juce::Component {

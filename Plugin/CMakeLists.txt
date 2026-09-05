@@ -15,7 +15,8 @@ juce_add_plugin(AmbientSynth
 
 target_sources(AmbientSynth PRIVATE
     PluginProcessor.cpp
-    PluginEditor.cpp)
+    PluginEditor.cpp
+    AmbientLookAndFeel.cpp)
 
 target_compile_definitions(AmbientSynth PUBLIC
     JUCE_WEB_BROWSER=0

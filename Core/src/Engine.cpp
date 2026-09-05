@@ -278,6 +278,26 @@ double Engine::frequencyOf(int note) const
     return std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
 }
 
+const Voice* Engine::loudestVoice() const
+{
+    const Voice* best = nullptr;
+    for (const auto& v : voices_)
+        if (v.isActive() && (best == nullptr || v.level() > best->level())) best = &v;
+    return best;
+}
+
+int Engine::displayPartials(float* out, int maxCount) const
+{
+    const Voice* v = loudestVoice();
+    return v != nullptr ? v->displayPartials(out, maxCount) : 0;
+}
+
+float Engine::displayFrequency() const
+{
+    const Voice* v = loudestVoice();
+    return v != nullptr ? static_cast<float>(v->frequency()) : 0.0f;
+}
+
 void Engine::soundingNotes(bool (&out)[128]) const
 {
     const uint64_t m0 = mask_[0].load(std::memory_order_relaxed), m1 = mask_[1].load(std::memory_order_relaxed);

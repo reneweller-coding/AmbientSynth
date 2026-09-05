@@ -75,6 +75,17 @@ public:
     bool gliding() const { return portaLeft_ > 0.0f; }
     uint64_t order = 0;      // allocation order for voice stealing
 
+    // For pictures only: the current amplitude of each partial of the first strand, exactly the
+    // numbers the oscillator is summing right now -- so a display drawn from them breathes with
+    // the shimmer and the drift instead of being a static illustration. Read without
+    // synchronisation from the message thread; a torn float costs one wrong pixel.
+    int displayPartials(float* out, int maxCount) const
+    {
+        const int n = maxCount < strands_[0].active ? maxCount : strands_[0].active;
+        for (int i = 0; i < n; ++i) out[i] = strands_[0].amp[i];
+        return n < 0 ? 0 : n;
+    }
+
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
     // may be null) phase-modulates the partials when p.fmAmount > 0 (the feedback loop).
     void render(float* nearL, float* nearR, float* farL, float* farR, int n, const VoiceParams& p, const float* fm = nullptr);

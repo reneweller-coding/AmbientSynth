@@ -1,4 +1,6 @@
 #include "PluginEditor.h"
+#include "AmbientLookAndFeel.h"
+#include <cstdlib>
 #include "ambient/Params.h"
 #include "ambient/Presets.h"
 #include "ambient/PresetMeta.h"
@@ -26,27 +28,22 @@ void fillPresetBox(juce::ComboBox& box)
 
 
 namespace {
-constexpr int kCellW = 60, kCellH = 70, kPad = 8, kTitleH = 18, kGroupTitleH = 22, kHeaderH = 114;
-const juce::Colour kBg(0xff121418), kGroupFill(0xff1a1d23), kSectionFill(0xff21252c), kAccent(0xff7fb3d5),
-                   kText(0xffd8dbe0), kDim(0xff7c8290);
-const juce::Colour kVoice(0xff7fb3d5), kFore(0xff8fd18f), kBack(0xffb59ce6), kCosmos(0xfff0a35e),
-                   kConductor(0xff6fd3c8), kMorph(0xffe58fb8), kMaster(0xffd8dbe0);
+// One cell is a knob and its name; the value is drawn inside the knob (see AmbientLookAndFeel),
+// which is what buys the room for a knob this size in the same wall of controls.
+constexpr int kCellW = 68, kCellH = 76, kPad = 11, kTitleH = 22, kGroupTitleH = 26, kHeaderH = 118;
+// The editor is laid out once, in this design space, and the whole thing is then scaled to
+// whatever size the window has. Dragging the corner is the zoom; the aspect ratio is fixed, so
+// nothing ever reflows into a different arrangement -- it only gets bigger or smaller.
+constexpr int kMinDesignW = 1400, kMinDesignH = 820;
+const juce::Colour kBg = ui::bg0, kGroupFill = ui::group, kSectionFill = ui::card, kAccent = ui::accent,
+                   kText = ui::text, kDim = ui::dim;
+const juce::Colour kVoice = ui::voiceCol, kFore = ui::foreCol, kBack = ui::backCol, kCosmos = ui::cosmosCol,
+                   kConductor = ui::condCol, kMorph = ui::morphCol, kMaster = ui::masterCol;
 }
 
 AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     : AudioProcessorEditor(p), proc_(p)
 {
-    laf_.setColourScheme(juce::LookAndFeel_V4::getDarkColourScheme());
-    laf_.setColour(juce::Slider::rotarySliderFillColourId, kAccent);
-    laf_.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff2c3038));
-    laf_.setColour(juce::Slider::thumbColourId, juce::Colours::white);
-    laf_.setColour(juce::Slider::textBoxTextColourId, kText);
-    laf_.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    laf_.setColour(juce::Label::textColourId, kText);
-    laf_.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff2a2e36));
-    laf_.setColour(juce::ToggleButton::textColourId, kText);
-    laf_.setColour(juce::ToggleButton::tickColourId, kAccent);
-    laf_.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2e36));
     setLookAndFeel(&laf_);
 
     groups_ = {
@@ -63,6 +60,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     viewport_.setScrollBarsShown(true, false);
     addAndMakeVisible(viewport_);
     buildCells();
+    colourCellsByGroup();
     // The Master section lives in the header, so its cells belong to the editor, not the content.
     if (Section* ms = findSection("Master"))
         for (int ci : ms->cells) { addAndMakeVisible(*cells_[static_cast<size_t>(ci)].comp); addAndMakeVisible(*cells_[static_cast<size_t>(ci)].label); }
@@ -161,8 +159,30 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*master_);
     masterAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, "master_gain", *master_);
 
+    scope_ = std::make_unique<ScopeView>(proc_);
+    addAndMakeVisible(*scope_);
+
+    // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
+    // only its size, and the window opens at whatever fraction of the screen actually fits.
     setResizable(true, true);
-    setSize(1500, 920);
+    layoutBody();                       // measure once: the design size is what the body needs
+    // Width: exactly what the body needs, so nothing ever scrolls sideways. Height: a landscape
+    // window; the body is taller than any screen and scrolls vertically, as it always has.
+    designW_ = std::max(kMinDesignW, bodyW_);
+    designH_ = std::max(kMinDesignH, kHeaderH + std::min(bodyH_, juce::roundToInt(designW_ * 0.50f)));
+    if (auto* con = getConstrainer()) {
+        con->setFixedAspectRatio(static_cast<double>(designW_) / static_cast<double>(designH_));
+        con->setSizeLimits(designW_ / 3, designH_ / 3, designW_ * 2, designH_ * 2);
+    }
+    {
+        float fit = 1.0f;
+        if (auto* screen = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()) {
+            const auto area = screen->userArea;
+            fit = juce::jlimit(0.34f, 1.0f, juce::jmin(area.getWidth() * 0.94f / designW_,
+                                                      area.getHeight() * 0.90f / designH_));
+        }
+        setSize(juce::roundToInt(designW_ * fit), juce::roundToInt(designH_ * fit));
+    }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);   // open on the perform page
     {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
         const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");
@@ -209,9 +229,10 @@ void AmbientSynthEditor::buildCells()
         switch (d.kind) {
         case ParamKind::Float:
         case ParamKind::Int: {
-            auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
-            s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, kCellW - 6, 15);
+            auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
             if (d.unit[0] != 0) s->setTextValueSuffix(juce::String(" ") + d.unit);
+            // A parameter that spans zero reads much better as an arc growing out of the centre.
+            if (d.min < -1.0e-6f && d.max > 1.0e-6f) s->getProperties().set("bipolar", true);
             content_.addAndMakeVisible(*s);
             c.slider = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, d.key, *s);
             c.comp = std::move(s);
@@ -272,6 +293,18 @@ void AmbientSynthEditor::buildCells()
     auto setB = std::make_unique<juce::TextButton>("B <- now");
     setB->onClick = [this] { proc_.setMorphSlotFromCurrent(1); morphBBox_->setSelectedId(0, juce::dontSendNotification); };
     addExtraCell("Morph", std::move(setB), "capture", 1);
+}
+
+void AmbientSynthEditor::colourCellsByGroup()
+{
+    for (const auto& sec : sections_) {
+        const juce::Colour col = sec.group >= 0 ? groups_[static_cast<size_t>(sec.group)].colour : kMaster;
+        for (int ci : sec.cells) {
+            Cell& c = cells_[static_cast<size_t>(ci)];
+            if (auto* sl = dynamic_cast<juce::Slider*>(c.comp.get())) sl->setColour(juce::Slider::rotarySliderFillColourId, col);
+            else if (auto* tb = dynamic_cast<juce::ToggleButton*>(c.comp.get())) tb->setColour(juce::ToggleButton::tickColourId, col);
+        }
+    }
 }
 
 int AmbientSynthEditor::addExtraCell(const juce::String& section, std::unique_ptr<juce::Component> comp, const juce::String& label, int units)
@@ -343,7 +376,16 @@ void AmbientSynthEditor::layoutSection(Section& s, int x, int y)
 
 void AmbientSynthEditor::resized()
 {
-    header_ = getLocalBounds().removeFromTop(kHeaderH);
+    // Measure the body first: the design width is whatever it needs, so the right-hand column can
+    // never fall off the edge, and the scale follows from that.
+    layoutBody();
+    designW_ = std::max(kMinDesignW, bodyW_);
+    designH_ = std::max(kMinDesignH, kHeaderH + std::min(bodyH_, juce::roundToInt(designW_ * 0.50f)));
+    scale_ = juce::jmax(0.05f, static_cast<float>(getWidth()) / static_cast<float>(designW_));
+    const auto tf = juce::AffineTransform::scale(scale_);
+    for (auto* child : getChildren()) child->setTransform(tf);
+
+    header_ = juce::Rectangle<int>(0, 0, designW_, kHeaderH);
     if (soundBox_) soundBox_->setBounds(200, 8, 180, 24);
     if (cosmosBox_) cosmosBox_->setBounds(388, 8, 160, 24);
     if (saveButton_) saveButton_->setBounds(556, 8, 64, 24);
@@ -353,23 +395,34 @@ void AmbientSynthEditor::resized()
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
     if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
-    if (perform_) perform_->setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
-    if (browse_) browse_->setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
+    const int W = designW_, H = juce::roundToInt(getHeight() / scale_);
+    if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
+    if (browse_) browse_->setBounds(0, kHeaderH, W, H - kHeaderH);
     routing_ = { 12, 40, 900, kHeaderH - 46 };
-    keys_ = { 930, 42, getWidth() - 930 - 340, 26 };
-    if (master_) master_->setBounds(getWidth() - 74, 6, 66, 52);
+    const int scopeX = 930, scopeR = W - 300;
+    if (scope_) scope_->setBounds(scopeX, 38, juce::jmax(160, scopeR - scopeX), kHeaderH - 46);
+    keys_ = { scopeX, kHeaderH - 12, juce::jmax(160, scopeR - scopeX), 7 };
+    if (master_) master_->setBounds(W - 74, 6, 66, 52);
 
     // The Master section (mid/side) sits in the header, left of the master knob.
     if (Section* ms = findSection("Master")) {
         ms->maxUnits = 8;
-        layoutSection(*ms, getWidth() - 74 - sectionWidth(*ms) - 6, 4);
+        layoutSection(*ms, W - 74 - sectionWidth(*ms) - 6, 4);
         ms->bounds = ms->bounds.withTrimmedTop(-2);
     }
 
     // Everything else scrolls below the header.
-    viewport_.setBounds(0, kHeaderH, getWidth(), getHeight() - kHeaderH);
+    viewport_.setBounds(0, kHeaderH, W, H - kHeaderH);
 
-    // Column widths from the widest group row in each column.
+    content_.setSize(std::max(bodyW_, viewport_.getMaximumVisibleWidth()),
+                     std::max(bodyH_, viewport_.getMaximumVisibleHeight()));
+}
+
+// Places every group and section, and records how much room the whole body needs. The design
+// size is measured from this once, in the constructor -- guessing it meant the right-hand column
+// kept falling off the edge.
+void AmbientSynthEditor::layoutBody()
+{
     int colWidth[2] = { 0, 0 };
     for (auto& g : groups_) {
         for (auto& row : g.rows) {
@@ -397,9 +450,8 @@ void AmbientSynthEditor::resized()
         g.bounds = { x0, colY[g.column], colWidth[g.column], y - colY[g.column] };
         colY[g.column] = y + kPad;
     }
-    const int contentW = std::max(colX[1] + colWidth[1] + kPad, viewport_.getMaximumVisibleWidth());
-    const int contentH = std::max(std::max(colY[0], colY[1]), viewport_.getMaximumVisibleHeight());
-    content_.setSize(contentW, contentH);
+    bodyW_ = colX[1] + colWidth[1] + kPad;
+    bodyH_ = std::max(colY[0], colY[1]);
 }
 
 // ---------------------------------------------------------------- perform page
@@ -1309,9 +1361,93 @@ void AmbientSynthEditor::paintRoutingMap(juce::Graphics& g, juce::Rectangle<int>
     g.drawText("signal flow", area.getX(), area.getBottom() - 12, 80, 12, juce::Justification::centredLeft);
 }
 
+// ---------------------------------------------------------------- oscillator scope
+
+void AmbientSynthEditor::ScopeView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat();
+    g.setColour(ui::card.withAlpha(0.55f));
+    g.fillRoundedRectangle(r, 6.0f);
+    g.setColour(ui::cardEdge);
+    g.drawRoundedRectangle(r.reduced(0.5f), 6.0f, 1.0f);
+
+    float live[ambient::kMaxPartials] = {};
+    const int n = proc.engine().displayPartials(live, ambient::kMaxPartials);
+    count = juce::jmax(count, n);
+    // Glide towards the engine's values: at 30 Hz the raw numbers would flicker, and the point is
+    // to see the slow breathing, not the control-block edges.
+    for (int i = 0; i < ambient::kMaxPartials; ++i) {
+        const float target = i < n ? std::abs(live[i]) : 0.0f;
+        amp[i] += (target - amp[i]) * 0.25f;
+    }
+    float peak = 1.0e-6f;
+    for (int i = 0; i < count; ++i) peak = juce::jmax(peak, amp[i]);
+    const bool silent = peak < 1.0e-4f;
+
+    const auto plot = r.reduced(9.0f, 7.0f);
+    if (silent) {
+        g.setColour(ui::faint);
+        g.setFont(ui::body(11.0f));
+        g.drawText("oscillator", plot, juce::Justification::centred, false);
+        g.setColour(ui::track);
+        g.drawLine(plot.getX(), plot.getCentreY(), plot.getRight(), plot.getCentreY(), 1.0f);
+        return;
+    }
+
+    // Spectrum behind: one thin bar per partial, on a decibel scale.
+    {
+        const float bw = juce::jmin(9.0f, plot.getWidth() / static_cast<float>(juce::jmax(count, 1)));
+        for (int i = 0; i < count; ++i) {
+            const float a = amp[i] / peak;
+            if (a < 1.0e-4f) continue;
+            const float db = juce::jlimit(0.0f, 1.0f, 1.0f + std::log10(a) / 2.5f);   // -50 dB .. 0
+            const float h = db * plot.getHeight() * 0.9f;
+            g.setColour(ui::accent.withAlpha(0.10f + 0.13f * db));
+            g.fillRect(plot.getX() + i * bw + 0.5f, plot.getBottom() - h, juce::jmax(1.0f, bw - 1.2f), h);
+        }
+    }
+
+    // One cycle of the wave those partials make. The phases are fixed (golden angle) so the shape
+    // is characteristic and readable; what moves is the amplitudes, which is what actually moves.
+    juce::Path wave;
+    const int steps = juce::jlimit(96, 512, static_cast<int>(plot.getWidth()));
+    const float mid = plot.getCentreY(), half = plot.getHeight() * 0.42f;
+    for (int x = 0; x <= steps; ++x) {
+        const float t = static_cast<float>(x) / static_cast<float>(steps);
+        float v = 0.0f;
+        for (int i = 0; i < count; ++i) {
+            if (amp[i] < 1.0e-5f) continue;
+            const float ph = 0.381966f * static_cast<float>(i);
+            v += amp[i] * std::sin(juce::MathConstants<float>::twoPi * ((i + 1) * t + ph));
+        }
+        const float y = mid - juce::jlimit(-1.0f, 1.0f, v / (peak * 2.2f)) * half;
+        const float px = plot.getX() + t * plot.getWidth();
+        if (x == 0) wave.startNewSubPath(px, y); else wave.lineTo(px, y);
+    }
+    g.setColour(ui::accent.withAlpha(0.20f));
+    g.strokePath(wave, juce::PathStrokeType(4.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(ui::accent);
+    g.strokePath(wave, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    const float hz = proc.engine().displayFrequency();
+    if (hz > 0.0f) {
+        g.setColour(ui::dim);
+        g.setFont(ui::body(10.0f));
+        g.drawText(juce::String(hz, 1) + " Hz   " + juce::String(count) + " partials",
+                   r.reduced(10.0f, 5.0f), juce::Justification::topRight, false);
+    }
+}
+
 void AmbientSynthEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(kBg);
+    // Everything below is drawn in the design space; one transform scales the whole editor.
+    g.fillAll(ui::bg0);
+    g.addTransform(juce::AffineTransform::scale(scale_));
+    {   // a little vertical lift, so the window is not a flat grey field
+        juce::ColourGradient sky(ui::bg1, 0.0f, 0.0f, ui::bg0, 0.0f, static_cast<float>(kHeaderH * 3), false);
+        g.setGradientFill(sky);
+        g.fillRect(0, 0, designW_, kHeaderH * 3);
+    }
 
     // Header
     g.setColour(kGroupFill);

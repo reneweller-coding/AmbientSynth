@@ -74,6 +74,12 @@ The setup installs, each with its own checkbox:
 
 all four on by default.
 
+**While the repository is private the download returns 404**, and the setup says so and installs
+everything else. The URL is already the one it will be; nothing has to change when the repository
+is made public. Until then the archives can be unpacked by hand into
+`ProgramData\AmbientSynth` (or `LocalAppData\AmbientSynth` for a per-user install), beside the
+`Packs` folder.
+
 The sample library is built by `Tools/make_content_pack.py`, which takes only what the packs
 actually name (the library folder holds more) and converts the 32-bit float samples to 24-bit,
 a quarter off the size for headroom they do not use: they all peak at exactly -6 dBFS, and the

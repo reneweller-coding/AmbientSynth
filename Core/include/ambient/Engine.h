@@ -139,6 +139,15 @@ public:
     // many were written, 0 when nothing sounds. Message thread, no synchronisation (see Voice.h).
     int  displayPartials(float* out, int maxCount) const;
     float displayFrequency() const;   // that voice's frequency in Hz, 0 when nothing sounds
+    // The same voice's slot bank (Additive / Wavetable in a slot) and its grains (Texture).
+    int  displaySlotPartials(int slot, float* out, int maxCount) const;
+    int  displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount) const;
+    // Every sounding voice's place, for the stage picture: pan -1..1, distance 0 near .. 1 far,
+    // envelope level, note, owner (0 keys, 1 brain). Returns how many were written.
+    struct VoiceStage { float pan, distance, level; int note, owner; };
+    int  voiceStage(VoiceStage* out, int maxCount) const;
+    // The last n (<= 4096) samples of the Cosmos return, mono, oldest first -- for its spectrum.
+    int  cosmosTap(float* out, int n) const;
 
 
     const FixedScale& scale() const { return *scale_; }
@@ -231,6 +240,8 @@ private:
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;
     float         cosmosShimmer_ = 0.0f, shimmerLpL_ = 0.0f, shimmerLpR_ = 0.0f, shimmerEnv_ = 0.0f;
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
+    float         cosTap_[4096] = {};   // ring of the cosmos return for the display (torn reads cost a pixel)
+    int           cosTapW_ = 0;
     // Feedback loop: the previous chunk's output mix, low-passed, saturated and throttled,
     // kept in a ring so any chunk length reads back exactly the samples just written.
     std::vector<float> fbRingL_, fbRingR_, fbInL_, fbInR_, fbMono_;

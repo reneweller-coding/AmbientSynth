@@ -312,7 +312,8 @@ private:
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
         AmbientSynthProcessor& proc;
-        int slot;   // 2 or 3
+        int slot;   // 1, 2 or 3
+        float amp[ambient::kTablePartials] = {};   // smoothed live amplitudes for the additive picture
     };
     // The conductor's notes as they happen: a piano roll scrolling left, one column per tick, so
     // the cluster brain's choices can be watched rather than inferred from the keyboard strip.
@@ -327,6 +328,39 @@ private:
         int lo = 36, hi = 84;                             // the note range in view, widened as notes arrive
     };
     std::unique_ptr<BrainView> brainView_;
+    // The stereo stage: every sounding voice as a dot, left-right by its pan, near-far by its
+    // plane, size by its envelope -- the spatial model (concept.md) as a picture, moving.
+    struct StageView : juce::Component, juce::Timer {
+        explicit StageView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+        struct Dot { float x = 0.0f, y = 0.0f, r = 0.0f; int note = -1; bool on = false; };
+        Dot dots[ambient::Engine::kMaxVoices];   // smoothed positions, one per voice slot seen
+    };
+    std::unique_ptr<StageView> stageView_;
+    // The Cosmos return's spectrum: what the shifter, the resonator, the vowel and the nebula are
+    // handing back, on a log-frequency axis, smoothed the way a meter falls.
+    struct CosmosView : juce::Component, juce::Timer {
+        explicit CosmosView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void timerCallback() override;
+        AmbientSynthProcessor& proc;
+        static constexpr int kN = 2048, kBins = 160;
+        std::vector<float> re, im, window;
+        std::unique_ptr<ambient::Fft> fft;
+        float bins[kBins] = {};   // dB per log-spaced bin, smoothed
+        bool  silent = true;
+    };
+    std::unique_ptr<CosmosView> cosmosView_;
+    // The amplitude envelope as a curve, with the loudest voice's level on it.
+    struct EnvView : juce::Component, juce::Timer {
+        explicit EnvView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+    };
+    std::unique_ptr<EnvView> envView_;
     std::unique_ptr<FilterView> filterView_;
     std::unique_ptr<SourceView> source1View_, source2View_, source3View_;
     std::unique_ptr<juce::TextButton> browseButton_;

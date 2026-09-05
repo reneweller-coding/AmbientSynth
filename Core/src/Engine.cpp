@@ -307,6 +307,39 @@ float Engine::displayFrequency() const
     return v != nullptr ? static_cast<float>(v->frequency()) : 0.0f;
 }
 
+int Engine::displaySlotPartials(int slot, float* out, int maxCount) const
+{
+    const Voice* v = loudestVoice();
+    return v != nullptr ? v->displaySlotPartials(slot, out, maxCount) : 0;
+}
+
+int Engine::displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount) const
+{
+    const Voice* v = loudestVoice();
+    const int a = textureActive_.load(std::memory_order_relaxed);
+    const int len = a >= 0 ? static_cast<int>(textures_[a].mono.size()) : 0;
+    return (v != nullptr && len > 0) ? v->displayGrains(slot, out, maxCount, len) : 0;
+}
+
+int Engine::voiceStage(VoiceStage* out, int maxCount) const
+{
+    int n = 0;
+    for (const auto& v : voices_) {
+        if (n >= maxCount) break;
+        if (!v.isActive()) continue;
+        out[n++] = { v.pan(), v.distance(), v.level(), v.note(), v.owner() };
+    }
+    return n;
+}
+
+int Engine::cosmosTap(float* out, int n) const
+{
+    n = clampv(n, 0, 4096);
+    const int w = cosTapW_;
+    for (int i = 0; i < n; ++i) out[i] = cosTap_[(w - n + i) & 4095];
+    return n;
+}
+
 void Engine::soundingNotes(bool (&out)[128]) const
 {
     const uint64_t m0 = mask_[0].load(std::memory_order_relaxed), m1 = mask_[1].load(std::memory_order_relaxed);
@@ -1042,7 +1075,12 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float ret = smCosmosReturn_.next(cosmosReturn_), tf = smCosmosToFar_.next(cosmosToFar_);
             nl[i] += cl[i] * ret; nr[i] += cr[i] * ret;
             fl[i] += cl[i] * tf;  fr[i] += cr[i] * tf;
+            cosTap_[(cosTapW_ + i) & 4095] = 0.5f * (cl[i] + cr[i]) * ret;   // what the return adds, for the picture
         }
+        cosTapW_ = (cosTapW_ + n) & 4095;
+    } else {
+        for (int i = 0; i < n; ++i) cosTap_[(cosTapW_ + i) & 4095] = 0.0f;
+        cosTapW_ = (cosTapW_ + n) & 4095;
     }
     nearReverb_.process(nl, nr, n);
 

@@ -1,4 +1,5 @@
 #include "ambient/Sources.h"
+#include "ambient/Simd.h"
 #include "ambient/Voice.h"     // kControlBlock
 #include "ambient/Cosmos.h"    // Fft for wavetable analysis
 #include <cmath>
@@ -283,17 +284,8 @@ void SourceSlot::renderBank(const float* spec, int H, int n, float* out)
     for (int h = H; h < active_; ++h) if (std::fabs(amp_[h]) > 1e-6f) act = h + 1;
     active_ = act;
 
-    for (int i = 0; i < n; ++i) {
-        float sum = 0.0f;
-        for (int h = 0; h < active_; ++h) {
-            sum += amp_[h] * ps_[h];
-            const float nc = pc_[h] * rc_[h] - ps_[h] * rs_[h];
-            ps_[h] = ps_[h] * rc_[h] + pc_[h] * rs_[h];
-            pc_[h] = nc;
-            amp_[h] += ampStep_[h];
-        }
-        out[i] = sum;
-    }
+    for (int i = 0; i < n; ++i)
+        out[i] = phasorBankStep(pc_, ps_, rc_, rs_, amp_, ampStep_, active_);
 }
 
 // Additive in a slot: the voice's spectrum formula (tilt, brightness window, odd/even, inharmonic

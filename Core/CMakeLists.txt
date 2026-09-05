@@ -40,3 +40,16 @@ if(MSVC)
 else()
     target_compile_options(AmbientCore PRIVATE -Wall -Wextra)
 endif()
+
+# AVX2 for the phasor banks (Simd.h), which are most of the instrument's arithmetic. Every x86-64
+# processor since 2013 has it; switch this off to build for anything older. The arm64 build (the
+# Quest) never sees it and takes the scalar path, which is the same arithmetic in another order.
+option(AMBIENT_AVX2 "Build the x86-64 core with AVX2" ON)
+if(AMBIENT_AVX2 AND CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|AMD64|x64)")
+    if(MSVC)
+        target_compile_options(AmbientCore PUBLIC /arch:AVX2)
+    else()
+        target_compile_options(AmbientCore PUBLIC -mavx2 -mfma)
+    endif()
+    target_compile_definitions(AmbientCore PUBLIC AMBIENT_AVX=1)
+endif()

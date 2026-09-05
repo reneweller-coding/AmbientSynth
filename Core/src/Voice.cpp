@@ -1,4 +1,5 @@
 #include "ambient/Voice.h"
+#include "ambient/Simd.h"
 #include "ambient/Params.h"   // kStackRatios
 #include "ambient/Tuning.h"   // intervalConsonance for the portamento gravity
 #include <cmath>
@@ -492,13 +493,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                         amp[h] += step[h];
                     }
                 } else {
-                    for (int h = 0; h < act; ++h) {
-                        sum += amp[h] * ps[h];
-                        const float nc = pc[h] * rc[h] - ps[h] * rs[h];
-                        ps[h] = ps[h] * rc[h] + pc[h] * rs[h];
-                        pc[h] = nc;
-                        amp[h] += step[h];
-                    }
+                    sum = phasorBankStep(pc, ps, rc, rs, amp, step, act);
                 }
                 accL += sum * s.gainL;
                 accR += sum * s.gainR;

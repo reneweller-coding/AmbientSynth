@@ -545,13 +545,42 @@ void Engine::readParams()
     vp_.bloomTime   = g(ParamId::BloomTime);
     vp_.stack       = static_cast<int>(std::lround(g(ParamId::Stack)));
     vp_.rateWander  = g(ParamId::RateWander);
-    {   // Source slots: 13 parameters each, laid out identically for Source 2 and Source 3.
-        const ParamId first[kSlots] = { ParamId::Src2Type, ParamId::Src3Type };
+    {   // Source slots: 24 fields each. Source 2 and 3 are laid out consecutively from their Type;
+        // Source 1's fields are scattered (its level and spectrum are the classic Oscillator
+        // parameters, read above), so every slot goes through one table of ids.
+        static const ParamId kSlotIds[kSlots][24] = {
+            { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
+              ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
+              ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
+              ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate },
+            { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
+              ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
+              ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
+              ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate },
+            { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
+              ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
+              ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
+              ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate },
+        };
         for (int k = 0; k < kSlots; ++k) {
-            auto at = [&](int off) { return g(static_cast<ParamId>(static_cast<int>(first[k]) + off)); };
+            // Source 1's level and spectrum were read into vp_ above; reading them again would step
+            // their inertia twice per block, so they are copied instead.
+            auto at = [&](int off) { return g(kSlotIds[k][off]); };
             SlotParams& s = vp_.slot[k];
+            if (k == 0) {
+                s.level = vp_.level; s.partials = vp_.partials; s.tilt = vp_.tilt; s.bright = vp_.brightness;
+                s.oddEven = vp_.oddEven; s.inharm = vp_.inharmonic; s.shimmer = vp_.shimmer; s.shimmerRate = vp_.shimmerRate;
+            } else {
+                s.level       = at(1);
+                s.partials    = static_cast<int>(std::lround(at(17)));
+                s.tilt        = at(18);
+                s.bright      = at(19);
+                s.oddEven     = at(20);
+                s.inharm      = at(21);
+                s.shimmer     = at(22);
+                s.shimmerRate = at(23);
+            }
             s.type          = static_cast<SourceType>(clampv(static_cast<int>(std::lround(at(0))), 0, kNumSourceTypes - 1));
-            s.level         = at(1);
             s.octave        = static_cast<int>(std::lround(at(2)));
             s.ratio         = static_cast<int>(std::lround(at(3)));
             s.pan           = at(4);

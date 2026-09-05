@@ -46,7 +46,9 @@ struct VoiceParams {
     double rootHz = 130.81;     // the brain's root, for the portamento's consonance gravity
     // Coherence offsets (from the engine's Kuramoto bank), added on top of the parameters
     float cohBrightness = 0.0f, cohPan = 0.0f, cohZ = 0.0f;
-    // Extra sources (Source 2 / 3) and the data they may need; pointers stay valid for the block.
+    // The three source slots (slot[0] = Source 1: Additive means the strand bank above, any other
+    // type mutes the bank and renders in the slot) and the data they may need; pointers stay
+    // valid for the block.
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
     const Texture*   texture = nullptr;
@@ -85,6 +87,10 @@ public:
         for (int i = 0; i < n; ++i) out[i] = strands_[0].amp[i];
         return n < 0 ? 0 : n;
     }
+    // The same for a slot's own bank (Additive / Wavetable in Source 1..3), and its grains.
+    int displaySlotPartials(int slot, float* out, int maxCount) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayAmps(out, maxCount); }
+    int displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount, int clipLen) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayGrains(out, maxCount, clipLen); }
+    float pan() const { return centre_; }   // where the voice's centre sits right now, -1..1
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
     // may be null) phase-modulates the partials when p.fmAmount > 0 (the feedback loop).
@@ -127,6 +133,7 @@ private:
     Resonator ghostL_[6], ghostR_[6];
     float    ghostGain_ = 0.0f;
     float    velocity_ = 1.0f;
+    float    centre_ = 0.0f;     // pan centre after drift and Source 1's Pan, for the stage picture
     float    distance_ = 0.0f;   // the plane the note was placed on
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;

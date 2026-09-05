@@ -1,7 +1,8 @@
-// AmbientSynth -- extra sound sources per voice ("Source 2" and "Source 3").
+// AmbientSynth -- the sound sources per voice: three equal slots.
 //
-// Source 1 is the additive partial bank (Oscillator section). Each of the two extra slots
-// can be one of:
+// Source 1 defaults to Additive, which is the voice's strand bank (Voice.h: up to six detuned or
+// stacked copies of a 32-partial spectrum, the classic Oscillator); Additive in Source 2 or 3 is
+// a single bank of the same spectrum inside the slot. Every slot can otherwise be one of:
 //   Wavetable -- not a table of samples but a table of SPECTRA (32 partial amplitudes per
 //                frame); the position morphs between frames and the result is rendered by
 //                the same rotating-phasor bank as the main oscillator. Alias-free, and every
@@ -22,14 +23,15 @@
 
 namespace ambient {
 
-constexpr int kSlots         = 2;
+constexpr int kSlots         = 3;
 constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
 constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use
 
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise };
+// Additive sits last so the indices the presets store for the other types stay what they were.
+enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive };
 
-constexpr int kNumSourceTypes = 5;
+constexpr int kNumSourceTypes = 6;
 constexpr int kNumTables      = 6;      // Classic, Organ, Vocal, Glass, Metal, User
 constexpr int kNumSlotRatios  = 10;
 extern const char* const kSourceTypeNames[kNumSourceTypes];
@@ -92,6 +94,9 @@ struct SlotParams {
     float spread = 0.03f;        // start-point scatter around Position, as a fraction of the clip
     NoiseKind noise = NoiseKind::Pink;
     float noiseQ = 0.4f;         // width of Band and Wind, 0 = wide open, 1 = a whistle
+    // Additive: the spectrum of the slot's own bank (same formula as the voice's strands)
+    int   partials = 16;
+    float tilt = 1.2f, bright = 0.7f, oddEven = 0.0f, inharm = 0.0f, shimmer = 0.4f, shimmerRate = 0.15f;
 };
 
 class SourceSlot {
@@ -103,8 +108,21 @@ public:
     void render(float* outL, float* outR, int n, double noteHz, const SlotParams& p,
                 const Wavetable* table, const Texture* texture, float driftRate);
 
+    // For pictures (message thread, torn reads cost a pixel): the bank's partial amplitudes as
+    // they are being summed, and the grains that are sounding.
+    int displayAmps(float* out, int maxCount) const
+    {
+        const int n = maxCount < active_ ? maxCount : active_;
+        for (int i = 0; i < n; ++i) out[i] = amp_[i];
+        return n < 0 ? 0 : n;
+    }
+    struct GrainInfo { float pos = 0.0f, age = 0.0f, gain = 0.0f, pan = 0.0f; };   // clip position 0..1, age 0..1, level, pan -1..1
+    int displayGrains(GrainInfo* out, int maxCount, int clipLen) const;
+
 private:
     void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt);
+    void renderAdditive(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderBank(const float* spec, int H, int n, float* out);   // the phasor bank's block: targets, then the sum
     void renderFm(float* out, int n, double hz, const SlotParams& p, float dt);
     void renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
@@ -114,6 +132,11 @@ private:
     float  rc_[kTablePartials] = {}, rs_[kTablePartials] = {};
     float  amp_[kTablePartials] = {}, ampStep_[kTablePartials] = {};
     int    active_ = 0;
+    // Additive: per-partial shimmer and the cached tilt/odd-even shape
+    Drifter shim_[kTablePartials];
+    float  tiltCache_[kTablePartials] = {};
+    float  cTilt_ = -1.0f, cOdd_ = -9.0f;
+    int    cPartials_ = -1;
     // FM
     double phC_ = 0.0, phM_ = 0.0;
     float  hpX_ = 0.0f, hpY_ = 0.0f;   // DC blocker state

@@ -10,17 +10,25 @@ namespace ambient {
 enum class ParamId : int {
     // Master
     MasterGain,
-    // Oscillator (additive partial bank per strand = Source 1)
+    // Source 1: Type chooses the additive strand bank (the classic Oscillator, default) or any of
+    // the slot types below; then the bank's own spectrum parameters
+    Src1Type,
     OscLevel, Partials, Tilt, Brightness, OddEven, Inharmonic, Shimmer, ShimmerRate,
     Unison, Detune, Drift, DriftRate, Spread, Bloom, BloomTime,
     // Stack: strands at pure ratios (one key = one just chord) instead of detuned copies;
     // Rate Wander: every voice's drift and shimmer rates themselves wander (nested LFO)
     Stack, RateWander,
-    // Source 2 / Source 3: extra sources per voice (wavetable of spectra, FM pair, texture)
+    // Source 1's slot fields, for the non-additive types (level is OscLevel, spectrum the eight above)
+    Src1Octave, Src1Ratio, Src1Pan, Src1Table, Src1Position, Src1PosDrift,
+    Src1FmRatio, Src1FmIndex, Src1Grain, Src1Density, Src1Follow, Src1Grains, Src1Spread, Src1Noise, Src1NoiseQ,
+    // Source 2 / Source 3: the same slot, laid out identically (the engine reads them by offset):
+    // 17 slot fields, then the seven of the slot's own additive bank
     Src2Type, Src2Level, Src2Octave, Src2Ratio, Src2Pan, Src2Table, Src2Position, Src2PosDrift,
     Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2Follow, Src2Grains, Src2Spread, Src2Noise, Src2NoiseQ,
+    Src2Partials, Src2Tilt, Src2Bright, Src2OddEven, Src2Inharm, Src2Shimmer, Src2ShimmerRate,
     Src3Type, Src3Level, Src3Octave, Src3Ratio, Src3Pan, Src3Table, Src3Position, Src3PosDrift,
     Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3Follow, Src3Grains, Src3Spread, Src3Noise, Src3NoiseQ,
+    Src3Partials, Src3Tilt, Src3Bright, Src3OddEven, Src3Inharm, Src3Shimmer, Src3ShimmerRate,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
     SubLevel, SubOctave, SubGlide, SubBinaural, SubTone, SubSource, PadLowCut,

@@ -53,7 +53,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Envelope", "Source 2", "Source 3" }, { "Air", "Filter", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
@@ -61,8 +61,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence" } }, {}, 1 },
     };
     tabRows_ = {
-        { 0, 0, { "OSC 1", "SOURCE 2", "SOURCE 3" }, { { "Oscillator", "Envelope" }, { "Source 2" }, { "Source 3" } } },
-        { 0, 1, { "FILTER", "Z-PLANE" }, { { "Air", "Filter" }, { "Z-Plane" } } },
+        { 0, 0, { "SOURCE 1", "SOURCE 2", "SOURCE 3" }, { { "Source 1", "Strands" }, { "Source 2" }, { "Source 3" } } },
+        { 0, 1, { "FILTER", "Z-PLANE" }, { { "Air", "Filter", "Envelope" }, { "Z-Plane" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } } },
@@ -251,7 +251,8 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
             if (s.name == "Space") s.maxUnits = 6;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
-            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
+            if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
+            if (s.name == "Strands") s.maxUnits = 5;
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -1277,8 +1278,8 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
     const auto r = getLocalBounds();
     const juce::String pre = "src" + juce::String(slot) + "_";
     const int type = static_cast<int>(std::lround(rawParam(proc, (pre + "type").toRawUTF8())));
-    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR" };
-    displayFrame(g, r, kTitles[juce::jlimit(0, 4, type)], ui::voiceCol);
+    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR", "ADDITIVE BANK" };
+    displayFrame(g, r, kTitles[juce::jlimit(0, 5, type)], ui::voiceCol);
     const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
     const float cy = plot.getCentreY(), hh = plot.getHeight() * 0.42f;
     g.setColour(ui::track.withAlpha(0.6f));
@@ -2164,15 +2165,29 @@ int AmbientSynthEditor::cellForParam(ParamId id) const
 
 void AmbientSynthEditor::updateSourceCells()
 {
-    // The 17 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
-    // 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position 7 pos drift 8 fm ratio 9 fm index
-    // 10 grain 11 density 12 follow 13 grains 14 spread 15 noise 16 noise q.
-    // Grey out what the chosen type ignores.
-    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4 };
-    const ParamId first[2] = { ParamId::Src2Type, ParamId::Src3Type };
-    for (int k = 0; k < 2; ++k) {
-        const int type = static_cast<int>(std::lround(proc_.engine().getParam(first[k])));
-        for (int off = 1; off <= 16; ++off) {
+    // The 24 slot fields (see Params.h): 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position
+    // 7 pos drift 8 fm ratio 9 fm index 10 grain 11 density 12 follow 13 grains 14 spread 15 noise
+    // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
+    // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
+    // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
+    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5 };
+    static const ParamId kIds[3][24] = {
+        { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
+          ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
+          ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
+          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate },
+        { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
+          ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
+          ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
+          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate },
+        { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
+          ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
+          ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
+          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate },
+    };
+    for (int k = 0; k < 3; ++k) {
+        const int type = static_cast<int>(std::lround(proc_.engine().getParam(kIds[k][0])));
+        for (int off = 1; off <= 23; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
@@ -2187,9 +2202,10 @@ void AmbientSynthEditor::updateSourceCells()
             case 12: on = type == Texture || type == Noise; break;               // pitch follow
             case 15:
             case 16: on = type == Noise; break;
+            case 17: case 18: case 19: case 20: case 21: case 22: case 23: on = type == Additive; break;
             default: break;
             }
-            const int ci = cellForParam(static_cast<ParamId>(static_cast<int>(first[k]) + off));
+            const int ci = cellForParam(kIds[k][off]);
             if (ci < 0) continue;
             Cell& c = cells_[static_cast<size_t>(ci)];
             if (c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }
@@ -2201,6 +2217,13 @@ void AmbientSynthEditor::updateSourceCells()
         const juce::String text = file.isNotEmpty() ? file : base;
         if (c.label->getText() != text) c.label->setText(text, juce::dontSendNotification);
     };
+    if (Section* strands = findSection("Strands")) {   // the strand bank exists only while Source 1 is additive
+        const bool on = std::lround(proc_.engine().getParam(ParamId::Src1Type)) == Additive;
+        for (int ci : strands->cells) {
+            Cell& c = cells_[static_cast<size_t>(ci)];
+            if (c.comp && c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }
+        }
+    }
     nameCell(tableCell_, "User table", proc_.wavetableName());
     nameCell(textureCell_, "Texture file", proc_.textureName());
     nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());

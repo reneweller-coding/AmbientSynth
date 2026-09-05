@@ -50,7 +50,11 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     rateWander_.init(rng_);
     zDriftX_.init(rng_); zDriftY_.init(rng_);
     for (auto& r : zbL_) r.reset(); for (auto& r : zbR_) r.reset();
-    for (auto& s : slots_) s.prepare(sr_, rng_.fork());
+    // Slot 0 (Source 1) came later than the other two: it takes a seed derived from the voice's
+    // rather than a fork from the stream, so the stream -- and with it every preset's random
+    // phases and drifts -- stayed exactly where it was before the slot existed.
+    slots_[0].prepare(sr_, seed ^ 0x9E3779B97F4A7C15ull);
+    for (int k = 1; k < kSlots; ++k) slots_[k].prepare(sr_, rng_.fork());
     filtL_.reset(); filtR_.reset();
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -193,8 +197,12 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const double nyq = 0.45 * sr_;
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
-    // The voice's centre wanders slowly; strands fan out around it.
-    const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan, -1.0f, 1.0f);
+    // The voice's centre wanders slowly; strands fan out around it. Source 1's Pan shifts the
+    // centre, its Octave and Ratio move the whole bank, so the three slots read alike.
+    const SlotParams& s1 = p.slot[0];
+    const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan + s1.pan, -1.0f, 1.0f);
+    centre_ = centre;
+    const double bankMul = kSlotRatios[clampv(s1.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(s1.octave, -2, 2));
     const int stack = clampv(p.stack, 0, kNumStacks - 1);
 
     for (int si = 0; si < unison; ++si) {
@@ -203,7 +211,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const float cents = pos * p.detune + s.pitch.update(dt, driftRate, rng_) * p.drift;
         // Stack: the strand sits at a pure ratio to the note (a just chord from one key);
         // detune and drift still apply on top, so Detune 0 makes it beat-free.
-        const double f = freq_ * kStackRatios[stack][si] * std::pow(2.0, cents / 1200.0);
+        const double f = freq_ * bankMul * kStackRatios[stack][si] * std::pow(2.0, cents / 1200.0);
         const float pan = clampv(centre + pos * p.spread, -1.0f, 1.0f);
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         s.gainL = std::cos(angle) * norm;
@@ -338,7 +346,10 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
     while (pos < n && env_.isActive()) {
         const int len = std::min(kControlBlock, n - pos);
         control(len, p);
-        const int unison = clampv(p.unison, 1, kMaxStrands);
+        // Source 1 is the strand bank only while its type is Additive; any other type renders in
+        // the slot below and the bank stays silent.
+        const bool bank = p.slot[0].type == SourceType::Additive;
+        const int unison = bank ? clampv(p.unison, 1, kMaxStrands) : 0;
         const bool air = airGain_ > 0.0f;
         const bool ghost = ghostGain_ > 0.0f;
         // Extra sources render block-wise into their own buffers, then join the strands
@@ -347,7 +358,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         bool anySlot = false;
         for (int k = 0; k < kSlots; ++k) {
             const SlotParams& sp = p.slot[k];
-            if (sp.type == SourceType::Off) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
+            if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
             slots_[k].render(slotL, slotR, len, freq_, sp, table, p.texture, p.driftRate * rateMul_);

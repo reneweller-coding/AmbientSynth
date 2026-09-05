@@ -7,7 +7,7 @@
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
     "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
 };
@@ -171,7 +171,12 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     posDrift_.init(rng_);
     idxDrift_.init(rng_);
     for (int h = 0; h < kTablePartials; ++h) { phasorFrom(rng_.uniform(), pc_[h], ps_[h]); rc_[h] = 1.0f; rs_[h] = 0.0f; amp_[h] = ampStep_[h] = 0.0f; }
+    {   // the shimmer drifters seed from a side stream, so the slot's own stream is what it always was
+        Rng aux; aux.seed(seed ^ 0xD1B54A32D192ED03ull);
+        for (auto& d : shim_) d.init(aux);
+    }
     active_ = 0;
+    cTilt_ = -1.0f; cOdd_ = -9.0f; cPartials_ = -1;
     phC_ = phM_ = 0.0;
     for (auto& g : grains_) g.on = false;
     spawnIn_ = 0.0;
@@ -192,7 +197,7 @@ void SourceSlot::noteOn(bool fresh)
 void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const SlotParams& p,
                         const Wavetable* table, const Texture* texture, float driftRate)
 {
-    if (p.type == SourceType::Off || n <= 0) { lastType_ = p.type; return; }
+    if (p.type == SourceType::Off || n <= 0) { lastType_ = p.type; return; }   // (Source 1 in Additive mode also lands here with n = 0)
     n = std::min(n, kControlBlock);
     const float dt = static_cast<float>(n / sr_);
     if (p.type != lastType_) {   // switching type: start clean, no leftover phasor amplitudes or grains
@@ -228,6 +233,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
 
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
     if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt);
+    else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
     else renderFm(scratch_, n, hz, p, dt);
     for (int i = 0; i < n; ++i) {
         gL_ += sL; gR_ += sR;
@@ -257,6 +263,13 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
         sumSq += spec[h - 1] * spec[h - 1];
         H = h;
     }
+    renderBank(spec, H, n, out);
+}
+
+void SourceSlot::renderBank(const float* spec, int H, int n, float* out)
+{
+    float sumSq = 0.0f;
+    for (int h = 0; h < H; ++h) sumSq += spec[h] * spec[h];
     const float scale = sumSq > 0.0f ? 0.5f / std::sqrt(sumSq) : 0.0f;
     const float invLen = 1.0f / static_cast<float>(n);
     for (int h = 0; h < kTablePartials; ++h) {
@@ -278,6 +291,62 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
         }
         out[i] = sum;
     }
+}
+
+// Additive in a slot: the voice's spectrum formula (tilt, brightness window, odd/even, inharmonic
+// stretch, per-partial shimmer) on the slot's own bank -- one strand, so a second or third
+// additive source costs what a wavetable slot costs.
+void SourceSlot::renderAdditive(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    const int partials = clampv(p.partials, 1, kTablePartials);
+    if (p.tilt != cTilt_ || p.oddEven != cOdd_ || partials != cPartials_) {
+        for (int h = 1; h <= partials; ++h) {
+            float a = std::pow(static_cast<float>(h), -p.tilt);
+            if (p.oddEven > 0.0f && (h % 2) == 0) a *= 1.0f - p.oddEven;
+            if (p.oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0f + p.oddEven;
+            tiltCache_[h - 1] = a;
+        }
+        cTilt_ = p.tilt; cOdd_ = p.oddEven; cPartials_ = partials;
+    }
+    const float hc = 1.0f + p.bright * p.bright * 31.0f;
+    const float B = p.inharm * p.inharm * 0.02f;
+    const double nyq = 0.45 * sr_;
+    float spec[kTablePartials];
+    int H = 0;
+    for (int h = 1; h <= partials; ++h) {
+        const double stretch = B > 0.0f ? std::sqrt(1.0 + B * static_cast<double>(h * h)) : 1.0;
+        const double fh = hz * h * stretch;
+        if (fh >= nyq) break;
+        phasorFrom(fh / sr_, rc_[h - 1], rs_[h - 1]);
+        const float r2 = pc_[h - 1] * pc_[h - 1] + ps_[h - 1] * ps_[h - 1];
+        const float fix = 1.5f - 0.5f * r2;
+        pc_[h - 1] *= fix; ps_[h - 1] *= fix;
+        float a = tiltCache_[h - 1];
+        if (static_cast<float>(h) > hc) {
+            const float x = std::min((static_cast<float>(h) - hc) / 6.0f, 1.0f);
+            a *= 0.5f * (1.0f + std::cos(kPi * x));
+        }
+        a *= 1.0f + 0.9f * p.shimmer * shim_[h - 1].update(dt, p.shimmerRate, rng_);
+        spec[h - 1] = a;
+        H = h;
+    }
+    renderBank(spec, H, n, out);
+}
+
+int SourceSlot::displayGrains(GrainInfo* out, int maxCount, int clipLen) const
+{
+    int n = 0;
+    for (int c = 0; c < kSlotGrains && n < maxCount; ++c) {
+        const Grain& g = grains_[c];
+        if (!g.on || g.len <= 0) continue;
+        GrainInfo& o = out[n++];
+        o.pos  = clipLen > 0 ? static_cast<float>(g.pos / static_cast<double>(clipLen)) : 0.0f;
+        o.age  = static_cast<float>(g.age) / static_cast<float>(g.len);
+        o.gain = g.gain;
+        const float sum = g.gl + g.gr;
+        o.pan  = sum > 1e-6f ? (g.gr - g.gl) / sum : 0.0f;
+    }
+    return n;
 }
 
 void SourceSlot::renderFm(float* out, int n, double hz, const SlotParams& p, float dt)

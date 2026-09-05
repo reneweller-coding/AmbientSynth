@@ -512,6 +512,16 @@ harmonics. The throttle ceiling was first 0.25: Distant Storm then climbed
 unity gain circulates through the delay's cross-feed until both ears carry
 the same thing. At 0.1 the loop thickens a drone without taking it over.
 
+### Output DC blocker
+
+One high pass at 4 Hz sits between the mid/side stage and the master gain, below the lowest
+sub the Foundation can reach (at 20 Hz it costs 0.17 dB). Several paths can leave an offset
+behind -- FM at an integer ratio, the tape stage's asymmetric term, a granular window over a
+clip that carries one, the shimmer's pitch shifter -- and an offset costs headroom in the soft
+clipper without ever being heard. The blockers inside the voice's FM slot and inside the
+feedback loop stay: they exist to stop a loop locking onto a DC operating point, which a filter
+at the end cannot do.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

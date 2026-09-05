@@ -86,6 +86,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     shimmerR_.prepare(sr_);
     shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
+    dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
     lastRootPc_ = -1;
     readParams();
     brain_.reset(rng_.fork(), rootNote_ - 12);   // the brain's root lives an octave below the key root
@@ -922,10 +923,17 @@ void Engine::renderChunk(float* L, float* R, int n)
     midSide_.process(L, R, n);
     if (subOn)
         for (int i = 0; i < n; ++i) { L[i] += subL[i]; R[i] += subR[i]; }
+    // Output DC blocker at 4 Hz, below the lowest sub the Foundation can reach. Several paths
+    // can leave an offset behind -- FM at an integer ratio, the asymmetric tape term, a granular
+    // window over a clip that carries one, the shimmer's pitch shifter -- and an offset costs
+    // headroom in the soft clipper without ever being heard. One filter at the end covers them all.
+    const float dcR = 1.0f - kTwoPi * 4.0f / static_cast<float>(sr_);
     for (int i = 0; i < n; ++i) {
         const float g = masterSmooth_.next(master);
-        L[i] = softClip(L[i] * g);
-        R[i] = softClip(R[i] * g);
+        const float yl = L[i] - dcXL_ + dcR * dcYL_; dcXL_ = L[i]; dcYL_ = yl;
+        const float yr = R[i] - dcXR_ + dcR * dcYR_; dcXR_ = R[i]; dcYR_ = yr;
+        L[i] = softClip(yl * g);
+        R[i] = softClip(yr * g);
     }
 }
 

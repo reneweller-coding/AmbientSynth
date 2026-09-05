@@ -1,0 +1,51 @@
+# Every push builds and measures. The first job is the one that has to stay fast: the core, the
+# render tool and the self test, without JUCE, on both a Windows and a Linux compiler -- two
+# compilers disagree about more than one ever will. The second job builds the plugin and runs the
+# host-contract test, which needs JUCE and therefore costs a few minutes.
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: core and self test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAMBIENT_BUILD_PLUGIN=OFF
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Self test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Render a preset offline
+        shell: bash
+        run: |
+          bin=$(find build -name 'ambient_render*' -type f | head -1)
+          "$bin" --preset "Sleep Concert" --seconds 8 --notes 45,52,59 --measure
+
+  plugin:
+    name: plugin and host contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # JUCE is fetched by CMake; caching it turns a two-minute download into a few seconds.
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Self test and host contract
+        run: ctest --test-dir build -C Release --output-on-failure

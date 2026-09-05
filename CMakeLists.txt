@@ -34,7 +34,6 @@ add_subdirectory(Core)
 if(AMBIENT_BUILD_TOOLS)
     enable_testing()
     add_subdirectory(Tools/render)
-    add_subdirectory(Tests)
 endif()
 
 if(AMBIENT_BUILD_PLUGIN)
@@ -48,4 +47,9 @@ if(AMBIENT_BUILD_PLUGIN)
         GIT_PROGRESS   TRUE)
     FetchContent_MakeAvailable(JUCE)
     add_subdirectory(Plugin)
+endif()
+
+# After the plugin, so the host-contract test can link against its shared code.
+if(AMBIENT_BUILD_TOOLS)
+    add_subdirectory(Tests)
 endif()

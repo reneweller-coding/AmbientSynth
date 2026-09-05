@@ -17,3 +17,11 @@ Library/Wavetables/
 Library/*.log
 Tools/library/texture_jobs.json
 Library/Impulses/
+
+# Stray working folders from earlier tool runs; the real library lives under Library/.
+/Impulses/
+/Textures/
+/Wavetables/
+/ambient.wav
+/build-android/
+/build-noavx/

@@ -1807,6 +1807,124 @@ void testModulation()
 
 // Per-note expression, the resonating body, the master's patina, the unmasking background and
 // the second conductor: each one measured through the engine, not merely compiled.
+// Everything in this instrument is written in seconds and hertz, and the engine turns those into
+// samples with the rate it was prepared at. That only stays true if it is checked: until this
+// test existed every single check ran at 48 kHz, so a coefficient that had quietly become a
+// number of samples would never have shown up. Three rates, the ones a host actually uses.
+void testSampleRates()
+{
+    for (double sr : { 44100.0, 48000.0, 96000.0 }) {
+        const int block = 256;
+        const int isr = static_cast<int>(sr);
+        std::vector<float> l(block), r(block);
+        const std::string at = " at " + std::to_string(isr) + " Hz";
+
+        {   // A whole preset renders finite, unclipped and without a step, whatever the rate.
+            Engine e;
+            e.applyPreset(1);
+            e.prepare(sr, block);
+            double peak = 0.0, jump = 0.0, sq = 0.0; long cnt = 0; float prev = 0.0f; bool finite = true;
+            for (int i = 0; i < static_cast<int>(6.0 * sr / block); ++i) {
+                e.process(l.data(), r.data(), block);
+                for (int k = 0; k < block; ++k) {
+                    const float m = 0.5f * (l[k] + r[k]);
+                    if (!std::isfinite(l[k]) || !std::isfinite(r[k])) finite = false;
+                    peak = std::max(peak, static_cast<double>(std::fabs(m)));
+                    if (cnt > 0) jump = std::max(jump, static_cast<double>(std::fabs(m - prev)));
+                    prev = m; sq += m * m; ++cnt;
+                }
+            }
+            const double rms = std::sqrt(sq / std::max(cnt, 1L));
+            CHECK(finite, ("a preset renders finite" + at).c_str());
+            CHECK(peak < 1.0, ("a preset stays under full scale" + at).c_str());
+            CHECK(jump < 0.3, ("a preset never steps" + at).c_str());
+            CHECK(rms > 1.0e-5, ("a preset makes sound" + at).c_str());
+        }
+        {   // A delay time is a time: an impulse must come back after the seconds it was given,
+            // not after a number of samples that happens to be right at 48 kHz.
+            StereoDelay d;
+            d.prepare(sr);
+            d.set(0.25f, 0.25f, 0.0f, 0.0f, 0.0f);
+            const int n = static_cast<int>(0.5 * sr);
+            std::vector<float> in(static_cast<size_t>(n), 0.0f), wl(static_cast<size_t>(n)), wr(static_cast<size_t>(n));
+            in[0] = 1.0f;
+            d.process(in.data(), in.data(), wl.data(), wr.data(), n);
+            int at_ = 0; float best = 0.0f;
+            for (int i = 0; i < n; ++i) if (std::fabs(wl[static_cast<size_t>(i)]) > best) { best = std::fabs(wl[static_cast<size_t>(i)]); at_ = i; }
+            const double seconds = at_ / sr;
+            CHECK(best > 0.3f && std::fabs(seconds - 0.25) < 0.003, ("a 250 ms delay returns after 250 ms" + at).c_str());
+        }
+        {   // A cutoff is a frequency: the 12 dB low pass must be 3 dB down at its own corner.
+            VoiceFilter f;
+            f.prepare(sr);
+            f.set(FilterModel::Lp12, 1000.0f, 0.0f, 0.0f);
+            auto amplitudeAt = [&](float hz) {
+                f.prepare(sr);
+                f.set(FilterModel::Lp12, 1000.0f, 0.0f, 0.0f);
+                const int n = static_cast<int>(sr * 0.2);
+                float peak2 = 0.0f;
+                for (int i = 0; i < n; ++i) {
+                    const float x = std::sin(kTwoPi * hz * static_cast<float>(i) / static_cast<float>(sr));
+                    float a, b; f.tick(x, x, a, b);
+                    if (i > n / 2) peak2 = std::max(peak2, std::fabs(a));
+                }
+                return peak2;
+            };
+            const float lowBand = amplitudeAt(100.0f), corner = amplitudeAt(1000.0f);
+            const float db = 20.0f * std::log10(std::max(corner, 1e-9f) / std::max(lowBand, 1e-9f));
+            CHECK(db < -1.5f && db > -6.0f, ("the low pass turns at the frequency it is given" + at).c_str());
+        }
+        {   // A tuning is a pitch: A4 must be 440 Hz however many samples a second there are.
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Scale, 5.0f);          // 12-TET
+            e.setParam(ParamId::Partials, 1.0f);
+            e.setParam(ParamId::Unison, 1.0f);
+            e.setParam(ParamId::Detune, 0.0f);
+            e.setParam(ParamId::Drift, 0.0f);
+            e.setParam(ParamId::Shimmer, 0.0f);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.setParam(ParamId::DelayMix, 0.0f);
+            e.setParam(ParamId::Air, 0.0f);
+            e.prepare(sr, block);
+            e.noteOn(69, 0.9f);
+            for (int i = 0; i < static_cast<int>(0.5 * sr / block); ++i) e.process(l.data(), r.data(), block);
+            auto power = [&](double hz) {
+                const double w = 2.0 * 3.14159265358979 * hz / sr;
+                const double c = 2.0 * std::cos(w);
+                double s1 = 0.0, s2 = 0.0;
+                for (int i = 0; i < static_cast<int>(0.5 * sr / block); ++i) {
+                    e.process(l.data(), r.data(), block);
+                    for (int k = 0; k < block; ++k) { const double s0 = l[k] + c * s1 - s2; s2 = s1; s1 = s0; }
+                }
+                return s1 * s1 + s2 * s2 - c * s1 * s2;
+            };
+            const double home = power(440.0), off = power(415.3);
+            CHECK(home > off * 8.0, ("A4 is 440 Hz" + at).c_str());
+        }
+        {   // A modulation rate is a rate: a 2 Hz LFO must swing twice a second.
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setModMatrixText("lfo1>cutoff:0.5");
+            e.setParam(ParamId::Lfo1Shape, 0.0f);
+            e.setParam(ParamId::Lfo1Rate, 2.0f);
+            e.setParam(ParamId::Lfo1Depth, 1.0f);
+            e.prepare(sr, block);
+            int crossings = 0; float last = 0.0f;
+            for (int i = 0; i < static_cast<int>(2.0 * sr / block); ++i) {
+                e.process(l.data(), r.data(), block);
+                const float v = e.modAmount(ParamId::Cutoff);
+                if (last <= 0.0f && v > 0.0f) ++crossings;
+                last = v;
+            }
+            CHECK(crossings >= 3 && crossings <= 5, ("a 2 Hz LFO runs at 2 Hz" + at).c_str());
+        }
+    }
+}
+
 void testExpressionBodyPatina()
 {
     const int sr = 48000, block = 256;
@@ -2073,6 +2191,7 @@ int main()
     testTimeline();
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
+    testSampleRates();
     testExpressionBodyPatina();
     testFilterModels();
     if (failures == 0) std::printf("selftest: all checks passed\n");

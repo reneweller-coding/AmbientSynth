@@ -40,6 +40,7 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
             row.sliders.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, key, *s));
             row.controls.push_back(std::move(s));
         }
+        owner.registerHelp(row.controls.back().get(), d->id);   // the header's help line covers the strip too
         auto l = std::make_unique<juce::Label>(juce::String(), name);
         l->setJustificationType(juce::Justification::centred);
         l->setFont(ui::body(10.0f));

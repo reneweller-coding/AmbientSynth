@@ -158,6 +158,8 @@ public:
     int  voiceStage(VoiceStage* out, int maxCount) const;
     // The last n (<= 4096) samples of the Cosmos return, mono, oldest first -- for its spectrum.
     int  cosmosTap(float* out, int n) const;
+    // The same for the finished output, after the master gain and the clipper.
+    int  outputTap(float* out, int n) const;
 
 
     const FixedScale& scale() const { return *scale_; }
@@ -275,6 +277,8 @@ private:
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
     float         cosTap_[4096] = {};   // ring of the cosmos return for the display (torn reads cost a pixel)
     int           cosTapW_ = 0;
+    float         outTap_[4096] = {};   // the same for the finished output
+    int           outTapW_ = 0;
     // Feedback loop: the previous chunk's output mix, low-passed, saturated and throttled,
     // kept in a ring so any chunk length reads back exactly the samples just written.
     std::vector<float> fbRingL_, fbRingR_, fbInL_, fbInR_, fbMono_;

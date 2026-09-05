@@ -49,7 +49,12 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     };
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
-    content_.onMouse = [this](const juce::MouseEvent& e) { if (!e.mods.isPopupMenu()) clickTabs(e.getPosition()); };
+    content_.onMouse = [this](const juce::MouseEvent& e) {
+        if (e.mods.isPopupMenu()) return;
+        for (const auto& d : diceOf_)
+            if (d.second.contains(e.getPosition())) { randomiseSection(d.first, e.mods.isShiftDown()); return; }
+        clickTabs(e.getPosition());
+    };
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, false);
     addAndMakeVisible(viewport_);
@@ -107,6 +112,30 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*helpButton_);
     help_ = std::make_unique<HelpView>(proc_, *this);
     addChildComponent(*help_);
+    undoButton_ = std::make_unique<juce::TextButton>("Undo");
+    undoButton_->setTooltip("Undo the last preset, die roll or A/B swap (Ctrl+Z)");
+    undoButton_->onClick = [this] { doUndo(); };
+    addAndMakeVisible(*undoButton_);
+    redoButton_ = std::make_unique<juce::TextButton>("Redo");
+    redoButton_->setTooltip("Redo (Ctrl+Y)");
+    redoButton_->onClick = [this] { doRedo(); };
+    addAndMakeVisible(*redoButton_);
+    abButton_ = std::make_unique<juce::TextButton>("A | B");
+    abButton_->setTooltip("Two whole snapshots to compare: the first click parks what you have in A and hands you B, every click after swaps");
+    abButton_->onClick = [this] { swapAB(); };
+    addAndMakeVisible(*abButton_);
+    compactButton_ = std::make_unique<juce::TextButton>("Compact");
+    compactButton_->setTooltip("Wraps the widest rows into two, so the page is narrower and taller. Still one page, still no scrolling.");
+    compactButton_->setClickingTogglesState(true);
+    compactButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    compactButton_->onClick = [this] {
+        compact_ = compactButton_->getToggleState();
+        proc_.setCompactLayout(compact_);
+        rebuildLayout();
+    };
+    addAndMakeVisible(*compactButton_);
+    outputView_ = std::make_unique<OutputView>(proc_);
+    addAndMakeVisible(*outputView_);
     tooltips_ = std::make_unique<juce::TooltipWindow>(nullptr, 600);
     setWantsKeyboardFocus(true);
 
@@ -117,7 +146,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
     soundBox_->onChange = [this] {
         const int idx = soundBox_->getSelectedId() - 1;
-        if (idx >= 0 && idx != proc_.soundPresetIndex()) proc_.applySoundPreset(idx);
+        if (idx >= 0 && idx != proc_.soundPresetIndex()) { pushUndo("preset"); proc_.applySoundPreset(idx); }
     };
     addAndMakeVisible(*soundBox_);
     cosmosBox_ = std::make_unique<juce::ComboBox>();
@@ -214,6 +243,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         }
         setSize(juce::roundToInt(designW_ * fit), juce::roundToInt(designH_ * fit));
     }
+    compact_ = proc_.compactLayout() || juce::SystemStats::getEnvironmentVariable("AMBIENT_COMPACT", "").isNotEmpty();
+    if (compact_) { compactButton_->setToggleState(true, juce::dontSendNotification); rebuildLayout(); }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);
     {   // AMBIENT_PRESET=<name>: open on a named preset (dev aid for photographing a modulated patch)
         const juce::String ps = juce::SystemStats::getEnvironmentVariable("AMBIENT_PRESET", "");
@@ -255,6 +286,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Space") s.maxUnits = 8;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
+            s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
             if (s.name == "Far Reverb") s.maxUnits = 10;                     // one row with Rotate and Unmask
@@ -310,6 +342,7 @@ void AmbientSynthEditor::buildCells()
         }
         }
         c.comp->addMouseListener(this, false);
+        registerHelp(c.comp.get(), d.id);
         if (auto* tc = dynamic_cast<juce::SettableTooltipClient*>(c.comp.get())) tc->setTooltip(ambient::paramHelp(d.id));
         cellOf_[c.comp.get()] = static_cast<int>(cells_.size());
         sec->cells.push_back(static_cast<int>(cells_.size()));
@@ -471,6 +504,10 @@ void AmbientSynthEditor::resized()
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
     if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
     if (helpButton_) helpButton_->setBounds(1200, 8, 56, 24);
+    if (undoButton_) undoButton_->setBounds(1262, 8, 50, 24);
+    if (redoButton_) redoButton_->setBounds(1316, 8, 50, 24);
+    if (abButton_) abButton_->setBounds(1370, 8, 52, 24);
+    if (compactButton_) compactButton_->setBounds(1426, 8, 70, 24);
 
     const int W = designW_, H = designH_;
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
@@ -482,6 +519,7 @@ void AmbientSynthEditor::resized()
     if (mod_) { mod_->setBounds(0, H - stripH, W, stripH); mod_->toFront(false); }
     helpLine_ = { 12, 40, W / 2 - 30, kHeaderH - 62 };
     keys_ = { W / 2, 44, juce::jmax(160, W - W / 2 - 360), 24 };
+    if (outputView_) outputView_->setBounds(W / 2, 74, juce::jmax(160, W - W / 2 - 360), kHeaderH - 92);
     if (master_) master_->setBounds(W - 74, 6, 66, 52);
 
     // The Master section (mid/side) sits in the header, left of the master knob.
@@ -502,6 +540,29 @@ void AmbientSynthEditor::resized()
 // size is measured from this once, in the constructor -- guessing it meant the right-hand column
 // kept falling off the edge. A tabbed row is as wide and as tall as its widest and tallest page,
 // so switching a tab never moves anything else.
+// Compact: a section wider than eight cells wraps into two rows. The page loses width and gains
+// height; nothing scrolls either way, and the arrangement is otherwise untouched.
+void AmbientSynthEditor::rebuildLayout()
+{
+    for (auto& s : sections_) {
+        if (s.wideUnits == 0) s.wideUnits = s.maxUnits;
+        // Only the rows that actually drive the page's width wrap: halving everything made the
+        // page taller than it was wide (1.27 : 1), which is worse on a 16:9 screen than the
+        // 1.9 : 1 it started from. Ten cells is the measured threshold.
+        s.maxUnits = (compact_ && s.wideUnits > 10) ? (s.wideUnits + 1) / 2 : s.wideUnits;
+    }
+    resized();
+    // The design's shape has changed, so the window has to follow: keep the width, take the new
+    // height from the new ratio, and tell the constrainer about it or the corner would fight it.
+    if (auto* con = getConstrainer()) {
+        con->setFixedAspectRatio(static_cast<double>(designW_) / static_cast<double>(designH_));
+        con->setSizeLimits(designW_ / 3, designH_ / 3, designW_ * 2, designH_ * 2);
+    }
+    setSize(getWidth(), juce::roundToInt(getWidth() * static_cast<double>(designH_) / static_cast<double>(designW_)));
+    content_.repaint();
+    repaint();
+}
+
 void AmbientSynthEditor::layoutBody()
 {
     int nCols = 1;
@@ -679,22 +740,125 @@ void AmbientSynthEditor::mouseDown(const juce::MouseEvent& e)
     });
 }
 
+void AmbientSynthEditor::registerHelp(juce::Component* c, ambient::ParamId id)
+{
+    if (c == nullptr) return;
+    helpParamOf_[c] = static_cast<int>(id);
+    c->addMouseListener(this, false);
+}
+
 void AmbientSynthEditor::mouseEnter(const juce::MouseEvent& e)
 {
-    auto it = cellOf_.find(e.eventComponent);
-    const int cell = it != cellOf_.end() ? it->second : -1;
-    if (cell != hoveredCell_) { hoveredCell_ = cell; repaint(); }
+    auto it = helpParamOf_.find(e.eventComponent);
+    const int param = it != helpParamOf_.end() ? it->second : -1;
+    if (param != hoveredParam_) { hoveredParam_ = param; repaint(); }
 }
 
 void AmbientSynthEditor::mouseExit(const juce::MouseEvent& e)
 {
-    auto it = cellOf_.find(e.eventComponent);
-    if (it != cellOf_.end() && it->second == hoveredCell_) { hoveredCell_ = -1; repaint(); }
+    auto it = helpParamOf_.find(e.eventComponent);
+    if (it != helpParamOf_.end() && it->second == hoveredParam_) { hoveredParam_ = -1; repaint(); }
+}
+
+// ---------------------------------------------------------------- undo, redo, A/B, the die
+
+AmbientSynthEditor::Snapshot AmbientSynthEditor::takeSnapshot(const juce::String& what) const
+{
+    Snapshot s;
+    s.what = what;
+    s.v.resize(static_cast<size_t>(kNumParams));
+    for (int i = 0; i < kNumParams; ++i)
+        if (auto* v = proc_.apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key)) s.v[static_cast<size_t>(i)] = v->load();
+    return s;
+}
+
+void AmbientSynthEditor::restore(const Snapshot& s)
+{
+    if (static_cast<int>(s.v.size()) != kNumParams) return;
+    for (int i = 0; i < kNumParams; ++i)
+        if (auto* p = proc_.apvts.getParameter(paramTable()[static_cast<size_t>(i)].key))
+            p->setValueNotifyingHost(p->convertTo0to1(s.v[static_cast<size_t>(i)]));
+    repaint();
+}
+
+void AmbientSynthEditor::pushUndo(const juce::String& what)
+{
+    undo_.push_back(takeSnapshot(what));
+    if (undo_.size() > 32) undo_.erase(undo_.begin());   // a session's worth, not a history
+    redo_.clear();
+}
+
+void AmbientSynthEditor::doUndo()
+{
+    if (undo_.empty()) return;
+    redo_.push_back(takeSnapshot(undo_.back().what));
+    restore(undo_.back());
+    undo_.pop_back();
+}
+
+void AmbientSynthEditor::doRedo()
+{
+    if (redo_.empty()) return;
+    undo_.push_back(takeSnapshot(redo_.back().what));
+    restore(redo_.back());
+    redo_.pop_back();
+}
+
+// A/B: the first click parks what you have in A and leaves you on B (a copy, so nothing is lost);
+// every click after that swaps the two. This is the comparison a sound gets judged by.
+void AmbientSynthEditor::swapAB()
+{
+    const Snapshot now = takeSnapshot("A/B");
+    if (slotA_.v.empty()) { slotA_ = now; slotB_ = now; showingB_ = true; }
+    else {
+        (showingB_ ? slotB_ : slotA_) = now;
+        showingB_ = !showingB_;
+        restore(showingB_ ? slotB_ : slotA_);
+    }
+    if (abButton_) abButton_->setButtonText(showingB_ ? "B | a" : "A | b");
+}
+
+// The die on a section: every parameter of that section is drawn again. Choices and switches are
+// picked at random, numbers land inside the middle of their range (the ends of a range are
+// usually where a preset stops being usable), and shift keeps them near where they already are.
+void AmbientSynthEditor::randomiseSection(const juce::String& name, bool subtle)
+{
+    Section* sec = findSection(name);
+    if (sec == nullptr) return;
+    pushUndo("randomise " + name);
+    juce::Random rng;
+    for (int ci : sec->cells) {
+        const Cell& c = cells_[static_cast<size_t>(ci)];
+        if (c.param < 0) continue;
+        const ParamId id = static_cast<ParamId>(c.param);
+        if (isPerformanceParam(id)) continue;
+        const ParamDesc& d = paramDesc(id);
+        auto* p = proc_.apvts.getParameter(d.key);
+        if (p == nullptr) continue;
+        float value;
+        if (d.kind == ParamKind::Choice || d.kind == ParamKind::Bool || d.kind == ParamKind::Int) {
+            const int lo = static_cast<int>(std::lround(d.min)), hi = static_cast<int>(std::lround(d.max));
+            const int cur = static_cast<int>(std::lround(proc_.engine().getParam(id)));
+            value = static_cast<float>(subtle ? juce::jlimit(lo, hi, cur + rng.nextInt(3) - 1) : lo + rng.nextInt(hi - lo + 1));
+        } else {
+            // Drawn in the parameter's own skewed domain, so a logarithmic knob is not biased
+            // towards its top end -- the same domain the morph and the map blend in.
+            const float span = std::max(d.max - d.min, 1e-9f);
+            const float cur = std::pow(juce::jlimit(0.0f, 1.0f, (proc_.engine().getParam(id) - d.min) / span), d.skew);
+            const float t = subtle ? juce::jlimit(0.0f, 1.0f, cur + 0.2f * (rng.nextFloat() * 2.0f - 1.0f))
+                                   : 0.15f + 0.7f * rng.nextFloat();
+            value = d.min + span * std::pow(t, 1.0f / d.skew);
+        }
+        p->setValueNotifyingHost(p->convertTo0to1(value));
+    }
+    repaint();
 }
 
 bool AmbientSynthEditor::keyPressed(const juce::KeyPress& k)
 {
     if (k == juce::KeyPress::F1Key) { setPage(help_ && help_->isVisible() ? 0 : 3); return true; }
+    if (k == juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0)) { doUndo(); return true; }
+    if (k == juce::KeyPress('y', juce::ModifierKeys::commandModifier, 0)) { doRedo(); return true; }
     if (k == juce::KeyPress::escapeKey && help_ && help_->isVisible()) { setPage(0); return true; }
     return false;
 }
@@ -1269,14 +1433,16 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
         g.setColour(ui::card.withAlpha(0.6f));
         g.fillRoundedRectangle(helpLine_.toFloat(), 5.0f);
         juce::String title, body;
-        if (hoveredCell_ >= 0 && hoveredCell_ < static_cast<int>(cells_.size()) && cells_[static_cast<size_t>(hoveredCell_)].param >= 0) {
-            const Cell& c = cells_[static_cast<size_t>(hoveredCell_)];
-            const ParamId id = static_cast<ParamId>(c.param);
+        if (hoveredParam_ >= 0 && hoveredParam_ < kNumParams) {
+            const ParamId id = static_cast<ParamId>(hoveredParam_);
             const ParamDesc& d = paramDesc(id);
             juce::String value;
-            if (auto* sl = dynamic_cast<juce::Slider*>(c.comp.get())) value = sl->getTextFromValue(sl->getValue());
-            else if (auto* cb = dynamic_cast<juce::ComboBox*>(c.comp.get())) value = cb->getText();
-            else if (auto* tb = dynamic_cast<juce::ToggleButton*>(c.comp.get())) value = tb->getToggleState() ? "on" : "off";
+            if (auto* v = proc_.apvts.getRawParameterValue(d.key)) {
+                const float raw = v->load();
+                if (d.kind == ParamKind::Choice) value = d.choices[juce::jlimit(0, d.numChoices - 1, static_cast<int>(std::lround(raw)))];
+                else if (d.kind == ParamKind::Bool) value = raw >= 0.5f ? "on" : "off";
+                else if (auto* pp = proc_.apvts.getParameter(d.key)) value = pp->getText(pp->convertTo0to1(raw), 24) + (d.unit[0] ? juce::String(" ") + d.unit : juce::String());
+            }
             title = juce::String(d.section).toUpperCase() + "   " + d.name + "      " + value;
             body = ambient::paramHelp(id);
             const int mods = [&] { int n = 0; const auto& m = proc_.engine().modMatrix(); for (int k = 0; k < m.count(); ++k) if (m.route(k).target == id) ++n; return n; }();
@@ -1377,6 +1543,19 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
         g.setColour(col.withAlpha(0.85f));
         g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
         g.drawText(s.name.toUpperCase(), s.bounds.getX() + kPad, s.bounds.getY() + 1, s.bounds.getWidth() - 2 * kPad, kTitleH, juce::Justification::centredLeft);
+        {   // The die: five pips in a small square at the right of the title. Click to redraw this
+            // section, shift-click to nudge it.
+            const juce::Rectangle<int> die(s.bounds.getRight() - kPad - 13, s.bounds.getY() + 4, 13, 13);
+            diceOf_[s.name] = die;
+            g.setColour(ui::card.brighter(0.10f));
+            g.fillRoundedRectangle(die.toFloat(), 3.0f);
+            g.setColour(col.withAlpha(0.5f));
+            g.drawRoundedRectangle(die.toFloat().reduced(0.5f), 3.0f, 1.0f);
+            g.setColour(col.withAlpha(0.75f));
+            const float cx = die.toFloat().getCentreX(), cy = die.toFloat().getCentreY(), d = 3.2f;
+            for (auto o : { juce::Point<float>(-d, -d), { d, -d }, { 0.0f, 0.0f }, { -d, d }, { d, d } })
+                g.fillEllipse(cx + o.x - 1.0f, cy + o.y - 1.0f, 2.0f, 2.0f);
+        }
         if (s.name == "Morph") {
             const float pos = proc_.engine().morphPosition();
             const bool active = proc_.apvts.getRawParameterValue("morph_active")->load() >= 0.5f;

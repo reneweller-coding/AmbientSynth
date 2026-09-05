@@ -41,7 +41,31 @@ private:
     void mouseEnter(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
     bool keyPressed(const juce::KeyPress&) override;
-    int  hoveredCell_ = -1;
+    int  hoveredParam_ = -1;                              // what the mouse is over, for the help line
+    std::map<juce::Component*, int> helpParamOf_;         // every control that has a parameter behind it
+public:
+    void registerHelp(juce::Component*, ambient::ParamId);   // the modulation strip registers its own
+private:
+    // Undo, redo and an A/B compare, all in terms of whole parameter snapshots: the instrument
+    // has no other state that a knob can destroy, and a snapshot is 320 floats.
+    struct Snapshot { std::vector<float> v; juce::String what; };
+    std::vector<Snapshot> undo_, redo_;
+    Snapshot slotA_, slotB_;
+    bool     showingB_ = false;
+    Snapshot takeSnapshot(const juce::String& what) const;
+    void     restore(const Snapshot&);
+    void     pushUndo(const juce::String& what);          // call before changing many parameters at once
+    void     doUndo();
+    void     doRedo();
+    void     swapAB();
+    std::unique_ptr<juce::TextButton> undoButton_, redoButton_, abButton_, compactButton_;
+    // Compact: the widest rows wrap into two, so the page is narrower and taller. Everything is
+    // still on one page; only the shape changes. Kept in the plugin state.
+    bool compact_ = false;
+    // The die in a section's title: one click randomises that section, shift-click nudges it.
+    std::map<juce::String, juce::Rectangle<int>> diceOf_;
+    void     randomiseSection(const juce::String& name, bool subtle);
+    void     rebuildLayout();
     struct HelpView : juce::Component, juce::ListBoxModel {
         HelpView(AmbientSynthProcessor&, AmbientSynthEditor&);
         void paint(juce::Graphics&) override;
@@ -93,6 +117,7 @@ private:
         std::vector<int> cells;
         juce::Rectangle<int> bounds;
         int maxUnits = 7;
+        int wideUnits = 0;          // the natural width, before Compact halves it
         int group = -1;
         bool visible = true;   // false while its tab is not the open one
     };
@@ -392,6 +417,20 @@ private:
         bool  silent = true;
     };
     std::unique_ptr<CosmosView> cosmosView_;
+    // The output's own spectrum in the header: what is actually leaving the instrument, which is
+    // the one picture a mixing eye keeps coming back to.
+    struct OutputView : juce::Component, juce::Timer {
+        explicit OutputView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void timerCallback() override;
+        AmbientSynthProcessor& proc;
+        static constexpr int kN = 1024, kBins = 96;
+        std::vector<float> re, im, window;
+        std::unique_ptr<ambient::Fft> fft;
+        float bins[kBins] = {};
+        float peakDb = -90.0f;
+    };
+    std::unique_ptr<OutputView> outputView_;
     // The amplitude envelope as a curve, with the loudest voice's level on it.
     struct EnvView : juce::Component, juce::Timer {
         explicit EnvView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }

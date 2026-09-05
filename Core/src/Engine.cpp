@@ -353,6 +353,14 @@ int Engine::cosmosTap(float* out, int n) const
     return n;
 }
 
+int Engine::outputTap(float* out, int n) const
+{
+    n = clampv(n, 0, 4096);
+    const int w = outTapW_;
+    for (int i = 0; i < n; ++i) out[i] = outTap_[(w - n + i) & 4095];
+    return n;
+}
+
 void Engine::soundingNotes(bool (&out)[128]) const
 {
     const uint64_t m0 = mask_[0].load(std::memory_order_relaxed), m1 = mask_[1].load(std::memory_order_relaxed);
@@ -1409,7 +1417,9 @@ void Engine::renderChunk(float* L, float* R, int n)
         const float yr = R[i] - dcXR_ + dcR * dcYR_; dcXR_ = R[i]; dcYR_ = yr;
         L[i] = softClip(yl * g);
         R[i] = softClip(yr * g);
+        outTap_[(outTapW_ + i) & 4095] = 0.5f * (L[i] + R[i]);
     }
+    outTapW_ = (outTapW_ + n) & 4095;
 }
 
 } // namespace ambient

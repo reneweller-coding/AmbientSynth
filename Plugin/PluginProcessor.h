@@ -53,6 +53,8 @@ public:
     // hundred presets is not a ride on the volume knob. It never touches a preset's own settings.
     void setLevelMatch(bool on) { levelMatch_ = on; }
     bool levelMatch() const { return levelMatch_; }
+    void setCompactLayout(bool on) { compact_ = on; }
+    bool compactLayout() const { return compact_; }
     juce::String textureName() const  { return textureFile_.existsAsFile() ? textureFile_.getFileNameWithoutExtension() : juce::String(); }
     juce::String wavetableName() const { return wavetableFile_.existsAsFile() ? wavetableFile_.getFileNameWithoutExtension() : juce::String(); }
     // User presets as files (full state including a loaded Scala scale).
@@ -121,7 +123,7 @@ private:
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_, wavetableFile_, impulseFile_, impulseBFile_;
-    bool       levelMatch_ = false;
+    bool       levelMatch_ = false, compact_ = false;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;
     juce::String routeText_;

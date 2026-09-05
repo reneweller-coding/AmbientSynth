@@ -550,6 +550,9 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     if (impulseFile_.existsAsFile())   state.setProperty("impulseFile", impulseFile_.getFullPathName(), nullptr);
+    if (impulseBFile_.existsAsFile())  state.setProperty("impulseBFile", impulseBFile_.getFullPathName(), nullptr);
+    if (compact_) state.setProperty("compact", 1, nullptr);          // how the editor is laid out
+    if (levelMatch_) state.setProperty("levelMatch", 1, nullptr);
     juce::ValueTree midi("midi");
     for (int cc = 0; cc < 128; ++cc) {
         const int target = ccMap_[static_cast<size_t>(cc)].load();
@@ -601,6 +604,9 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
             const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
+            const juce::String irBPath = tree.getProperty("impulseBFile").toString();
+            compact_ = static_cast<int>(tree.getProperty("compact", 0)) != 0;
+            levelMatch_ = static_cast<int>(tree.getProperty("levelMatch", 0)) != 0;
             const juce::String route = tree.getProperty("route").toString();
             const juce::String modMatrix = tree.getProperty("modMatrix").toString();
             const juce::String modEnvs = tree.getProperty("modEnvs").toString();
@@ -622,6 +628,7 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));
             if (tabPath.isNotEmpty() && juce::File(tabPath).existsAsFile()) loadWavetableFile(juce::File(tabPath));
             if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile()) loadImpulseFile(juce::File(irPath));
+            if (irBPath.isNotEmpty() && juce::File(irBPath).existsAsFile()) loadImpulseFile(juce::File(irBPath), true);
         }
     }
 }

@@ -442,3 +442,59 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
     g.setColour(ui::voiceCol.withAlpha(0.25f)); g.strokePath(p, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     g.setColour(ui::voiceCol);                  g.strokePath(p, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
+
+// ---------------------------------------------------------------- the output's spectrum
+
+AmbientSynthEditor::OutputView::OutputView(AmbientSynthProcessor& p)
+    : proc(p), re(kN), im(kN), window(kN), fft(std::make_unique<ambient::Fft>(kN))
+{
+    setInterceptsMouseClicks(false, false);
+    for (int i = 0; i < kN; ++i) window[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * i / kN);
+    for (float& b : bins) b = -90.0f;
+    startTimerHz(15);
+}
+
+void AmbientSynthEditor::OutputView::timerCallback()
+{
+    if (!isShowing()) return;
+    proc.engine().outputTap(re.data(), kN);
+    float peak = 0.0f;
+    for (int i = 0; i < kN; ++i) { peak = juce::jmax(peak, std::fabs(re[static_cast<size_t>(i)])); re[static_cast<size_t>(i)] *= window[static_cast<size_t>(i)]; im[static_cast<size_t>(i)] = 0.0f; }
+    peakDb = 20.0f * std::log10(peak + 1.0e-6f);
+    fft->transform(re.data(), im.data(), false);
+    const float sr = static_cast<float>(proc.getSampleRate() > 0 ? proc.getSampleRate() : 48000.0);
+    for (int b = 0; b < kBins; ++b) {
+        const float f0 = 30.0f * std::pow(16000.0f / 30.0f, static_cast<float>(b) / kBins);
+        const float f1 = 30.0f * std::pow(16000.0f / 30.0f, static_cast<float>(b + 1) / kBins);
+        int k0 = juce::jmax(1, static_cast<int>(f0 / sr * kN)), k1 = juce::jmax(k0 + 1, static_cast<int>(f1 / sr * kN));
+        float p = 0.0f;
+        for (int k = k0; k < juce::jmin(k1, kN / 2); ++k) p = juce::jmax(p, re[static_cast<size_t>(k)] * re[static_cast<size_t>(k)] + im[static_cast<size_t>(k)] * im[static_cast<size_t>(k)]);
+        const float db = 10.0f * std::log10(p / (kN * kN * 0.0625f) + 1.0e-12f);
+        bins[b] = db > bins[b] ? db : bins[b] + (db - bins[b]) * 0.2f;   // fast up, slow down, like a meter
+    }
+    repaint();
+}
+
+void AmbientSynthEditor::OutputView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat();
+    g.setColour(ui::bg0.withAlpha(0.5f));
+    g.fillRoundedRectangle(r, 4.0f);
+    const auto plot = r.reduced(4.0f, 3.0f);
+    g.setColour(ui::track.withAlpha(0.45f));
+    for (float hz : { 100.0f, 1000.0f, 10000.0f }) {
+        const float t = std::log(hz / 30.0f) / std::log(16000.0f / 30.0f);
+        g.drawVerticalLine(juce::roundToInt(plot.getX() + t * plot.getWidth()), plot.getY(), plot.getBottom());
+    }
+    const float bw = plot.getWidth() / kBins;
+    for (int b = 0; b < kBins; ++b) {
+        const float t = juce::jlimit(0.0f, 1.0f, (bins[b] + 72.0f) / 72.0f);
+        if (t <= 0.001f) continue;
+        const float h = t * plot.getHeight();
+        g.setColour(ui::accent.withAlpha(0.25f + 0.55f * t));
+        g.fillRect(plot.getX() + b * bw, plot.getBottom() - h, juce::jmax(1.0f, bw - 0.8f), h);
+    }
+    g.setColour(peakDb > -0.5f ? juce::Colour(0xffe06060) : ui::dim);
+    g.setFont(ui::body(9.5f));
+    g.drawText(juce::String(peakDb, 1) + " dB peak", r.reduced(6.0f, 2.0f), juce::Justification::topRight, false);
+}

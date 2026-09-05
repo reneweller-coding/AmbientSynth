@@ -94,6 +94,10 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     shimmerR_.prepare(sr_);
     shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
+    smBlur_.setTime(0.02f, sr_);
+    blur_.prepare(sr_, 0x5EED5EEDull);
+    auxRng_.seed(0xA5A5A5A5ull);
+    tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
     dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
     lastRootPc_ = -1;
     readParams();
@@ -634,19 +638,19 @@ void Engine::readParams()
     {   // Source slots: 24 fields each. Source 2 and 3 are laid out consecutively from their Type;
         // Source 1's fields are scattered (its level and spectrum are the classic Oscillator
         // parameters, read above), so every slot goes through one table of ids.
-        static const ParamId kSlotIds[kSlots][25] = {
+        static const ParamId kSlotIds[kSlots][26] = {
             { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
               ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
               ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
-              ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync },
+              ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync, ParamId::Src1Drift },
             { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
               ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
               ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
-              ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync },
+              ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync, ParamId::Src2Drift },
             { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
               ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
               ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
-              ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync },
+              ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync, ParamId::Src3Drift },
         };
         for (int k = 0; k < kSlots; ++k) {
             // Source 1's level and spectrum were read into vp_ above; reading them again would step
@@ -667,6 +671,7 @@ void Engine::readParams()
                 s.shimmerRate = at(23);
             }
             s.type          = static_cast<SourceType>(clampv(static_cast<int>(std::lround(at(0))), 0, kNumSourceTypes - 1));
+            s.drift         = at(25);
             s.octave        = static_cast<int>(std::lround(at(2)));
             s.ratio         = static_cast<int>(std::lround(at(3)));
             s.pan           = at(4);
@@ -733,6 +738,20 @@ void Engine::readParams()
     vp_.presence    = g(ParamId::Presence);
     vp_.breath      = g(ParamId::Breath);
     vp_.breathRate  = g(ParamId::BreathRate);
+    vp_.phaseWidth  = g(ParamId::PhaseWidth);
+    vp_.phaseRate   = g(ParamId::PhaseRate);
+    vp_.doppler     = g(ParamId::Doppler);
+    vp_.strikeLevel = g(ParamId::StrikeLevel);
+    vp_.strikeType  = static_cast<int>(std::lround(g(ParamId::StrikeType)));
+    vp_.strikeDecay = g(ParamId::StrikeDecay);
+    vp_.strikeDamp  = g(ParamId::StrikeDamp);
+    vp_.strikeBrain = std::lround(g(ParamId::StrikeWho)) == 1;
+    tide_       = g(ParamId::Tide);
+    tidePeriod_ = g(ParamId::TidePeriod);
+    vp_.pitchMul = tide_ > 0.0f ? std::pow(2.0f, tide_ * tideDrift_.value() / 1200.0f) : 1.0f;
+    blurMix_    = g(ParamId::BlurMix);
+    blur_.set(g(ParamId::BlurSmear));
+    farRotate_  = g(ParamId::FarRotate);
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
@@ -767,11 +786,11 @@ void Engine::readParams()
 
     ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), syncedHz(ParamId::EnsembleSync, g(ParamId::EnsembleRate)));
     delay_.set(syncedSeconds(ParamId::DelaySyncL, g(ParamId::DelayTimeL)), syncedSeconds(ParamId::DelaySyncR, g(ParamId::DelayTimeR)),
-               g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp));
+               g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp), g(ParamId::DelayAbsorb));
     delayMix_   = g(ParamId::DelayMix);
     delayToFar_ = g(ParamId::DelayToFar);
     delay2_.set(syncedSeconds(ParamId::Delay2SyncL, g(ParamId::Delay2TimeL)), syncedSeconds(ParamId::Delay2SyncR, g(ParamId::Delay2TimeR)),
-                g(ParamId::Delay2Feedback), g(ParamId::Delay2Cross), g(ParamId::Delay2Damp));
+                g(ParamId::Delay2Feedback), g(ParamId::Delay2Cross), g(ParamId::Delay2Damp), g(ParamId::Delay2Absorb));
     delay2Mix_   = g(ParamId::Delay2Mix);
     delay2ToFar_ = g(ParamId::Delay2ToFar);
     cloud_.set(syncedHz(ParamId::CloudSync, g(ParamId::CloudDensity)), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
@@ -880,6 +899,8 @@ void Engine::process(float* L, float* R, int n)
         tableSeen_ = tv;
     }
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
+    if (tide_ > 0.0f) tideDrift_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(tidePeriod_, 0.5f)), auxRng_);
+    if (farRotate_ > 0.0f) rotDrift_.update(static_cast<float>(n / sr_), 0.008f, auxRng_);
     arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
     shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
     purityDrift_.update(static_cast<float>(n / sr_), getParam(ParamId::TuneDriftRate), rng_);
@@ -1037,6 +1058,13 @@ void Engine::renderChunk(float* L, float* R, int n)
     if (fbOn && fbBus_ > 0.0f)
         for (int i = 0; i < n; ++i) { nl[i] += fbl[i] * fbBus_; nr[i] += fbr[i] * fbBus_; }
 
+    // Blur: the near bus through a spectral smear before anything else hears it, so a note's
+    // attack is wiped into texture and one note flows into the next.
+    if (blurMix_ > 0.0f || smBlur_.value > 1.0e-4f) {
+        float* bl = nebL_.data(); float* br = nebR_.data();
+        blur_.process(nl, nr, bl, br, n);
+        for (int i = 0; i < n; ++i) { const float m = smBlur_.next(blurMix_); nl[i] = nl[i] * (1.0f - m) + bl[i] * m; nr[i] = nr[i] * (1.0f - m) + br[i] * m; }
+    }
     // Foreground plane: ensemble, asymmetric delay (echoes partly recede into the far plane), small room.
     ensemble_.process(nl, nr, n);
     delay_.process(nl, nr, wl, wr, n);
@@ -1107,6 +1135,10 @@ void Engine::renderChunk(float* L, float* R, int n)
         roomTailLeft_ = roomLevel_ > 0.0005f ? static_cast<long>(room_.impulseSeconds() * sr_) + Convolver::kBlock : std::max(0L, roomTailLeft_ - n);
     }
     farReverb_.process(fl, fr, n);
+    if (farRotate_ > 0.0f) {   // the background slowly turns: left and right rotate into each other
+        const float a = rotDrift_.value() * farRotate_ * 0.6f, c = std::cos(a), sn = std::sin(a);
+        for (int i = 0; i < n; ++i) { const float l = fl[i], r = fr[i]; fl[i] = l * c - r * sn; fr[i] = l * sn + r * c; }
+    }
     if (cosmosShimmer_ > 0.0f) {
         shimmerL_.process(fl, sl, n);
         shimmerR_.process(fr, sr, n);
@@ -1231,7 +1263,7 @@ void Engine::renderChunk(float* L, float* R, int n)
                 subHz = ghost;
             }
         }
-        const double target = std::log(std::max(subHz, 10.0));
+        const double target = std::log(std::max(subHz * static_cast<double>(vp_.pitchMul), 10.0));   // the tide moves the sub with the voices
         if (subFreqCur_ <= 0.0) subFreqCur_ = target;
         const double glideC = 1.0 - std::exp(-1.0 / (std::max(subGlide_, 0.05f) * sr_));
         const float levelC = 1.0f - std::exp(-1.0f / (2.0f * static_cast<float>(sr_)));

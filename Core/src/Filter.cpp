@@ -5,13 +5,26 @@
 namespace ambient {
 
 const char* const kFilterModelNames[kNumFilterModels] = {
-    "LP 6", "LP 12", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "Comb",
+    "LP 6", "LP 12", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "Comb", "Formant",
 };
+
+namespace {
+// Formant frequencies of u o a e i (a rising sweep as Cutoff turns), interpolated in log frequency.
+const float kFormants[5][3] = { { 325.0f, 700.0f, 2530.0f }, { 450.0f, 800.0f, 2830.0f }, { 800.0f, 1150.0f, 2900.0f },
+                                { 400.0f, 1600.0f, 2700.0f }, { 270.0f, 2300.0f, 3000.0f } };
+void formantsAt(float cutoffHz, float* out)
+{
+    const float t = clampv(std::log(cutoffHz / 40.0f) / std::log(18000.0f / 40.0f), 0.0f, 1.0f) * 4.0f;
+    const int i = std::min(static_cast<int>(t), 3);
+    const float f = t - static_cast<float>(i);
+    for (int k = 0; k < 3; ++k) out[k] = std::exp(std::log(kFormants[i][k]) + f * (std::log(kFormants[i + 1][k]) - std::log(kFormants[i][k])));
+}
+} // namespace
 const char* const kFilterRouteNames[2] = { "Series", "Parallel" };
 
 void VoiceFilter::reset()
 {
-    svfL_.reset(); svfR_.reset(); svf2L_.reset(); svf2R_.reset();
+    svfL_.reset(); svfR_.reset(); svf2L_.reset(); svf2R_.reset(); svf3L_.reset(); svf3R_.reset();
     std::memset(lad_, 0, sizeof(lad_));
     onePole_[0] = onePole_[1] = 0.0f;
     std::memset(combBuf_, 0, sizeof(combBuf_));
@@ -65,6 +78,14 @@ void VoiceFilter::set(FilterModel model, float cutoffHz, float resonance, float 
         combDelay_ = clampv(sr_ / fc, 2.0f, static_cast<float>(kCombMax - 4));
         combFb_ = 0.98f * res;
         break;
+    case FilterModel::Formant: {
+        float f[3]; formantsAt(fc, f);
+        const float q = 3.0f + 12.0f * res;
+        svfL_.setQ(f[0], q, sr_); svfR_.copyCoefficients(svfL_);
+        svf2L_.setQ(f[1], q, sr_); svf2R_.copyCoefficients(svf2L_);
+        svf3L_.setQ(f[2], q, sr_); svf3R_.copyCoefficients(svf3L_);
+        break;
+    }
     default: break;
     }
 }
@@ -103,6 +124,19 @@ float VoiceFilter::magnitude(FilterModel model, float cutoffHz, float resonance,
         const C G = g / (1.0f - (1.0f - g) * z);
         const C G4 = G * G * G * G;
         return std::abs(G4 / (1.0f + k * G4)) * (1.0f + k * 0.5f);
+    }
+    case FilterModel::Formant: {
+        float f[3]; formantsAt(fc, f);
+        const float q = 3.0f + 12.0f * res;
+        static const float gain[3] = { 1.0f, 0.5f, 0.3f };
+        float sum = 0.0f;
+        for (int i = 0; i < 3; ++i) {
+            const float gc = std::tan(kPi * clampv(f[i], 10.0f, sr * 0.45f) / sr);
+            const C s(0.0f, std::tan(0.5f * w) / gc);
+            const float k = 1.0f / q;
+            sum += std::abs(k * s / (s * s + k * s + 1.0f)) * gain[i];   // magnitudes summed: the picture without the phases
+        }
+        return sum;
     }
     case FilterModel::Comb: {
         const float D = clampv(sr / fc, 2.0f, static_cast<float>(kCombMax - 4));

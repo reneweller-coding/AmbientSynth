@@ -35,6 +35,13 @@ struct VoiceParams {
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
     int   filterModel = 1;      // FilterModel (Filter.h); 1 = the 12 dB state-variable low pass
     float filterDrive = 0.0f;
+    // Rich refinements: the binaural phase field, the breathing doppler, the pitch tide (from the
+    // engine, already a multiplier), and the strike layer
+    float phaseWidth = 0.0f, phaseRate = 0.03f, doppler = 0.0f;
+    float pitchMul = 1.0f;
+    float strikeLevel = 0.0f, strikeDecay = 0.4f, strikeDamp = 0.5f;
+    int   strikeType = 0;       // String, Wood, Metal
+    bool  strikeBrain = false;  // the brain's notes strike too
     bool  filterOn = true;      // the voice filter can be switched out; z-plane Replace also bypasses it
     bool  filterParallel = false;   // both filters on: z-plane after the filter (false) or beside it (true)
     // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
@@ -123,6 +130,22 @@ private:
     Envelope env_;
     VoiceFilter filt_;
     bool     lastFilterOn_ = true;
+    // Binaural phase field: two first-order all-passes per ear, corners drifting apart
+    Drifter  phaseDrift_;
+    bool     phaseOn_ = false;
+    float    apC_[2][2] = {}, apX_[2][2] = {}, apY_[2][2] = {};
+    // Doppler from the breathing distance
+    float    prevDist_ = 0.0f;
+    double   dopplerMul_ = 1.0;
+    // Strike: a Karplus-Strong loop excited at note-on, on the near plane
+    static constexpr int kStrikeMax = 4096;
+    float    ks_[kStrikeMax] = {};
+    int      ksLen_ = 0, ksPos_ = 0, ksLeft_ = 0, ksT_ = 0, ksTotal_ = 0;
+    float    ksG_ = 0.0f, ksLpC_ = 0.5f, ksLp_ = 0.0f, ksApK_ = 0.0f, ksApX_ = 0.0f, ksApY_ = 0.0f, ksAmp_ = 0.0f;
+    float    ksGainL_ = 0.7f, ksGainR_ = 0.7f;
+    bool     ksOn_ = false;
+    void     strikeStart(double hz, const VoiceParams& p);
+    inline float strikeTick();
     Svf      airL_, airR_;
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;

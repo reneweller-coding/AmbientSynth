@@ -64,7 +64,7 @@ void StereoDelay::prepare(double sampleRate)
     tLcur_ = tRcur_ = 0.0f;
 }
 
-void StereoDelay::set(float timeL, float timeR, float feedback, float cross, float damping)
+void StereoDelay::set(float timeL, float timeR, float feedback, float cross, float damping, float absorb)
 {
     const float maxT = static_cast<float>(mask_ - 64);
     tL_ = std::min(clampv(timeL, 0.001f, 4.0f) * static_cast<float>(sr_), maxT);
@@ -74,6 +74,15 @@ void StereoDelay::set(float timeL, float timeR, float feedback, float cross, flo
     fb_ = clampv(feedback, 0.0f, 0.98f);
     cross_ = clampv(cross, 0.0f, 1.0f);
     lpc_ = 1.0f - 0.9f * clampv(damping, 0.0f, 1.0f);
+    absorb_ = clampv(absorb, 0.0f, 1.0f);
+    if (absorb_ > 0.0f) {
+        // The band narrows with the feedback: at full feedback and full absorb the loop keeps
+        // 320 Hz .. 1 kHz, and every repeat passes through it again.
+        const float lc = 20.0f * std::pow(2.0f, 4.0f * absorb_ * fb_);
+        const float hc = 16000.0f * std::pow(2.0f, -4.0f * absorb_ * fb_);
+        hpc_  = 1.0f - std::exp(-kTwoPi * lc / static_cast<float>(sr_));
+        lpc2_ = 1.0f - std::exp(-kTwoPi * hc / static_cast<float>(sr_));
+    }
 }
 
 void StereoDelay::process(const float* inL, const float* inR, float* wetL, float* wetR, int n)
@@ -93,8 +102,14 @@ void StereoDelay::process(const float* inL, const float* inR, float* wetL, float
         const float oR = ringRead(br, mask_, w_, dR);
         lpL_ += lpc_ * (oL - lpL_);
         lpR_ += lpc_ * (oR - lpR_);
-        const float fbL = fb_ * ((1.0f - cross_) * lpL_ + cross_ * lpR_);
-        const float fbR = fb_ * ((1.0f - cross_) * lpR_ + cross_ * lpL_);
+        float fdL = lpL_, fdR = lpR_;
+        if (absorb_ > 0.0f) {   // the absorption band: low cut, then the sinking high cut
+            loL_ += hpc_ * (fdL - loL_); loR_ += hpc_ * (fdR - loR_);
+            hiL_ += lpc2_ * ((fdL - loL_) - hiL_); hiR_ += lpc2_ * ((fdR - loR_) - hiR_);
+            fdL = hiL_; fdR = hiR_;
+        }
+        const float fbL = fb_ * ((1.0f - cross_) * fdL + cross_ * fdR);
+        const float fbR = fb_ * ((1.0f - cross_) * fdR + cross_ * fdL);
         bl[w_ & mask_] = inL[i] + fbL;
         br[w_ & mask_] = inR[i] + fbR;
         wetL[i] = oL;

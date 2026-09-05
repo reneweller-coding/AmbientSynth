@@ -174,6 +174,7 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     {   // the shimmer drifters seed from a side stream, so the slot's own stream is what it always was
         Rng aux; aux.seed(seed ^ 0xD1B54A32D192ED03ull);
         for (auto& d : shim_) d.init(aux);
+        pitchDrift_.init(aux);
     }
     active_ = 0;
     cTilt_ = -1.0f; cOdd_ = -9.0f; cPartials_ = -1;
@@ -206,7 +207,10 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         for (auto& g : grains_) g.on = false;
         lastType_ = p.type;
     }
-    const double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
+    double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
+    // Slow independent pitch drift: each source on its own curve, so three sources on pure ratios
+    // beat like an ensemble in a room whose temperature moves, never in lockstep.
+    if (p.drift > 0.0f) hz *= std::pow(2.0, static_cast<double>(p.drift * pitchDrift_.update(dt, driftRate > 0.0f ? driftRate : 0.05f, rng_)) / 1200.0);
 
     // Level and pan ramp across the block (equal power).
     const float angle = (clampv(p.pan, -1.0f, 1.0f) + 1.0f) * 0.25f * kPi;
@@ -241,7 +245,6 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         outR[i] += scratch_[i] * gR_;
     }
     gL_ = tL; gR_ = tR;
-    (void)driftRate;
 }
 
 void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt)

@@ -54,18 +54,18 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
-        { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb" } }, {}, 1 },
+        { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence", "Clock" } }, {}, 1 },
     };
     tabRows_ = {
-        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" } } },
+        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" } } },
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
-        { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } } },
+        { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } } },
         { 5, 0, { "BRAIN", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
     };
@@ -205,7 +205,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(envView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get() };
+        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr };
         tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get() };
     }
     if (groups_.size() > 4) {
@@ -272,11 +272,12 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning") s.maxUnits = 9;
             if (s.name == "Morph") s.maxUnits = 9;
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
-            if (s.name == "Space") s.maxUnits = 6;                           // two rows each, side by side
+            if (s.name == "Space") s.maxUnits = 7;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Strands") s.maxUnits = 10;
-            if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 11;   // one row with the two Sync choices
+            if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
+            if (s.name == "Far Reverb") s.maxUnits = 9;                      // one row with Rotate
             if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
             if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route
@@ -2697,23 +2698,23 @@ void AmbientSynthEditor::updateSourceCells()
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
     enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5 };
-    static const ParamId kIds[3][25] = {
+    static const ParamId kIds[3][26] = {
         { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
           ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
           ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
-          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync },
+          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync, ParamId::Src1Drift },
         { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
           ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
           ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
-          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync },
+          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync, ParamId::Src2Drift },
         { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
           ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
           ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
-          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync },
+          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync, ParamId::Src3Drift },
     };
     for (int k = 0; k < 3; ++k) {
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(kIds[k][0])));
-        for (int off = 1; off <= 24; ++off) {
+        for (int off = 1; off <= 25; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
@@ -2730,6 +2731,7 @@ void AmbientSynthEditor::updateSourceCells()
             case 16: on = type == Noise; break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: on = type == Additive; break;
             case 24: on = type == Texture || type == Noise; break;                // density sync
+            case 25: on = type != Off && type != Noise; break;                    // pitch drift
             default: break;
             }
             const int ci = cellForParam(kIds[k][off]);

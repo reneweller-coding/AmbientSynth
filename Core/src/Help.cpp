@@ -48,6 +48,7 @@ const HelpEntry kHelp[] = {
     { "srcN_spread", "Texture: scatters each grain's start point around Position, as a fraction of the clip. At 1 a grain may come from anywhere." },
     { "srcN_noise", "The noise colour: White, Pink (-3 dB/oct), Brown (-6), Blue (+3), Violet (+6), Grey (flat to the ear), Band (a resonant band at Position), Wind (a wandering band), Crackle (sparse impulses), Digital (sample-and-hold)." },
     { "srcN_noise_q", "Width of the Band and Wind colours: 0 wide open, 1 a whistle." },
+    { "srcN_drift", "A slow, independent pitch drift of this source in cents. Three sources on just ratios each drifting on their own curve beat like real instruments in a changing room, never symmetrically." },
 
     // ---- strands (Source 1 additive only)
     { "strands", "How many detuned or stacked copies of the bank a voice plays, 1 to 6. Each has its own pitch drift and pan." },
@@ -115,6 +116,9 @@ const HelpEntry kHelp[] = {
     { "presence", "A broad bell at 2-5 kHz on the near plane only (up to 6 dB), gone on the far plane -- foreground articulation the way Rich carves it." },
     { "breath", "Every voice's distance itself wanders by up to this much of the plane (0.35 at 1): the room breathes." },
     { "breath_rate", "How fast the distances breathe. 0.03 Hz is half a minute per swing." },
+    { "phase_width", "Two all-pass stages per ear whose corners drift in opposite directions: the phase between left and right changes slowly and the room seems to change size rather than the sound to move. Off at 0." },
+    { "phase_rate", "How fast the phase field drifts. Keep it slow: the effect is space, not tremolo." },
+    { "doppler", "As a voice breathes closer or further away its pitch bends a little, the way a moving source does. A few cents at most; the ear reads approach and retreat from it." },
 
     // ---- ensemble
     { "ens_mix", "Amount of the ensemble (a slow stereo chorus) on the near bus." },
@@ -130,6 +134,7 @@ const HelpEntry kHelp[] = {
     { "dly_feedback", "How much of the delay returns into itself. Near 1 the echoes last for minutes." },
     { "dly_cross", "How much the left echo feeds the right and vice versa -- ping-pong at 1." },
     { "dly_damp", "Low-pass in the feedback path: each repeat darker than the last." },
+    { "dly_absorb", "Absorption: with Absorb up, the loop also loses its low end and its high cut moves down as Feedback rises, so long echoes drown into a warm fog instead of merely getting quieter." },
     { "dly_mix", "Level of the echoes on the near (dry) bus." },
     { "dly_to_far", "Level of the echoes sent into the far reverb instead: echoes that recede into the background." },
 
@@ -145,6 +150,9 @@ const HelpEntry kHelp[] = {
     { "far_asym", "Stretches the right half of the reverb's lines and delays its output slightly, so the two ears hear different reflections." },
     { "far_highcut", "Low-pass on the far reverb's tail." },
     { "far_freeze", "Holds the far reverb's tail forever: an instant infinite pad of whatever was in it." },
+    { "far_rotate", "The whole background slowly turns: the far field's left and right rotate into each other on a minute-scale curve. Depth of the turn." },
+    { "blur_mix", "A spectral smear on the near bus itself, ahead of the effects: every attack is wiped into texture, notes flow into each other. Mix of the blurred signal (latency 43 ms on the blurred part)." },
+    { "blur_smear", "How much the blur smears: 0 follows the input closely, 1 is a spectral freeze that only lets new energy in slowly." },
 
     // ---- feedback
     { "fb_bus", "The mixed output returns, low-passed and saturated, into the near bus before the filters and effects -- throttled by the output level so it hisses and holds instead of running away." },
@@ -211,6 +219,13 @@ const HelpEntry kHelp[] = {
     { "purity", "Blends every note between 12-TET (0) and the chosen scale (1) in the log domain -- the beating locks in as you turn it up." },
     { "purity_drift", "Lets the purity wander, so the tuning locks in and loosens over minutes." },
     { "purity_rate", "How fast the purity wanders." },
+    { "tide", "The whole instrument's pitch leans by up to this many cents on a very slow curve, like a tape machine over an evening. Sub and voices move together, so the harmony stays." },
+    { "tide_period", "Minutes for one swing of the tide." },
+    { "strike_level", "A short plucked or struck impulse at note-on on the near plane, whatever the voice's distance: the intimate contrast that makes the background vast. Level; 0 is off." },
+    { "strike_type", "String: a plucked string at the note (Karplus-Strong). Wood: a short, dull knock two octaves up. Metal: the string with an all-pass in its loop, stretched and clangorous." },
+    { "strike_decay", "Seconds the strike rings." },
+    { "strike_damp", "Brightness loss per round of the string: 0 bright and long, 1 dull and short." },
+    { "strike_who", "Keys: only your notes strike. Keys + Brain: the conductor's notes too." },
     { "portamento", "Seconds a new key glides from the last one." },
     { "porta_gravity", "Slows the glide near consonant ratios to the root, so a slide clicks into the harmonic nodes on the way." },
 

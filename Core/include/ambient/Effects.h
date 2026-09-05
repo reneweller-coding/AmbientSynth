@@ -27,7 +27,9 @@ private:
 class StereoDelay {
 public:
     void prepare(double sampleRate);
-    void set(float timeL, float timeR, float feedback, float cross, float damping);
+    // absorb: with it up, the loop also loses its low end and its high cut sinks as the feedback
+    // rises, so long echoes drown into a fog instead of merely getting quieter.
+    void set(float timeL, float timeR, float feedback, float cross, float damping, float absorb = 0.0f);
     // Writes the wet signal only; the caller mixes it.
     void process(const float* inL, const float* inR, float* wetL, float* wetR, int n);
 private:
@@ -37,6 +39,8 @@ private:
     float  tL_ = 0, tR_ = 0, tLcur_ = 0, tRcur_ = 0;
     float  fb_ = 0.5f, cross_ = 0.3f, lpc_ = 0.5f;
     float  lpL_ = 0, lpR_ = 0;
+    float  absorb_ = 0.0f, hpc_ = 0.0f, lpc2_ = 1.0f;   // the absorption band, from feedback and absorb
+    float  loL_ = 0, loR_ = 0, hiL_ = 0, hiR_ = 0;
     double modPh_[2] = { 0.0, 0.5 };
 };
 

@@ -97,6 +97,7 @@ struct SlotParams {
     // Additive: the spectrum of the slot's own bank (same formula as the voice's strands)
     int   partials = 16;
     float tilt = 1.2f, bright = 0.7f, oddEven = 0.0f, inharm = 0.0f, shimmer = 0.4f, shimmerRate = 0.15f;
+    float drift = 0.0f;          // cents of slow, independent pitch drift (the asymmetric detune)
 };
 
 class SourceSlot {
@@ -163,7 +164,7 @@ public:
 private:
     NoiseState noise_[2];
     Drifter noiseDrift_;
-    Drifter posDrift_, idxDrift_;
+    Drifter posDrift_, idxDrift_, pitchDrift_;
     Rng    rng_;
     double sr_ = 48000.0;
     float  gL_ = 0.0f, gR_ = 0.0f;

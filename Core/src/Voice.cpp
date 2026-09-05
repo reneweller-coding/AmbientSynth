@@ -54,6 +54,12 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     // rather than a fork from the stream, so the stream -- and with it every preset's random
     // phases and drifts -- stayed exactly where it was before the slot existed.
     slots_[0].prepare(sr_, seed ^ 0x9E3779B97F4A7C15ull);
+    {   // the phase field's drifter seeds from a side stream, so the voice's stream is untouched
+        Rng aux; aux.seed(seed ^ 0x51ED270B9E3779B9ull);
+        phaseDrift_.init(aux);
+    }
+    ksOn_ = false; ksLen_ = 0;
+    std::memset(apX_, 0, sizeof(apX_)); std::memset(apY_, 0, sizeof(apY_));
     for (int k = 1; k < kSlots; ++k) slots_[k].prepare(sr_, rng_.fork());
     filt_.prepare(sr_);
     airL_.reset();  airR_.reset();
@@ -93,8 +99,52 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
         bloomT_ = 0.0f;
+        prevDist_ = distance_;
     }
     env_.noteOn();
+    if (p.strikeLevel > 0.0f && (owner == 0 || p.strikeBrain)) strikeStart(freqHz, p);
+}
+
+// The strike: a burst of noise into a delay loop with a damping low pass (Karplus-Strong). String
+// rings at the note; Wood is two octaves up, short and dull; Metal puts an all-pass in the loop,
+// which stretches the partials into something clangorous. It plays on the near plane whatever
+// the voice's distance -- the intimate impulse that makes the background behind it vast.
+void Voice::strikeStart(double hz, const VoiceParams& p)
+{
+    const int type = clampv(p.strikeType, 0, 2);
+    double f = hz;
+    if (type == 1) f = clampv(hz * 4.0, 200.0, 2500.0);
+    ksLen_ = clampv(static_cast<int>(sr_ / std::max(f, 20.0)), 8, kStrikeMax - 1);
+    std::memset(ks_, 0, sizeof(float) * static_cast<size_t>(ksLen_));
+    ksPos_ = 0;
+    ksLeft_ = ksLen_;
+    float decay = std::max(p.strikeDecay, 0.02f);
+    if (type == 1) decay *= 0.35f;
+    ksG_ = std::pow(10.0f, -3.0f * static_cast<float>(ksLen_) / (decay * static_cast<float>(sr_)));
+    ksLpC_ = 1.0f - 0.9f * clampv(p.strikeDamp, 0.0f, 1.0f);
+    if (type == 1) ksLpC_ = std::min(ksLpC_, 0.25f);
+    ksApK_ = type == 2 ? 0.55f : 0.0f;
+    ksLp_ = ksApX_ = ksApY_ = 0.0f;
+    ksAmp_ = 0.6f * p.strikeLevel * velocity_;
+    ksT_ = 0;
+    ksTotal_ = static_cast<int>(decay * 1.5f * static_cast<float>(sr_)) + ksLen_;
+    const float angle = (clampv(centre_, -1.0f, 1.0f) + 1.0f) * 0.25f * kPi;
+    ksGainL_ = std::cos(angle); ksGainR_ = std::sin(angle);
+    ksOn_ = true;
+}
+
+inline float Voice::strikeTick()
+{
+    float in = 0.0f;
+    if (ksLeft_ > 0) { in = ksAmp_ * rng_.bipolar(); --ksLeft_; }
+    const float d = ks_[ksPos_];
+    ksLp_ += ksLpC_ * (d - ksLp_);
+    float v = ksLp_;
+    if (ksApK_ != 0.0f) { const float y = -ksApK_ * v + ksApX_ + ksApK_ * ksApY_; ksApX_ = v; ksApY_ = y; v = y; }
+    ks_[ksPos_] = in + ksG_ * v;
+    if (++ksPos_ >= ksLen_) ksPos_ = 0;
+    if (++ksT_ > ksTotal_) ksOn_ = false;
+    return d;
 }
 
 void Voice::noteOff() { env_.noteOff(); }
@@ -151,6 +201,13 @@ void Voice::control(int blockLen, const VoiceParams& p)
 
     const float bd = breath_.update(dt, p.breathRate * rateMul, rng_);
     distEff_ = clampv(distance_ + 0.35f * p.breath * bd, 0.0f, 1.0f);
+    // Doppler: the breathing distance has a velocity; a voice coming closer rises a little, one
+    // receding falls. One plane unit is taken as about twenty metres.
+    if (p.doppler > 0.0f && dtReal > 0.0f) {
+        const float vel = (distEff_ - prevDist_) / dtReal;
+        dopplerMul_ = clampv(1.0 - 0.06 * static_cast<double>(p.doppler * vel), 0.97, 1.03);
+    } else dopplerMul_ = 1.0;
+    prevDist_ = distEff_;
     gNear_  = std::cos(distEff_ * 0.5f * kPi);
     gFar_   = std::sin(distEff_ * 0.5f * kPi);
     gLevel_ = 1.0f - 0.5f * distEff_;
@@ -202,7 +259,8 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const SlotParams& s1 = p.slot[0];
     const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan + s1.pan, -1.0f, 1.0f);
     centre_ = centre;
-    const double bankMul = kSlotRatios[clampv(s1.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(s1.octave, -2, 2));
+    const double bankMul = kSlotRatios[clampv(s1.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(s1.octave, -2, 2))
+                         * (static_cast<double>(p.pitchMul) * dopplerMul_);   // the tide and the doppler, 1.0 exactly when off
     const int stack = clampv(p.stack, 0, kNumStacks - 1);
 
     for (int si = 0; si < unison; ++si) {
@@ -277,6 +335,20 @@ void Voice::control(int blockLen, const VoiceParams& p)
                         - 2.5f * distEff_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filt_.set(static_cast<FilterModel>(clampv(p.filterModel, 0, kNumFilterModels - 1)), cut, p.resonance, p.filterDrive);
+    // Binaural phase field: the two ears' all-pass corners drift apart and back on one slow curve;
+    // the phase relation changes, not the level, so the room seems to breathe in size.
+    phaseOn_ = p.phaseWidth > 0.0f;
+    if (phaseOn_) {
+        const float d = phaseDrift_.update(dt, p.phaseRate * rateMul, rng_) * p.phaseWidth * 1.5f;   // octaves apart
+        const float sr = static_cast<float>(sr_);
+        for (int ch = 0; ch < 2; ++ch) {
+            const float sgn = ch == 0 ? 1.0f : -1.0f;
+            const float f1 = clampv(300.0f * std::pow(2.0f, sgn * d), 40.0f, 0.4f * sr), f2 = clampv(1500.0f * std::pow(2.0f, sgn * d), 40.0f, 0.4f * sr);
+            const float t1 = std::tan(kPi * f1 / sr), t2 = std::tan(kPi * f2 / sr);
+            apC_[ch][0] = (t1 - 1.0f) / (t1 + 1.0f);
+            apC_[ch][1] = (t2 - 1.0f) / (t2 + 1.0f);
+        }
+    }
     if (p.filterOn != lastFilterOn_) { if (p.filterOn) filt_.reset(); lastFilterOn_ = p.filterOn; }   // switched back in: from rest
 
     // Z-plane: the point wanders around (X, Y) on two Drifters, the frame is interpolated from
@@ -366,7 +438,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
-            slots_[k].render(slotL, slotR, len, freq_, sp, table, p.texture, p.driftRate * rateMul_);
+            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), sp, table, p.texture, p.driftRate * rateMul_);
         }
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();
@@ -459,6 +531,13 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             ++itdW_;
             shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
             shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
+            if (phaseOn_) {   // first-order all-passes: y = c x + x1 - c y1, two per ear
+                float* c = apC_[0]; float* x1 = apX_[0]; float* y1 = apY_[0];
+                for (int st = 0; st < 2; ++st) { const float y = c[st] * outL + x1[st] - c[st] * y1[st]; x1[st] = outL; y1[st] = y; outL = y; }
+                c = apC_[1]; x1 = apX_[1]; y1 = apY_[1];
+                for (int st = 0; st < 2; ++st) { const float y = c[st] * outR + x1[st] - c[st] * y1[st]; x1[st] = outR; y1[st] = y; outR = y; }
+            }
+            if (ksOn_) { const float sk = strikeTick(); nearL[pos + i] += sk * ksGainL_; nearR[pos + i] += sk * ksGainR_; }
             nearL[pos + i] += outL * gNear_;
             nearR[pos + i] += outR * gNear_;
             farL[pos + i]  += outL * gFar_;

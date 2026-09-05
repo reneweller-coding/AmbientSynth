@@ -14,7 +14,7 @@
 
 namespace ambient {
 
-enum class FilterModel : int { Lp6 = 0, Lp12, Lp24, Hp12, Bp12, Notch, Peak, Ladder, Comb, Count };
+enum class FilterModel : int { Lp6 = 0, Lp12, Lp24, Hp12, Bp12, Notch, Peak, Ladder, Comb, Formant, Count };
 constexpr int kNumFilterModels = static_cast<int>(FilterModel::Count);
 extern const char* const kFilterModelNames[kNumFilterModels];
 extern const char* const kFilterRouteNames[2];   // Series, Parallel
@@ -36,7 +36,7 @@ public:
 private:
     FilterModel model_ = FilterModel::Lp12;
     float sr_ = 48000.0f;
-    Svf   svfL_, svfR_, svf2L_, svf2R_;
+    Svf   svfL_, svfR_, svf2L_, svf2R_, svf3L_, svf3R_;   // the formant model uses all three pairs
     // one-pole (Lp6) and ladder
     float g1_ = 0.1f, kLad_ = 0.0f, ladComp_ = 1.0f;
     float lad_[2][4] = {};
@@ -80,6 +80,15 @@ inline float VoiceFilter::one(int ch, float x)
         s[2] += g1_ * (s[1] - s[2]);
         s[3] += g1_ * (s[2] - s[3]);
         return s[3] * ladComp_;
+    }
+    case FilterModel::Formant: {
+        // Three band passes on the formants of a vowel that Cutoff morphs through (u-o-a-e-i);
+        // Resonance narrows them. A cold wave comes out with a throat.
+        float lp, bp, hp, sum = 0.0f;
+        Svf* f[3] = { ch == 0 ? &svfL_ : &svfR_, ch == 0 ? &svf2L_ : &svf2R_, ch == 0 ? &svf3L_ : &svf3R_ };
+        static const float gain[3] = { 1.0f, 0.5f, 0.3f };
+        for (int i = 0; i < 3; ++i) { f[i]->tick(x, lp, bp, hp); sum += bp * f[i]->k * gain[i]; }
+        return sum;
     }
     case FilterModel::Comb: {
         // Feedback comb tuned to Cutoff, a low pass in the loop; output scaled so the peaks sit at

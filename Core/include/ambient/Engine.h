@@ -235,6 +235,14 @@ private:
     CombResonator resonator_;
     VowelFilter   vowel_;
     Nebula        nebula_;
+    // Blur on the near bus (a second Nebula), the pitch tide, the turning far field. Their
+    // drifters run on a side stream so enabling them never moves the brain's dice.
+    Nebula        blur_;
+    float         blurMix_ = 0.0f;
+    Smoother      smBlur_;
+    Drifter       tideDrift_, rotDrift_;
+    float         tide_ = 0.0f, tidePeriod_ = 12.0f, farRotate_ = 0.0f;
+    Rng           auxRng_;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;

@@ -20,18 +20,20 @@ enum class ParamId : int {
     Stack, RateWander,
     // Source 1's slot fields, for the non-additive types (level is OscLevel, spectrum the eight above)
     Src1Octave, Src1Ratio, Src1Pan, Src1Table, Src1Position, Src1PosDrift,
-    Src1FmRatio, Src1FmIndex, Src1Grain, Src1Density, Src1DensitySync, Src1Follow, Src1Grains, Src1Spread, Src1Noise, Src1NoiseQ,
+    Src1FmRatio, Src1FmIndex, Src1Grain, Src1Density, Src1DensitySync, Src1Follow, Src1Grains, Src1Spread, Src1Noise, Src1NoiseQ, Src1Drift,
     // Source 2 / Source 3: the same slot, laid out identically (the engine reads them by offset):
     // 17 slot fields, then the seven of the slot's own additive bank
     Src2Type, Src2Level, Src2Octave, Src2Ratio, Src2Pan, Src2Table, Src2Position, Src2PosDrift,
     Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2DensitySync, Src2Follow, Src2Grains, Src2Spread, Src2Noise, Src2NoiseQ,
-    Src2Partials, Src2Tilt, Src2Bright, Src2OddEven, Src2Inharm, Src2Shimmer, Src2ShimmerRate,
+    Src2Partials, Src2Tilt, Src2Bright, Src2OddEven, Src2Inharm, Src2Shimmer, Src2ShimmerRate, Src2Drift,
     Src3Type, Src3Level, Src3Octave, Src3Ratio, Src3Pan, Src3Table, Src3Position, Src3PosDrift,
     Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3DensitySync, Src3Follow, Src3Grains, Src3Spread, Src3Noise, Src3NoiseQ,
-    Src3Partials, Src3Tilt, Src3Bright, Src3OddEven, Src3Inharm, Src3Shimmer, Src3ShimmerRate,
+    Src3Partials, Src3Tilt, Src3Bright, Src3OddEven, Src3Inharm, Src3Shimmer, Src3ShimmerRate, Src3Drift,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
     SubLevel, SubOctave, SubGlide, SubBinaural, SubTone, SubSource, PadLowCut,
+    // Strike: a short plucked or struck impulse (Karplus-Strong) at note-on, on the near plane
+    StrikeLevel, StrikeType, StrikeDecay, StrikeDamp, StrikeWho,
     // Air (filtered-noise breath layer per voice)
     Air, AirColor, AirQ,
     // Amplitude envelope
@@ -45,16 +47,22 @@ enum class ParamId : int {
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,
     // presence bell for the near plane, slow breathing of every voice's distance
     Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, ArcSync, Presence, Breath, BreathRate,
+    // Phase Width: two all-pass pairs per voice, drifting in opposite directions on the two ears,
+    // so the room seems to change size rather than the sound to move; Doppler: the breathing
+    // distance bends the pitch a little as a voice approaches or recedes
+    PhaseWidth, PhaseRate, Doppler,
     // Ensemble
     EnsembleMix, EnsembleDepth, EnsembleRate, EnsembleSync,
     // Stereo delay (asymmetric L/R)
-    DelayTimeL, DelayTimeR, DelaySyncL, DelaySyncR, DelayFeedback, DelayCross, DelayDamp, DelayMix, DelayToFar,
+    DelayTimeL, DelayTimeR, DelaySyncL, DelaySyncR, DelayFeedback, DelayCross, DelayDamp, DelayAbsorb, DelayMix, DelayToFar,
     // Second stereo delay, in series after the first
-    Delay2TimeL, Delay2TimeR, Delay2SyncL, Delay2SyncR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Mix, Delay2ToFar,
+    Delay2TimeL, Delay2TimeR, Delay2SyncL, Delay2SyncR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Absorb, Delay2Mix, Delay2ToFar,
     // Near reverb (foreground room)
     NearMix, NearDecay, NearDamp,
+    // Blur: a spectral smear on the near bus itself, so an attack is wiped into texture
+    BlurMix, BlurSmear,
     // Far reverb (the infinite background)
-    FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze,
+    FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze, FarRotate,
     // Feedback: the mixed output (before the master) returns, low-passed and saturated,
     // into the near bus before the filters and effects, and/or as phase modulation of every
     // partial. Throttled by the output level so it hisses and holds instead of running away.
@@ -78,6 +86,8 @@ enum class ParamId : int {
     // lets that blend wander so the beating locks in and loosens over minutes; Freeze holds every
     // voice's spectrum and pitch still (drifts, shimmer, bloom stop moving)
     TunePurity, TuneDrift, TuneDriftRate, Freeze,
+    // Tide: the whole instrument's pitch leans by a few cents over many minutes
+    Tide, TidePeriod,
     // Ghost: the Air noise through a bank of sharp resonators on the note's just harmonics
     AirMode,
     // Portamento for keys: a new key glides from the last one; Gravity slows the glide near
@@ -156,7 +166,9 @@ extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to neares
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
-extern const char* const kAirModeNames[2];     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)
+extern const char* const kAirModeNames[2];
+extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal
+extern const char* const kStrikeWhoNames[2];    // Keys, Keys + Brain     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)
 constexpr int kNumStacks = 8;
 extern const char* const kStackNames[kNumStacks];   // Detune, Octaves, Fifths, Major, Minor, Seventh, Harmonics, Subharmonics
 extern const double kStackRatios[kNumStacks][6];    // ratio of strand 0..5 to the note (Detune = all 1)

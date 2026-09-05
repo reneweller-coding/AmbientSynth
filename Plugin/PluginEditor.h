@@ -366,7 +366,7 @@ private:
         int head = 0;
         int lo = 36, hi = 84;                             // the note range in view, widened as notes arrive
     };
-    std::unique_ptr<BrainView> brainView_;
+    std::unique_ptr<BrainView> brainView_, brainView2_;
     // The stereo stage: every sounding voice as a dot, left-right by its pan, near-far by its
     // plane, size by its envelope -- the spatial model (concept.md) as a picture, moving.
     struct StageView : juce::Component, juce::Timer {

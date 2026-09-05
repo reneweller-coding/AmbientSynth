@@ -54,20 +54,20 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence", "Clock" } }, {}, 1 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1 },
     };
     tabRows_ = {
         { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" } } },
-        { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" } } },
+        { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Body", "Patina" } } },
-        { 5, 0, { "BRAIN", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
+        { 5, 0, { "BRAIN", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
     };
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
@@ -195,24 +195,26 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     source2View_ = std::make_unique<SourceView>(proc_, 2);
     source3View_ = std::make_unique<SourceView>(proc_, 3);
     brainView_ = std::make_unique<BrainView>(proc_);
+    brainView2_ = std::make_unique<BrainView>(proc_);
     stageView_ = std::make_unique<StageView>(proc_);
     cosmosView_ = std::make_unique<CosmosView>(proc_);
     envView_ = std::make_unique<EnvView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
                                 static_cast<juce::Component*>(source1View_.get()), static_cast<juce::Component*>(brainView_.get()),
+                                static_cast<juce::Component*>(brainView2_.get()),
                                 static_cast<juce::Component*>(stageView_.get()), static_cast<juce::Component*>(cosmosView_.get()),
                                 static_cast<juce::Component*>(envView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
         tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr };
-        tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get() };
+        tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get(), nullptr };
     }
     if (groups_.size() > 4) {
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
         groups_[4].displays = { cosmosView_.get() };                    // COSMOS
     }
-    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
+    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -279,6 +281,8 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
             if (s.name == "Far Reverb") s.maxUnits = 10;                     // one row with Rotate and Unmask
             if (s.name == "Body") s.maxUnits = 7;                            // one row
+            if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;
+            if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
             if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route

@@ -131,6 +131,9 @@ private:
     std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none
     std::atomic<int> learnTarget_{ -1 };
     double clockSamples_ = 0.0, lastClockSample_ = -1.0;   // MIDI clock: running sample count, for the tick intervals
+    // MPE: which note each channel is currently playing, so its bend, pressure and slide reach
+    // the right voice. Channel 1 (index 0) is the master channel and holds no note.
+    int   mpeNote_[16] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
     juce::String slotName_[2] = { "Init", "Init" };
 
     // OscSink

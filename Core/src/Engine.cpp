@@ -106,6 +106,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     lastRootPc_ = -1;
     readParams();
     brain_.reset(rng_.fork(), rootNote_ - 12);   // the brain's root lives an octave below the key root
+    brain2_.reset(0x2B2A1Full, rootNote_ - 12);  // its own stream, so switching it on never moves the first one
     for (auto& h : midiHeld_) h = false;
 }
 
@@ -416,6 +417,22 @@ void Engine::noteOff(int note)
     if (hold_) return;   // keys latch
     midiHeld_[note] = false;
     stopNote(note, OwnerMidi);
+}
+
+void Engine::setPressure(int note, float v)
+{
+    for (auto& x : voices_) if (x.isActive() && (note < 0 || x.note() == note)) x.setPressure(v);
+}
+
+void Engine::setSlide(int note, float v)
+{
+    for (auto& x : voices_) if (x.isActive() && (note < 0 || x.note() == note)) x.setSlide(v);
+}
+
+void Engine::setBend(int note, float normalised)
+{
+    const float semis = clampv(normalised, -1.0f, 1.0f) * bendRange_;
+    for (auto& x : voices_) if (x.isActive() && (note < 0 || x.note() == note)) x.setBend(semis);
 }
 
 void Engine::allNotesOff()
@@ -781,6 +798,27 @@ void Engine::readParams()
     bp_.high        = static_cast<int>(std::lround(g(ParamId::BrainHigh)));
     bp_.consonance  = g(ParamId::BrainConsonance);
     bp_.wander      = g(ParamId::BrainWander);
+    brainQuant_     = clampv(static_cast<int>(std::lround(g(ParamId::BrainQuantize))), 0, kNumSyncDivs - 1);
+    vp_.pressDistance = g(ParamId::PressDistance);
+    vp_.pressBright   = g(ParamId::PressBright);
+    vp_.pressLevel    = g(ParamId::PressLevel);
+    vp_.slideCutoff   = g(ParamId::SlideCutoff);
+    vp_.slideZ        = g(ParamId::SlideZ);
+    bendRange_        = g(ParamId::BendRange);
+    // The second conductor. Its root follows the first one's plus an interval, so the two stay
+    // in one harmony however far the first one's root wanders.
+    brain2On_        = g(ParamId::Brain2On) >= 0.5f;
+    bp2_.on          = brain2On_;
+    bp2_.density     = static_cast<int>(std::lround(g(ParamId::Brain2Density)));
+    bp2_.rateSeconds = g(ParamId::Brain2Rate);
+    bp2_.holdMin     = g(ParamId::Brain2HoldMin);
+    bp2_.holdMax     = g(ParamId::Brain2HoldMax);
+    bp2_.low         = static_cast<int>(std::lround(g(ParamId::Brain2Low)));
+    bp2_.high        = static_cast<int>(std::lround(g(ParamId::Brain2High)));
+    bp2_.consonance  = g(ParamId::Brain2Consonance);
+    bp2_.wander      = 0.0f;   // it follows the first conductor's root instead of wandering itself
+    brain2Depth_     = g(ParamId::Brain2Depth);
+    brain2Interval_  = static_cast<int>(std::lround(g(ParamId::Brain2Interval)));
 
     // Hour-scale arc: a very slow drift that leans on density, brightness and depth.
     const float a = arc_.value() * arcAmount_;
@@ -874,6 +912,7 @@ void Engine::readParams()
         seed_ = seed;
         rng_.seed(static_cast<uint64_t>(seed_) + 1);
         brain_.reset(rng_.fork(), 48 + rootPc);
+        brain2_.reset(0x2B2A1Full + static_cast<uint64_t>(seed_), 48 + rootPc);
         arc_.init(rng_);
     }
 }
@@ -1017,6 +1056,12 @@ void Engine::renderChunk(float* L, float* R, int n)
             stopNote(e.note, OwnerBrain);
         }
     };
+    // The second conductor plays on one plane, deep, so it reads as a background line rather
+    // than as more of the same cluster.
+    auto emit2 = [this](const BrainEvent& e) {
+        if (e.type == BrainEvent::Type::NoteOn) startNote(e.note, e.velocity, OwnerBrain2, clampv(depth_ * brain2Depth_, 0.0f, 1.0f));
+        else stopNote(e.note, OwnerBrain2);
+    };
 
     // Feedback loop, input side: what the previous chunk wrote into the ring comes back as
     // phase modulation of the partials and/or as signal into the near bus (before ensemble,
@@ -1058,7 +1103,25 @@ void Engine::renderChunk(float* L, float* R, int n)
     bool anyVoice = false;
     for (int p = 0; p < n; p += kControlBlock) {
         const int len = std::min(kControlBlock, n - p);
-        brain_.update(len / sr_, bp_, anchor, freqOf, emit);
+        {   // Quantize: the decisions are held back and made at the next note value of the clock,
+            // so the conductor lands on the grid instead of wherever the dice fell. All of the
+            // waiting time is handed over at the tick, so the mean rate is unchanged.
+            const double dt = len / sr_;
+            if (syncOn(brainQuant_) && running_) {
+                quantAcc_ += dt;
+                const double b = syncBeats(brainQuant_);
+                const double now = std::floor(beat_ / b), before = std::floor(lastBeat_ / b);
+                lastBeat_ = beat_;
+                if (now != before) { brain_.update(quantAcc_, bp_, anchor, freqOf, emit); quantAcc_ = 0.0; }
+            } else {
+                quantAcc_ = 0.0; lastBeat_ = beat_;
+                brain_.update(dt, bp_, anchor, freqOf, emit);
+            }
+            if (brain2On_) {
+                brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
+                brain2_.update(dt, bp2_, -1, freqOf, emit2);
+            }
+        }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
         for (auto& v : voices_) if (v.isActive()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm); }
     }

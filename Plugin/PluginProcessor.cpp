@@ -205,10 +205,19 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         setTime_.store(setClock_);
     }
 
+    const bool mpe = raw_[static_cast<size_t>(ParamId::MpeOn)]->load() >= 0.5f;
     for (const auto meta : midi) {
         const auto m = meta.getMessage();
-        if (m.isNoteOn())            engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity());
-        else if (m.isNoteOff())      engine_.noteOff(m.getNoteNumber());
+        const int ch = juce::jlimit(1, 16, m.getChannel()) - 1;
+        // With MPE every finger has its own channel; without it, expression addresses every
+        // sounding voice, which is what channel pressure and the wheel mean on a plain keyboard.
+        const int expressed = mpe ? mpeNote_[ch] : -1;
+        if (m.isNoteOn())            { if (mpe) mpeNote_[ch] = m.getNoteNumber(); engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity()); }
+        else if (m.isNoteOff())      { if (mpe && mpeNote_[ch] == m.getNoteNumber()) mpeNote_[ch] = -1; engine_.noteOff(m.getNoteNumber()); }
+        else if (m.isPitchWheel())   engine_.setBend(expressed, (m.getPitchWheelValue() - 8192) / 8192.0f);
+        else if (m.isChannelPressure()) engine_.setPressure(expressed, m.getChannelPressureValue() / 127.0f);
+        else if (m.isAftertouch())   engine_.setPressure(m.getNoteNumber(), m.getAfterTouchValue() / 127.0f);
+        else if (m.isController() && m.getControllerNumber() == 74) engine_.setSlide(expressed, m.getControllerValue() / 127.0f);
         else if (m.isAllNotesOff() || m.isAllSoundOff()) engine_.allNotesOff();
         else if (m.isMidiClock()) {   // 24 a quarter; the interval between two carries the tempo
             const double t = clockSamples_ + meta.samplePosition;

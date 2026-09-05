@@ -8,6 +8,7 @@
 #include "ambient/Cosmos.h"
 #include "ambient/Presets.h"
 #include "ambient/Help.h"
+#include "ambient/Filter.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
 #include "ambient/Menu.h"
@@ -1804,6 +1805,137 @@ void testModulation()
 }
 
 
+// Per-note expression, the resonating body, the master's patina, the unmasking background and
+// the second conductor: each one measured through the engine, not merely compiled.
+void testExpressionBodyPatina()
+{
+    const int sr = 48000, block = 256;
+    std::vector<float> l(block), r(block);
+    // Renders `seconds` and returns the RMS, after `warm` seconds of settling.
+    auto rms = [&](Engine& e, double warm, double seconds) {
+        for (int i = 0; i < static_cast<int>(warm * sr / block); ++i) e.process(l.data(), r.data(), block);
+        double sq = 0.0; long cnt = 0;
+        for (int i = 0; i < static_cast<int>(seconds * sr / block); ++i) {
+            e.process(l.data(), r.data(), block);
+            for (int k = 0; k < block; ++k) { sq += l[k] * l[k] + r[k] * r[k]; cnt += 2; }
+        }
+        return cnt > 0 ? std::sqrt(sq / cnt) : 0.0;
+    };
+    auto plain = [&](Engine& e) {
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Attack, 0.05f);
+        e.setParam(ParamId::Release, 0.2f);
+        e.setParam(ParamId::FarLevel, 0.0f);
+        e.setParam(ParamId::NearMix, 0.0f);
+        e.setParam(ParamId::DelayMix, 0.0f);
+        e.setParam(ParamId::EnsembleMix, 0.0f);
+        e.setParam(ParamId::Air, 0.0f);
+    };
+
+    {   // Pressure raises the level it is told to raise, and only then.
+        Engine a, b;
+        plain(a); plain(b);
+        a.setParam(ParamId::PressLevel, 1.0f); b.setParam(ParamId::PressLevel, 1.0f);
+        a.prepare(sr, block); b.prepare(sr, block);
+        a.noteOn(60, 0.8f); b.noteOn(60, 0.8f);
+        b.setPressure(60, 1.0f);
+        const double q = rms(a, 0.5, 1.0), p2 = rms(b, 0.5, 1.0);
+        CHECK(p2 > q * 1.5, "pressure raises the voice's level");
+        Engine c; plain(c); c.prepare(sr, block); c.noteOn(60, 0.8f); c.setPressure(60, 1.0f);
+        const double none = rms(c, 0.5, 1.0);
+        CHECK(std::fabs(none - q) < q * 0.02, "pressure does nothing while its depth is zero");
+    }
+    {   // Bend moves the pitch by the range it is given: a semitone is 2^(1/12).
+        Engine e; plain(e);
+        e.setParam(ParamId::BendRange, 12.0f);
+        e.setParam(ParamId::Partials, 1.0f);
+        e.setParam(ParamId::Scale, 5.0f);          // 12-TET, so the note is exactly A4 = 440
+        e.setParam(ParamId::Unison, 1.0f);
+        e.setParam(ParamId::Detune, 0.0f);
+        e.setParam(ParamId::Drift, 0.0f);
+        e.setParam(ParamId::Shimmer, 0.0f);
+        e.prepare(sr, block);
+        e.noteOn(69, 0.8f);
+        e.setBend(69, 1.0f);                        // a full octave up
+        for (int i = 0; i < 200; ++i) e.process(l.data(), r.data(), block);
+        // Goertzel at 880 Hz should now beat 440 Hz.
+        auto power = [&](double hz) {
+            const double w = 2.0 * 3.14159265358979 * hz / sr;
+            double c = 2.0 * std::cos(w), s1 = 0.0, s2 = 0.0;
+            for (int i = 0; i < 100; ++i) {
+                e.process(l.data(), r.data(), block);
+                for (int k = 0; k < block; ++k) { const double s0 = l[k] + c * s1 - s2; s2 = s1; s1 = s0; }
+            }
+            return s1 * s1 + s2 * s2 - c * s1 * s2;
+        };
+        const double up = power(880.0), home = power(440.0);
+        CHECK(up > home * 4.0, "a full-range bend moves the note an octave up");
+    }
+    {   // The body answers: with it up the output is louder and different, with it off identical.
+        Engine a, b;
+        plain(a); plain(b);
+        b.setParam(ParamId::BodyLevel, 1.0f);
+        b.setParam(ParamId::BodyDecay, 2.0f);
+        a.prepare(sr, block); b.prepare(sr, block);
+        a.noteOn(50, 0.8f); b.noteOn(50, 0.8f);
+        const double dry = rms(a, 1.0, 1.0), wet = rms(b, 1.0, 1.0);
+        CHECK(wet > dry * 1.05, "the resonating body adds to the mix");
+    }
+    {   // Patina is bypassed at zero, and audible above it (its wow moves the signal).
+        Engine a, b;
+        plain(a); plain(b);
+        b.setParam(ParamId::PatinaAmount, 1.0f);
+        b.setParam(ParamId::PatinaAge, 1.0f);
+        a.prepare(sr, block); b.prepare(sr, block);
+        a.noteOn(60, 0.8f); b.noteOn(60, 0.8f);
+        const double open = rms(a, 0.5, 1.0), aged = rms(b, 0.5, 1.0);
+        CHECK(aged < open * 0.98 || aged > open * 1.02, "patina changes the master");
+    }
+    {   // The second conductor adds voices of its own.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Brain2On, 1.0f);
+        e.setParam(ParamId::Brain2Rate, 2.0f);
+        e.setParam(ParamId::Brain2Density, 3.0f);
+        e.setParam(ParamId::Attack, 0.1f);
+        e.prepare(sr, block);
+        for (int i = 0; i < 400; ++i) e.process(l.data(), r.data(), block);
+        CHECK(e.activeVoices() > 0, "the second conductor plays on its own");
+    }
+}
+
+// Every filter model must do what its own magnitude curve promises: the display is drawn from
+// that function, so a model whose audio path disagrees with it would lie to the eye.
+void testFilterModels()
+{
+    const float sr = 48000.0f;
+    for (int m = 0; m < kNumFilterModels; ++m) {
+        VoiceFilter f;
+        f.prepare(sr);
+        const auto model = static_cast<FilterModel>(m);
+        f.set(model, 800.0f, 0.3f, 0.0f);
+        // Drive a sine at a few frequencies and compare the settled amplitude with the promise.
+        for (float hz : { 200.0f, 800.0f, 3000.0f }) {
+            const int n = static_cast<int>(sr * 4.0f / hz) * 8;   // whole cycles, long enough to settle
+            float peak = 0.0f;
+            for (int i = 0; i < n; ++i) {
+                const float x = std::sin(kTwoPi * hz * static_cast<float>(i) / sr);
+                float ol, orr;
+                f.tick(x, x, ol, orr);
+                if (i > n / 2) peak = std::max(peak, std::fabs(ol));
+            }
+            const float want = VoiceFilter::magnitude(model, 800.0f, 0.3f, hz, sr);
+            // A comb's response at one frequency depends on where the sine sits between its
+            // teeth, and the formant bank sums magnitudes without their phases; both are noted
+            // in the code, so they get a loose bound and the rest a tight one.
+            const bool loose = model == FilterModel::Comb || model == FilterModel::Formant;
+            const float tol = loose ? 0.5f : 0.12f;
+            CHECK(std::fabs(peak - want) <= tol * std::max(want, 0.15f) + 0.02f,
+                  (std::string("filter model ") + kFilterModelNames[m] + " matches its own curve").c_str());
+        }
+    }
+}
+
 void testModulationEngine()
 {
     const int sr = 48000, block = 256;
@@ -1941,6 +2073,8 @@ int main()
     testTimeline();
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
+    testExpressionBodyPatina();
+    testFilterModels();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

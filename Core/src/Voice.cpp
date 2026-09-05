@@ -101,6 +101,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         bloomT_ = 0.0f;
         prevDist_ = distance_;
     }
+    press_ = pressTarget_; slide_ = slideTarget_; bend_ = bendTarget_;   // a new note starts where its controller is
     env_.noteOn();
     if (p.strikeLevel > 0.0f && (owner == 0 || p.strikeBrain)) strikeStart(freqHz, p);
 }
@@ -199,8 +200,18 @@ void Voice::control(int blockLen, const VoiceParams& p)
     rateMul_ = rateMul;
     const float driftRate = p.driftRate * rateMul, shimmerRate = p.shimmerRate * rateMul;
 
+    // Expression, smoothed towards what the controller last said (about 30 ms).
+    {
+        const float c = clampv(dtReal / 0.03f, 0.0f, 1.0f);
+        press_ += (pressTarget_ - press_) * c;
+        slide_ += (slideTarget_ - slide_) * c;
+        bend_  += (bendTarget_ - bend_) * c;
+    }
     const float bd = breath_.update(dt, p.breathRate * rateMul, rng_);
-    distEff_ = clampv(distance_ + 0.35f * p.breath * bd, 0.0f, 1.0f);
+    // Pressure pulls the note towards the listener: the plane already decides brightness, level,
+    // dryness and presence, so one finger moves all of them the way leaning into a note does.
+    const float pressPull = p.pressDistance * press_;
+    distEff_ = clampv(distance_ * (1.0f - pressPull) + 0.35f * p.breath * bd, 0.0f, 1.0f);
     // Doppler: the breathing distance has a velocity; a voice coming closer rises a little, one
     // receding falls. One plane unit is taken as about twenty metres.
     if (p.doppler > 0.0f && dtReal > 0.0f) {
@@ -220,7 +231,8 @@ void Voice::control(int blockLen, const VoiceParams& p)
     bloomT_ += dt;
     const float bt = clampv(bloomT_ / std::max(p.bloomTime, 1.0f), 0.0f, 1.0f);
     const float bloomOpen = bt * bt * (3.0f - 2.0f * bt);
-    const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness, 0.0f, 1.0f);
+    const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness
+                                    + p.pressBright * press_, 0.0f, 1.0f);
 
     // Base spectrum shared by all strands of this voice. The tilt/odd-even shape is
     // cached (pow is expensive); only the brightness window is applied per block.
@@ -250,7 +262,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         cachedB_ = B;
     }
     const int unison = clampv(p.unison, 1, kMaxStrands);
-    const float norm = p.level / std::sqrt(static_cast<float>(unison));
+    const float norm = p.level * (1.0f + p.pressLevel * press_) / std::sqrt(static_cast<float>(unison));
     const double nyq = 0.45 * sr_;
     const float invLen = 1.0f / static_cast<float>(blockLen);
 
@@ -260,7 +272,8 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan + s1.pan, -1.0f, 1.0f);
     centre_ = centre;
     const double bankMul = kSlotRatios[clampv(s1.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(s1.octave, -2, 2))
-                         * (static_cast<double>(p.pitchMul) * dopplerMul_);   // the tide and the doppler, 1.0 exactly when off
+                         * (static_cast<double>(p.pitchMul) * dopplerMul_)   // the tide and the doppler, 1.0 exactly when off
+                         * (bend_ != 0.0f ? std::pow(2.0, static_cast<double>(bend_) / 12.0) : 1.0);
     const int stack = clampv(p.stack, 0, kNumStacks - 1);
 
     for (int si = 0; si < unison; ++si) {
@@ -332,6 +345,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float octaves = p.keyTrack * static_cast<float>(note_ - 60) / 12.0f
                         + p.filterEnv * 4.0f * env_.level()
                         + p.filterDrift * 2.0f * fd
+                        + p.slideCutoff * slide_
                         - 2.5f * distEff_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filt_.set(static_cast<FilterModel>(clampv(p.filterModel, 0, kNumFilterModels - 1)), cut, p.resonance, p.filterDrive);
@@ -357,7 +371,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     zModeCur_ = clampv(p.zMode, 0, 2);
     if (zModeCur_ != 0) {
         const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
-        const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
+        const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ + p.slideZ * slide_, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
         const ZFrame f = zInterpolate(p.zShape, x, y);
         const float track = std::pow(static_cast<float>(freq_) / 261.6256f, p.zKeyTrack);
         const float bwScale = std::pow(2.0f, 2.0f * (0.5f - p.zRes));   // resonance 1 -> quarter bandwidth, 0 -> double

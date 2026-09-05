@@ -38,6 +38,9 @@ struct VoiceParams {
     // Rich refinements: the binaural phase field, the breathing doppler, the pitch tide (from the
     // engine, already a multiplier), and the strike layer
     float phaseWidth = 0.0f, phaseRate = 0.03f, doppler = 0.0f;
+    // Expression: how far this voice's own pressure, slide and bend reach
+    float pressDistance = 0.0f, pressBright = 0.0f, pressLevel = 0.0f;
+    float slideCutoff = 0.0f, slideZ = 0.0f;
     float pitchMul = 1.0f;
     float strikeLevel = 0.0f, strikeDecay = 0.4f, strikeDamp = 0.5f;
     int   strikeType = 0;       // String, Wood, Metal
@@ -83,6 +86,12 @@ public:
     double frequency() const { return freq_; }
     // Retune a sounding voice (tuning purity/drift): glides in the log domain, ~1 s time constant.
     void setTargetFrequency(double hz) { freqTarget_ = hz; }
+    // Per-note expression. Pressure and slide are 0..1, bend is in semitones; all three are
+    // smoothed inside the voice, so a controller sending steps never steps the sound.
+    void setPressure(float v) { pressTarget_ = clampv(v, 0.0f, 1.0f); }
+    void setSlide(float v)    { slideTarget_ = clampv(v, 0.0f, 1.0f); }
+    void setBend(float semitones) { bendTarget_ = semitones; }
+    float pressure() const { return press_; }
     // Portamento: start at fromHz and slide to the note's frequency over `seconds`, slowing near
     // consonant ratios to the root by `gravity` (0 = an even log-domain glide).
     void glideFrom(double fromHz, float seconds, float gravity);
@@ -162,6 +171,9 @@ private:
     Resonator ghostL_[6], ghostR_[6];
     float    ghostGain_ = 0.0f;
     float    velocity_ = 1.0f;
+    float    press_ = 0.0f, pressTarget_ = 0.0f;     // per-note expression, smoothed at control rate
+    float    slide_ = 0.0f, slideTarget_ = 0.0f;
+    float    bend_ = 0.0f, bendTarget_ = 0.0f;
     float    centre_ = 0.0f;     // pan centre after drift and Source 1's Pan, for the stage picture
     float    distance_ = 0.0f;   // the plane the note was placed on
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate

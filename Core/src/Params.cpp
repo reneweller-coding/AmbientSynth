@@ -212,6 +212,14 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::PhaseRate,   "phase_rate",   "Phase Rate",    "Space",      0.005f, 0.5f,  0.03f, 0.5f, "Hz"),
     F(ParamId::Doppler,     "doppler",      "Doppler",       "Space",      0.f,   1.f,    0.f,   1.f,  ""),
 
+    F(ParamId::PressDistance, "press_distance", "Press Near",  "Expression", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::PressBright,   "press_bright",   "Press Bright","Expression", -1.f, 1.f,   0.f,  1.f, ""),
+    F(ParamId::PressLevel,    "press_level",    "Press Level", "Expression", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::SlideCutoff,   "slide_cutoff",   "Slide Filter","Expression", -3.f, 3.f,   0.f,  1.f, "oct"),
+    F(ParamId::SlideZ,        "slide_z",        "Slide Z",     "Expression", -1.f, 1.f,   0.f,  1.f, ""),
+    F(ParamId::BendRange,     "bend_range",     "Bend Range",  "Expression", 0.f,  48.f,  2.f,  0.5f, "st"),
+    B(ParamId::MpeOn,         "mpe",            "MPE",         "Expression", false),
+
     F(ParamId::EnsembleMix,   "ens_mix",   "Mix",   "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),
     F(ParamId::EnsembleDepth, "ens_depth", "Depth", "Ensemble", 0.f,   1.f, 0.4f, 1.f,  ""),
     F(ParamId::EnsembleRate,  "ens_rate",  "Rate",  "Ensemble", 0.02f, 2.f, 0.2f, 0.4f, "Hz"),
@@ -315,6 +323,18 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     I(ParamId::BrainHigh,       "brain_high",       "Highest",    "Cluster Brain", 24.f, 108.f, 79.f),
     F(ParamId::BrainConsonance, "brain_consonance", "Consonance", "Cluster Brain", 0.f,  1.f,   0.7f, 1.f, ""),
     F(ParamId::BrainWander,     "brain_wander",     "Wander",     "Cluster Brain", 0.f,  1.f,   0.3f, 1.f, ""),
+    C(ParamId::BrainQuantize, "brain_quantize", "Quantize", "Cluster Brain", kSyncDivNames, kNumSyncDivs, 0),
+
+    B(ParamId::Brain2On,        "brain2_on",       "Active",    "Brain 2", false),
+    I(ParamId::Brain2Density,   "brain2_density",  "Density",   "Brain 2", 1.f,   12.f,  3.f),
+    F(ParamId::Brain2Rate,      "brain2_rate",     "Event Rate","Brain 2", 2.f,   600.f, 60.f, 0.4f, "s"),
+    F(ParamId::Brain2HoldMin,   "brain2_hold_min", "Hold Min",  "Brain 2", 2.f,   600.f, 60.f, 0.4f, "s"),
+    F(ParamId::Brain2HoldMax,   "brain2_hold_max", "Hold Max",  "Brain 2", 5.f,   1200.f,240.f,0.4f, "s"),
+    I(ParamId::Brain2Low,       "brain2_low",      "Lowest",    "Brain 2", 12.f,  84.f,  28.f),
+    I(ParamId::Brain2High,      "brain2_high",     "Highest",   "Brain 2", 24.f,  108.f, 58.f),
+    F(ParamId::Brain2Depth,     "brain2_depth",    "Plane",     "Brain 2", 0.f,   1.f,   0.9f, 1.f,  ""),
+    I(ParamId::Brain2Interval,  "brain2_interval", "Interval",  "Brain 2", -24.f, 24.f,  0.f,  "st"),
+    F(ParamId::Brain2Consonance,"brain2_consonance","Consonance","Brain 2",0.f,   1.f,   0.7f, 1.f,  ""),
 
     C(ParamId::Scale,     "scale",     "Scale",     "Tuning", kScaleNames, kNumScaleChoices, 3),
     C(ParamId::KeyMap,    "keymap",    "Keys",      "Tuning", kKeyMapNames, 2, 0),

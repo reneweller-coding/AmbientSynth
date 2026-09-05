@@ -42,6 +42,11 @@ public:
     void noteOn(int note, float velocity);
     void noteOff(int note);
     void allNotesOff();
+    // Per-note expression (MPE, polyphonic aftertouch, CC 74). `note` < 0 addresses every
+    // sounding voice, which is what a plain keyboard's channel pressure and wheel mean.
+    void setPressure(int note, float v);
+    void setSlide(int note, float v);
+    void setBend(int note, float normalised);   // -1 .. 1, scaled by the Bend Range parameter
 
     // Renders `n` stereo samples (replaces L/R). Any n; larger than maxBlockSize is chunked.
     void process(float* L, float* R, int n);
@@ -166,7 +171,7 @@ public:
     float noteLevel(int note) const { return (note >= 0 && note < 128) ? noteLevel_[note].load(std::memory_order_relaxed) : 0.0f; }
 
 private:
-    enum Owner { OwnerMidi = 0, OwnerBrain = 1 };
+    enum Owner { OwnerMidi = 0, OwnerBrain = 1, OwnerBrain2 = 2 };
     Voice* allocate(int note, int owner);
     void   startNote(int note, float velocity, int owner, float distance);
     void   stopNote(int note, int owner);
@@ -182,7 +187,14 @@ private:
     float              blendTarget_[kNumParams] = {};
     void updateBlend(int n);
     Voice        voices_[kMaxVoices];
-    ClusterBrain brain_;
+    ClusterBrain brain_, brain2_;
+    BrainParams  bp2_;
+    float        brain2Depth_ = 0.9f;
+    int          brain2Interval_ = 0;
+    bool         brain2On_ = false;
+    int          brainQuant_ = 0;      // SyncDiv: the conductor's decisions land on the grid
+    double       quantAcc_ = 0.0, lastBeat_ = 0.0;
+    float        bendRange_ = 2.0f;
     Ensemble     ensemble_;
     StereoDelay  delay_, delay2_;
     GrainCloud   cloud_;

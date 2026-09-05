@@ -51,6 +51,9 @@ enum class ParamId : int {
     // so the room seems to change size rather than the sound to move; Doppler: the breathing
     // distance bends the pitch a little as a voice approaches or recedes
     PhaseWidth, PhaseRate, Doppler,
+    // Expression: what a key's pressure, its sideways slide and its own pitch bend do.
+    // With an MPE controller each finger has all three; a plain keyboard shares them.
+    PressDistance, PressBright, PressLevel, SlideCutoff, SlideZ, BendRange, MpeOn,
     // Ensemble
     EnsembleMix, EnsembleDepth, EnsembleRate, EnsembleSync,
     // Stereo delay (asymmetric L/R)
@@ -83,7 +86,11 @@ enum class ParamId : int {
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)
     BrainOn, BrainDensity, BrainRate, BrainSync, BrainHoldMin, BrainHoldMax,
-    BrainLow, BrainHigh, BrainConsonance, BrainWander,
+    BrainLow, BrainHigh, BrainConsonance, BrainWander, BrainQuantize,
+    // A second conductor for the background: its own register, pace and plane, on the
+    // first one's root (plus an interval), so the two play a slow counterpoint
+    Brain2On, Brain2Density, Brain2Rate, Brain2HoldMin, Brain2HoldMax,
+    Brain2Low, Brain2High, Brain2Depth, Brain2Interval, Brain2Consonance,
     // Tuning
     Scale, KeyMap, RootNote, RefPitch, Seed, Hold,
     // Purity blends every note between 12-TET (0) and the chosen scale (1) in the log domain; Drift

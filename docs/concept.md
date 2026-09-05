@@ -698,6 +698,56 @@ the rotation) seeds from a side stream rather than from the voice's or the engin
 switching one on never moves the brain's dice or a preset's random phases. Ten built-in
 presets (168..177, "rich studies") show each one; the library generator draws them per style.
 
+## The instrument as a place: body, unmasking, patina, externalisation
+
+Four stages that are about the room the sound is in rather than the sound itself. All four are
+off by default and were measured sound-neutral there.
+
+* **Body** (`Core/include/ambient/Body.h`): twelve modes tuned to the brain's root, fed from the
+  finished mix and returned to it -- the soundboard a pad sits on. Four materials, which are four
+  sets of mode ratios: Wood (a plate's irregular low modes), Plate (the stretched series of flat
+  metal), Bell (hum, prime, tierce, quint, nominal), String (harmonic with a little stiffness).
+  Decay is the lowest mode's T60; the higher ones die away faster at a rate belonging to the
+  material; Tone tilts the gains, Spread scatters the modes across the field. Two things had to
+  be measured rather than assumed: a resonator normalised to unity at its peak passes almost
+  nothing of a broadband signal (the Body knob moved the mix by 0.02 dB), so the level is
+  normalised on the expected *power* instead, the way the Air band is; and modes scattered
+  randomly around the centre are all driven by the same mono signal and therefore correlate the
+  two channels (width 0.69 collapsed to 0.11), so neighbouring modes sit on opposite sides. Q is
+  capped at 300, because a mode narrower than that is never excited by a drone that drifts.
+* **Unmask** (Far Reverb): the background steps aside for the foreground band by band -- three
+  bands, the near bus as the side chain, 50 ms to duck and 1.2 s to return. It is what a mixing
+  engineer does by riding the reverb return, and what keeps a dense pad from swallowing its own
+  notes.
+* **Patina** (master): tape wow and flutter as a moving read point, the top end a worn machine
+  has lost, a noise floor that rises a little with the signal (modulation noise, which is what
+  makes a floor sound like tape rather than like dither), and a gentle saturation. Bypassed
+  entirely at zero.
+* **Externalise** (Space): the two cues a headphone image needs to sit outside the head -- the
+  notch the pinna cuts into what arrives from the side, whose frequency moves with the voice's
+  angle, and the reflection off the shoulder a quarter of a millisecond later. Brown and Duda's
+  structural model, the parts of it that need no measured data.
+
+## Playing it: expression, two conductors, the grid
+
+* **Expression** (MPE, aftertouch, CC 74, bend): pressure pulls a voice towards the listener --
+  the plane already decides brightness, level, dryness and presence, so one finger moves all of
+  them the way leaning into a note does -- and can also open brightness and level directly; the
+  sideways slide moves that voice's filter and its point in the z-plane; bend is per note. With
+  MPE on, channels 2 to 16 each carry one note with its own three; without it, the wheel and
+  channel pressure apply to every sounding voice. Everything is smoothed inside the voice.
+* **Brain Quantize**: the conductor's decisions wait for the next note value of the clock, and
+  all of the waiting time is handed over at the tick, so the mean rate is unchanged.
+* **Brain 2**: a second conductor with its own register, pace, density and plane, on the first
+  one's root plus an interval, with its own random stream. Two of them play a slow counterpoint
+  neither would play alone.
+* **Room Morph**: a second impulse response and a crossfade between the two rooms. The second
+  convolution only runs while the morph is actually between them.
+* **Level matching** (plugin): every preset's loudness was measured from a twelve-second render
+  and stored in its metadata; while level matching is on, loading a preset trims the master gain
+  towards a common target (at most 12 dB) so that auditioning a hundred presets is not a ride on
+  the volume knob. A preset that was never measured is left alone.
+
 ## Clock and sync
 
 `Core/include/ambient/Clock.h`. Where the tempo comes from is one setting,
@@ -986,6 +1036,15 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   matrix as text. A modulated knob wears a thin ring in its source's colour
   and a second arc from its value to where the modulation is pushing it this
   instant; its right-click menu lists what drives it, each route removable.
+  The editor is four translation units (`EditorCommon.h` holds what they share): the frame and
+  the pages, the modulation strip, the in-grid displays, the browse and perform pages. Each
+  section's title carries a die: a click draws that section's parameters again (in the
+  parameter's own skewed domain, inside the middle 70 % of its range), shift nudges them.
+  Undo, redo and an A/B compare work on whole parameter snapshots. The header carries the
+  output's own spectrum with its peak level, and a Compact switch that wraps the widest rows
+  into two: the page goes from 1.9 : 1 to 1.6 : 1, still without scrolling. (Wrapping every
+  wide row, rather than only those above ten cells, gave 1.27 : 1 -- worse than the shape it
+  started from, which is why the threshold is where it is.)
   Help (`Core/include/ambient/Help.h`): one or two sentences for every
   parameter (`paramHelp`, families share their text so the three slots and
   eight LFOs cannot drift apart; the self test insists every parameter has

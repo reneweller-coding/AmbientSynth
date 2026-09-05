@@ -88,6 +88,15 @@ source, Absorb in the delay feedback (echoes that drown), a pitch Tide over
 minutes, a turning far field, and golden-ratio LFO defaults. Ten built-in
 "rich studies" presets show them; the library uses them per style.
 
+**A place, not a patch.** A resonating **Body** under everything (twelve modes on the root:
+wood, plate, bell or string), an **Unmask** that lets the background step aside for the
+foreground band by band, a **Patina** on the master (tape wow, lost highs, a noise floor,
+gentle saturation), and **Externalise** for headphones (pinna notch and shoulder reflection).
+**Expression**: pressure, slide and per-note bend, over MPE or a plain keyboard; pressure pulls
+a voice out of the background towards you. A **second conductor** for the background, the first
+one's decisions optionally **on the clock's grid**, and a **Room Morph** between two impulse
+responses.
+
 **The editor.** One page, nothing scrolls, the corner zooms: two columns of
 sections, and rows of a kind -- the three sources, the filters, the effect
 pairs, the conductor's tables, morph and macros -- page through tabs. Each
@@ -99,7 +108,9 @@ return's spectrum, the conductor's notes as a roll. The strip along the
 bottom holds the modulators: drag a card onto a knob to route it, right-click
 a card or a knob to see and remove routes, and the LFO / ENVELOPES / MATRIX
 tabs edit the sources. A modulated knob wears a ring in its source's colour
-and shows the modulation moving it.
+and shows the modulation moving it. Every section title carries a die (click to redraw that
+section, shift to nudge it); Undo, Redo and A|B work on whole snapshots; the header shows the
+output's spectrum; Compact wraps the widest rows for a narrower window.
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

@@ -18,6 +18,7 @@
 #include "ambient/Sources.h"
 #include "ambient/PresetMap.h"
 #include "ambient/Timeline.h"
+#include "ambient/Score.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -166,6 +167,8 @@ int main(int argc, char** argv)
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
     SetTimeline setFile; bool haveSet = false; bool secondsGiven = false;
+    Score score; bool haveScore = false;
+    std::string stemPrefix;
     int presetIndex = -1;
     loadDefaultPresetPacks();   // $AMBIENT_PACKS or ~/Documents/AmbientSynth/Packs; --packs adds more
     std::vector<int> notes;
@@ -224,6 +227,13 @@ int main(int argc, char** argv)
             if (!engine.setEnvShape(idx, text.c_str())) { std::fprintf(stderr, "bad envelope %d\n", idx + 1); return 2; }
             std::printf("env %d: %d points\n", idx + 1, engine.envShape(idx).count());
         }
+        else if (a == "--score") {   // a written score of timed ramps; length defaults to the score's
+            const std::string path = next();
+            if (!score.load(path.c_str())) { std::fprintf(stderr, "cannot read the score %s\n", path.c_str()); return 1; }
+            haveScore = true;
+            std::printf("score: %d events, %.0f s\n", score.count(), score.length());
+        }
+        else if (a == "--stems") stemPrefix = next();   // also write near/far/cosmos/room
         else if (a == "--set-file") {   // play a recorded set (.ambientset) while rendering; length defaults to the set's
             const std::string path = next();
             if (!setFile.load(path.c_str())) { std::fprintf(stderr, "cannot read set %s\n", path.c_str()); return 2; }
@@ -398,9 +408,19 @@ int main(int argc, char** argv)
     }
 
     if (haveSet) { if (!secondsGiven) seconds = setFile.length() + 20.0; setFile.seek(0.0); }
+    if (haveScore) { if (!secondsGiven) seconds = score.length() + 20.0; score.rewind(); }
     const long total = static_cast<long>(seconds * sr);
     std::vector<float> L(static_cast<size_t>(block)), R(static_cast<size_t>(block));
     std::vector<float> wav; wav.reserve(static_cast<size_t>(total) * 2);
+    // Stems: four stereo pairs written alongside the mix, so a piece can be balanced afterwards.
+    std::vector<std::vector<float>> stemOut(static_cast<size_t>(Engine::kNumStems) * 2);
+    std::vector<float> stemChunk(static_cast<size_t>(Engine::kNumStems) * 2 * static_cast<size_t>(block), 0.0f);
+    float* stemPtr[Engine::kNumStems * 2] = {};
+    if (!stemPrefix.empty()) {
+        for (int c = 0; c < Engine::kNumStems * 2; ++c)
+            stemPtr[c] = stemChunk.data() + static_cast<size_t>(c) * static_cast<size_t>(block);
+        engine.setStemBuffers(stemPtr);
+    }
 
     double sumSq[2] = { 0, 0 }; float peak = 0.0f; long nans = 0;
     double secSq[2] = { 0, 0 }; long secCount = 0; int sec = 0;
@@ -420,7 +440,14 @@ int main(int argc, char** argv)
                 }
             });
         }
+        if (haveScore)
+            score.step(static_cast<double>(n) / sr,
+                       [&](ParamId id) { return engine.getParam(id); },
+                       [&](ParamId id, float v) { engine.setParam(id, v); });
         engine.process(L.data(), R.data(), n);
+        if (!stemPrefix.empty())
+            for (int c = 0; c < Engine::kNumStems * 2; ++c)
+                stemOut[static_cast<size_t>(c)].insert(stemOut[static_cast<size_t>(c)].end(), stemPtr[c], stemPtr[c] + n);
         for (int i = 0; i < n; ++i) {
             const float l = L[static_cast<size_t>(i)], r = R[static_cast<size_t>(i)];
             if (std::isnan(l) || std::isnan(r) || std::isinf(l) || std::isinf(r)) ++nans;
@@ -448,6 +475,19 @@ int main(int argc, char** argv)
         return nans == 0 ? 0 : 1;
     }
     if (!writeWav(out, wav, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", out.c_str()); return 1; }
+    if (!stemPrefix.empty()) {
+        for (int st = 0; st < Engine::kNumStems; ++st) {
+            std::vector<float> inter;
+            inter.reserve(stemOut[static_cast<size_t>(st) * 2].size() * 2);
+            for (size_t k = 0; k < stemOut[static_cast<size_t>(st) * 2].size(); ++k) {
+                inter.push_back(stemOut[static_cast<size_t>(st) * 2][k]);
+                inter.push_back(stemOut[static_cast<size_t>(st) * 2 + 1][k]);
+            }
+            const std::string path = stemPrefix + "_" + Engine::stemName(st) + ".wav";
+            if (!writeWav(path, inter, 2, sr)) { std::fprintf(stderr, "cannot write a stem\n"); return 1; }
+            std::printf("stem: %s\n", path.c_str());
+        }
+    }
     std::printf("wrote %s\n", out.c_str());
     return nans == 0 ? 0 : 1;
 }

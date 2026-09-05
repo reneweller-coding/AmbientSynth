@@ -9,6 +9,7 @@
 #include "ambient/Presets.h"
 #include "ambient/Help.h"
 #include "ambient/Filter.h"
+#include "ambient/Score.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
 #include "ambient/Menu.h"
@@ -1836,6 +1837,90 @@ void testParamTable()
         CHECK(sectionOf(d.section) != ParamSection::Unknown, (std::string("section known: ") + d.section).c_str());
 }
 
+// Stems: the four planes have to add up to what comes out, or they are not stems. They are taken
+// where each plane joins the mix, so what they sum to is the mix *before* the master stage --
+// the mid/side split, the output DC blocker and the soft clipper come after them. The mid
+// channel is what the master stage leaves alone (its side high-pass is the whole difference, and
+// it lives below 50 Hz), so that is what this compares.
+// A score: the text form, the ramp in the parameter's own domain, and what it does when played.
+void testScore()
+{
+    Score sc;
+    const char* text =
+        "# a piece\n"
+        "0:00 cosmos_send 0\n"
+        "0:10 cosmos_send 0.6 over 0:20\n"
+        "1:00 far_decay 60 over 0:30\n"
+        "2:00 brain_on off\n";
+    CHECK(sc.parse(text), "a score parses");
+    CHECK(sc.count() == 4, "a score keeps every line");
+    // The last thing to happen is the ramp that starts at 1:00 and takes half a minute; the
+    // switch at 2:00 is an instant, so the piece is over at two minutes.
+    CHECK(std::fabs(sc.length() - 120.0) < 0.001, "a score knows when it ends");
+    CHECK(!sc.parse("0:00 no_such_parameter 1\n"), "a score refuses a parameter that does not exist");
+    CHECK(!sc.parse("nonsense\n"), "a score refuses a line it cannot read");
+    CHECK(sc.parse(text), "and takes a good one again afterwards");
+    char buf[2048];
+    CHECK(sc.write(buf, sizeof(buf)) > 0, "a score writes itself back");
+    Score again;
+    CHECK(again.parse(buf), "and what it writes parses");
+    CHECK(again.count() == sc.count(), "the round trip keeps every line");
+
+    // Played: the ramp has to arrive, and to travel rather than jump.
+    float value = 0.0f;
+    bool brain = true;
+    auto get = [&](ParamId id) { return id == ParamId::CosmosSend ? value : 1.0f; };
+    auto set = [&](ParamId id, float v) { if (id == ParamId::CosmosSend) value = v; if (id == ParamId::BrainOn) brain = v >= 0.5f; };
+    sc.rewind();
+    for (int i = 0; i < 20; ++i) sc.step(1.0, get, set);          // 20 s: half way into the ramp
+    CHECK(value > 0.05f && value < 0.55f, "a ramp is on its way at half time");
+    for (int i = 0; i < 20; ++i) sc.step(1.0, get, set);          // 40 s: past its end
+    CHECK(std::fabs(value - 0.6f) < 0.01f, "a ramp arrives");
+    for (int i = 0; i < 50; ++i) sc.step(1.0, get, set);          // 90 s: still before the switch
+    CHECK(brain, "a later event has not fired yet");
+    for (int i = 0; i < 40; ++i) sc.step(1.0, get, set);          // 130 s: past it
+    CHECK(!brain, "a switch flips when its time comes");
+}
+
+void testStems()
+{
+    const int sr = 48000, block = 256;
+    Engine e;
+    e.applyPreset(2);                       // something with a reverb and a cosmos path
+    e.setParam(ParamId::MasterGain, 0.0f);
+    e.setParam(ParamId::OscLevel, 0.2f);    // quiet, so the soft clipper is linear
+    e.setParam(ParamId::CosmosSend, 0.3f);
+    e.setParam(ParamId::RoomLevel, 0.3f);
+    e.setParam(ParamId::SubLevel, 0.0f);
+    e.setParam(ParamId::PatinaAmount, 0.0f);
+    e.setParam(ParamId::BodyLevel, 0.0f);
+    e.prepare(sr, block);
+    std::vector<float> L(block), R(block);
+    std::vector<float> stem(static_cast<size_t>(Engine::kNumStems) * 2 * block, 0.0f);
+    float* ptr[Engine::kNumStems * 2];
+    for (int c = 0; c < Engine::kNumStems * 2; ++c) ptr[c] = stem.data() + static_cast<size_t>(c) * block;
+    e.setStemBuffers(ptr);
+    double err = 0.0, ref = 0.0;
+    long cnt = 0;
+    for (int b = 0; b < 400; ++b) {
+        e.process(L.data(), R.data(), block);
+        if (b < 40) continue;               // let the reverbs fill
+        for (int i = 0; i < block; ++i) {
+            float sl = 0.0f, sr2 = 0.0f;
+            for (int st = 0; st < Engine::kNumStems; ++st) { sl += ptr[st * 2][i]; sr2 += ptr[st * 2 + 1][i]; }
+            const double mixMid = 0.5 * (L[static_cast<size_t>(i)] + R[static_cast<size_t>(i)]);
+            const double stemMid = 0.5 * (sl + sr2);
+            err += (mixMid - stemMid) * (mixMid - stemMid);
+            ref += mixMid * mixMid;
+            ++cnt;
+        }
+    }
+    const double rel = 10.0 * std::log10((err / std::max(cnt, 1L)) / std::max(ref / std::max(cnt, 1L), 1e-20));
+    CHECK(ref > 1e-10, "the stem test made sound");
+    CHECK(rel < -30.0, "the four stems sum to the mix (mid channel, before the master stage)");
+    e.setStemBuffers(nullptr);
+}
+
 void testSampleRates()
 {
     for (double sr : { 44100.0, 48000.0, 96000.0 }) {
@@ -2217,6 +2302,8 @@ int main()
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
     testParamTable();
+    testScore();
+    testStems();
     testSampleRates();
     testExpressionBodyPatina();
     testFilterModels();

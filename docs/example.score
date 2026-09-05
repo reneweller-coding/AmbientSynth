@@ -1,0 +1,25 @@
+# An example score: forty minutes, written down.
+#   <time>  <parameter>  <value>  [over <duration>]
+# Times are m:ss or h:mm:ss. Without "over" the value is set at that moment; with it the
+# parameter travels there from wherever it was, in its own perceptual curve.
+# Render it offline:  ambient_render --preset "Sleep Concert" --score docs/example.score
+
+0:00    brain_density 3
+0:00    cosmos_send 0
+0:00    room_level 0
+0:00    far_decay 25
+0:00    master_gain -14
+
+4:00    brain_density 5 over 6:00
+6:00    cosmos_send 0.45 over 8:00
+8:00    far_decay 60 over 10:00
+
+18:00   room_level 0.35 over 5:00
+20:00   cosmos_shimmer 0.4 over 6:00
+24:00   body_level 0.5 over 4:00
+
+30:00   brain_density 3 over 6:00
+32:00   cosmos_send 0.15 over 6:00
+34:00   far_decay 90 over 6:00
+36:00   master_gain -22 over 4:00
+40:00   brain_on off

@@ -302,6 +302,12 @@ double Engine::frequencyOf(int note) const
     return std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
 }
 
+const char* Engine::stemName(int i)
+{
+    static const char* const names[kNumStems] = { "near", "far", "cosmos", "room" };
+    return (i >= 0 && i < kNumStems) ? names[i] : "";
+}
+
 const Voice* Engine::loudestVoice() const
 {
     const Voice* best = nullptr;

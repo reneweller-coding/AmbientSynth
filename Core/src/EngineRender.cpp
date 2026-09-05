@@ -96,6 +96,7 @@ void Engine::process(float* L, float* R, int n)
     int pos = 0;
     while (pos < n) {
         const int chunk = std::min(n - pos, maxBlock_);
+        stemPos_ = pos;
         renderChunk(L + pos, R + pos, chunk);
         pos += chunk;
     }
@@ -287,11 +288,13 @@ void Engine::renderChunk(float* L, float* R, int n)
             nl[i] += cl[i] * ret; nr[i] += cr[i] * ret;
             fl[i] += cl[i] * tf;  fr[i] += cr[i] * tf;
             cosTap_[(cosTapW_ + i) & 4095] = 0.5f * (cl[i] + cr[i]) * ret;   // what the return adds, for the picture
+            if (stems_ != nullptr) { stems_[4][stemPos_ + i] = cl[i] * ret; stems_[5][stemPos_ + i] = cr[i] * ret; }
         }
         cosTapW_ = (cosTapW_ + n) & 4095;
     } else {
         for (int i = 0; i < n; ++i) cosTap_[(cosTapW_ + i) & 4095] = 0.0f;
         cosTapW_ = (cosTapW_ + n) & 4095;
+        if (stems_ != nullptr) for (int i = 0; i < n; ++i) { stems_[4][stemPos_ + i] = 0.0f; stems_[5][stemPos_ + i] = 0.0f; }
     }
     nearReverb_.process(nl, nr, n);
 
@@ -358,6 +361,17 @@ void Engine::renderChunk(float* L, float* R, int n)
         const float far = smFarLevel_.next(farLevel_);
         L[i] = nl[i] + fl[i] * far;
         R[i] = nr[i] + fr[i] * far;
+        if (stems_ != nullptr) {
+            // The Cosmos return was added into the near bus above, so it has to come out of the
+            // near stem or it would be counted twice and the four would no longer sum to the mix.
+            // What the Cosmos sent into the far plane cannot be separated here at all -- the
+            // reverb has already mixed it with everything else -- and belongs to the far stem,
+            // which is where it is heard.
+            stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i];
+            stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i];
+            stems_[2][stemPos_ + i] = fl[i] * far;
+            stems_[3][stemPos_ + i] = fr[i] * far;
+        }
     }
     if (roomOn) {
         float* ol = roomOutL_.data(); float* orr = roomOutR_.data();
@@ -383,11 +397,14 @@ void Engine::renderChunk(float* L, float* R, int n)
             roomLevelCur_ += (roomLevel_ - roomLevelCur_) * levelC;
             roomLpL_ += lpc * (ol[i] - roomLpL_);
             roomLpR_ += lpc * (orr[i] - roomLpR_);
-            L[i] += roomLpL_ * roomLevelCur_ * roomGain;
-            R[i] += roomLpR_ * roomLevelCur_ * roomGain;
+            const float rL = roomLpL_ * roomLevelCur_ * roomGain, rR = roomLpR_ * roomLevelCur_ * roomGain;
+            L[i] += rL;
+            R[i] += rR;
+            if (stems_ != nullptr) { stems_[6][stemPos_ + i] = rL; stems_[7][stemPos_ + i] = rR; }
         }
     } else {
         roomLpL_ = roomLpR_ = 0.0f;
+        if (stems_ != nullptr) for (int i = 0; i < n; ++i) { stems_[6][stemPos_ + i] = 0.0f; stems_[7][stemPos_ + i] = 0.0f; }
     }
 
     // Feedback loop, output side: the mix (before mid/side, sub and master) goes into the ring,

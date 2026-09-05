@@ -25,6 +25,7 @@ add_library(AmbientCore STATIC
     src/Body.cpp
     src/Help.cpp
     src/Timeline.cpp
+    src/Score.cpp
 )
 if(WIN32)
     target_link_libraries(AmbientCore PUBLIC ws2_32)

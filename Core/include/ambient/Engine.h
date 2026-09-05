@@ -51,6 +51,15 @@ public:
     // Renders `n` stereo samples (replaces L/R). Any n; larger than maxBlockSize is chunked.
     void process(float* L, float* R, int n);
 
+    // Stems. Pass eight pointers -- near L/R, far L/R, cosmos L/R, room L/R -- each with room for
+    // the n of the next process() call, and they are filled alongside the mix; pass nullptr to
+    // stop. What is in them is what each plane contributes to the output at the point it joins
+    // it, so the four sum to the mix before the master stage (the Cosmos path's own send into
+    // the far plane is part of the far stem, where it is heard).
+    static constexpr int kNumStems = 4;
+    static const char* stemName(int i);
+    void setStemBuffers(float* const* eightPointers) { stems_ = eightPointers; }
+
     // Any thread. Applied at the start of the next block.
     void setUserScale(const FixedScale& s);
     // User wavetable (Table = User in a source slot) and texture (Type = Texture), message
@@ -336,6 +345,8 @@ private:
     bool              asleep_ = false;
 
     std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
+    float* const* stems_ = nullptr;   // eight pointers or null; valid for one process() call
+    int    stemPos_ = 0;              // where in them this chunk starts
     double   sr_ = 48000.0;
     int      maxBlock_ = 512;
     uint64_t order_ = 0;

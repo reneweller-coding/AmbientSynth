@@ -748,6 +748,38 @@ off by default and were measured sound-neutral there.
   towards a common target (at most 12 dB) so that auditioning a hundred presets is not a ride on
   the volume knob. A preset that was never measured is left alone.
 
+## Stems, and a score
+
+**Stems.** `Engine::setStemBuffers` takes eight pointers -- near, far, cosmos and room, left and
+right -- and fills them alongside the mix; `ambient_render --stems <prefix>` writes the four
+files. Each stem is what its plane contributes where it joins the output, so the four sum to the
+mix *before* the master stage (the mid/side split, the output DC blocker and the soft clipper come
+after them). Two details had to be measured rather than assumed: the Cosmos return is added into
+the near bus, so it is subtracted from the near stem or it would be counted twice (it was, and the
+four summed 1.6 dB loud); and what the Cosmos sends into the far plane cannot be separated at all,
+because the reverb has already mixed it with everything else -- it belongs to the far stem, which
+is where it is heard. The self test renders four hundred blocks and compares the mid channel of
+the mix with the sum of the stems; measured, the difference sits below -30 dB, and what is left is
+the master stage: it is in the side channel (-14.5 dB) and below 50 Hz (-16 dB), which is exactly
+the Bass Mono high-pass and the DC blocker.
+
+**A score** (`Core/include/ambient/Score.h`). The set timeline records what you did; the route
+walks the map; neither lets you write a piece. A score is a text file of timed ramps:
+
+```
+0:00    cosmos_send 0
+6:00    cosmos_send 0.45 over 8:00
+34:00   far_decay 90 over 6:00
+40:00   brain_on off
+```
+
+`<time> <parameter key> <value> [over <duration>]`, times as m:ss or h:mm:ss. Without *over* the
+value is set at that moment; with it the parameter travels there from wherever it was when the
+ramp began, in the parameter's own skewed domain -- the same one the morph and the map blend use,
+so a logarithmic knob moves the way a hand would move it. Choices and switches change when their
+ramp ends rather than halfway. `ambient_render --score <file>` plays one offline and takes its
+length from the score; `docs/example.score` is a forty-minute piece to start from.
+
 ## Clock and sync
 
 `Core/include/ambient/Clock.h`. Where the tempo comes from is one setting,

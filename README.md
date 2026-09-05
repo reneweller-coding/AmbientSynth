@@ -97,6 +97,12 @@ a voice out of the background towards you. A **second conductor** for the backgr
 one's decisions optionally **on the clock's grid**, and a **Room Morph** between two impulse
 responses.
 
+**Stems and scores.** `ambient_render --stems <prefix>` writes the near, far, cosmos and room
+planes as four stereo files alongside the mix, so a piece can be balanced afterwards. A **score**
+is a text file of timed ramps -- `6:00 cosmos_send 0.45 over 8:00` -- that plays a written piece
+instead of a recorded one; `--score <file>` renders one offline, and `docs/example.score` is a
+forty-minute example.
+
 **The editor.** One page, nothing scrolls, the corner zooms: two columns of
 sections, and rows of a kind -- the three sources, the filters, the effect
 pairs, the conductor's tables, morph and macros -- page through tabs. Each

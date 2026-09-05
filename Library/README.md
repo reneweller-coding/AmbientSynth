@@ -33,10 +33,29 @@ Tools/TextureGen/.venv/Scripts/python Tools/TextureGen/texturegen_worker.py \
     --resume --nice --max-minutes 330
 ```
 
-The packs last, because they reference the files by name:
+Audit the clips: text-to-audio misses sometimes, and a silent or gappy clip makes a dead
+granular source. `--repair` high-passes clips with a DC offset instead of rejecting them, and
+`--compact` halves the library by rewriting 32-bit float as 16-bit PCM, which is worth doing
+before pushing anything to a headset.
+
+```
+python Tools/library/check_textures.py --repair
+```
+
+Then the packs, which reference the files by name:
 
 ```
 python Tools/library/make_presets.py --per-style 200
+```
+
+Finally the measurement pass. `make_presets.py` estimates each preset's descriptors from its
+settings, because it has to name files before they exist. This replaces that estimate with the
+real thing and corrects every preset's master gain to the measured loudness, which is what
+keeps a library of thousands from having a few dozen presets that jump out. About twenty
+minutes for five thousand renders.
+
+```
+python Tools/library/measure_packs.py --jobs 6
 ```
 
 ## Installing it
@@ -93,11 +112,11 @@ Every pack line carries a map position, six descriptors (brightness, motion, wid
 weight, density) and tag bits, so the browser filters and the Absynth-style point map work on
 the library the same way they work on the built-in presets.
 
-There is one honest difference. The 148 built-in presets are **measured**: `Tools/preset_map.py`
-renders each one and reads the descriptors off the audio. The generated presets are
-**estimated** from their settings, because measuring five thousand of them means five thousand
-renders. The estimate is good enough to cluster the map and drive the filters, but a descriptor
-here is a prediction, not a measurement.
+Both halves of the library are measured, not described. `Tools/preset_map.py` renders the 148
+built-in presets; `Tools/library/measure_packs.py` renders the generated ones and writes the
+result back into the pack files. `make_presets.py` alone would only estimate the descriptors
+from the settings, which is enough to lay a map out but is a prediction -- so a library that has
+not been through the measurement pass says so in its own header line.
 
 ## Checking it
 

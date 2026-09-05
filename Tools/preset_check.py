@@ -10,6 +10,7 @@ Limits (a preset fails if any is exceeded):
     jump     > 0.30         (sample-to-sample: a click)
     dc       > 0.02         (mean of the mixed signal)
     silent   rms < -60 dBFS after the chord and brain had 10 s
+    mono     > 6 dB lost when summed to mono (the sides cancel the centre)
     non-finite samples
 Exit code 1 when anything fails.
 """
@@ -31,7 +32,7 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 sys.path.insert(0, HERE)
 from analyze import read_wav  # noqa: E402
 
-LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": -60.0}
+LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": -60.0, "mono_loss": 6.0}
 
 
 def check_preset(name, seconds, packs=None):
@@ -54,6 +55,11 @@ def check_preset(name, seconds, packs=None):
     peak = float(np.abs(x).max())
     jump = float(np.abs(np.diff(mono)).max())
     dc = float(abs(mono[int(len(mono) * 0.5):].mean()))
+    # Mono compatibility: how much level the stereo image loses when it is summed to mono.
+    # A wide drone loses 1-3 dB; more than that means the sides are cancelling the centre.
+    st = float(np.sqrt((tail ** 2).mean()))
+    mn = float(np.sqrt((tail.mean(axis=1) ** 2).mean()))
+    mono_loss = float(20 * np.log10((st + 1e-12) / (mn + 1e-12)))
     fails = []
     if rms_db > LIMITS["rms_db"]: fails.append(f"loud {rms_db:.1f} dBFS")
     if peak > LIMITS["peak"]: fails.append(f"peak {peak:.2f}")
@@ -61,7 +67,9 @@ def check_preset(name, seconds, packs=None):
     if dc > LIMITS["dc"]: fails.append(f"dc {dc:.3f}")
     if rms_db < LIMITS["silent_db"]: fails.append(f"silent {rms_db:.1f} dBFS")
     if nonfinite: fails.append(f"non-finite {nonfinite}")
-    return {"name": name, "rms_db": rms_db, "peak": peak, "jump": jump, "dc": dc, "nonfinite": nonfinite, "fail": fails}
+    if mono_loss > LIMITS["mono_loss"]: fails.append(f"mono -{mono_loss:.1f} dB")
+    return {"name": name, "rms_db": rms_db, "peak": peak, "jump": jump, "dc": dc,
+            "mono_loss": mono_loss, "nonfinite": nonfinite, "fail": fails}
 
 
 def main():
@@ -96,7 +104,7 @@ def main():
         if "error" in r:
             print(f"{i:4d} {name:28s} {status}: {r['error']}")
         elif r["fail"] or a.jobs == 1:
-            print(f"{i:4d} {name:28s} rms {r['rms_db']:6.1f}  peak {r['peak']:.2f}  jump {r['jump']:.3f}  dc {r['dc']:.4f}  {status}")
+            print(f"{i:4d} {name:28s} rms {r['rms_db']:6.1f}  peak {r['peak']:.2f}  jump {r['jump']:.3f}  dc {r['dc']:.4f}  mono -{r['mono_loss']:.1f}  {status}")
     print(f"\n{len(names) - failed} of {len(names)} presets pass" + (f", {failed} FAIL" if failed else ""))
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:

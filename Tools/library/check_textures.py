@@ -52,6 +52,17 @@ def highpass_in_place(path, hz=20.0):
     sf.write(path, y, sr, subtype="FLOAT")
 
 
+def to_int16(path):
+    """32-bit float halved to 16-bit PCM. The clips are normalised to -6 dBFS peak and only ever
+    feed a granular reader, so the extra bits buy nothing -- and the Quest's storage is finite."""
+    info = sf.info(path)
+    if info.subtype == "PCM_16":
+        return False
+    x, sr = sf.read(path, dtype="float32", always_2d=True)
+    sf.write(path, x, sr, subtype="PCM_16")
+    return True
+
+
 def measure(path):
     x, sr = sf.read(path, dtype="float32", always_2d=True)
     mono = x.mean(axis=1)
@@ -82,12 +93,14 @@ def main():
     ap.add_argument("--json", default=None)
     ap.add_argument("--repair", action="store_true",
                     help="high-pass clips that carry a DC offset instead of rejecting them")
+    ap.add_argument("--compact", action="store_true",
+                    help="rewrite 32-bit float clips as 16-bit PCM (halves the library)")
     a = ap.parse_args()
     files = sorted(glob.glob(os.path.join(a.dir, "*.wav")))
     if not files:
         print(f"no clips in {a.dir}")
         return 0
-    rows, bad, repaired = [], [], 0
+    rows, bad, repaired, packed = [], [], 0, 0
     for f in files:
         m = measure(f)
         if a.repair and any(x.startswith("dc ") for x in m["fail"]):
@@ -95,6 +108,8 @@ def main():
             m = measure(f)
             repaired += 1
         m["name"] = os.path.basename(f)
+        if a.compact and not m["fail"] and to_int16(f):
+            packed += 1
         rows.append(m)
         if m["fail"]:
             bad.append(m)
@@ -105,7 +120,8 @@ def main():
     ok = len(rows) - len(bad)
     secs = sum(r.get("seconds", 0.0) for r in rows)
     print(f"{ok} of {len(rows)} clips usable ({secs / 60:.0f} min of audio)"
-          + (f", {repaired} high-passed" if repaired else ""))
+          + (f", {repaired} high-passed" if repaired else "")
+          + (f", {packed} packed to 16 bit" if packed else ""))
     for m in bad[:20]:
         print(f"  reject {m['name']}: {', '.join(m['fail'])}")
     if len(bad) > 20:

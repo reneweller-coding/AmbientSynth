@@ -120,6 +120,15 @@ not been through the measurement pass says so in its own header line.
 
 ## Checking it
 
+`Tools/library/verify_packs.py` is the cheap pass: it parses every line and fails on an unknown
+parameter, a choice name the synth does not know, a value outside its range, a duplicate preset
+name, a named sample that is not there, or two presets on the same spot of the map. A second
+for five thousand presets.
+
+```
+python Tools/library/verify_packs.py
+```
+
 `Tools/preset_check.py` renders presets and fails the ones that are too loud, clip, click,
 carry DC or come out silent. It takes the whole library:
 

@@ -64,6 +64,16 @@ state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.
 
+**The editor.** One page, nothing scrolls, the corner zooms: two columns of
+sections, and rows of a kind -- the three sources, the two filters, the effect
+pairs, the conductor's tables, morph and macros -- page through tabs. Each
+row's spare room is a live display (oscillator cycle and partials, the source
+slot's table or grain window, filter response, the conductor's notes as a
+roll). The strip along the bottom holds the modulators: drag a card onto a
+knob to route it, right-click a card or a knob to see and remove routes, and
+the LFO / ENVELOPES / MATRIX tabs edit the sources. A modulated knob wears a
+ring in its source's colour and shows the modulation moving it.
+
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch
 *Active* on and the *Position* knob (or a mapped MIDI controller, later a hand

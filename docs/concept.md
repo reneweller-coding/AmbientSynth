@@ -863,7 +863,22 @@ arm64-v8a. Details in `docs/quest-plan.md`.
 * Editor: sections flow-laid-out from the table (knobs, toggles, combo boxes),
   header with preset box, voice count, brain root, scale, arc value and a
   keyboard strip where near notes are bright and far notes dim; *Load Scala…*
-  file chooser; resizable.
+  file chooser. The page is laid out once in a fixed design space and scaled
+  as a whole, so dragging the corner zooms and never reflows. Everything is
+  in sight at once, nothing scrolls: two columns (voice and morph on the
+  left; effects, cosmos and conductor on the right), and rows whose sections
+  are of a kind -- the three sources, the two filters, the effect pairs, the
+  conductor's tables, morph and macros -- page through tabs, each tabbed row
+  as tall as its tallest page so switching moves nothing else. The room a
+  row's knobs leave goes to a live display drawn from the engine's numbers:
+  the oscillator's cycle and partials, the source slot's table, grain window
+  or noise colour, the two filters' response, the conductor's notes as a
+  scrolling roll. Along the bottom the modulation strip: one card per source
+  (dragged onto a knob it becomes a route; right-click lists and removes its
+  routes), and tabs with the eight LFO editors, the six envelopes and the
+  matrix as text. A modulated knob wears a thin ring in its source's colour
+  and a second arc from its value to where the modulation is pushing it this
+  instant; its right-click menu lists what drives it, each route removable.
 
 ## Roadmap
 

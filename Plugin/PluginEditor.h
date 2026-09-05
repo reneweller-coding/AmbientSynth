@@ -55,6 +55,7 @@ private:
         juce::Rectangle<int> bounds;
         int maxUnits = 7;
         int group = -1;
+        bool visible = true;   // false while its tab is not the open one
     };
     struct Group {
         juce::String name;
@@ -64,6 +65,23 @@ private:
         int column = 0;
         std::vector<juce::Component*> displays;        // per row: a display that fills the leftover width, or null
     };
+
+    // A row of a group whose sections take turns: one page open, the others a tab away. This is
+    // what keeps the whole synth on one screen -- the three sources, the two filters, the effect
+    // pairs and the conductor's tables are alike enough that seeing one at a time is no loss.
+    struct TabRow {
+        int group = 0, row = 0;
+        std::vector<juce::String> names;                       // one label per page
+        std::vector<std::vector<juce::String>> pages;          // section names per page
+        std::vector<juce::Component*> displays;                // per page: display for the leftover width, or null
+        int active = 0;
+        juce::Rectangle<int> bar;
+        std::vector<juce::Rectangle<int>> tabs;
+    };
+    std::vector<TabRow> tabRows_;
+    TabRow* tabRowFor(int group, int row);
+    void    setSectionVisible(Section&, bool);
+    void    clickTabs(juce::Point<int> contentPos);
 
     Section* findSection(const juce::String& name);
     int      sectionWidth(const Section&) const;
@@ -99,7 +117,9 @@ private:
     // Everything below the header lives in a scrollable content component.
     struct Content : juce::Component {
         std::function<void(juce::Graphics&)> onPaint;
+        std::function<void(const juce::MouseEvent&)> onMouse;
         void paint(juce::Graphics& g) override { if (onPaint) onPaint(g); }
+        void mouseDown(const juce::MouseEvent& e) override { if (onMouse) onMouse(e); }
     };
     Content content_;
     juce::Viewport viewport_;
@@ -294,6 +314,19 @@ private:
         AmbientSynthProcessor& proc;
         int slot;   // 2 or 3
     };
+    // The conductor's notes as they happen: a piano roll scrolling left, one column per tick, so
+    // the cluster brain's choices can be watched rather than inferred from the keyboard strip.
+    struct BrainView : juce::Component, juce::Timer {
+        explicit BrainView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override;
+        AmbientSynthProcessor& proc;
+        static constexpr int kCols = 240;                 // 16 s at 15 Hz
+        std::vector<std::array<bool, 128>> hist = std::vector<std::array<bool, 128>>(kCols);
+        int head = 0;
+        int lo = 36, hi = 84;                             // the note range in view, widened as notes arrive
+    };
+    std::unique_ptr<BrainView> brainView_;
     std::unique_ptr<FilterView> filterView_;
     std::unique_ptr<SourceView> source2View_, source3View_;
     std::unique_ptr<juce::TextButton> browseButton_;

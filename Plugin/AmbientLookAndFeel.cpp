@@ -111,6 +111,19 @@ void AmbientLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
     const float from = bipolar ? 0.5f * (startAngle + endAngle) : startAngle;
     arc(g, c, ringR, from, angle, thick, fill, hot);
 
+    // A modulated knob wears a thin outer ring in its source's colour, and a second arc from the
+    // value to where the modulation has pushed it this instant -- the Vital idiom, and the only
+    // way to see from the panel what the matrix is doing.
+    if (s.getProperties().contains("modColour")) {
+        const juce::Colour mc(static_cast<juce::uint32>(static_cast<int>(s.getProperties()["modColour"])));
+        const float off = static_cast<float>(s.getProperties().getWithDefault("modOffset", 0.0));
+        const float outer = ringR + thick * 0.5f + 2.0f;
+        g.setColour(mc.withAlpha(0.55f));
+        g.drawEllipse(c.x - outer, c.y - outer, 2.0f * outer, 2.0f * outer, 1.2f);
+        const float to = juce::jlimit(startAngle, endAngle, angle + off * (endAngle - startAngle));
+        if (std::abs(to - angle) > 1.0e-3f) arc(g, c, ringR, angle, to, thick * 0.6f, mc, true);
+    }
+
     // Pointer: a short radial tick, not a full needle.
     {
         juce::Path p;
@@ -120,8 +133,9 @@ void AmbientLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
                      juce::AffineTransform::rotation(angle).translated(c.x, c.y));
     }
 
-    // The value lives inside the knob; the cell's label below carries the name.
-    if (r >= 13.0f) {
+    // The value lives inside the knob; the cell's label below carries the name. The small knobs of
+    // the modulation strip have no room for it and show nothing rather than an overflowing number.
+    if (r >= 18.0f) {
         const juce::String txt = valueText(s);
         if (txt.isNotEmpty()) {
             g.setColour(enabled ? (hot ? ui::text : ui::text.withAlpha(0.82f)) : ui::faint);

@@ -35,6 +35,9 @@ constexpr int kCellW = 68, kCellH = 76, kPad = 11, kTitleH = 22, kGroupTitleH = 
 // whatever size the window has. Dragging the corner is the zoom; the aspect ratio is fixed, so
 // nothing ever reflows into a different arrangement -- it only gets bigger or smaller.
 constexpr int kMinDesignW = 1400, kMinDesignH = 820;
+// A tab bar above a row that pages, and the modulation strip along the bottom; the page height
+// follows from these plus the body, so nothing on the main page ever has to scroll.
+constexpr int kTabH = 26, kStripH = 300, kDisplayMinW = 300;
 const juce::Colour kBg = ui::bg0, kGroupFill = ui::group, kSectionFill = ui::card, kAccent = ui::accent,
                    kText = ui::text, kDim = ui::dim;
 const juce::Colour kVoice = ui::voiceCol, kFore = ui::foreCol, kBack = ui::backCol, kCosmos = ui::cosmosCol,
@@ -46,18 +49,30 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
 {
     setLookAndFeel(&laf_);
 
+    // Two columns, everything in sight at once: the voice and the morph on the left, the effects,
+    // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
+    // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Oscillator", "Envelope" }, { "Source 2" }, { "Source 3" }, { "Air", "Filter" }, { "Space" }, { "Z-Plane" }, { "Foundation" } }, {}, 0 },
-        { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } }, {}, 0 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } }, {}, 0 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" } }, {}, 1 },
+        { "VOICE",      kVoice,     { { "Oscillator", "Envelope", "Source 2", "Source 3" }, { "Air", "Filter", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },
+        { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
+        { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "MORPH",      kMorph,     { { "Morph" }, { "Macros" } }, {}, 1 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence" } }, {}, 1 },
+    };
+    tabRows_ = {
+        { 0, 0, { "OSC 1", "SOURCE 2", "SOURCE 3" }, { { "Oscillator", "Envelope" }, { "Source 2" }, { "Source 3" } } },
+        { 0, 1, { "FILTER", "Z-PLANE" }, { { "Air", "Filter" }, { "Z-Plane" } } },
+        { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
+        { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } } },
+        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } } },
+        { 5, 0, { "BRAIN", "TUNING", "COHERENCE" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" } } },
     };
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
+    content_.onMouse = [this](const juce::MouseEvent& e) { if (!e.mods.isPopupMenu()) clickTabs(e.getPosition()); };
     viewport_.setViewedComponent(&content_, false);
-    viewport_.setScrollBarsShown(true, false);
+    viewport_.setScrollBarsShown(false, false);
     addAndMakeVisible(viewport_);
     buildCells();
     colourCellsByGroup();
@@ -167,28 +182,24 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     filterView_ = std::make_unique<FilterView>(proc_);
     source2View_ = std::make_unique<SourceView>(proc_, 2);
     source3View_ = std::make_unique<SourceView>(proc_, 3);
+    brainView_ = std::make_unique<BrainView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
-                                static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()) })
+                                static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
+                                static_cast<juce::Component*>(brainView_.get()) })
         content_.addAndMakeVisible(*c);
-    if (!groups_.empty()) {   // VOICE rows: {Oscillator, Envelope}, {Source 2}, {Source 3}, {Air, Filter}, {Space}, {Z-Plane}, {Foundation}
-        Group& voice = groups_[0];
-        voice.displays.assign(voice.rows.size(), nullptr);
-        if (voice.rows.size() > 3) {
-            voice.displays[0] = scope_.get();
-            voice.displays[1] = source2View_.get();
-            voice.displays[2] = source3View_.get();
-            voice.displays[3] = filterView_.get();
-        }
+    if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
+        tabRows_[0].displays = { scope_.get(), source2View_.get(), source3View_.get() };
+        tabRows_[1].displays = { filterView_.get(), nullptr };
     }
+    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
     setResizable(true, true);
     layoutBody();                       // measure once: the design size is what the body needs
-    // Width: exactly what the body needs, so nothing ever scrolls sideways. Height: a landscape
-    // window; the body is taller than any screen and scrolls vertically, as it always has.
+    // Width and height: exactly what header, body and modulation strip need, so nothing scrolls.
     designW_ = std::max(kMinDesignW, bodyW_);
-    designH_ = std::max(kMinDesignH, kHeaderH + std::min(bodyH_, juce::roundToInt(designW_ * 0.50f)));
+    designH_ = std::max(kMinDesignH, kHeaderH + bodyH_ + kStripH);
     if (auto* con = getConstrainer()) {
         con->setFixedAspectRatio(static_cast<double>(designW_) / static_cast<double>(designH_));
         con->setSizeLimits(designW_ / 3, designH_ / 3, designW_ * 2, designH_ * 2);
@@ -202,10 +213,17 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         }
         setSize(juce::roundToInt(designW_ * fit), juce::roundToInt(designH_ * fit));
     }
-    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);   // open on the perform page
+    if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);
+    {   // AMBIENT_PRESET=<name>: open on a named preset (dev aid for photographing a modulated patch)
+        const juce::String ps = juce::SystemStats::getEnvironmentVariable("AMBIENT_PRESET", "");
+        for (int i = 0; ps.isNotEmpty() && i < numPresets(); ++i)
+            if (ps == preset(i).name) { proc_.applySoundPreset(i); if (soundBox_) soundBox_->setSelectedId(i + 1, juce::dontSendNotification); }
+    }   // open on the perform page
     {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
         const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");
         if (br.isNotEmpty()) { setPage(2); if (br == "map") browse_->setMode(1); }
+        const juce::String sc = juce::SystemStats::getEnvironmentVariable("AMBIENT_SCROLL", "");
+        if (sc.isNotEmpty()) juce::MessageManager::callAsync([this, y = sc.getIntValue()] { viewport_.setViewPosition(0, y); });
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
         for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
     }
@@ -226,9 +244,13 @@ void AmbientSynthEditor::buildCells()
         Section* sec = findSection(d.section);
         if (sec == nullptr) {
             Section s; s.name = d.section;
-            if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
+            if (s.name == "Tuning" || s.name == "Far Reverb") s.maxUnits = 8;
+            if (s.name == "Cosmos") s.maxUnits = 8;                          // two even rows
             if (s.name == "Tuning") s.maxUnits = 9;
-            if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
+            if (s.name == "Morph") s.maxUnits = 9;
+            if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
+            if (s.name == "Space") s.maxUnits = 6;                           // two rows each, side by side
+            if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
@@ -416,7 +438,7 @@ void AmbientSynthEditor::resized()
     // never fall off the edge, and the scale follows from that.
     layoutBody();
     designW_ = std::max(kMinDesignW, bodyW_);
-    designH_ = std::max(kMinDesignH, kHeaderH + std::min(bodyH_, juce::roundToInt(designW_ * 0.50f)));
+    designH_ = std::max(kMinDesignH, kHeaderH + bodyH_ + kStripH);
     scale_ = juce::jmax(0.05f, static_cast<float>(getWidth()) / static_cast<float>(designW_));
     const auto tf = juce::AffineTransform::scale(scale_);
     for (auto* child : getChildren()) child->setTransform(tf);
@@ -437,7 +459,7 @@ void AmbientSynthEditor::resized()
     if (browse_) browse_->setBounds(0, kHeaderH, W, H - kHeaderH);
     // The modulation strip sits along the bottom of the main page, the way Pigments puts its
     // modulator lane there: the sources are always in sight, and a route is a drag away.
-    const int stripH = juce::jlimit(210, 340, (H - kHeaderH) * 34 / 100);
+    const int stripH = kStripH;
     if (mod_) { mod_->setBounds(0, H - stripH, W, stripH); mod_->toFront(false); }
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     keys_ = { 930, 42, juce::jmax(160, W - 930 - 340), 26 };
@@ -459,46 +481,121 @@ void AmbientSynthEditor::resized()
 
 // Places every group and section, and records how much room the whole body needs. The design
 // size is measured from this once, in the constructor -- guessing it meant the right-hand column
-// kept falling off the edge.
+// kept falling off the edge. A tabbed row is as wide and as tall as its widest and tallest page,
+// so switching a tab never moves anything else.
 void AmbientSynthEditor::layoutBody()
 {
-    int colWidth[2] = { 0, 0 };
-    for (auto& g : groups_) {
-        for (auto& row : g.rows) {
-            int w = kPad;
-            for (auto& n : row) if (Section* s = findSection(n)) w += sectionWidth(*s) + kPad;
-            colWidth[g.column] = std::max(colWidth[g.column], w);
+    int nCols = 1;
+    for (auto& g : groups_) nCols = std::max(nCols, g.column + 1);
+    std::vector<int> colWidth(static_cast<size_t>(nCols), 0), colX(static_cast<size_t>(nCols), 0), colY(static_cast<size_t>(nCols), kPad);
+    auto pageWidth = [this](const std::vector<juce::String>& names) {
+        int w = kPad;
+        for (auto& n : names) if (Section* s = findSection(n)) w += sectionWidth(*s) + kPad;
+        return w;
+    };
+    auto pageHeight = [this](const std::vector<juce::String>& names) {
+        int h = 0;
+        for (auto& n : names) if (Section* s = findSection(n)) h = std::max(h, sectionHeight(*s));
+        return h;
+    };
+    for (size_t gi = 0; gi < groups_.size(); ++gi) {
+        auto& g = groups_[gi];
+        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+            // A page with a display asks for room to draw it in, or the picture would be squeezed out.
+            int w = 0;
+            if (TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri))) {
+                for (size_t pi = 0; pi < t->pages.size(); ++pi)
+                    w = std::max(w, pageWidth(t->pages[pi]) + (pi < t->displays.size() && t->displays[pi] != nullptr ? kDisplayMinW : 0));
+            } else {
+                w = pageWidth(g.rows[ri]) + (ri < g.displays.size() && g.displays[ri] != nullptr ? kDisplayMinW : 0);
+            }
+            colWidth[static_cast<size_t>(g.column)] = std::max(colWidth[static_cast<size_t>(g.column)], w);
         }
     }
-    int colX[2] = { kPad, kPad + colWidth[0] + kPad };
-    int colY[2] = { kPad, kPad };
-    for (auto& g : groups_) {
-        const int x0 = colX[g.column];
-        int y = colY[g.column] + kGroupTitleH;
+    colX[0] = kPad;
+    for (size_t ci = 1; ci < colX.size(); ++ci) colX[ci] = colX[ci - 1] + colWidth[ci - 1] + kPad;
+    const juce::Font tabFont = ui::title(10.5f);
+    for (size_t gi = 0; gi < groups_.size(); ++gi) {
+        auto& g = groups_[gi];
+        const size_t col = static_cast<size_t>(g.column);
+        const int x0 = colX[col];
+        int y = colY[col] + kGroupTitleH;
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
-            auto& row = g.rows[ri];
-            int x = x0 + kPad, rowH = 0;
-            for (auto& n : row) {
+            TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
+            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : g.rows[ri];
+            juce::Component* disp = nullptr;
+            int rowH = 0;
+            if (t != nullptr) {
+                for (auto& pg : t->pages) rowH = std::max(rowH, pageHeight(pg));
+                t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
+                t->tabs.clear();
+                int tx = t->bar.getX();
+                for (auto& nm : t->names) {
+                    const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
+                    t->tabs.push_back({ tx, y, tw, kTabH - 4 });
+                    tx += tw + 4;
+                }
+                for (size_t pi = 0; pi < t->pages.size(); ++pi) {
+                    if (static_cast<int>(pi) == t->active) continue;
+                    for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
+                    if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
+                }
+                if (static_cast<size_t>(t->active) < t->displays.size()) disp = t->displays[static_cast<size_t>(t->active)];
+                y += kTabH;
+            } else {
+                rowH = pageHeight(names);
+                if (ri < g.displays.size()) disp = g.displays[ri];
+            }
+            int x = x0 + kPad;
+            for (auto& n : names) {
                 Section* s = findSection(n);
                 if (s == nullptr) continue;
+                setSectionVisible(*s, true);
                 layoutSection(*s, x, y);
                 x += s->bounds.getWidth() + kPad;
-                rowH = std::max(rowH, s->bounds.getHeight());
             }
             // Whatever the row leaves free goes to its display -- that room used to stay empty.
-            juce::Component* disp = ri < g.displays.size() ? g.displays[ri] : nullptr;
             if (disp != nullptr) {
-                const int right = x0 + colWidth[g.column] - kPad;
+                const int right = x0 + colWidth[col] - kPad;
                 if (right - x >= 120 && rowH > 0) { disp->setBounds(x, y, right - x, rowH); disp->setVisible(true); }
                 else disp->setVisible(false);
             }
             y += rowH + kPad;
         }
-        g.bounds = { x0, colY[g.column], colWidth[g.column], y - colY[g.column] };
-        colY[g.column] = y + kPad;
+        g.bounds = { x0, colY[col], colWidth[col], y - colY[col] };
+        colY[col] = y + kPad;
     }
-    bodyW_ = colX[1] + colWidth[1] + kPad;
-    bodyH_ = std::max(colY[0], colY[1]);
+    bodyW_ = colX.back() + colWidth.back() + kPad;
+    bodyH_ = 0;
+    for (int yy : colY) bodyH_ = std::max(bodyH_, yy);
+}
+
+AmbientSynthEditor::TabRow* AmbientSynthEditor::tabRowFor(int group, int row)
+{
+    for (auto& t : tabRows_) if (t.group == group && t.row == row) return &t;
+    return nullptr;
+}
+
+void AmbientSynthEditor::setSectionVisible(Section& s, bool v)
+{
+    s.visible = v;
+    for (int ci : s.cells) {
+        Cell& c = cells_[static_cast<size_t>(ci)];
+        if (c.comp) c.comp->setVisible(v);
+        if (c.label) c.label->setVisible(v);
+    }
+}
+
+void AmbientSynthEditor::clickTabs(juce::Point<int> pos)
+{
+    for (auto& t : tabRows_)
+        for (size_t i = 0; i < t.tabs.size(); ++i)
+            if (t.tabs[i].contains(pos) && static_cast<int>(i) != t.active) {
+                t.active = static_cast<int>(i);
+                layoutBody();
+                content_.repaint();
+                return;
+            }
 }
 
 // ---------------------------------------------------------------- perform page
@@ -1068,6 +1165,54 @@ void drawAxes(juce::Graphics& g, juce::Rectangle<float> plot)
                    juce::roundToInt(xForHz(plot, hz)) - 14, juce::roundToInt(plot.getBottom()) - 11, 28, 10,
                    juce::Justification::centred, false);
 }
+}
+
+void AmbientSynthEditor::BrainView::timerCallback()
+{
+    if (!isShowing()) return;
+    bool now[128] = {};
+    proc.engine().soundingNotes(now);
+    auto& col = hist[static_cast<size_t>(head)];
+    for (int n = 0; n < 128; ++n) {
+        col[static_cast<size_t>(n)] = now[n];
+        if (now[n]) { lo = juce::jmin(lo, n - 2); hi = juce::jmax(hi, n + 2); }
+    }
+    head = (head + 1) % kCols;
+    repaint();
+}
+
+void AmbientSynthEditor::BrainView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat().reduced(6.0f);
+    g.setColour(ui::card);
+    g.fillRoundedRectangle(r, 5.0f);
+    g.setColour(ui::condCol.withAlpha(0.85f));
+    g.setFont(ui::title(10.0f));
+    g.drawText("NOTES", r.reduced(8.0f, 4.0f), juce::Justification::topLeft);
+    const auto plot = r.reduced(8.0f).withTrimmedTop(16.0f);
+    const int span = juce::jmax(12, hi - lo);
+    const float rowH = plot.getHeight() / static_cast<float>(span);
+    const float colW = plot.getWidth() / static_cast<float>(kCols);
+    // octave lines, faint, so the register can be read
+    g.setColour(ui::faint.withAlpha(0.5f));
+    for (int n = (lo / 12 + 1) * 12; n < lo + span; n += 12) {
+        const float y = plot.getBottom() - (n - lo) * rowH;
+        g.drawHorizontalLine(juce::roundToInt(y), plot.getX(), plot.getRight());
+    }
+    // the roll: newest column at the right; a held note becomes a bar
+    for (int k = 0; k < kCols; ++k) {
+        const auto& col = hist[static_cast<size_t>((head + k) % kCols)];
+        const float x = plot.getX() + k * colW;
+        const float age = static_cast<float>(k) / static_cast<float>(kCols);
+        g.setColour(ui::condCol.withAlpha(0.25f + 0.7f * age));
+        for (int n = juce::jmax(0, lo); n < juce::jmin(128, lo + span); ++n)
+            if (col[static_cast<size_t>(n)])
+                g.fillRect(x, plot.getBottom() - (n - lo + 1) * rowH + rowH * 0.15f, colW + 0.6f, rowH * 0.7f);
+    }
+    g.setColour(ui::dim);
+    g.setFont(ui::body(9.5f));
+    g.drawText(juce::MidiMessage::getMidiNoteName(lo, true, true, 4), plot.getX(), plot.getBottom() - 12.0f, 40.0f, 12.0f, juce::Justification::left);
+    g.drawText(juce::MidiMessage::getMidiNoteName(lo + span, true, true, 4), plot.getX(), plot.getY(), 40.0f, 12.0f, juce::Justification::left);
 }
 
 void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
@@ -1923,15 +2068,65 @@ void AmbientSynthEditor::mouseDown(const juce::MouseEvent& e)
     juce::PopupMenu menu;
     menu.addItem(1, proc_.learnTarget() == param ? "Learning... move a controller" : "MIDI Learn", proc_.learnTarget() != param);
     if (cc >= 0) menu.addItem(2, "Clear MIDI (CC " + juce::String(cc) + ")");
+    {   // what modulates this knob, each route removable -- the other side of the cards' menu
+        const ambient::ModMatrix& m = proc_.engine().modMatrix();
+        bool any = false;
+        for (int k = 0; k < m.count(); ++k) {
+            if (static_cast<int>(m.route(k).target) != param) continue;
+            if (!any) { menu.addSeparator(); menu.addSectionHeader("Modulated by"); any = true; }
+            menu.addItem(1000 + k, juce::String(ambient::modSourceName(m.route(k).source)) + "   " + juce::String(m.route(k).depth, 2) + "   (remove)");
+        }
+        if (!any) { menu.addSeparator(); menu.addItem(3, "not modulated -- drag a card from the strip onto the knob", false, false); }
+    }
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(e.eventComponent), [this, id](int result) {
         if (result == 1) proc_.armMidiLearn(id);
         else if (result == 2) proc_.clearMidiLearn(id);
+        else if (result >= 1000) {
+            char buf[4096];
+            const int len = proc_.engine().writeModMatrix(buf, sizeof(buf));
+            juce::StringArray rows = juce::StringArray::fromTokens(juce::String(juce::CharPointer_UTF8(buf), static_cast<size_t>(juce::jmax(0, len))), ";", "");
+            rows.remove(result - 1000);
+            proc_.engine().setModMatrixText(rows.joinIntoString(";").toRawUTF8());
+            repaint();
+        }
     });
 }
 
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
+    {   // mark the knobs the matrix drives, and how far it is pushing them right now
+        const ambient::ModMatrix& m = proc_.engine().modMatrix();
+        for (auto& c : cells_) {
+            auto* sl = dynamic_cast<juce::Slider*>(c.comp.get());
+            if (sl == nullptr || c.param < 0) continue;
+            int colour = 0;
+            for (int k = 0; k < m.count(); ++k) {
+                if (static_cast<int>(m.route(k).target) != c.param) continue;
+                using MS = ambient::ModSource;
+                const int si = static_cast<int>(m.route(k).source);
+                juce::Colour col = ui::cosmosCol;
+                if (si >= static_cast<int>(MS::Lfo1) && si <= static_cast<int>(MS::Lfo8)) col = ui::accent;
+                else if (si >= static_cast<int>(MS::Env1) && si <= static_cast<int>(MS::Env6)) col = ui::foreCol;
+                else if (si >= static_cast<int>(MS::MacroA) && si <= static_cast<int>(MS::MacroH)) col = ui::morphCol;
+                else if (si >= static_cast<int>(MS::Kura1) && si <= static_cast<int>(MS::Kura4)) col = ui::condCol;
+                colour = static_cast<int>(col.getARGB());
+                break;
+            }
+            const bool had = sl->getProperties().contains("modColour");
+            if (colour != 0) {
+                const ParamDesc& d = paramDesc(static_cast<ParamId>(c.param));
+                const float off = proc_.engine().modAmount(static_cast<ParamId>(c.param)) / juce::jmax(1.0e-6f, d.max - d.min);
+                sl->getProperties().set("modColour", colour);
+                sl->getProperties().set("modOffset", off);
+                sl->repaint();
+            } else if (had) {
+                sl->getProperties().remove("modColour");
+                sl->getProperties().remove("modOffset");
+                sl->repaint();
+            }
+        }
+    }
     if (mapOpen_) {
         if (mapEditor_ != nullptr) mapText_ = mapEditor_->getText();
         else {
@@ -2308,8 +2503,21 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
         g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
         g.drawText(grp.name, grp.bounds.getX() + 12, grp.bounds.getY() + 2, grp.bounds.getWidth() - 20, kGroupTitleH, juce::Justification::centredLeft);
     }
+    for (const auto& t : tabRows_) {
+        const juce::Colour col = groups_[static_cast<size_t>(t.group)].colour;
+        for (size_t i = 0; i < t.tabs.size(); ++i) {
+            const bool on = static_cast<int>(i) == t.active;
+            const auto r = t.tabs[i].toFloat();
+            g.setColour(on ? col.withAlpha(0.26f) : kSectionFill.brighter(0.04f));
+            g.fillRoundedRectangle(r, 5.0f);
+            if (on) { g.setColour(col.withAlpha(0.9f)); g.drawRoundedRectangle(r.reduced(0.5f), 5.0f, 1.0f); }
+            g.setColour(on ? kText : kDim);
+            g.setFont(ui::title(10.5f));
+            g.drawText(t.names[i], t.tabs[i], juce::Justification::centred);
+        }
+    }
     for (const auto& s : sections_) {
-        if (s.name == "Master") continue;   // painted in the header
+        if (s.name == "Master" || !s.visible) continue;   // painted in the header / behind another tab
         const juce::Colour col = s.group >= 0 ? groups_[static_cast<size_t>(s.group)].colour : kMaster;
         g.setColour(kSectionFill);
         g.fillRoundedRectangle(s.bounds.toFloat(), 5.0f);

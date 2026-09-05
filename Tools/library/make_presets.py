@@ -216,9 +216,12 @@ def make_preset(style, rng, textures, wavetables, shade):
         else:                                            # Texture
             p[pre + "grain"] = logu(rng, 60.0, 800.0)
             p[pre + "density"] = logu(rng, 3.0, 40.0)
-            p[pre + "follow"] = "Note" if rng.random() < 0.6 else "Free"
-            if not texture_file:
+            if not texture_file and textures:
                 texture_file = textures[rng.randrange(len(textures))]
+            # Only a clip with a detected pitch (TextureGen puts the note in the name) can be
+            # transposed to the played note; the rest are played free, as a bed.
+            pitched = bool(texture_file) and bool(PITCHED.search(texture_file))
+            p[pre + "follow"] = "Note" if (pitched and rng.random() < 0.75) else "Free"
 
     if on("src2"):
         fill_slot(2)
@@ -461,11 +464,28 @@ def layout(desc):
 
 # ---------------------------------------------------------------- assets and names
 
-def texture_pool(dirname, style_name):
+PITCHED = re.compile(r"_[A-G]#?-?\d+\.wav$")
+
+
+def rejected_clips(dirname):
+    """Names Tools/library/check_textures.py has flagged as unusable."""
+    path = os.path.join(dirname, "rejected.txt")
+    if not os.path.isfile(path):
+        return set()
+    out = set()
+    for line in open(path, encoding="utf-8"):
+        line = line.split("#")[0].strip()
+        if line:
+            out.add(line)
+    return out
+
+
+def texture_pool(dirname, style_name, rejected):
     """Clips whose file name starts with this style's slug (make_textures.py names them that
-    way), falling back to everything in the folder."""
+    way), falling back to everything in the folder. Duds are left out."""
     slug = re.sub(r"[^a-z0-9]+", "_", style_name.lower()).strip("_")[:20]
-    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
+    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav"))
+                   if os.path.basename(f) not in rejected)
     own = [f for f in files if f.startswith(slug + "_")]
     return own or files
 
@@ -509,6 +529,9 @@ def main():
     PARAMS = param_table()
     os.makedirs(a.out_dir, exist_ok=True)
 
+    rejects = rejected_clips(a.textures)
+    if rejects:
+        print(f"{len(rejects)} clips skipped (see {os.path.join(a.textures, 'rejected.txt')})")
     packs = []
     # Names stay unique across the whole synth, so "--preset <name>" and the browser search
     # always mean one preset -- the built-in ones included.
@@ -516,7 +539,7 @@ def main():
                                                     text=True, encoding="utf-8").stdout.splitlines() if n.strip()}
     for si, st in enumerate(STYLES):
         rng = random.Random(a.seed * 104729 + si)
-        textures = texture_pool(a.textures, st["name"])
+        textures = texture_pool(a.textures, st["name"], rejects)
         tables = wavetable_pool(a.wavetables, st)
         rows = []
         for k in range(a.per_style):

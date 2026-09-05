@@ -831,15 +831,22 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     const int current = owner.proc.getCurrentProgram();
     std::vector<bool> inFilter(static_cast<size_t>(numPresets()), false);
     for (int i : owner.filtered) inFilter[static_cast<size_t>(i)] = true;
+    // With a preset library loaded there can be thousands of points: shrink the dots so the
+    // plane stays readable, and draw the dimmed ones as squares, which is much cheaper to fill.
+    const int shown = std::min(numPresetMeta(), numPresets());
+    const float dotScale = juce::jlimit(0.34f, 1.0f, std::sqrt(200.0f / juce::jmax(1, shown)));
+    const bool many = shown > 800;
     for (int pass = 0; pass < 2; ++pass) {
-        for (int i = 0; i < std::min(numPresetMeta(), numPresets()); ++i) {
+        for (int i = 0; i < shown; ++i) {
             if (inFilter[static_cast<size_t>(i)] != (pass == 1)) continue;
             const PresetMeta& m = presetMeta(i);
             const auto s = toScreen(m.x, m.y);
-            const float size = 6.0f + 6.0f * m.density;
+            const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
             juce::Colour c = familyColour(m.family);
             if (pass == 0) c = c.withAlpha(0.18f);
-            g.setColour(c); g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
+            g.setColour(c);
+            if (pass == 0 && many) g.fillRect(s.x - size / 2, s.y - size / 2, size, size);
+            else                   g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
             if (i == owner.selected || i == current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
         }
     }

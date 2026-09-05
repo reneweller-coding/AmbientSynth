@@ -521,6 +521,31 @@ families; all render finite with a held chord, levels −29 … −11 dBFS.
 User presets are saved by the plugin as `.ambientsynth` XML files (full
 state including a loaded Scala scale).
 
+### Preset packs
+
+`Core/src/PresetPacks.cpp`: a pack is a UTF-8 text file (`.ambientpack`) read
+at start, so a library of thousands does not sit in the binary. One preset per
+line, `name|settings|x y bright motion width noisy bass density tags|texture|
+wavetable`; everything after the settings is optional, and the two file fields
+are resolved against the pack's own folder. Packs come from `$AMBIENT_PACKS`
+(one folder, or several separated by `;`), otherwise from
+`Documents/AmbientSynth/Packs`, and on the Quest from `<externalDataPath>/Packs`.
+
+The list the rest of the program sees is `builtinPresetCount()` compiled-in
+presets followed by every loaded pack, and `numPresets`, `preset`, `presetMeta`,
+`numPresetFamilies` and `presetFamilyName` dispatch across both, so the DAW
+programs, the browser, the map and routes-by-name pick packs up without knowing
+they exist. Each pack becomes one family after the built-in ones.
+`PresetMap::warmup` rebuilds when the count changes; the host loads a pack
+preset's own sample and wavetable when it applies it, through
+`presetFilePath(index, 0|1)`.
+
+`Library/` holds a generated library of 5000 presets in 25 packs, with 1200
+texture clips and 608 wavetables (see `Library/README.md` and
+`Tools/library/`). Its descriptors are estimated from the settings rather than
+measured -- five thousand measurements means five thousand renders -- which is
+the one place where the map's numbers are a prediction and not a measurement.
+
 Two layers, loadable independently and combinable (`PresetScope`):
 *Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
 section. Applying a preset in one scope resets only that scope's parameters

@@ -31,6 +31,10 @@ struct SineTable {
     SineTable() { for (int i = 0; i <= N; ++i) v[i] = std::sin(kTwoPi * static_cast<float>(i) / static_cast<float>(N)); }
 };
 inline const SineTable& sineTable() { static const SineTable t; return t; }
+// Cosine/sine of a phase in [0,1), from the sine table. Used to seed and to step the rotating
+// phasors that stand in for every per-sample std::sin/std::cos in the engine.
+inline void phasorFrom(double phase01, float& c, float& s);
+
 inline float sin01(double phase01)
 {
     const double x = phase01 * SineTable::N;
@@ -38,6 +42,13 @@ inline float sin01(double phase01)
     const float f = static_cast<float>(x - i);
     const float* t = sineTable().v;
     return t[i] + f * (t[i + 1] - t[i]);
+}
+
+inline void phasorFrom(double phase01, float& c, float& s)
+{
+    s = sin01(phase01);
+    double q = phase01 + 0.25; if (q >= 1.0) q -= 1.0;
+    c = sin01(q);
 }
 
 // Smooth bounded random curve in [-1,1]: new random target every 1/rate seconds

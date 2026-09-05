@@ -259,11 +259,11 @@ int main(int argc, char** argv)
     }
     for (int n : notes) engine.noteOn(n, 0.8f);
     if (!routeText.empty()) {
-        if (!engine.route().parse(routeText.c_str())) { std::fprintf(stderr, "bad route text (unknown preset name or malformed point)\n"); return 2; }
+        if (!engine.setRouteText(routeText.c_str())) { std::fprintf(stderr, "bad route text (unknown preset name or malformed point)\n"); return 2; }
         engine.setParam(ParamId::RouteSpeed, static_cast<float>(routeSpeed));
         engine.setParam(ParamId::RouteLoop, 1.0f);
         engine.setParam(ParamId::RouteActive, 1.0f);
-        const Waypoint& w0 = engine.route().point(0);
+        const Waypoint& w0 = engine.routeEdit().point(0);
         engine.setParam(ParamId::MapX, w0.x); engine.setParam(ParamId::MapY, w0.y); engine.setParam(ParamId::MapRadius, w0.radius);   // start on the first point
         engine.setParam(ParamId::MorphGlide, 20.0f);
     }

@@ -599,15 +599,15 @@ private:
         }
         case MenuAction::ToggleRoute: {
             // Plays the route from ambient.cfg (route=<preset name or text>), or the first route preset.
-            if (engine_.route().count() == 0) {
+            if (engine_.routeEdit().count() == 0) {
                 const char* text = routePreset(0).points;
                 for (int r = 0; r < numRoutePresets(); ++r) if (config_.route == routePreset(r).name) text = routePreset(r).points;
-                if (!config_.route.empty() && !engine_.route().parse(config_.route.c_str())) engine_.route().parse(text);
-                else if (config_.route.empty()) engine_.route().parse(text);
+                if (!config_.route.empty() && !engine_.setRouteText(config_.route.c_str())) engine_.setRouteText(text);
+                else if (config_.route.empty()) engine_.setRouteText(text);
             }
             const bool on = engine_.getParam(ParamId::RouteActive) >= 0.5f;
             engine_.setParam(ParamId::RouteActive, on ? 0.0f : 1.0f);
-            LOGI("route %s (%d points)", on ? "stopped" : "playing", engine_.route().count());
+            LOGI("route %s (%d points)", on ? "stopped" : "playing", engine_.routeEdit().count());
             break;
         }
         case MenuAction::ToggleRecord:

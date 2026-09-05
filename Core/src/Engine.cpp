@@ -12,6 +12,11 @@
 #else
   #define AMBIENT_HAS_MXCSR 0
 #endif
+#if defined(__aarch64__) || defined(_M_ARM64)
+  #define AMBIENT_HAS_FPCR 1
+#else
+  #define AMBIENT_HAS_FPCR 0
+#endif
 
 namespace ambient {
 
@@ -140,6 +145,10 @@ void Engine::morphSlot(int slot, float* out) const
 
 bool Engine::routeStep(double dt, float& x, float& y, float& radius)
 {
+    // Pick up an edit made on the message thread (fixed-size object, no allocation), and restart
+    // from the cursor so a route changed while it plays does not jump.
+    const int rv = routeVersion_.load(std::memory_order_acquire);
+    if (rv != routeSeen_) { route_ = routePending_; routeSeen_ = rv; routeWasActive_ = false; }
     const bool active = getParam(ParamId::RouteActive) >= 0.5f && route_.count() > 0;
     if (active && !routeWasActive_) {   // (re)start from where the cursor is now
         route_.start(getParam(ParamId::MapX), getParam(ParamId::MapY), getParam(ParamId::MapRadius), getParam(ParamId::RouteLoop) >= 0.5f);
@@ -548,6 +557,14 @@ void Engine::process(float* L, float* R, int n)
     const unsigned int savedCsr = _mm_getcsr();
     _mm_setcsr(savedCsr | 0x8040);   // flush-to-zero + denormals-are-zero
 #endif
+#if AMBIENT_HAS_FPCR
+    // The same thing on ARM: FPCR bit 24 is flush-to-zero. Without it the Quest ran every decaying
+    // reverb tail and envelope into denormals, where the FPU falls off a cliff.
+    uint64_t savedFpcr = 0;
+    __asm__ __volatile__("mrs %0, fpcr" : "=r"(savedFpcr));
+    const uint64_t fpcrFz = savedFpcr | (1ull << 24);
+    __asm__ __volatile__("msr fpcr, %0" : : "r"(fpcrFz));
+#endif
     // Pending user scale / wavetable (written from the message thread).
     const int uv = userVersion_.load(std::memory_order_acquire);
     if (uv != userSeen_) {
@@ -637,6 +654,9 @@ void Engine::process(float* L, float* R, int n)
     brainRoot_.store(brain_.root(), std::memory_order_relaxed);
 #if AMBIENT_HAS_MXCSR
     _mm_setcsr(savedCsr);
+#endif
+#if AMBIENT_HAS_FPCR
+    __asm__ __volatile__("msr fpcr, %0" : : "r"(savedFpcr));
 #endif
 }
 
@@ -909,10 +929,18 @@ void Engine::renderChunk(float* L, float* R, int n)
         if (subFreqCur_ <= 0.0) subFreqCur_ = target;
         const double glideC = 1.0 - std::exp(-1.0 / (std::max(subGlide_, 0.05f) * sr_));
         const float levelC = 1.0f - std::exp(-1.0f / (2.0f * static_cast<float>(sr_)));
+        // The glide is a one-pole in the log domain, so its end point over this block is known in
+        // closed form: take exp twice and walk the frequency linearly, instead of an exp per sample.
+        const double reach = 1.0 - std::pow(1.0 - glideC, static_cast<double>(n));
+        const double fBegin = std::exp(subFreqCur_);
+        const double freqEnd = subFreqCur_ + (target - subFreqCur_) * reach;
+        const double fEnd = std::exp(freqEnd);
+        const double fStep = n > 0 ? (fEnd - fBegin) / static_cast<double>(n) : 0.0;
+        double f = fBegin;
+        subFreqCur_ = freqEnd;
         for (int i = 0; i < n; ++i) {
-            subFreqCur_ += (target - subFreqCur_) * glideC;
             subLevelCur_ += (subLevel_ - subLevelCur_) * levelC;
-            const double f = std::exp(subFreqCur_);
+            f += fStep;
             const double fL = std::max(f - 0.5 * subBinaural_, 5.0), fR = std::max(f + 0.5 * subBinaural_, 5.0);
             subPhaseL_ += fL / sr_; if (subPhaseL_ >= 1.0) subPhaseL_ -= 1.0;
             subPhaseR_ += fR / sr_; if (subPhaseR_ >= 1.0) subPhaseR_ -= 1.0;

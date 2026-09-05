@@ -522,6 +522,51 @@ clipper without ever being heard. The blockers inside the voice's FM slot and in
 feedback loop stay: they exist to stop a loop locking onto a DC operating point, which a filter
 at the end cannot do.
 
+
+## Real-time budget
+
+What the audio thread is allowed to do, and what was measured.
+
+**No allocation, no lock.** Every buffer is sized in `prepare()`; a scan of `Core/src/*.cpp`
+finds no `new`, `assign`, `resize` or lock inside `process`, `render`, `readParams`, `control`,
+`routeStep` or the note calls. The plugin's `processBlock` takes one `ScopedTryLock` for the
+recorder (never blocks) and calls `setSize` on its scratch buffer only if the host hands it a
+block larger than `prepareToPlay` announced. Parameters are cached `std::atomic<float>*` taken
+once in the constructor -- never a string lookup. Data that crosses threads (user scale, user
+wavetable, texture, route) is double-buffered and published with an atomic version.
+
+**Control rate.** Modulation runs once per `kControlBlock` = 64 samples (1.3 ms); levels that
+must not step use per-sample `Smoother`s.
+
+**No transcendental in a per-sample loop.** `sin01` is a table with linear interpolation, and
+every oscillator, window and formant runs as a rotating phasor seeded by `phasorFrom` (Dsp.h),
+renormalised with one Newton step so it stays on the unit circle. Two places had been missed and
+were found by scanning for `std::sin|cos|exp|pow|log` inside sample loops: the GrainCloud's Hann
+window (a `std::cos` per sample per grain, up to 32 sounding) and the Foundation's sub, whose
+glide is a one-pole in the log domain and took a `std::exp` per sample -- the block's end point
+is known in closed form, so two `exp` per block and a linear walk do the same job. Measured on a
+cloud- and sub-heavy render, interleaved A/B over four runs: 1.00-1.10 s before, 0.86-0.94 s
+after, about 15 % (19.6x to 23.0x realtime).
+
+**Denormals.** Flush-to-zero and denormals-are-zero are set at the top of `Engine::process` and
+restored at the end: `_mm_setcsr` on x86, and FPCR bit 24 on ARM64 -- which had been missing, so
+the Quest ran every decaying reverb tail into denormals.
+
+**Voices.** A voice is rendered only while its envelope is not idle; release ends at level 1e-4
+(-80 dB). The allocator takes a free voice, else the quietest releasing one, else the oldest.
+
+**Not done, deliberately.** No SIMD: the partial bank is already a flat `float` array per strand
+(structure of arrays) and the compiler vectorises it, but nothing is hand-written against SSE or
+NEON, and the core stays framework-free so `juce::FloatVectorOperations` is not available to it.
+No fast-math: the offline render is the determinism oracle of the self test, and reassociation
+makes it drift. LTO is an option (`AMBIENT_LTO`), off by default -- measured on MSVC it changed
+nothing (1.05-1.16 s either way).
+
+**Known hazard.** `processBlock` writes host parameters through `setValueNotifyingHost` for the
+gesture layer, the route cursor and, on the block where the map is switched off, for every
+parameter at once. JUCE allows this from the audio thread, but what a host does with it is the
+host's business; the burst on map exit is the one place where it is more than a handful.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

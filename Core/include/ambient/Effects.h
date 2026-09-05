@@ -91,7 +91,10 @@ public:
     void process(const float* inL, const float* inR, float* outL, float* outR, int n);
 private:
     static constexpr int kMaxGrains = 32;
-    struct Grain { bool active = false; double pos = 0.0; double rate = 1.0; float len = 1.0f, phase = 0.0f, gainL = 0.0f, gainR = 0.0f; };
+    // The Hann window runs as a rotating phasor (wc/ws advanced by rc/rs): a std::cos per sample
+    // per grain, with up to 32 sounding, was the most expensive line in the cloud.
+    struct Grain { bool active = false; double pos = 0.0; double rate = 1.0; float len = 1.0f, phase = 0.0f,
+                   gainL = 0.0f, gainR = 0.0f, wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; };
     std::vector<float> buf_;
     Grain  grains_[kMaxGrains];
     Rng    rng_;

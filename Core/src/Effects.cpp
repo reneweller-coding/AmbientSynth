@@ -254,6 +254,8 @@ void GrainCloud::process(const float* inL, const float* inR, float* outL, float*
                 const float angle = (pan + 1.0f) * 0.25f * kPi;
                 g.active = true; g.pos = static_cast<double>(w_) - behind; g.rate = rate; g.len = len; g.phase = 0.0f;
                 g.gainL = std::cos(angle) * gain; g.gainR = std::sin(angle) * gain;
+                g.wc = 1.0f; g.ws = 0.0f;
+                phasorFrom(1.0 / static_cast<double>(std::max(len, 1.0f)), g.rc, g.rs);
                 break;
             }
         }
@@ -262,9 +264,13 @@ void GrainCloud::process(const float* inL, const float* inR, float* outL, float*
             if (!g.active) continue;
             const double delay = static_cast<double>(w_) - g.pos;
             if (delay < 1.0 || g.phase >= g.len) { g.active = false; continue; }
-            const float win = 0.5f - 0.5f * std::cos(kTwoPi * g.phase / g.len);
+            const float win = 0.5f - 0.5f * g.wc;
             const float s = ringRead(b, mask_, static_cast<int>(w_ & mask_), static_cast<float>(delay)) * win;
             sl += s * g.gainL; sr += s * g.gainR;
+            const float r2 = g.wc * g.wc + g.ws * g.ws, fix = 1.5f - 0.5f * r2;   // keep it on the unit circle
+            const float nc = (g.wc * g.rc - g.ws * g.rs) * fix;
+            g.ws = (g.ws * g.rc + g.wc * g.rs) * fix;
+            g.wc = nc;
             g.pos += g.rate; g.phase += 1.0f;
         }
         outL[i] += sl; outR[i] += sr;

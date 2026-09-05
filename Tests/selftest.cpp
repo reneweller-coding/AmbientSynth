@@ -755,7 +755,7 @@ void testRoute()
         Engine e;
         e.setParam(ParamId::BrainOn, 0.0f);
         e.prepare(48000.0, 256);
-        CHECK(e.route().parse("0.1,0.5|4|2|0.1;0.9,0.5|4|2|0.1"), "engine route set");
+        CHECK(e.setRouteText("0.1,0.5|4|2|0.1;0.9,0.5|4|2|0.1"), "engine route set");
         e.setParam(ParamId::MapX, 0.1f); e.setParam(ParamId::MapY, 0.5f);
         e.setParam(ParamId::RouteSpeed, 2.0f); e.setParam(ParamId::RouteLoop, 0.0f);
         e.setParam(ParamId::RouteActive, 1.0f);

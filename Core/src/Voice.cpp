@@ -7,13 +7,7 @@
 namespace ambient {
 
 namespace {
-// Set a phasor from a phase in [0,1).
-inline void phasorFromPhase(double phase01, float& c, float& s)
-{
-    s = sin01(phase01);
-    double q = phase01 + 0.25; if (q >= 1.0) q -= 1.0;
-    c = sin01(q);
-}
+inline void phasorFromPhase(double phase01, float& c, float& s) { phasorFrom(phase01, c, s); }
 
 // log2 of the harmonic numbers, so the presence bell needs one log2 per strand, not per partial.
 struct Log2Harmonics {

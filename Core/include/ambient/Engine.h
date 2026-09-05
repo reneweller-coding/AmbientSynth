@@ -81,7 +81,17 @@ public:
     // own speed scaling): while RouteActive the route moves the cursor and the engine plays the
     // map blend; the new cursor is returned so the host can mirror it into its parameters.
     // The route text is performance state (plugin state / OSC / Quest config), not a preset.
-    Route& route() { return route_; }
+    // The audio thread walks route_; every edit goes into routePending_ and is published with a
+    // version, the way the user scale and the texture already are. The lock that used to sit in
+    // the plugin protected nothing: routeStep never took it.
+    const Route& route() const { return route_; }              // what is playing (message thread may read)
+    const Route& routeEdit() const { return routePending_; }   // what was last edited
+    bool setRouteText(const char* text)
+    { if (!routePending_.parse(text)) return false; routeVersion_.fetch_add(1, std::memory_order_release); return true; }
+    bool addRoutePoint(const Waypoint& w)
+    { if (!routePending_.add(w)) return false; routeVersion_.fetch_add(1, std::memory_order_release); return true; }
+    void clearRoute() { routePending_.clear(); routeVersion_.fetch_add(1, std::memory_order_release); }
+    int  writeRoute(char* buf, size_t cap) const { return routePending_.write(buf, cap); }
     bool routeStep(double dt, float& x, float& y, float& radius);
     bool routeRunning() const { return route_.running(); }
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
@@ -129,7 +139,9 @@ private:
     Convolver    room_;
     bool         userImpulse_ = false;
     float        roomMaxSeconds_ = 8.0f;
-    Route        route_;
+    Route        route_, routePending_;
+    std::atomic<int> routeVersion_{ 0 };
+    int          routeSeen_ = 0;
     bool         routeWasActive_ = false;
     float        roomLevel_ = 0.0f, roomLevelCur_ = 0.0f, roomHighcut_ = 5000.0f;
     int          roomSource_ = 0, roomPreDelay_ = 0;

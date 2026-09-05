@@ -95,10 +95,10 @@ public:
     bool isPlayingSet() const { return setPlaying_.load(); }
     double setTime() const { return setTime_.load(); }
     // Route over the map (text form, see ambient/Route.h), kept in the plugin state.
-    bool setRouteText(const juce::String& text) { const juce::ScopedLock sl(routeLock_); if (!engine_.route().parse(text.toRawUTF8())) return false; routeText_ = text; return true; }
+    bool setRouteText(const juce::String& text) { if (!engine_.setRouteText(text.toRawUTF8())) return false; routeText_ = text; return true; }
     juce::String routeText() const { return routeText_; }
-    void clearRoute() { engine_.route().clear(); routeText_.clear(); }
-    bool addRoutePoint(const ambient::Waypoint& w) { if (!engine_.route().add(w)) return false; char buf[4096]; engine_.route().write(buf, sizeof(buf)); routeText_ = buf; return true; }
+    void clearRoute() { engine_.clearRoute(); routeText_.clear(); }
+    bool addRoutePoint(const ambient::Waypoint& w) { if (!engine_.addRoutePoint(w)) return false; char buf[4096]; engine_.writeRoute(buf, sizeof(buf)); routeText_ = buf; return true; }
     // Favourite presets (browser stars), kept in the plugin state.
     // juce::BigInteger grows on demand, so the library's size is not a limit here.
     bool isFavourite(int preset) const { return preset >= 0 && favourites_[preset]; }
@@ -117,7 +117,6 @@ private:
     juce::File textureFile_, wavetableFile_, impulseFile_;
     juce::BigInteger favourites_;
     juce::String routeText_;
-    juce::CriticalSection routeLock_;
     // set timeline (recording appends on the audio thread; save/load on the message thread while stopped)
     ambient::SetTimeline setRec_, setPlay_;
     std::atomic<bool> setRecording_{ false }, setPlaying_{ false };

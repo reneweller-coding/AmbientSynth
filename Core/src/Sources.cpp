@@ -158,12 +158,6 @@ bool Wavetable::analyse(const float* mono, int n, int frameLen)
 // ---------------------------------------------------------------- slot
 
 namespace {
-inline void phasorFrom(double phase01, float& c, float& s)
-{
-    s = sin01(phase01);
-    double q = phase01 + 0.25; if (q >= 1.0) q -= 1.0;
-    c = sin01(q);
-}
 inline double wrap01(double x) { return x - std::floor(x); }
 }
 

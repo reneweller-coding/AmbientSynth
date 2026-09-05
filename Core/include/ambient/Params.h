@@ -36,8 +36,8 @@ enum class ParamId : int {
     Air, AirColor, AirQ,
     // Amplitude envelope
     Attack, Decay, Sustain, Release,
-    // Filter
-    Cutoff, Resonance, FilterEnv, FilterDrift, KeyTrack,
+    // Filter: one of nine models (Filter.h) behind the same knobs; Drive saturates ahead of it
+    FilterModel, Cutoff, Resonance, FilterEnv, FilterDrift, KeyTrack, FilterDrive,
     // Z-plane filter: four frames on a square, the point (X, Y) interpolates their poles and wanders
     ZMode, ZShape, ZX, ZY, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,

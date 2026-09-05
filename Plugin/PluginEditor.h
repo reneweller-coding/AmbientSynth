@@ -328,7 +328,7 @@ private:
     };
     std::unique_ptr<BrainView> brainView_;
     std::unique_ptr<FilterView> filterView_;
-    std::unique_ptr<SourceView> source2View_, source3View_;
+    std::unique_ptr<SourceView> source1View_, source2View_, source3View_;
     std::unique_ptr<juce::TextButton> browseButton_;
     void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();

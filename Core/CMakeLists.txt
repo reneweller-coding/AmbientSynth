@@ -18,6 +18,7 @@ add_library(AmbientCore STATIC
     src/Convolution.cpp
     src/Route.cpp
     src/ZPlane.cpp
+    src/Filter.cpp
     src/Timeline.cpp
 )
 if(WIN32)

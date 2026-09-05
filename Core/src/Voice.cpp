@@ -55,7 +55,7 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     // phases and drifts -- stayed exactly where it was before the slot existed.
     slots_[0].prepare(sr_, seed ^ 0x9E3779B97F4A7C15ull);
     for (int k = 1; k < kSlots; ++k) slots_[k].prepare(sr_, rng_.fork());
-    filtL_.reset(); filtR_.reset();
+    filt_.prepare(sr_);
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
     std::memset(itdBufR_, 0, sizeof(itdBufR_));
@@ -88,7 +88,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
             }
             s.active = 0;
         }
-        filtL_.reset(); filtR_.reset();
+        filt_.reset();
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
@@ -276,8 +276,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
                         + p.filterDrift * 2.0f * fd
                         - 2.5f * distEff_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
-    filtL_.set(cut, p.resonance, static_cast<float>(sr_));
-    filtR_.copyCoefficients(filtL_);
+    filt_.set(static_cast<FilterModel>(clampv(p.filterModel, 0, kNumFilterModels - 1)), cut, p.resonance, p.filterDrive);
 
     // Z-plane: the point wanders around (X, Y) on two Drifters, the frame is interpolated from
     // the shape's corners, resonance narrows the bandwidths, key tracking moves the frame with
@@ -409,8 +408,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 outL = accL * zDry_ + zl * zNorm_ * zWet_;
                 outR = accR * zDry_ + zr * zNorm_ * zWet_;
             } else {
-                outL = filtL_.lp(accL);
-                outR = filtR_.lp(accR);
+                filt_.tick(accL, accR, outL, outR);
                 if (zModeCur_ == 1) {   // Series: after the state-variable filter
                     float zl = outL, zr = outR;
                     for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }

@@ -53,7 +53,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
@@ -61,7 +61,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence" } }, {}, 1 },
     };
     tabRows_ = {
-        { 0, 0, { "SOURCE 1", "SOURCE 2", "SOURCE 3" }, { { "Source 1", "Strands" }, { "Source 2" }, { "Source 3" } } },
+        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" } } },
         { 0, 1, { "FILTER", "Z-PLANE" }, { { "Air", "Filter", "Envelope" }, { "Z-Plane" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } } },
@@ -180,15 +180,16 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // Displays inside the grid: each fills the room its row leaves after the knobs.
     scope_ = std::make_unique<ScopeView>(proc_);
     filterView_ = std::make_unique<FilterView>(proc_);
+    source1View_ = std::make_unique<SourceView>(proc_, 1);
     source2View_ = std::make_unique<SourceView>(proc_, 2);
     source3View_ = std::make_unique<SourceView>(proc_, 3);
     brainView_ = std::make_unique<BrainView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
-                                static_cast<juce::Component*>(brainView_.get()) })
+                                static_cast<juce::Component*>(source1View_.get()), static_cast<juce::Component*>(brainView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { scope_.get(), source2View_.get(), source3View_.get() };
+        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get() };
         tabRows_[1].displays = { filterView_.get(), nullptr };
     }
     if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
@@ -252,7 +253,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Space") s.maxUnits = 6;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
-            if (s.name == "Strands") s.maxUnits = 5;
+            if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -1225,13 +1226,11 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
 
     const float sr = static_cast<float>(juce::jmax(8000.0, proc.getSampleRate() > 0 ? proc.getSampleRate() : 48000.0));
     const float cutoff = rawParam(proc, "cutoff"), res = rawParam(proc, "resonance");
+    const int model = juce::jlimit(0, ambient::kNumFilterModels - 1, static_cast<int>(std::lround(rawParam(proc, "filter_model"))));
     const int zMode = static_cast<int>(std::lround(rawParam(proc, "z_mode")));
     const int zShape = juce::jlimit(0, ambient::kZShapes - 1, static_cast<int>(std::lround(rawParam(proc, "z_shape"))));
     const float zMix = rawParam(proc, "z_mix");
 
-    // The state-variable low pass, from its own coefficients: g = tan(pi fc/sr), damping k.
-    const float gc = std::tan(juce::MathConstants<float>::pi * juce::jlimit(10.0f, sr * 0.45f, cutoff) / sr);
-    const float k = 2.0f - 1.9f * juce::jlimit(0.0f, 1.0f, res);
     // The z-plane cascade, from the frame the engine would build at this point.
     ambient::ZBiquad zb[ambient::kZSections];
     float zNorm = 1.0f; int zUsed = 0;
@@ -1247,8 +1246,8 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
         const float t = static_cast<float>(i) / static_cast<float>(steps);
         const float hz = 20.0f * std::pow(1000.0f, t);
         const float w = juce::MathConstants<float>::twoPi * hz / sr;
-        const float tt = std::tan(0.5f * w) / gc;
-        const float hs = 1.0f / std::sqrt(juce::jmax(1.0e-9f, (1.0f - tt * tt) * (1.0f - tt * tt) + (k * tt) * (k * tt)));
+        // the chosen model's own response, from the same maths the voice uses
+        const float hs = ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr);
         float hz_ = 1.0f;
         if (zUsed > 0) { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
         float combined = hs;
@@ -1268,7 +1267,7 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
 
     g.setColour(ui::dim);
     g.setFont(ui::body(10.0f));
-    juce::String legend = juce::String(cutoff, cutoff < 1000.0f ? 0 : 0) + " Hz";
+    juce::String legend = juce::String(ambient::kFilterModelNames[model]) + "   " + juce::String(cutoff, 0) + " Hz";
     if (zMode != 0) legend += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (zMode == 2 ? "  (replace)" : "  (series)");
     g.drawText(legend, r.reduced(9, 5), juce::Justification::topRight, false);
 }

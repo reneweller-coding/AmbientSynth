@@ -620,6 +620,8 @@ void Engine::readParams()
     vp_.decay       = g(ParamId::Decay);
     vp_.sustain     = g(ParamId::Sustain);
     vp_.release     = g(ParamId::Release);
+    vp_.filterModel = static_cast<int>(std::lround(g(ParamId::FilterModel)));
+    vp_.filterDrive = g(ParamId::FilterDrive);
     vp_.cutoff      = g(ParamId::Cutoff);
     vp_.resonance   = g(ParamId::Resonance);
     vp_.filterEnv   = g(ParamId::FilterEnv);

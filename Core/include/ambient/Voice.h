@@ -9,6 +9,7 @@
 #pragma once
 #include "Dsp.h"
 #include "Sources.h"
+#include "Filter.h"
 #include "ZPlane.h"
 #include <cstdint>
 
@@ -32,6 +33,8 @@ struct VoiceParams {
     float air = 0.15f, airColor = 3.0f, airQ = 10.0f;
     float attack = 6.0f, decay = 4.0f, sustain = 0.8f, release = 12.0f;
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
+    int   filterModel = 1;      // FilterModel (Filter.h); 1 = the 12 dB state-variable low pass
+    float filterDrive = 0.0f;
     // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
     int   zMode = 0, zShape = 0;
     float zX = 0.5f, zY = 0.5f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
@@ -116,7 +119,7 @@ private:
     SourceSlot slots_[kSlots];
     float    rateMul_ = 1.0f;
     Envelope env_;
-    Svf      filtL_, filtR_;
+    VoiceFilter filt_;
     Svf      airL_, airR_;
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;

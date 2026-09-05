@@ -13,6 +13,7 @@
 //   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
 //   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)
 //   Packs/*.ambientpack  preset packs loaded at start (see Core/include/ambient/Presets.h)
+//                        a pack preset may name its own texture, wavetable and impulse
 //   rec-*.wav     recordings
 
 #include <android/log.h>
@@ -462,7 +463,7 @@ public:
         return true;
     }
 
-    // A pack preset may bring its own sample and wavetable; the paths sit next to the pack file.
+    // A pack preset may bring its own sample, wavetable and impulse; the paths sit next to the pack.
     void loadPresetFiles(int index)
     {
         std::vector<float> mono; int rate = 0;
@@ -476,6 +477,12 @@ public:
         if (tab != nullptr && *tab && readWavMono(tab, mono, rate))
             if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
                 LOGE("%s: needs 2048-sample frames", tab);
+        const char* imp = presetFilePath(index, 2);
+        std::vector<std::vector<float>> ir;
+        if (imp != nullptr && *imp && readWavChannels(imp, ir, rate) && !ir.empty()) {
+            pendingIr_ = ir; pendingIrRate_ = rate;   // set once the engine is prepared
+            LOGI("preset impulse %s", imp);
+        }
     }
 
     // texture.wav (a field recording etc., assumed at C4 for Pitch = Note) and wavetable.wav

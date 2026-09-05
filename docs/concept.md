@@ -635,6 +635,21 @@ inaudible next to a Wavetable slot. All three source types now land within 0.8 d
 Cost, measured: eight voices with both slots granular at 60 grains/s and 800 ms grains --
 1024 concurrent grains -- render at 6.5x realtime with *Grains* at 64, 8.6x at 32 and 16x at 8.
 
+### Noise slot
+
+The fourth source type. Ten colours: the textbook slopes (white, pink, brown, blue, violet) plus
+grey (white with the ear's most sensitive region taken out, so it *sounds* flat rather than
+measuring flat), a resonant Band that can track the played note, Wind (the same band with a
+wandering centre and less damping), Crackle (sparse decaying impulses -- vinyl, embers, rain) and
+Digital (sample-and-hold white). Position sets the band centre or the colour, Pos Drift lets it
+wander, Density is the crackle rate or the hold rate, Noise Q the width.
+
+Two things were measured rather than assumed. The three-pole short form of Kellet's pink filter
+is 1.7 dB per octave too steep, so the full seven-term version is used: measured slopes are white
+-0.1, pink -3.1, brown -6.0, blue +2.8, violet +5.5 dB per octave. And every colour is
+level-matched against a Wavetable slot at the same Level (-22.0 dBFS with the voice filter open);
+before that a violet slot sat eleven decibels above a pink one at the same setting.
+
 ### GrainCloud
 
 History ring of 4 s fed from the near bus × *Send*. Grains are spawned at

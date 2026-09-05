@@ -7,7 +7,10 @@
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise" };
+const char* const kNoiseKindNames[kNumNoiseKinds] = {
+    "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
+};
 const char* const kTableNames[kNumTables] = { "Classic", "Organ", "Vocal", "Glass", "Metal", "User" };
 const char* const kSlotRatioNames[kNumSlotRatios] = { "1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1" };
 const double      kSlotRatios[kNumSlotRatios] = { 1.0, 9.0 / 8.0, 6.0 / 5.0, 5.0 / 4.0, 4.0 / 3.0, 3.0 / 2.0, 8.0 / 5.0, 5.0 / 3.0, 7.0 / 4.0, 2.0 };
@@ -205,6 +208,14 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     const float tL = p.level * std::cos(angle), tR = p.level * std::sin(angle);
     const float sL = (tL - gL_) / static_cast<float>(n), sR = (tR - gR_) / static_cast<float>(n);
 
+    if (p.type == SourceType::Noise) {
+        float bufL[kControlBlock];
+        std::memset(bufL, 0, sizeof(float) * static_cast<size_t>(n));
+        renderNoise(bufL, n, hz, p, dt);        // left into bufL, right into scratch_
+        for (int i = 0; i < n; ++i) { outL[i] += bufL[i]; outR[i] += scratch_[i]; }
+        gL_ = tL; gR_ = tR;
+        return;
+    }
     if (p.type == SourceType::Texture) {
         // Grains carry their own level/pan (fixed at spawn), written straight to L/R.
         float bufL[kControlBlock];
@@ -366,6 +377,154 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             g.wc = nc;
             g.pos += g.rate; ++g.age;
         }
+    }
+}
+
+namespace {
+// Paul Kellet's pink filter, all seven terms. The three-pole short form is 1.7 dB per octave too
+// steep -- measured, which is why it is not used here.
+inline float pinkStep(SourceSlot::NoiseState& st, float w)
+{
+    st.pink[0] = 0.99886f * st.pink[0] + w * 0.0555179f;
+    st.pink[1] = 0.99332f * st.pink[1] + w * 0.0750759f;
+    st.pink[2] = 0.96900f * st.pink[2] + w * 0.1538520f;
+    st.pink[3] = 0.86650f * st.pink[3] + w * 0.3104856f;
+    st.pink[4] = 0.55000f * st.pink[4] + w * 0.5329522f;
+    st.pink[5] = -0.7616f * st.pink[5] - w * 0.0168980f;
+    const float out = st.pink[0] + st.pink[1] + st.pink[2] + st.pink[3] + st.pink[4] + st.pink[5]
+                    + st.pink[6] + w * 0.5362f;
+    st.pink[6] = w * 0.115926f;
+    return out * 0.18f;
+}
+} // namespace
+
+// ---------------------------------------------------------------- noise
+//
+// Ten colours. The three textbook slopes (pink, brown, blue/violet) plus grey, a resonant band
+// that can track the note, a wandering band that is wind, sparse crackle and sample-and-hold
+// digital noise. Each is normalised so that Level means roughly the same loudness across the
+// lot -- the same lesson the Texture slot taught: a source whose Level means something different
+// from its neighbour's is a source nobody uses.
+void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt)
+{
+    std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
+    const NoiseKind kind = static_cast<NoiseKind>(clampv(static_cast<int>(p.noise), 0, kNumNoiseKinds - 1));
+
+    // Position picks the band centre (or the colour), and Pos Drift lets it wander. With Pitch =
+    // Note the centre follows the played note instead, which turns Band into a formant.
+    const float wander = noiseDrift_.update(dt, 0.03f, rng_) * p.positionDrift;
+    const float posN = clampv(p.position + 0.35f * wander, 0.0f, 1.0f);
+    double centre = 40.0 * std::pow(300.0, static_cast<double>(posN));      // 40 Hz .. 12 kHz
+    if (p.follow) centre = clampv(hz * (0.5 + 8.0 * posN), 30.0, 0.45 * sr_);
+    centre = clampv(centre, 20.0, 0.45 * sr_);
+
+    // State-variable band pass; q from Noise Q, wider for Wind so it breathes rather than whistles.
+    const float f = 2.0f * std::sin(static_cast<float>(kPi * centre / sr_));
+    const float qAmount = clampv(p.noiseQ, 0.0f, 1.0f);
+    const float damp = kind == NoiseKind::Wind ? (0.6f - 0.5f * qAmount) : (0.7f - 0.66f * qAmount);
+
+    const double rate = kind == NoiseKind::Digital
+        ? clampv(200.0 * std::pow(100.0, static_cast<double>(posN)), 100.0, 0.5 * sr_)   // 200 Hz .. 20 kHz
+        : 0.0;
+    const double crackleRate = clampv(static_cast<double>(p.density) * 8.0, 1.0, 4000.0);
+
+    // Level per colour, measured so a slot at Level 1 lands near the wavetable slot's output.
+    // Measured against a Wavetable slot at the same Level (-22.8 dBFS) and corrected, one colour
+    // at a time. Without this a violet slot was thirty decibels below a pink one at the same
+    // setting, which is the same trap the Texture slot fell into.
+    // Measured with the voice filter open against a Wavetable slot at the same Level (-22.0
+    // dBFS) and corrected one colour at a time. Without this a violet slot sat eleven decibels
+    // above a pink one at the same setting -- the trap the Texture slot fell into.
+    static const float kGain[kNumNoiseKinds] = {
+        0.85f,   // White
+        1.29f,   // Pink
+        1.74f,   // Brown
+        3.19f,   // Blue
+        0.99f,   // Violet
+        0.86f,   // Grey
+        3.20f,   // Band
+        3.07f,   // Wind
+        1.80f,   // Crackle
+        0.64f,   // Digital
+    };
+    const float gain = kGain[static_cast<int>(kind)] * p.level;
+
+    for (int c = 0; c < 2; ++c) {
+        NoiseState& st = noise_[c];
+        float* dst = (c == 0) ? outL : scratch_;
+        for (int i = 0; i < n; ++i) {
+            const float w = rng_.bipolar();
+            float v = 0.0f;
+            switch (kind) {
+            case NoiseKind::White: v = w; break;
+            case NoiseKind::Pink: {
+                // Paul Kellet's economy filter: three poles, about 1 dB from a true 1/f slope.
+                v = pinkStep(st, w);
+                break;
+            }
+            case NoiseKind::Brown: {
+                st.brown = clampv(st.brown + 0.02f * w, -1.0f, 1.0f);
+                v = st.brown;
+                break;
+            }
+            case NoiseKind::Blue: {   // differentiated pink: +3 dB per octave
+                const float pink = pinkStep(st, w);
+                v = pink - st.prev;
+                st.prev = pink;
+                break;
+            }
+            case NoiseKind::Violet:    // differentiated white: +6 dB per octave
+                v = w - st.prev;
+                st.prev = w;
+                break;
+            case NoiseKind::Grey: {
+                // White with the ear's most sensitive region taken out, so it sounds flat rather
+                // than measuring flat: a broad dip around 3 kHz through the same band pass.
+                st.bp2 += f * st.bp1;
+                const float hp = w - st.bp2 - 0.4f * st.bp1;
+                st.bp1 += f * hp;
+                v = w - 0.75f * st.bp1;
+                break;
+            }
+            case NoiseKind::Band:
+            case NoiseKind::Wind: {
+                st.bp2 += f * st.bp1;
+                const float hp = w - st.bp2 - damp * st.bp1;
+                st.bp1 += f * hp;
+                v = st.bp1;
+                break;
+            }
+            case NoiseKind::Crackle: {
+                // Sparse impulses, each a short decaying blip: vinyl, embers, rain on a roof.
+                st.nextGrain -= 1.0;
+                if (st.nextGrain <= 0.0) {
+                    st.nextGrain = -std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * sr_ / crackleRate;
+                    st.crackle = rng_.bipolar();
+                    st.crackleDecay = std::exp(-1.0f / (0.0015f * (1.0f + 6.0f * posN) * static_cast<float>(sr_)));
+                }
+                v = st.crackle;
+                st.crackle *= st.crackleDecay;
+                break;
+            }
+            case NoiseKind::Digital: {
+                st.holdLeft -= rate;
+                if (st.holdLeft <= 0.0) { st.holdLeft += sr_; st.hold = w; }
+                v = st.hold;
+                break;
+            }
+            default: break;
+            }
+            dst[i] = v;
+        }
+    }
+
+    // Pan and level, ramped across the block like the other types.
+    const float angle = (clampv(p.pan, -1.0f, 1.0f) + 1.0f) * 0.25f * kPi;
+    const float gl = gain * std::cos(angle), gr = gain * std::sin(angle);
+    for (int i = 0; i < n; ++i) {
+        const float l = outL[i], r = scratch_[i];
+        outL[i] = l * gl;
+        scratch_[i] = r * gr;
     }
 }
 

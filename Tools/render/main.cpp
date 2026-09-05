@@ -233,7 +233,7 @@ int main(int argc, char** argv)
         }
     }
 
-    // A pack preset may name a sample and a wavetable of its own; load them before rendering.
+    // A pack preset may name a sample, a wavetable and an impulse of its own.
     if (presetIndex >= 0) {
         const char* tex = presetFilePath(presetIndex, 0);
         const char* tab = presetFilePath(presetIndex, 1);

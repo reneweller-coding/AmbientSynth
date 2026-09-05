@@ -503,6 +503,48 @@ const Preset kPresets[] = {
       "src2_follow=Note;src2_pan=-0.6;src3_type=Texture;src3_level=0.45;src3_grain=650;src3_density=6;"
       "src3_grains=10;src3_spread=0.008;src3_follow=Note;src3_pan=0.6;src3_ratio=3/2;"
       "osc_level=0.4;partials=16;attack=18;release=35;arc=0.6;arc_period=90;far_decay=50;depth=0.95;master_gain=-11" },
+
+    // ---------------------------------------------------------------- 158..167 noise
+    // Noise is a source here, not just the Air band. The colours are level-matched to each other
+    // and to the other slot types, so Level means the same thing everywhere.
+    { "Pink Bed",
+      "src3_type=Noise;src3_noise=Pink;src3_level=0.5;src3_pan=0.2;src3_pos=0.4;src3_pos_drift=0.3;"
+      "osc_level=0.6;partials=12;brightness=0.5;attack=14;release=30;far_decay=40;depth=0.85;master_gain=-11" },
+    { "Brown Floor",
+      "src3_type=Noise;src3_noise=Brown;src3_level=0.6;src3_pan=-0.1;src3_pos=0.15;"
+      "osc_level=0.5;partials=10;tilt=2;brightness=0.25;cutoff=700;sub_level=0.4;bass_mono=220;"
+      "far_decay=50;far_highcut=1600;depth=0.95;master_gain=-11" },
+    { "Wind Over Stone",
+      "src2_type=Noise;src2_noise=Wind;src2_level=0.6;src2_noise_q=0.55;src2_pos=0.45;src2_pos_drift=0.9;"
+      "src2_pan=-0.5;src3_type=Noise;src3_noise=Wind;src3_level=0.6;src3_noise_q=0.6;src3_pos=0.55;"
+      "src3_pos_drift=0.9;src3_pan=0.5;osc_level=0.3;partials=8;far_size=3;far_decay=45;width=1.5;master_gain=-11" },
+    { "Vinyl Dust",
+      "src3_type=Noise;src3_noise=Crackle;src3_level=0.45;src3_density=6;src3_pos=0.35;"
+      "osc_level=0.55;partials=14;brightness=0.45;attack=10;release=25;near_mix=0.3;far_decay=25;master_gain=-11" },
+    { "Formant Noise",
+      "src2_type=Noise;src2_noise=Band;src2_level=0.55;src2_noise_q=0.75;src2_pos=0.35;src2_follow=Note;"
+      "src2_pos_drift=0.4;osc_level=0.45;partials=16;z_mode=Series;z_shape=Vowel Morph;z_x=0.4;z_y=0.5;"
+      "z_rate=0.02;z_depth=0.8;z_mix=0.6;far_decay=35;master_gain=-11" },
+    { "Violet Air",
+      "src3_type=Noise;src3_noise=Violet;src3_level=0.35;src3_pos=0.8;"
+      "osc_level=0.55;partials=20;brightness=0.85;shimmer=0.5;far_highcut=12000;far_decay=30;"
+      "side_air=4;width=1.5;master_gain=-12" },
+    { "Grey Chamber",
+      "src3_type=Noise;src3_noise=Grey;src3_level=0.5;src3_pos=0.5;src3_pos_drift=0.2;"
+      "osc_level=0.5;partials=12;near_mix=0.35;near_decay=2;far_level=0.5;far_decay=15;far_size=1;"
+      "depth=0.4;master_gain=-11" },
+    { "Digital Rain",
+      "src2_type=Noise;src2_noise=Digital;src2_level=0.4;src2_pos=0.55;src2_pos_drift=0.5;src2_pan=-0.4;"
+      "osc_level=0.4;partials=10;inharmonic=0.3;cutoff=3000;dly_mix=0.3;dly_feedback=0.7;dly_time_l=0.37;"
+      "dly_time_r=0.53;far_decay=30;master_gain=-11" },
+    { "Blue Sheen",
+      "src3_type=Noise;src3_noise=Blue;src3_level=0.4;src3_pos=0.7;src3_pos_drift=0.4;"
+      "osc_level=0.5;partials=18;brightness=0.8;cosmos_send=0.3;cosmos_shimmer=0.4;cosmos_return=0.6;"
+      "far_decay=35;far_highcut=9000;master_gain=-11" },
+    { "Noise Cathedral",
+      "src2_type=Noise;src2_noise=White;src2_level=0.35;src2_pan=-0.6;src3_type=Noise;src3_noise=Pink;"
+      "src3_level=0.45;src3_pan=0.6;src3_pos=0.3;osc_level=0.35;partials=8;"
+      "far_size=3;far_decay=70;far_highcut=5000;far_level=1;depth=1;room_level=0.3;master_gain=-11" },
 };
 }
 

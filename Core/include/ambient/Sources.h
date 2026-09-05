@@ -27,9 +27,9 @@ constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
 constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use
 
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture };
+enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise };
 
-constexpr int kNumSourceTypes = 4;
+constexpr int kNumSourceTypes = 5;
 constexpr int kNumTables      = 6;      // Classic, Organ, Vocal, Glass, Metal, User
 constexpr int kNumSlotRatios  = 10;
 extern const char* const kSourceTypeNames[kNumSourceTypes];
@@ -37,6 +37,14 @@ extern const char* const kTableNames[kNumTables];
 extern const char* const kSlotRatioNames[kNumSlotRatios];
 extern const double      kSlotRatios[kNumSlotRatios];
 extern const char* const kFollowNames[2];
+
+// Noise is a source in its own right, not just the Air band: an ambient instrument spends half
+// its life in it. Ten colours, from the textbook slopes to the ones that are really textures.
+enum class NoiseKind : int {
+    White = 0, Pink, Brown, Blue, Violet, Grey, Band, Wind, Crackle, Digital, Count
+};
+constexpr int kNumNoiseKinds = static_cast<int>(NoiseKind::Count);
+extern const char* const kNoiseKindNames[kNumNoiseKinds];
 
 struct Wavetable {
     int   frames = 0;
@@ -82,6 +90,8 @@ struct SlotParams {
     bool  follow = false;        // texture pitched to the note
     int   grains = 16;           // how many grains this slot may have sounding at once, 1..kSlotGrains
     float spread = 0.03f;        // start-point scatter around Position, as a fraction of the clip
+    NoiseKind noise = NoiseKind::Pink;
+    float noiseQ = 0.4f;         // width of Band and Wind, 0 = wide open, 1 = a whistle
 };
 
 class SourceSlot {
@@ -97,6 +107,7 @@ private:
     void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt);
     void renderFm(float* out, int n, double hz, const SlotParams& p, float dt);
     void renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
+    void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
 
     // Wavetable: phasor bank like Voice::Strand.
     float  pc_[kTablePartials] = {}, ps_[kTablePartials] = {};
@@ -113,6 +124,22 @@ private:
                    float gl = 0.0f, gr = 0.0f; float wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; bool on = false; };
     Grain  grains_[kSlotGrains];
     double spawnIn_ = 0.0;   // seconds until the next grain
+public:
+    // Noise: one generator per side, so the two channels are fully decorrelated -- which is what
+    // makes a noise bed sit around the listener instead of in the middle of the head.
+    struct NoiseState {
+        float pink[7] = {};          // Kellet's economy pink filter
+        float brown = 0.0f;
+        float prev = 0.0f;           // for the differentiated colours
+        float bp1 = 0.0f, bp2 = 0.0f;   // state-variable band pass
+        float hold = 0.0f;           // sample and hold
+        double holdLeft = 0.0;
+        double nextGrain = 0.0;      // crackle
+        float crackle = 0.0f, crackleDecay = 0.0f;
+    };
+private:
+    NoiseState noise_[2];
+    Drifter noiseDrift_;
     Drifter posDrift_, idxDrift_;
     Rng    rng_;
     double sr_ = 48000.0;

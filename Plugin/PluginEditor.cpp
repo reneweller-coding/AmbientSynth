@@ -210,7 +210,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning" || s.name == "Far Reverb" || s.name == "Cosmos") s.maxUnits = 8;
             if (s.name == "Tuning") s.maxUnits = 9;
             if (s.name == "Morph" || s.name == "Foundation") s.maxUnits = 9;
-            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 11;
+            if (s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -1192,18 +1192,31 @@ int AmbientSynthEditor::cellForParam(ParamId id) const
 
 void AmbientSynthEditor::updateSourceCells()
 {
-    // The 15 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
+    // The 17 slot parameters are laid out identically for Source 2 and Source 3 (see Params.h):
     // 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position 7 pos drift 8 fm ratio 9 fm index
-    // 10 grain 11 density 12 follow 13 grains 14 spread. Grey what the chosen type ignores.
+    // 10 grain 11 density 12 follow 13 grains 14 spread 15 noise 16 noise q.
+    // Grey out what the chosen type ignores.
+    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4 };
     const ParamId first[2] = { ParamId::Src2Type, ParamId::Src3Type };
     for (int k = 0; k < 2; ++k) {
-        const int type = static_cast<int>(std::lround(proc_.engine().getParam(first[k])));   // 0 off 1 wavetable 2 fm 3 texture
-        for (int off = 1; off <= 14; ++off) {
-            bool on = type != 0;
-            if (off == 5) on = type == 1;
-            else if (off == 6 || off == 7) on = type == 1 || type == 3 || (off == 7 && type == 2);
-            else if (off == 8 || off == 9) on = type == 2;
-            else if (off >= 10) on = type == 3;
+        const int type = static_cast<int>(std::lround(proc_.engine().getParam(first[k])));
+        for (int off = 1; off <= 16; ++off) {
+            bool on = type != Off;
+            switch (off) {
+            case 5:  on = type == Table; break;                                  // wavetable choice
+            case 6:  on = type == Table || type == Texture || type == Noise; break;   // position / centre
+            case 7:  on = type != Off;  break;                                   // pos drift moves all of them
+            case 8:
+            case 9:  on = type == Fm; break;
+            case 10:
+            case 13:
+            case 14: on = type == Texture; break;                                // grain, grains, spread
+            case 11: on = type == Texture || type == Noise; break;               // density: grains or crackle
+            case 12: on = type == Texture || type == Noise; break;               // pitch follow
+            case 15:
+            case 16: on = type == Noise; break;
+            default: break;
+            }
             const int ci = cellForParam(static_cast<ParamId>(static_cast<int>(first[k]) + off));
             if (ci < 0) continue;
             Cell& c = cells_[static_cast<size_t>(ci)];

@@ -4,7 +4,7 @@
 // Two independent layers can be loaded and combined:
 //   Sound  = everything except the Cosmos section (voices, space, delays, reverbs, brain, tuning)
 //   Cosmos = the Cosmos section only
-// The 158 full presets carry both layers (they are the DAW programs); the Cosmos
+// The 168 full presets carry both layers (they are the DAW programs); the Cosmos
 // bank carries Cosmos-only settings.
 #pragma once
 #include "Params.h"
@@ -17,11 +17,12 @@ struct Preset {
     const char* settings;             // "key=value;key=value", choice values may be given by name
     const char* texture = nullptr;    // file the host should load into the Texture slots (pack presets)
     const char* wavetable = nullptr;  // file the host should load into the User wavetable
+    const char* impulse = nullptr;    // file the host should load into the convolution Room
 };
 
 enum class PresetScope { Full, Sound, Cosmos };
 
-// The preset list is the 158 built-in presets followed by every loaded pack, so everything that
+// The preset list is the 168 built-in presets followed by every loaded pack, so everything that
 // walks presets by index (DAW programs, the map, routes, the browser) sees packs automatically.
 int numPresets();
 const Preset& preset(int index);
@@ -50,7 +51,7 @@ inline bool inScope(ParamId id, PresetScope scope)
 //
 //   # comment
 //   pack <pack name>
-//   <name>|<settings>|<x y bright motion width noisy bass density tagbits>|<texture>|<wavetable>
+//   <name>|<settings>|<x y bright motion width noisy bass density tagbits>|<texture>|<wavetable>|<impulse>
 //
 // Everything after the settings is optional. The metadata field feeds the browser and the map
 // (see PresetMeta.h); the file fields name a sample and a wavetable relative to the pack file,
@@ -61,7 +62,9 @@ int  loadDefaultPresetPacks();              // $AMBIENT_PACKS (';'-separated), e
 void clearPresetPacks();
 int  numPresetPacks();
 const char* presetPackName(int pack);
-// Absolute path of the file a pack preset names, or an empty string. `which`: 0 texture, 1 wavetable.
+// Absolute path of the file a pack preset names, or an empty string.
+// `which`: 0 texture, 1 wavetable, 2 impulse.
+constexpr int kPresetFiles = 3;
 const char* presetFilePath(int presetIndex, int which);
 
 // Parse a value for `d` from text: numbers, "on"/"off", or a choice name.

@@ -277,7 +277,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(builtinPresetCount() == 158, "exactly 158 built-in presets");
+    CHECK(builtinPresetCount() == 168, "exactly 168 built-in presets");
     CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
@@ -1608,7 +1608,7 @@ void testPresetPacks()
         f << "# a comment line\n";
         f << "pack Pack Under Test\n";
         f << "\n";
-        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav\n";
+        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav|ir/c.wav\n";
         f << "Pack Beta|sub_level=0.5\n";
     }
     CHECK(loadPresetPack(file.string().c_str()), "pack file loads");
@@ -1627,10 +1627,14 @@ void testPresetPacks()
 
     const std::string tex = presetFilePath(base, 0);
     const std::string tab = presetFilePath(base, 1);
+    const std::string imp = presetFilePath(base, 2);
     CHECK(tex.find("a.wav") != std::string::npos && std::filesystem::path(tex).is_absolute(),
           "texture path resolved against the pack folder");
     CHECK(tab.find("b.wav") != std::string::npos, "wavetable path resolved");
+    CHECK(imp.find("c.wav") != std::string::npos, "impulse path resolved");
+    CHECK(std::string(presetFilePath(base, 3)).empty(), "there is no fourth file slot");
     CHECK(std::string(presetFilePath(base + 1, 0)).empty(), "a preset without files reports none");
+    CHECK(std::string(presetFilePath(base + 1, 2)).empty(), "and no impulse either");
     CHECK(std::string(presetFilePath(0, 0)).empty(), "built-in presets carry no pack files");
 
     CHECK(numPresetFamilies() == baseFamilies + 1, "the pack adds one family");

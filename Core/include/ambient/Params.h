@@ -18,9 +18,9 @@ enum class ParamId : int {
     Stack, RateWander,
     // Source 2 / Source 3: extra sources per voice (wavetable of spectra, FM pair, texture)
     Src2Type, Src2Level, Src2Octave, Src2Ratio, Src2Pan, Src2Table, Src2Position, Src2PosDrift,
-    Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2Follow, Src2Grains, Src2Spread,
+    Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2Follow, Src2Grains, Src2Spread, Src2Noise, Src2NoiseQ,
     Src3Type, Src3Level, Src3Octave, Src3Ratio, Src3Pan, Src3Table, Src3Position, Src3PosDrift,
-    Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3Follow, Src3Grains, Src3Spread,
+    Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3Follow, Src3Grains, Src3Spread, Src3Noise, Src3NoiseQ,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
     SubLevel, SubOctave, SubGlide, SubBinaural, SubTone, SubSource, PadLowCut,

@@ -1,0 +1,374 @@
+"""Two hundred impulse responses for the convolution Room, aimed at drones rather than at
+reproducing a concert hall.
+
+`Tools/ImpulseGen` designs one room at a time; this builds a library out of eight families, of
+which only the first is an ordinary room. The rest exist because a convolution reverb fed a
+drone is not really a room simulator -- it is a resonator you can shape:
+
+    room        designed halls, chambers, caverns, plates: per-band decay, size, colour
+    tuned       a bank of decaying partials on a just-intoned chord: the reverb rings in key
+    modal       inharmonic modes (bells, plates, springs): metal instead of air
+    reverse     the decay run backwards, so every note swells into its own reflection
+    comb        regularly spaced taps: corridors, pipes, wells, flutter
+    scatter     sparse random taps with a thinning density: rain rooms, shattering
+    shimmer     the tail mixed with an octave-up copy of itself
+    spectral    narrow bands that decay at different rates, so the room changes colour as it dies
+
+    python Tools/library/make_impulses.py --out-dir Library/Impulses
+
+Deterministic: the same seed writes the same 200 files with the same names, which is what lets a
+preset name one before it has been rendered. Roughly a minute, CPU only, about 400 MB.
+
+Everything is checked before it is written: an impulse must decay, must not be silent, must not
+carry a DC offset, and must not start with a click that the Room would stamp on every note.
+"""
+import argparse
+import math
+import os
+import random
+import sys
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, os.path.join(ROOT, "Tools", "ImpulseGen"))
+from impulsegen_core import band_split, decay_env, normalise, procedural, save  # noqa: E402
+
+SR = 48000
+# The desktop Room holds eight seconds, the Quest four (Engine::setRoomMaxSeconds).
+MAX_SECONDS = 8.0
+
+
+# ---------------------------------------------------------------- helpers
+
+def stereo_noise(rng, n):
+    return np.stack([rng.standard_normal(n), rng.standard_normal(n)])
+
+
+def fade_in(ir, sr, ms=1.5):
+    """Every impulse starts from silence: a hard first sample is a click on every single note."""
+    k = max(2, int(sr * ms / 1000.0))
+    ir[:, :k] *= np.linspace(0.0, 1.0, k) ** 2
+    return ir
+
+
+def fade_out(ir, sr, ms=40.0):
+    k = max(2, int(sr * ms / 1000.0))
+    ir[:, -k:] *= np.linspace(1.0, 0.0, k) ** 2
+    return ir
+
+
+def dc_block(ir, sr, hz=25.0):
+    """y[n] = x[n] - x[n-1] + a*y[n-1]. Through scipy, not a Python loop: two hundred impulses of
+    eight seconds is 150 million samples."""
+    from scipy.signal import lfilter
+    a = math.exp(-2.0 * math.pi * hz / sr)
+    return lfilter([1.0, -1.0], [1.0, -a], ir, axis=-1)
+
+
+def finish(ir, sr):
+    ir = np.asarray(ir, dtype=np.float64)
+    if ir.ndim == 1:
+        ir = np.stack([ir, ir])
+    ir = np.nan_to_num(ir)
+    ir = fade_out(fade_in(ir, sr), sr)
+    return normalise(ir)
+
+
+# ---------------------------------------------------------------- families
+
+JI = [1.0, 9 / 8, 6 / 5, 5 / 4, 4 / 3, 3 / 2, 8 / 5, 5 / 3, 7 / 4, 2.0, 9 / 4, 5 / 2, 3.0, 4.0]
+
+
+def make_tuned(rng, seconds, root_hz, ratios, rt60, spread_cents, bright):
+    """A bank of decaying partials: the Room becomes a resonator that rings in key. Fed a drone
+    this is the difference between a space and an instrument."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    out = np.zeros((2, n))
+    for c in range(2):
+        for k, r in enumerate(ratios):
+            f = root_hz * r * (2.0 ** (rng.uniform(-spread_cents, spread_cents) / 1200.0))
+            if f > 0.45 * SR:
+                continue
+            # higher partials die sooner unless the room is bright
+            rt = rt60 * (1.0 / (1.0 + (1.0 - bright) * 0.7 * k))
+            amp = (1.0 / (1.0 + k)) ** (1.2 - 0.7 * bright)
+            out[c] += amp * np.sin(2 * math.pi * f * t + rng.uniform(0, 6.283)) * np.exp(-6.9078 * t / max(rt, 0.05))
+    # a breath of noise so it is a room and not a bank of oscillators
+    noise = stereo_noise(rng, n) * decay_env(n, SR, rt60 * 0.35)
+    return out + 0.18 * noise
+
+
+BELL = [1.0, 2.76, 5.40, 8.93, 13.34, 18.64]
+PLATE = [1.0, 2.00, 3.01, 3.44, 4.03, 5.65, 6.98, 8.71]
+SPRING = [1.0, 1.59, 2.14, 2.30, 2.65, 3.16, 3.50, 4.06, 4.60]
+
+
+def make_modal(rng, seconds, root_hz, modes, rt60, damp):
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    out = np.zeros((2, n))
+    for c in range(2):
+        for k, r in enumerate(modes):
+            f = root_hz * r * (1.0 + rng.uniform(-0.004, 0.004))
+            if f > 0.45 * SR:
+                continue
+            rt = rt60 / (1.0 + damp * k * 0.6)
+            out[c] += (0.9 ** k) * np.sin(2 * math.pi * f * t + rng.uniform(0, 6.283)) * np.exp(-6.9078 * t / max(rt, 0.03))
+    return out
+
+
+def make_reverse(rng, seconds, rt60, tone):
+    """A decay run backwards: every note swells into its own reflection before it arrives."""
+    ir = procedural(sr=SR, seconds=seconds, rt60_low=rt60 * 1.3, rt60_mid=rt60, rt60_high=rt60 * 0.6,
+                    size=rng.uniform(0.5, 2.0), tone=tone, early_level=0.0,
+                    diffusion_ms=rng.uniform(10.0, 60.0), seed=rng.integers(1, 10 ** 6))
+    return np.ascontiguousarray(np.asarray(ir, dtype=np.float64)[:, ::-1])
+
+
+def make_comb(rng, seconds, period_ms, feedback, tone, stereo_offset_ms):
+    """Regularly spaced taps: a corridor, a pipe, a well. The period is what you hear as a pitch
+    when it is short and as a flutter when it is long."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    for c in range(2):
+        period = (period_ms + (stereo_offset_ms if c else 0.0)) * SR / 1000.0
+        amp, at, k = 1.0, period, 0
+        while at < n - 4 and amp > 0.0008 and k < 4000:
+            i = int(at)
+            frac = at - i
+            burst = max(2, int(SR * 0.0008 * (1.0 + 2.0 * tone)))
+            env = np.hanning(burst * 2)[burst:]
+            seg = out[c, i:i + burst]
+            m = min(burst, seg.size)
+            sign = 1.0 if k % 2 == 0 else -1.0
+            out[c, i:i + m] += sign * amp * (1.0 - frac * 0.2) * env[:m] * rng.uniform(0.85, 1.0)
+            amp *= feedback
+            at += period * (1.0 + rng.uniform(-0.01, 0.01))
+            k += 1
+    n2 = out.shape[1]
+    return out * decay_env(n2, SR, seconds * 0.9)
+
+
+def make_scatter(rng, seconds, density, thinning, tone):
+    """Sparse taps whose rate falls off: rain in a room, glass shattering, a slow collapse."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    t = 0.0
+    while t < seconds:
+        rate = density * math.exp(-thinning * t)
+        if rate < 0.5:
+            break
+        t += rng.exponential(1.0 / rate)
+        i = int(t * SR)
+        if i >= n - 8:
+            break
+        burst = max(3, int(SR * rng.uniform(0.0004, 0.004) * (1.0 + tone)))
+        env = np.hanning(burst * 2)[burst:]
+        grain = rng.standard_normal(burst) * env
+        pan = rng.uniform(0.0, 1.0)
+        m = min(burst, n - i)
+        out[0, i:i + m] += grain[:m] * math.cos(pan * math.pi / 2) * math.exp(-1.5 * t / seconds)
+        out[1, i:i + m] += grain[:m] * math.sin(pan * math.pi / 2) * math.exp(-1.5 * t / seconds)
+    return out
+
+
+def make_shimmer(rng, seconds, rt60, tone, amount):
+    """The tail plus a copy of itself an octave up: the reverb rises as it decays."""
+    base = np.asarray(procedural(sr=SR, seconds=seconds, rt60_low=rt60, rt60_mid=rt60 * 0.8,
+                                 rt60_high=rt60 * 0.5, size=rng.uniform(0.8, 2.5), tone=tone,
+                                 seed=rng.integers(1, 10 ** 6)), dtype=np.float64)
+    n = base.shape[1]
+    up = np.zeros_like(base)
+    idx = np.minimum(np.arange(n) * 2, n - 1)          # read twice as fast = an octave up
+    for c in range(2):
+        up[c, : n // 2] = base[c][idx][: n // 2]
+    # the octave enters late, so the swell is heard rather than the transient
+    ramp = np.clip(np.linspace(-0.15, 1.0, n), 0.0, 1.0) ** 1.5
+    return base + amount * up * ramp
+
+
+def make_spectral(rng, seconds, bands, spread, tone):
+    """Narrow bands with different decay times: the room changes colour while it dies."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    freqs = np.exp(np.linspace(math.log(70.0), math.log(9000.0), bands))
+    from scipy.signal import lfilter
+    for c in range(2):
+        noise = rng.standard_normal(n)
+        for k, f in enumerate(freqs):
+            q = rng.uniform(6.0, 22.0)
+            w = 2 * math.pi * f / SR
+            r = math.exp(-w / (2 * q))
+            b0 = 1.0 - r
+            y = lfilter([b0, 0.0, -b0], [1.0, -2.0 * r * math.cos(w), r * r], noise)
+            rt = seconds * (0.25 + 0.75 * (1.0 - k / max(1, bands - 1)) ** (1.0 + spread)) * (1.0 + 0.3 * tone)
+            out[c] += y * decay_env(n, SR, max(0.15, rt))
+    return out
+
+
+# ---------------------------------------------------------------- the catalogue
+
+def catalogue(rng):
+    """(family, name, builder) for every impulse. Names are stable, so a preset can name one."""
+    jobs = []
+
+    # -- rooms: the ordinary end, but tuned dark and long the way this instrument wants
+    room_kinds = [
+        ("chamber",   (0.6, 1.6), (0.3, 0.8), (-0.4, 0.3), 1.2),
+        ("hall",      (2.0, 5.0), (0.8, 1.8), (-0.5, 0.2), 3.0),
+        ("cathedral", (5.0, 9.0), (1.5, 2.6), (-0.6, 0.1), 6.0),
+        ("cavern",    (6.0, 12.0), (2.0, 3.0), (-0.9, -0.3), 7.0),
+        ("plate",     (1.5, 4.0), (0.2, 0.6), (0.0, 0.6), 3.0),
+        ("bunker",    (1.0, 3.0), (0.4, 1.0), (-0.9, -0.5), 2.5),
+    ]
+    for kind, rt, size, tone, secs in room_kinds:
+        for i in range(9):
+            def build(rng=rng, rt=rt, size=size, tone=tone, secs=secs):
+                base = rng.uniform(*rt)
+                return procedural(sr=SR, seconds=min(MAX_SECONDS, secs * rng.uniform(0.8, 1.2)),
+                                  rt60_low=base * rng.uniform(1.0, 1.6),
+                                  rt60_mid=base,
+                                  rt60_high=base * rng.uniform(0.25, 0.7),
+                                  size=rng.uniform(*size), tone=rng.uniform(*tone),
+                                  diffusion_ms=rng.uniform(8.0, 70.0),
+                                  predelay_ms=rng.uniform(0.0, 90.0),
+                                  width=rng.uniform(0.7, 1.4),
+                                  early_level=rng.uniform(0.1, 0.7),
+                                  modulation=rng.uniform(0.0, 0.7),
+                                  seed=int(rng.integers(1, 10 ** 6)))
+            jobs.append(("room", f"room_{kind}_{i:02d}", build))
+
+    # -- tuned resonators
+    for i in range(30):
+        def build(rng=rng):
+            root = rng.choice([55.0, 65.4, 73.4, 82.4, 98.0, 110.0, 130.8, 146.8, 164.8, 196.0])
+            take = int(rng.integers(3, 9))
+            ratios = sorted(rng.choice(JI, size=take, replace=False).tolist())
+            return make_tuned(rng, min(MAX_SECONDS, rng.uniform(2.5, 7.0)), float(root), ratios,
+                              rt60=rng.uniform(1.5, 6.0), spread_cents=rng.uniform(0.0, 14.0),
+                              bright=rng.uniform(0.0, 1.0))
+        jobs.append(("tuned", f"tuned_{i:02d}", build))
+
+    # -- modal metal
+    for i in range(25):
+        def build(rng=rng):
+            modes = [BELL, PLATE, SPRING][i % 3]
+            return make_modal(rng, min(MAX_SECONDS, rng.uniform(1.5, 6.0)),
+                              float(rng.uniform(70.0, 320.0)), modes,
+                              rt60=rng.uniform(1.0, 5.0), damp=rng.uniform(0.2, 1.4))
+        name = ["bell", "plate", "spring"][i % 3]
+        jobs.append(("modal", f"modal_{name}_{i:02d}", build))
+
+    # -- reverse swells
+    for i in range(20):
+        def build(rng=rng):
+            return make_reverse(rng, min(MAX_SECONDS, rng.uniform(1.2, 5.0)),
+                                rt60=rng.uniform(0.8, 4.0), tone=rng.uniform(-0.7, 0.5))
+        jobs.append(("reverse", f"reverse_{i:02d}", build))
+
+    # -- combs, pipes, corridors
+    for i in range(20):
+        def build(rng=rng):
+            return make_comb(rng, min(MAX_SECONDS, rng.uniform(1.5, 6.0)),
+                             period_ms=float(math.exp(rng.uniform(math.log(2.0), math.log(180.0)))),
+                             feedback=rng.uniform(0.80, 0.985), tone=rng.uniform(0.0, 1.0),
+                             stereo_offset_ms=rng.uniform(0.0, 3.0))
+        jobs.append(("comb", f"comb_{i:02d}", build))
+
+    # -- scattered
+    for i in range(20):
+        def build(rng=rng):
+            return make_scatter(rng, min(MAX_SECONDS, rng.uniform(2.0, 7.0)),
+                                density=rng.uniform(30.0, 900.0), thinning=rng.uniform(0.05, 1.2),
+                                tone=rng.uniform(0.0, 1.0))
+        jobs.append(("scatter", f"scatter_{i:02d}", build))
+
+    # -- shimmer
+    for i in range(15):
+        def build(rng=rng):
+            return make_shimmer(rng, min(MAX_SECONDS, rng.uniform(3.0, 7.0)),
+                                rt60=rng.uniform(2.0, 6.0), tone=rng.uniform(-0.5, 0.4),
+                                amount=rng.uniform(0.3, 0.9))
+        jobs.append(("shimmer", f"shimmer_{i:02d}", build))
+
+    # -- spectral
+    for i in range(16):
+        def build(rng=rng):
+            return make_spectral(rng, min(MAX_SECONDS, rng.uniform(2.0, 6.0)),
+                                 bands=int(rng.integers(5, 13)), spread=rng.uniform(0.3, 2.5),
+                                 tone=rng.uniform(-0.5, 0.8))
+        jobs.append(("spectral", f"spectral_{i:02d}", build))
+
+    return jobs
+
+
+# ---------------------------------------------------------------- checks
+
+def check(ir, sr, family):
+    """An impulse has to be there, must carry no offset and must not click, and must decay --
+    except in the one family whose whole point is that it does not: a reversed decay swells, and
+    for that one the check is that it actually rises."""
+    problems = []
+    mono = ir.mean(axis=0)
+    n = mono.size
+    if not np.all(np.isfinite(ir)):
+        problems.append("non-finite")
+        return problems
+    rms = float(np.sqrt((mono ** 2).mean()))
+    if rms < 1e-5:
+        problems.append("silent")
+    head = float(np.sqrt((mono[: n // 8] ** 2).mean()) + 1e-12)
+    tail = float(np.sqrt((mono[-n // 8:] ** 2).mean()) + 1e-12)
+    if family == "reverse":
+        if head > tail * 0.5:
+            problems.append(f"does not swell ({20 * math.log10(tail / head):+.0f} dB)")
+    elif tail > head * 0.5:
+        problems.append(f"does not decay ({20 * math.log10(tail / head):+.0f} dB)")
+    if abs(float(mono.mean())) > 0.001 + 0.01 * rms:
+        problems.append("dc")
+    if abs(float(mono[0])) > 0.02:
+        problems.append("starts with a step")
+    return problems
+
+
+# ---------------------------------------------------------------- main
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--out-dir", default=os.path.join(ROOT, "Library", "Impulses"))
+    ap.add_argument("--seed", type=int, default=31)
+    ap.add_argument("--float32", action="store_true", help="32-bit float instead of 24-bit PCM")
+    ap.add_argument("--only", default=None, help="only families whose name contains this")
+    a = ap.parse_args()
+    os.makedirs(a.out_dir, exist_ok=True)
+    rng = np.random.default_rng(a.seed)
+    jobs = catalogue(rng)
+    if a.only:
+        jobs = [j for j in jobs if a.only in j[0] or a.only in j[1]]
+    print(f"{len(jobs)} impulses -> {a.out_dir}")
+
+    bad, families = 0, {}
+    for family, name, build in jobs:
+        ir = finish(build(), SR)
+        ir = dc_block(ir, SR)
+        ir = normalise(ir)
+        problems = check(ir, SR, family)
+        if problems:
+            bad += 1
+            print(f"  PROBLEM {name}: {', '.join(problems)}")
+            continue
+        save(os.path.join(a.out_dir, name + ".wav"), ir, SR,
+             {"family": family, "seconds": ir.shape[1] / SR}, float32=a.float32)
+        families[family] = families.get(family, 0) + 1
+    total = sum(families.values())
+    print(f"{total} written" + (f", {bad} rejected" if bad else ""))
+    for f in sorted(families):
+        print(f"  {f:9s} {families[f]}")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

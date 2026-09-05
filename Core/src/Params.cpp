@@ -91,6 +91,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::Src2Follow,   "src2_follow",   "Pitch",     "Source 2", kFollowNames, 2, 0),
     I(ParamId::Src2Grains,   "src2_grains",   "Grains",    "Source 2", 1.f,   64.f,   16.f),
     F(ParamId::Src2Spread,   "src2_spread",   "Spread",    "Source 2", 0.f,   1.f,    0.03f,  0.5f, ""),
+    C(ParamId::Src2Noise,    "src2_noise",    "Noise",     "Source 2", kNoiseKindNames, kNumNoiseKinds, 1),
+    F(ParamId::Src2NoiseQ,   "src2_noise_q",  "Noise Q",   "Source 2", 0.f,   1.f,    0.4f,   1.f,  ""),
 
     C(ParamId::Src3Type,     "src3_type",     "Type",      "Source 3", kSourceTypeNames, kNumSourceTypes, 0),
     F(ParamId::Src3Level,    "src3_level",    "Level",     "Source 3", 0.f,   1.f,    0.5f,   1.f,  ""),
@@ -107,6 +109,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::Src3Follow,   "src3_follow",   "Pitch",     "Source 3", kFollowNames, 2, 0),
     I(ParamId::Src3Grains,   "src3_grains",   "Grains",    "Source 3", 1.f,   64.f,   16.f),
     F(ParamId::Src3Spread,   "src3_spread",   "Spread",    "Source 3", 0.f,   1.f,    0.03f,  0.5f, ""),
+    C(ParamId::Src3Noise,    "src3_noise",    "Noise",     "Source 3", kNoiseKindNames, kNumNoiseKinds, 1),
+    F(ParamId::Src3NoiseQ,   "src3_noise_q",  "Noise Q",   "Source 3", 0.f,   1.f,    0.4f,   1.f,  ""),
 
     F(ParamId::SubLevel,    "sub_level",    "Level",         "Foundation", 0.f,   1.f,    0.f,   1.f,  ""),
     C(ParamId::SubOctave,   "sub_octave",   "Octave",        "Foundation", kSubOctaveNames, 2, 0),

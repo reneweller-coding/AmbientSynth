@@ -424,6 +424,8 @@ void Engine::readParams()
             s.follow        = at(12) >= 0.5f;
             s.grains        = static_cast<int>(std::lround(at(13)));
             s.spread        = at(14);
+            s.noise         = static_cast<NoiseKind>(clampv(static_cast<int>(std::lround(at(15))), 0, kNumNoiseKinds - 1));
+            s.noiseQ        = at(16);
         }
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
         const int a = textureActive_.load(std::memory_order_acquire);

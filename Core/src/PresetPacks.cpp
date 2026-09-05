@@ -15,7 +15,7 @@ namespace ambient {
 namespace {
 
 struct PackEntry {
-    std::string name, settings, texture, wavetable;
+    std::string name, settings, texture, wavetable, impulse;
     PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };
 };
 struct Pack {
@@ -27,7 +27,7 @@ struct Pack {
 std::vector<Pack>& packs() { static std::vector<Pack> p; return p; }
 // Preset objects handed out point into the pack strings, so they stay valid until clearPresetPacks().
 std::vector<Preset>& views() { static std::vector<Preset> v; return v; }
-std::vector<std::string>& paths() { static std::vector<std::string> p; return p; }   // absolute, 2 per pack entry
+std::vector<std::string>& paths() { static std::vector<std::string> p; return p; }   // absolute, kPresetFiles per entry
 
 void rebuildViews()
 {
@@ -37,10 +37,15 @@ void rebuildViews()
         for (const PackEntry& e : pk.entries) {
             views().push_back(Preset{ e.name.c_str(), e.settings.c_str(),
                                       e.texture.empty() ? nullptr : e.texture.c_str(),
-                                      e.wavetable.empty() ? nullptr : e.wavetable.c_str() });
+                                      e.wavetable.empty() ? nullptr : e.wavetable.c_str(),
+                                      e.impulse.empty() ? nullptr : e.impulse.c_str() });
             const std::filesystem::path dir(pk.dir);
-            paths().push_back(e.texture.empty() ? std::string() : (dir / e.texture).lexically_normal().string());
-            paths().push_back(e.wavetable.empty() ? std::string() : (dir / e.wavetable).lexically_normal().string());
+            auto resolve = [&dir](const std::string& rel) {
+                return rel.empty() ? std::string() : (dir / rel).lexically_normal().string();
+            };
+            paths().push_back(resolve(e.texture));
+            paths().push_back(resolve(e.wavetable));
+            paths().push_back(resolve(e.impulse));
         }
 }
 
@@ -97,6 +102,7 @@ bool loadPresetPack(const char* path)
         }
         if (fields.size() > 3) e.texture = trim(fields[3]);
         if (fields.size() > 4) e.wavetable = trim(fields[4]);
+        if (fields.size() > 5) e.impulse = trim(fields[5]);
         pack.entries.push_back(std::move(e));
     }
     if (pack.entries.empty()) return false;
@@ -155,7 +161,8 @@ const Preset& preset(int index)
 const char* presetFilePath(int presetIndex, int which)
 {
     const int b = builtinPresetCount();
-    const size_t i = static_cast<size_t>(presetIndex - b) * 2 + static_cast<size_t>(which & 1);
+    if (which < 0 || which >= kPresetFiles) return "";
+    const size_t i = static_cast<size_t>(presetIndex - b) * kPresetFiles + static_cast<size_t>(which);
     return (presetIndex >= b && i < paths().size()) ? paths()[i].c_str() : "";
 }
 

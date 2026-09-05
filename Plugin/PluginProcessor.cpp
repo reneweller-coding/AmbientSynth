@@ -272,11 +272,13 @@ const juce::String AmbientSynthProcessor::getProgramName(int index)
 
 void AmbientSynthProcessor::loadPresetFiles(int index)
 {
-    // A pack preset can bring its own sample and wavetable; the paths are relative to the pack.
+    // A pack preset can bring its own sample, wavetable and impulse; paths are relative to the pack.
     const juce::String tex(juce::CharPointer_UTF8(presetFilePath(index, 0)));
     const juce::String tab(juce::CharPointer_UTF8(presetFilePath(index, 1)));
+    const juce::String imp(juce::CharPointer_UTF8(presetFilePath(index, 2)));
     if (tex.isNotEmpty() && juce::File(tex).existsAsFile()) loadTextureFile(juce::File(tex));
     if (tab.isNotEmpty() && juce::File(tab).existsAsFile()) loadWavetableFile(juce::File(tab));
+    if (imp.isNotEmpty() && juce::File(imp).existsAsFile()) loadImpulseFile(juce::File(imp));
 }
 
 void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)

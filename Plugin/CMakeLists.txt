@@ -16,6 +16,9 @@ juce_add_plugin(AmbientSynth
 target_sources(AmbientSynth PRIVATE
     PluginProcessor.cpp
     PluginEditor.cpp
+    EditorViews.cpp
+    EditorModStrip.cpp
+    EditorBrowse.cpp
     AmbientLookAndFeel.cpp)
 
 target_compile_definitions(AmbientSynth PUBLIC

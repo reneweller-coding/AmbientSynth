@@ -656,6 +656,48 @@ for `FILE_FLAG_SEQUENTIAL_SCAN`, so the clips it reads are aged out of the cache
 Measured afterwards: a full pass grows the standby list by well under a gigabyte instead of
 tens of them.
 
+## The Rich refinements
+
+Ten small mechanisms, each a way the sound stops being a synthesizer and starts being a place.
+Every one is off by default and was measured sound-neutral there (37 presets identical before
+and after); each was measured effective on its own.
+
+* **Phase Width / Phase Rate** (Space): two first-order all-passes per ear whose corner
+  frequencies (300 and 1500 Hz) drift apart and back on one slow curve, the left ear up and the
+  right ear down by up to 1.5 octaves. The phase relation between the ears changes, the level
+  does not, so the ear reads a room changing size rather than a sound moving. Measured: width
+  descriptor 0.73 to 0.99 on the default patch at full depth.
+* **Doppler** (Space): the breathing distance has a velocity; a voice coming closer rises, one
+  receding falls, up to 3 % (one plane unit taken as about twenty metres).
+* **Blur** (Foreground, a second Nebula): the near bus through a spectral smear ahead of every
+  effect, so an attack is wiped into texture and one note flows into the next. Mix and Smear;
+  the blurred part is 43 ms late, the dry part is not.
+* **Formant** (tenth filter model): three band passes on the formants of u-o-a-e-i, Cutoff
+  morphs the vowel, Resonance narrows the formants, Drift and an LFO make it breathe.
+* **Strike** (its own tab): a Karplus-Strong loop excited with a noise burst at note-on --
+  String at the note, Wood two octaves up with heavy damping and a short decay, Metal with an
+  all-pass in the loop -- on the near plane whatever the voice's distance. Fires for keys, or
+  for the brain's notes too. The intimate impulse that makes the background behind it vast.
+* **Drift** per source (Source 1..3): an independent slow pitch drift in cents. Three sources
+  on just ratios each drifting on their own curve beat like an ensemble in a room whose
+  temperature moves; nothing is symmetric, nothing cancels for long.
+* **Absorb** (both delays): with Absorb up the feedback loop also loses its low end, and its
+  high cut sinks as the feedback rises (at full feedback and full absorb the loop keeps
+  320 Hz to 1 kHz), every repeat passing through the band again: echoes drown in a fog
+  instead of merely getting quieter.
+* **Tide / Tide Period** (Tuning): the whole instrument's pitch leans by up to 30 cents on a
+  minute-scale curve; the sub follows, so the harmony stays.
+* **Rotate** (Far Reverb): the far field's left and right rotate into each other on a slow
+  curve; the background turns.
+* **Golden-ratio LFO defaults**: the eight LFOs start at 0.03 Hz times the golden ratio to
+  the n-th power, so their cycles share no common period and their extremes never line up.
+  The coherence ring's natural periods were already primes (23 / 31 / 41 / 53 s).
+
+Every new random source (the phase field's drifter, the sources' pitch drifters, the tide and
+the rotation) seeds from a side stream rather than from the voice's or the engine's, so
+switching one on never moves the brain's dice or a preset's random phases. Ten built-in
+presets (168..177, "rich studies") show each one; the library generator draws them per style.
+
 ## Clock and sync
 
 `Core/include/ambient/Clock.h`. Where the tempo comes from is one setting,

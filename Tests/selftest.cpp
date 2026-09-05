@@ -278,7 +278,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(builtinPresetCount() == 168, "exactly 168 built-in presets");
+    CHECK(builtinPresetCount() == 178, "exactly 178 built-in presets");
     CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");

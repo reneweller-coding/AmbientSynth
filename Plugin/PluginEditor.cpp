@@ -272,7 +272,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning") s.maxUnits = 9;
             if (s.name == "Morph") s.maxUnits = 9;
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
-            if (s.name == "Space") s.maxUnits = 7;                           // two rows each, side by side
+            if (s.name == "Space") s.maxUnits = 8;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Strands") s.maxUnits = 10;

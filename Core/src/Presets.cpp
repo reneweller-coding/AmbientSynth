@@ -545,6 +545,49 @@ const Preset kPresets[] = {
       "src2_type=Noise;src2_noise=White;src2_level=0.35;src2_pan=-0.6;src3_type=Noise;src3_noise=Pink;"
       "src3_level=0.45;src3_pan=0.6;src3_pos=0.3;osc_level=0.35;partials=8;"
       "far_size=3;far_decay=70;far_highcut=5000;far_level=1;depth=1;room_level=0.3;master_gain=-11" },
+
+    // ---------------------------------------------------------------- 168..177 rich studies
+    // The refinements that make a drone physical: a phase field between the ears, a blur that
+    // wipes attacks into texture, a throat in the filter, a struck string in the foreground,
+    // sources that drift apart on their own, echoes that drown, a pitch that leans over minutes,
+    // a background that turns.
+    { "Breathing Room",
+      "phase_width=0.7;phase_rate=0.02;breath=0.3;breath_rate=0.02;doppler=0.6;depth=0.8;"
+      "osc_level=0.7;partials=14;brightness=0.55;shimmer=0.45;attack=12;release=30;far_decay=40;master_gain=-11" },
+    { "Fog Bank",
+      "blur_mix=0.65;blur_smear=0.8;osc_level=0.7;partials=18;brightness=0.6;attack=1.5;release=20;"
+      "keys_depth=0.2;depth=0.85;far_decay=45;far_highcut=4000;dly_mix=0.2;dly_feedback=0.6;master_gain=-11" },
+    { "Throat Singer",
+      "filter_model=Formant;cutoff=900;resonance=0.55;filter_drift=0.7;keytrack=0;filter_env=0;"
+      "osc_level=0.8;partials=24;tilt=0.9;brightness=0.9;odd_even=0.3;shimmer=0.35;strands=2;detune=3;"
+      "attack=8;release=25;air=0.1;far_decay=30;depth=0.6;master_gain=-11" },
+    { "Plucked Void",
+      "strike_level=0.55;strike_type=String;strike_decay=1.2;strike_damp=0.35;keys_depth=0.1;"
+      "osc_level=0.45;partials=12;brightness=0.4;attack=6;release=40;far_size=3;far_decay=60;far_level=1;"
+      "depth=0.95;dly_mix=0.25;dly_feedback=0.7;dly_to_far=0.6;master_gain=-11" },
+    { "Wooden Knock",
+      "strike_level=0.5;strike_type=Wood;strike_decay=0.25;strike_damp=0.8;strike_who=Keys + Brain;"
+      "brain_rate=14;brain_density=4;osc_level=0.5;partials=10;tilt=1.6;brightness=0.35;attack=9;release=28;"
+      "far_decay=35;depth=0.9;room_level=0.35;master_gain=-11" },
+    { "Bell Metal",
+      "strike_level=0.45;strike_type=Metal;strike_decay=2.5;strike_damp=0.15;keys_depth=0.15;"
+      "osc_level=0.5;partials=20;inharmonic=0.35;brightness=0.7;shimmer=0.3;attack=10;release=35;"
+      "cosmos_send=0.3;cosmos_shimmer=0.4;cosmos_return=0.5;far_decay=45;far_highcut=7000;master_gain=-12" },
+    { "Three Reeds",
+      "src1_ratio=1/1;src1_drift=3;src2_type=Additive;src2_level=0.5;src2_ratio=3/2;src2_drift=5;src2_pan=-0.5;"
+      "src2_partials=14;src2_tilt=1.1;src2_bright=0.6;src3_type=Additive;src3_level=0.45;src3_ratio=5/4;src3_drift=4;"
+      "src3_pan=0.5;src3_partials=12;src3_tilt=1.3;src3_bright=0.5;osc_level=0.55;partials=16;strands=1;"
+      "drift_rate=0.02;attack=10;release=30;far_decay=35;depth=0.7;master_gain=-12" },
+    { "Drowned Echo",
+      "dly_mix=0.5;dly_feedback=0.9;dly_absorb=0.9;dly_time_l=0.9;dly_time_r=1.3;dly_cross=0.5;dly_to_far=0.7;"
+      "dly2_mix=0.3;dly2_feedback=0.8;dly2_absorb=0.7;dly2_time_l=2.1;dly2_time_r=2.9;"
+      "osc_level=0.6;partials=14;brightness=0.6;attack=3;release=25;keys_depth=0.15;far_decay=40;master_gain=-11" },
+    { "Evening Tide",
+      "tide=8;tide_period=6;purity_drift=0.3;purity_rate=0.008;osc_level=0.65;partials=16;brightness=0.5;"
+      "shimmer=0.5;shimmer_rate=0.05;attack=16;release=40;sub_level=0.3;sub_glide=12;far_decay=50;depth=0.9;master_gain=-11" },
+    { "Turning Sky",
+      "far_rotate=0.8;far_level=1;far_size=3;far_decay=70;far_asym=0.8;phase_width=0.5;phase_rate=0.012;"
+      "osc_level=0.5;partials=12;brightness=0.45;attack=14;release=45;depth=1;width=1.4;master_gain=-11" },
 };
 }
 

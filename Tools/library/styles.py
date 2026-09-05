@@ -107,6 +107,8 @@ MODULES_BASE = {
     "src2": 0.45, "src3": 0.25, "sub": 0.45, "stack": 0.35, "room": 0.45,
     "texture": 0.20, "usertable": 0.20, "keys": 0.10, "delay2": 0.20,
     "coherence": 0.15, "portamento": 0.10,
+    # the Rich refinements: how often a preset of this style reaches for them
+    "phase": 0.45, "blur": 0.15, "filtermodel": 0.35, "strike": 0.12, "absorb": 0.5, "tide": 0.3, "rotate": 0.35,
 }
 
 # Word pools the preset names are built from: "<first> <second>".

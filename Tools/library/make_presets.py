@@ -36,7 +36,9 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 
 # Choice names, exactly as Core/src/Params.cpp, Sources.cpp and ZPlane.cpp spell them.
 STACKS = ["Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics"]
-SOURCE_TYPES = ["Wavetable", "FM", "Texture", "Noise", "Noise"]   # noise twice: an ambient synth lives in it
+SOURCE_TYPES = ["Wavetable", "FM", "Texture", "Noise", "Noise", "Additive"]   # noise twice: an ambient synth lives in it
+FILTER_MODELS = ["LP 6", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "Comb", "Formant"]
+STRIKE_TYPES = ["String", "String", "Wood", "Metal"]
 TABLES = ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"]
 SLOT_RATIOS = ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"]
 Z_SHAPES = ["Vowel Morph", "Choir", "Nasal", "Low Sweep", "High Sweep", "Band Sweep", "Phaser",
@@ -337,6 +339,8 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
                 kind = "Wavetable"
         p[pre + "type"] = kind
         p[pre + "level"] = u(rng, 0.15, 0.55)
+        if kind != "Noise" and rng.random() < 0.4:   # independent fine drift: sources that beat like an ensemble
+            p[pre + "drift"] = logu(rng, 0.8, 10.0)
         p[pre + "octave"] = rng.choice([-2, -1, 0, 0, 0, 1])
         p[pre + "ratio"] = SLOT_RATIOS[rng.randrange(len(SLOT_RATIOS))]
         p[pre + "pan"] = u(rng, -0.8, 0.8)
@@ -360,6 +364,18 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         elif kind == "FM":
             p[pre + "fm_ratio"] = rng.choice([0.5, 1.0, 1.5, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0])
             p[pre + "fm_index"] = logu(rng, 0.3, 3.5)
+        elif kind == "Additive":
+            # a second (or third) additive bank on its own just ratio: the classic Rich stack, but
+            # with its own spectrum and its own slow pitch drift
+            p[pre + "partials"] = rng.randint(6, 28)
+            p[pre + "tilt"] = u(rng, 0.8, 2.2)
+            p[pre + "bright"] = u(rng, 0.3, 0.9)
+            p[pre + "odd_even"] = u(rng, -0.5, 0.5) if rng.random() < 0.5 else 0.0
+            if rng.random() < 0.3:
+                p[pre + "inharmonic"] = u(rng, 0.05, 0.4)
+            p[pre + "shimmer"] = u(rng, 0.2, 0.6)
+            p[pre + "shimmer_rate"] = logu(rng, 0.03, 0.4)
+            p[pre + "drift"] = logu(rng, 1.0, 8.0)
         else:                                            # Texture
             grain_ms = logu(rng, 60.0, 800.0)
             density = logu(rng, 3.0, 40.0)
@@ -475,6 +491,45 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
     if rng.random() < 0.25:
         p["purity_drift"] = u(rng, 0.1, 0.5)
         p["purity_rate"] = logu(rng, 0.003, 0.05)
+
+    # The Rich refinements ------------------------------------------------------------------
+    if on("phase"):                                  # the binaural phase field, slow
+        p["phase_width"] = u(rng, 0.2, 0.8)
+        p["phase_rate"] = logu(rng, 0.006, 0.08)
+    if float(p.get("breath", 0.0)) > 0.05 and rng.random() < 0.4:
+        p["doppler"] = u(rng, 0.2, 0.8)
+    if on("blur"):                                   # attacks wiped into texture
+        p["blur_mix"] = u(rng, 0.2, 0.6)
+        p["blur_smear"] = u(rng, 0.3, 0.9)
+    if on("filtermodel"):
+        model = FILTER_MODELS[rng.randrange(len(FILTER_MODELS))]
+        p["filter_model"] = model
+        if model == "Comb":
+            p["cutoff"] = logu(rng, 80.0, 700.0); p["resonance"] = u(rng, 0.4, 0.8); p["keytrack"] = u(rng, 0.5, 1.0)
+        elif model == "Formant":
+            p["cutoff"] = logu(rng, 150.0, 6000.0); p["resonance"] = u(rng, 0.3, 0.8); p["filter_drift"] = u(rng, 0.4, 1.0)
+        elif model == "HP 12":
+            p["cutoff"] = logu(rng, 60.0, 400.0)
+        elif model in ("BP 12", "Notch", "Peak"):
+            p["cutoff"] = logu(rng, 200.0, 3000.0); p["resonance"] = u(rng, 0.3, 0.8); p["filter_drift"] = u(rng, 0.3, 0.9)
+        elif model == "Ladder":
+            p["resonance"] = u(rng, 0.3, 0.85); p["filter_drive"] = u(rng, 0.0, 0.5)
+    if on("strike") or (on("keys") and rng.random() < 0.5):   # the struck foreground against the vast background
+        p["strike_level"] = u(rng, 0.2, 0.6)
+        p["strike_type"] = STRIKE_TYPES[rng.randrange(len(STRIKE_TYPES))]
+        p["strike_decay"] = logu(rng, 0.1, 1.8)
+        p["strike_damp"] = u(rng, 0.15, 0.8)
+        if rng.random() < 0.3:
+            p["strike_who"] = "Keys + Brain"
+    if on("absorb"):                                 # echoes that drown instead of merely fading
+        p["dly_absorb"] = u(rng, 0.3, 1.0)
+        if "dly2_mix" in p:
+            p["dly2_absorb"] = u(rng, 0.3, 1.0)
+    if on("tide"):                                   # the whole instrument leans over minutes
+        p["tide"] = logu(rng, 2.0, 12.0)
+        p["tide_period"] = logu(rng, 4.0, 30.0)
+    if on("rotate"):                                 # the background turns
+        p["far_rotate"] = u(rng, 0.2, 0.8)
     p["seed"] = rng.randrange(1, 9999)
 
     # brain_high must stay above brain_low, and hold_max above hold_min

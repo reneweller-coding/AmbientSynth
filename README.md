@@ -79,6 +79,15 @@ delays, ensemble, cloud, brain, arc, grain density -- has a Sync choice from
 head, from MIDI clock at the input, or from the synth's own clock (Tempo /
 Run in the Conductor's CLOCK tab), which is what the standalone runs on.
 
+**The Rich refinements.** A binaural phase field per voice (Phase Width: the
+room seems to change size rather than the sound to move), Doppler on the
+breathing distance, a Blur that wipes attacks into texture on the near bus, a
+Formant filter model, a Strike layer (plucked string, wooden knock, struck
+metal at note-on, always in the foreground), an independent pitch drift per
+source, Absorb in the delay feedback (echoes that drown), a pitch Tide over
+minutes, a turning far field, and golden-ratio LFO defaults. Ten built-in
+"rich studies" presets show them; the library uses them per style.
+
 **The editor.** One page, nothing scrolls, the corner zooms: two columns of
 sections, and rows of a kind -- the three sources, the filters, the effect
 pairs, the conductor's tables, morph and macros -- page through tabs. Each

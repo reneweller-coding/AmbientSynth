@@ -66,8 +66,11 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     toB.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(1, selected); };
     star.onClick = [this] { if (selected >= 0) { proc.setFavourite(selected, !proc.isFavourite(selected)); applyFilter(); } };
     onlyFavourites.onClick = [this] { applyFilter(); };
+    hideDull.onClick = [this] { applyFilter(); };
+    hideDull.setTooltip("Hides presets that measured as barely moving and barely wide -- the dull tail of a generated library");
     for (auto* b : { &load, &toA, &toB, &star }) addAndMakeVisible(*b);
     addAndMakeVisible(onlyFavourites);
+    addAndMakeVisible(hideDull);
 
     // Classic columns: Family | Character | Motion & density | Features. A click narrows,
     // several rows in one column combine with OR, columns combine with AND, "All" clears.
@@ -210,6 +213,9 @@ void AmbientSynthEditor::BrowseView::applyFilter()
         const PresetMeta& m = presetMeta(i);
         if (needle.isNotEmpty() && !juce::String(preset(i).name).toLowerCase().contains(needle)) continue;
         if (onlyFavourites.getToggleState() && !proc.isFavourite(i)) continue;
+        // Dull, measured rather than judged: in the bottom fifth for movement and for width, and
+        // not carrying the sparseness that would make that a deliberate character.
+        if (hideDull.getToggleState() && m.motion < 0.2f && m.width < 0.2f && m.density < 0.5f) continue;
         if (mode == 1) {
             if (fam >= 0 && m.family != fam) continue;
             if ((m.tags & need) != need) continue;
@@ -337,7 +343,8 @@ void AmbientSynthEditor::BrowseView::resized()
     search.setBounds(top.removeFromLeft(180)); top.removeFromLeft(6);
     if (mode == 1) { family.setBounds(top.removeFromLeft(150)); top.removeFromLeft(6); }
     sort.setBounds(top.removeFromLeft(150)); top.removeFromLeft(12);
-    onlyFavourites.setBounds(top.removeFromLeft(140));
+    onlyFavourites.setBounds(top.removeFromLeft(130));
+    hideDull.setBounds(top.removeFromLeft(160));
     area.removeFromTop(8);
     auto buttons = area.removeFromBottom(26);
     load.setBounds(buttons.removeFromLeft(80)); buttons.removeFromLeft(6);

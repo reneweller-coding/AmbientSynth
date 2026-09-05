@@ -646,6 +646,14 @@ by the setting that exists to slow the performer's hand down.
 
 ### Measuring without a temporary file
 
+The measurement line also carries a `hash=` of the audio itself. Descriptors are averages: two
+renders can agree on every one of them and still not be the same sound, and a regression that
+moves energy around without changing its statistics would pass unnoticed. The samples are
+quantised to about -120 dB before hashing, so a real change in what is played trips it while the
+last bit of a sum does not (the vectorised partial bank moves those, and moving them is not a
+change). Verified: the same render twice gives the same hash, and a cutoff moved by one hertz
+gives a different one.
+
 `ambient_render --measure` renders and prints the descriptors as one line instead of writing a
 WAV. The measurement pass over the library used to render each preset to a temporary file and
 read it straight back: five thousand presets times twelve seconds of stereo float is twenty-three

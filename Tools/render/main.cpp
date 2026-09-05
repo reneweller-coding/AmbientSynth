@@ -148,11 +148,22 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
     }
     const double dc = std::fabs(0.5 * (ml + mr));
     const double monoLoss = 20.0 * std::log10((std::sqrt(stSq / cnt) + 1e-12) / (std::sqrt(monoSq / cnt) + 1e-12));
+    // A fingerprint of the audio itself. The descriptors are averages: two renders can agree on
+    // every one of them and still not be the same sound. The samples are quantised to about
+    // -120 dB first, so this catches a change in what is played and not the last bit of a sum
+    // (the vectorised partial bank moves those, and moving them is not a change).
+    uint64_t h = 1469598103934665603ull;
+    for (size_t i = 0; i < n; ++i) {
+        const int32_t q[2] = { static_cast<int32_t>(std::lround(L[i] * 1048576.0f)),
+                               static_cast<int32_t>(std::lround(R[i] * 1048576.0f)) };
+        for (int k = 0; k < 2; ++k)
+            for (int b = 0; b < 4; ++b) { h ^= static_cast<uint64_t>((q[k] >> (b * 8)) & 0xff); h *= 1099511628211ull; }
+    }
     std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d "
-                "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f\n",
+                "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f hash=%016llx\n",
                 20.0 * std::log10(rms + 1e-12), centroid * inv, flatness * inv,
                 frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices,
-                peak, jump, dc, monoLoss);
+                peak, jump, dc, monoLoss, static_cast<unsigned long long>(h));
 }
 
 } // namespace

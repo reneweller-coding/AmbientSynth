@@ -14,6 +14,7 @@ add_library(AmbientCore STATIC
     src/PresetMeta.cpp
     src/PresetPacks.cpp
     src/PresetMap.cpp
+    src/Modulation.cpp
     src/Convolution.cpp
     src/Route.cpp
     src/ZPlane.cpp

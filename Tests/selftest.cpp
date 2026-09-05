@@ -19,6 +19,7 @@
 #include "ambient/Route.h"
 #include "ambient/ZPlane.h"
 #include "ambient/Timeline.h"
+#include "ambient/Modulation.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -1657,6 +1658,133 @@ void testPresetPacks()
     std::filesystem::remove_all(dir, ec);
 }
 
+
+void testModulation()
+{
+    // --- LFO shapes -----------------------------------------------------------------------
+    {
+        LfoSpec sp; sp.shape = LfoShape::Sine; sp.rateHz = 1.0f;
+        CHECK(std::fabs(Lfo::shapeAt(sp, 0.0f, nullptr)) < 1e-5f, "sine starts at zero");
+        CHECK(std::fabs(Lfo::shapeAt(sp, 0.25f, nullptr) - 1.0f) < 1e-5f, "sine peaks at a quarter");
+        sp.shape = LfoShape::Triangle;
+        CHECK(std::fabs(Lfo::shapeAt(sp, 0.25f, nullptr) - 1.0f) < 1e-5f, "triangle peaks at a quarter");
+        CHECK(std::fabs(Lfo::shapeAt(sp, 0.75f, nullptr) + 1.0f) < 1e-5f, "triangle troughs at three quarters");
+        sp.shape = LfoShape::RampUp;
+        CHECK(Lfo::shapeAt(sp, 0.0f, nullptr) < -0.99f && Lfo::shapeAt(sp, 0.999f, nullptr) > 0.99f,
+              "ramp up runs -1 to 1");
+        sp.shape = LfoShape::RampDown;
+        CHECK(Lfo::shapeAt(sp, 0.0f, nullptr) > 0.99f && Lfo::shapeAt(sp, 0.999f, nullptr) < -0.99f,
+              "ramp down runs 1 to -1");
+    }
+    {   // Continuity: the standing rule of this instrument is that no modulator may step. At the
+        // control block's rate, every shape has to move smoothly even at a fast setting.
+        const float dt = 64.0f / 48000.0f;
+        for (int sh = 0; sh < kNumLfoShapes; ++sh) {
+            if (sh == static_cast<int>(LfoShape::RampUp) || sh == static_cast<int>(LfoShape::RampDown))
+                continue;                       // a ramp's wrap is its shape
+            LfoSpec sp; sp.shape = static_cast<LfoShape>(sh); sp.rateHz = 4.0f;
+            Lfo l; l.reset(7, 0.0f);
+            float prev = l.step(dt, sp, nullptr), worst = 0.0f;
+            for (int i = 0; i < 4000; ++i) {
+                const float v = l.step(dt, sp, nullptr);
+                worst = std::max(worst, std::fabs(v - prev));
+                prev = v;
+            }
+            CHECK(worst < 0.25f, "LFO shape moves continuously at the control rate");
+        }
+    }
+    {   // One cycle in twenty minutes has to be reachable, and it has to actually move.
+        LfoSpec sp; sp.shape = LfoShape::Sine; sp.rateHz = 1.0f / 1200.0f;
+        Lfo l; l.reset(1, 0.0f);
+        float v = 0.0f;
+        for (int i = 0; i < 300; ++i) v = l.step(1.0f, sp, nullptr);   // five minutes
+        CHECK(v > 0.9f, "an LFO at one cycle in twenty minutes peaks after five");
+    }
+    {   // A wavetable frame becomes an LFO curve: that is what makes any drawn curve a modulator
+        // without a second mechanism for drawable shapes.
+        std::vector<float> frames(2048);
+        for (int i = 0; i < 2048; ++i) frames[static_cast<size_t>(i)] = std::sin(kTwoPi * i / 2048.0f);
+        Wavetable t;
+        CHECK(t.analyse(frames.data(), 2048), "one-frame table for the LFO");
+        LfoSpec sp; sp.shape = LfoShape::Table;
+        const float a = Lfo::shapeAt(sp, 0.25f, &t), b = Lfo::shapeAt(sp, 0.75f, &t);
+        CHECK(a > 0.9f && b < -0.9f, "a sine frame read as an LFO shape is a sine");
+    }
+
+    // --- envelopes ------------------------------------------------------------------------
+    {
+        ModEnv e;
+        CHECK(e.parse("0:0/2:1/6:0.3/10:0"), "envelope parses");
+        CHECK(e.count() == 4, "four breakpoints");
+        CHECK(std::fabs(e.at(0.0f, EnvMode::OneShot, true)) < 1e-5f, "starts at zero");
+        CHECK(std::fabs(e.at(2.0f, EnvMode::OneShot, true) - 1.0f) < 1e-5f, "peak at its breakpoint");
+        CHECK(std::fabs(e.at(1.0f, EnvMode::OneShot, true) - 0.5f) < 1e-4f, "linear halfway up");
+        CHECK(std::fabs(e.at(99.0f, EnvMode::OneShot, true)) < 1e-5f, "holds the last value past the end");
+        char buf[256];
+        CHECK(e.write(buf, sizeof(buf)) > 0, "envelope writes");
+        ModEnv back;
+        CHECK(back.parse(buf) && back.count() == 4, "envelope round trip");
+        CHECK(std::fabs(back.at(1.0f, EnvMode::OneShot, true) - 0.5f) < 1e-3f, "round trip keeps the shape");
+        CHECK(!back.parse("nonsense"), "a malformed envelope is rejected");
+    }
+    {   // Curve, sustain and loop.
+        ModEnv e;
+        CHECK(e.parse("0:0:0.8/4:1/8:0"), "curved envelope parses");
+        CHECK(e.at(2.0f, EnvMode::OneShot, true) < 0.4f, "a positive curve dwells at the start");
+        ModEnv s;
+        CHECK(s.parse("0:0/1:1/5:0.5/9:0|s2"), "envelope with a sustain point");
+        CHECK(s.sustain() == 2, "sustain point read");
+        CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, true) - 0.5f) < 1e-4f, "held at the sustain point");
+        CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, false)) < 1e-4f, "released, it runs to the end");
+        ModEnv l;
+        CHECK(l.parse("0:0/2:1/4:0|l0-2"), "envelope with a loop");
+        CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");
+        CHECK(std::fabs(l.at(1.0f, EnvMode::Loop, true) - l.at(3.0f, EnvMode::Loop, true)) < 1e-4f,
+              "the loop repeats its segment");
+    }
+
+    // --- matrix ---------------------------------------------------------------------------
+    {
+        ModMatrix m;
+        CHECK(m.parse("lfo1>cutoff:0.4;lfo1>shimmer:0.25;env2>z_x:-0.3:macro_a;lfo3>air:0.5:none:u"),
+              "matrix parses");
+        CHECK(m.count() == 4, "four routes");
+        CHECK(m.route(0).source == ModSource::Lfo1 && m.route(0).target == ParamId::Cutoff, "first route");
+        CHECK(m.route(1).source == ModSource::Lfo1, "one source may drive several targets");
+        CHECK(m.route(2).via == ModSource::MacroA, "via source read");
+        CHECK(m.route(3).unipolar, "unipolar flag read");
+        CHECK(!m.parse("lfo9>cutoff:1"), "unknown source rejected");
+        CHECK(!m.parse("lfo1>not_a_param:1"), "unknown target rejected");
+        char buf[1024];
+        ModMatrix again;
+        CHECK(m.parse("lfo1>cutoff:0.4;env2>z_x:-0.3:macro_a") && m.write(buf, sizeof(buf)) > 0,
+              "matrix writes");
+        CHECK(again.parse(buf) && again.count() == 2 && again.route(1).via == ModSource::MacroA,
+              "matrix round trip");
+    }
+    {   // Depth is a fraction of the target's own range, so one number means the same thing on a
+        // cutoff in hertz and on a mix in 0..1.
+        ModMatrix m;
+        CHECK(m.parse("lfo1>cutoff:0.5;lfo1>dly_mix:0.5"), "two targets, one source");
+        float src[kNumModSources] = {};
+        src[static_cast<int>(ModSource::Lfo1)] = 1.0f;
+        std::vector<float> out(kNumParams, 0.0f);
+        m.apply(src, out.data());
+        const ParamDesc& c = paramDesc(ParamId::Cutoff);
+        const ParamDesc& d = paramDesc(ParamId::DelayMix);
+        CHECK(std::fabs(out[static_cast<size_t>(ParamId::Cutoff)] - 0.5f * (c.max - c.min)) < 0.01f,
+              "depth scales with the target's range");
+        CHECK(std::fabs(out[static_cast<size_t>(ParamId::DelayMix)] - 0.5f * (d.max - d.min)) < 1e-5f,
+              "and the same number on a 0..1 target");
+        CHECK(m.parse("lfo1>dly_mix:1:macro_a"), "route with a via");
+        src[static_cast<int>(ModSource::MacroA)] = -1.0f;
+        std::vector<float> off(kNumParams, 0.0f);
+        m.apply(src, off.data());
+        CHECK(std::fabs(off[static_cast<size_t>(ParamId::DelayMix)]) < 1e-6f,
+              "a via source at zero shuts the route");
+    }
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -1676,6 +1804,7 @@ int main()
     testMidSide();
     testPresets();
     testPresetPacks();
+    testModulation();
     testSpace();
     testRichCarving();
     testFeedback();

@@ -1,6 +1,7 @@
 #include "ambient/Params.h"
 #include "ambient/Filter.h"
 #include "ambient/Clock.h"
+#include "ambient/Body.h"
 #include "ambient/Sources.h"   // choice names of the source slots
 #include "ambient/ZPlane.h"    // choice names of the z-plane filter
 #include "ambient/Modulation.h"  // choice names of the LFOs and envelopes
@@ -253,6 +254,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FarHighcut,  "far_highcut",  "Tail Cut",  "Far Reverb", 500.f, 16000.f, 3500.f, 0.3f, "Hz"),
     B(ParamId::FarFreeze,   "far_freeze",   "Freeze",    "Far Reverb", false),
     F(ParamId::FarRotate,   "far_rotate",   "Rotate",    "Far Reverb", 0.f,  1.f, 0.f,  1.f,  ""),
+    F(ParamId::FarUnmask,   "far_unmask",   "Unmask",    "Far Reverb", 0.f,  1.f, 0.f,  1.f,  ""),
 
     F(ParamId::FeedbackBus,   "fb_bus",   "To Bus",   "Feedback", 0.f,   1.f,     0.f,    1.f,  ""),
     F(ParamId::FeedbackFm,    "fb_fm",    "To Pitch", "Feedback", 0.f,   1.f,     0.f,    1.f,  ""),
@@ -286,6 +288,18 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::CloudPitch,   "cloud_pitch",   "Pitch",   "Cloud", 0.f,   1.f,    0.3f,  1.f,  ""),
     F(ParamId::CloudSpray,   "cloud_spray",   "Spray",   "Cloud", 0.05f, 2.f,    0.8f,  0.5f, "s"),
     F(ParamId::CloudLevel,   "cloud_level",   "Level",   "Cloud", 0.f,   1.f,    0.7f,  1.f,  ""),
+
+    F(ParamId::BodyLevel,    "body_level",    "Body",     "Body",   0.f,   1.f,    0.f,   1.f,  ""),
+    C(ParamId::BodyMaterial, "body_material", "Material", "Body",   kBodyMaterialNames, kNumBodyMaterials, 0),
+    F(ParamId::BodyPitch,    "body_pitch",    "Pitch",    "Body",   0.25f, 4.f,    1.f,   0.5f, "x root"),
+    F(ParamId::BodyDecay,    "body_decay",    "Decay",    "Body",   0.1f,  20.f,   4.f,   0.4f, "s"),
+    F(ParamId::BodyTone,     "body_tone",     "Tone",     "Body",   0.f,   1.f,    0.4f,  1.f,  ""),
+    F(ParamId::BodySpread,   "body_spread",   "Spread",   "Body",   0.f,   1.f,    0.6f,  1.f,  ""),
+
+    F(ParamId::PatinaAmount, "patina",        "Patina",   "Patina", 0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::PatinaWow,    "patina_wow",    "Wow",      "Patina", 0.f,   1.f,    0.3f,  1.f,  ""),
+    F(ParamId::PatinaHiss,   "patina_hiss",   "Hiss",     "Patina", 0.f,   1.f,    0.2f,  1.f,  ""),
+    F(ParamId::PatinaAge,    "patina_age",    "Age",      "Patina", 0.f,   1.f,    0.3f,  1.f,  ""),
 
     F(ParamId::BassMono, "bass_mono", "Bass Mono", "Master", 40.f, 300.f, 150.f, 0.5f, "Hz"),
     F(ParamId::SideAir,  "side_air",  "Side Air",  "Master", 0.f,  6.f,   2.f,   1.f,  "dB"),

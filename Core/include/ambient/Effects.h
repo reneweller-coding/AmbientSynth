@@ -73,6 +73,50 @@ private:
     bool   freeze_ = false;
 };
 
+// The background steps aside for the foreground, band by band. A mixing engineer rides the
+// reverb return down while a line is sounding and lets it back up in the gaps; done per band it
+// is what keeps a dense pad from swallowing its own notes. Three bands (below 300 Hz, 300 Hz to
+// 2.5 kHz, above), the near bus as the side chain, fast to duck and slow to return -- the return
+// is the part the ear hears as the room breathing back in.
+class Unmask {
+public:
+    void prepare(double sampleRate);
+    void set(float amount);   // 0 = off (and then not computed at all)
+    // Ducks far[] where near[] has energy, in place.
+    void process(const float* nearL, const float* nearR, float* farL, float* farR, int n);
+    void reset();
+private:
+    struct Split { float lo = 0.0f, mid = 0.0f; };   // one-pole state per crossover per channel
+    Split  sNear_[2], sFar_[2];
+    float  env_[3] = {};                              // the near bus's band envelopes
+    float  gain_[3] = { 1.0f, 1.0f, 1.0f };           // what the far bus is multiplied by, smoothed
+    float  aCoef_ = 0.01f, rCoef_ = 0.0005f;
+    float  c1_ = 0.02f, c2_ = 0.2f;                   // crossover coefficients (300 Hz, 2.5 kHz)
+    float  amount_ = 0.0f;
+    double sr_ = 48000.0;
+};
+
+// The master's age: tape wow, the highs a worn machine loses, a noise floor that lives under the
+// music, and a gentle saturation. Every one of them is a defect, and together they are most of
+// what separates a recording from a render. Off at amount 0, and then bypassed entirely.
+class Patina {
+public:
+    void prepare(double sampleRate, uint64_t seed);
+    void set(float amount, float wow, float hiss, float age);
+    void process(float* L, float* R, int n);
+    void reset();
+private:
+    std::vector<float> bufL_, bufR_;
+    int     mask_ = 0, w_ = 0;
+    double  sr_ = 48000.0;
+    float   amount_ = 0.0f, wow_ = 0.3f, hiss_ = 0.2f, age_ = 0.3f;
+    float   lpC_ = 1.0f, lpL_ = 0.0f, lpR_ = 0.0f;
+    float   env_ = 0.0f;
+    Drifter wowDrift_;
+    double  flutterPh_ = 0.0;
+    Rng     rng_;
+};
+
 class MidSide {
 public:
     void prepare(double sampleRate);

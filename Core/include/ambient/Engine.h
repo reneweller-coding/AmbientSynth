@@ -12,6 +12,7 @@
 #include "Effects.h"
 #include "Cosmos.h"
 #include "Convolution.h"
+#include "Body.h"
 #include "Route.h"
 #include "Modulation.h"
 #include "Clock.h"
@@ -187,6 +188,11 @@ private:
     GrainCloud   cloud_;
     float        delay2Mix_ = 0.0f, delay2ToFar_ = 0.5f, cloudSend_ = 0.0f;
     Reverb       nearReverb_, farReverb_;
+    Unmask       unmask_;
+    Body         body_;
+    Patina       patina_;
+    float        bodyLevel_ = 0.0f, bodyPitch_ = 1.0f;
+    Smoother     smBody_;
     MidSide      midSide_;
     // Room (convolution) on the far plane: level, source, pre-delay ring, tail low-pass
     Convolver    room_;

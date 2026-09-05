@@ -95,6 +95,10 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
     smBlur_.setTime(0.02f, sr_);
+    smBody_.setTime(0.02f, sr_);
+    unmask_.prepare(sr_);
+    body_.prepare(sr_, 0xB0D1B0D1ull);
+    patina_.prepare(sr_, 0x9A7104ull);
     blur_.prepare(sr_, 0x5EED5EEDull);
     auxRng_.seed(0xA5A5A5A5ull);
     tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
@@ -797,6 +801,13 @@ void Engine::readParams()
     cloudSend_ = g(ParamId::CloudSend);
     nearReverb_.setSpace(0.3f, 20000.0f);
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
+    unmask_.set(g(ParamId::FarUnmask));
+    bodyLevel_ = g(ParamId::BodyLevel);
+    bodyPitch_ = g(ParamId::BodyPitch);
+    body_.set(static_cast<BodyMaterial>(clampv(static_cast<int>(std::lround(g(ParamId::BodyMaterial))), 0, kNumBodyMaterials - 1)),
+              static_cast<float>(frequencyOf(brain_.root())) * bodyPitch_ * vp_.pitchMul,
+              g(ParamId::BodyDecay), g(ParamId::BodyTone), g(ParamId::BodySpread));
+    patina_.set(g(ParamId::PatinaAmount), g(ParamId::PatinaWow), g(ParamId::PatinaHiss), g(ParamId::PatinaAge));
     farReverb_.setSpace(g(ParamId::FarAsym), g(ParamId::FarHighcut));
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
@@ -1163,6 +1174,10 @@ void Engine::renderChunk(float* L, float* R, int n)
         std::memset(sl, 0, bytes); std::memset(sr, 0, bytes);
     }
 
+    // Unmasking: the background gives way to the foreground band by band, before the two planes
+    // are summed (the near bus is the side chain, and it is finished by now).
+    unmask_.process(nl, nr, fl, fr, n);
+
     const float master = dbToGain(masterGain_);
     for (int i = 0; i < n; ++i) {
         const float far = smFarLevel_.next(farLevel_);
@@ -1289,9 +1304,20 @@ void Engine::renderChunk(float* L, float* R, int n)
             subR[i] = g * ((1.0f - subTone_) * sin01(subPhaseR_) + subTone_ * triR);
         }
     }
+    // The body: the whole mix passes through a bank of modes and their answer is added back. It
+    // sits before the mid/side stage, so its own width is treated like everything else's.
+    if (bodyLevel_ > 0.0f || smBody_.value > 1.0e-4f) {
+        float* mono = nl;   // the near bus is finished with; reuse it
+        // The bank is linear, so the level rides on its input: one smoothed multiply per sample
+        // and the body can be turned up mid-note without a step.
+        for (int i = 0; i < n; ++i) mono[i] = 0.5f * (L[i] + R[i]) * smBody_.next(bodyLevel_);
+        body_.process(mono, L, R, n, 1.0f);
+    }
     midSide_.process(L, R, n);
     if (subOn)
         for (int i = 0; i < n; ++i) { L[i] += subL[i]; R[i] += subR[i]; }
+    // The master's age, before the gain and the clipper: tape wow, lost highs, a noise floor.
+    patina_.process(L, R, n);
     // Output DC blocker at 4 Hz, below the lowest sub the Foundation can reach. Several paths
     // can leave an offset behind -- FM at an integer ratio, the asymmetric tape term, a granular
     // window over a clip that carries one, the shimmer's pitch shifter -- and an offset costs

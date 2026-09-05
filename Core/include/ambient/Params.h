@@ -62,7 +62,7 @@ enum class ParamId : int {
     // Blur: a spectral smear on the near bus itself, so an attack is wiped into texture
     BlurMix, BlurSmear,
     // Far reverb (the infinite background)
-    FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze, FarRotate,
+    FarLevel, FarSize, FarDecay, FarDamp, FarPreDelay, FarAsym, FarHighcut, FarFreeze, FarRotate, FarUnmask,
     // Feedback: the mixed output (before the master) returns, low-passed and saturated,
     // into the near bus before the filters and effects, and/or as phase modulation of every
     // partial. Throttled by the output level so it hisses and holds instead of running away.
@@ -75,6 +75,10 @@ enum class ParamId : int {
     CosmosReturn, CosmosToFar,
     // Granular cloud on the far plane
     CloudSend, CloudDensity, CloudSync, CloudSize, CloudPitch, CloudSpray, CloudLevel,
+    // Body: a bank of modes under everything -- the soundboard the pad sits on (Body.h)
+    BodyLevel, BodyMaterial, BodyPitch, BodyDecay, BodyTone, BodySpread,
+    // Patina: the master's age -- tape wow, lost highs, a noise floor, gentle saturation
+    PatinaAmount, PatinaWow, PatinaHiss, PatinaAge,
     // Mid/side master stage
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)

@@ -20,6 +20,7 @@ add_library(AmbientCore STATIC
     src/ZPlane.cpp
     src/Filter.cpp
     src/Clock.cpp
+    src/Body.cpp
     src/Help.cpp
     src/Timeline.cpp
 )

@@ -57,7 +57,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike" }, { "Air", "Filter", "Envelope", "Z-Plane" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence", "Clock" } }, {}, 1 },
     };
@@ -66,7 +66,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
-        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } } },
+        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Body", "Patina" } } },
         { 5, 0, { "BRAIN", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
     };
 
@@ -277,7 +277,8 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
-            if (s.name == "Far Reverb") s.maxUnits = 9;                      // one row with Rotate
+            if (s.name == "Far Reverb") s.maxUnits = 10;                     // one row with Rotate and Unmask
+            if (s.name == "Body") s.maxUnits = 7;                            // one row
             if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
             if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route

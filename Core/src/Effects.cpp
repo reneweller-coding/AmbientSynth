@@ -118,6 +118,138 @@ void StereoDelay::process(const float* inL, const float* inR, float* wetL, float
     }
 }
 
+// ---------------------------------------------------------------- Unmask
+
+void Unmask::prepare(double sampleRate)
+{
+    sr_ = sampleRate;
+    // Crossovers at 300 Hz and 2.5 kHz, one-pole: gentle slopes are what this wants, since the
+    // bands are only used to steer a gain, never listened to on their own.
+    c1_ = 1.0f - std::exp(-kTwoPi * 300.0f / static_cast<float>(sr_));
+    c2_ = 1.0f - std::exp(-kTwoPi * 2500.0f / static_cast<float>(sr_));
+    aCoef_ = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));    // duck in 50 ms
+    rCoef_ = 1.0f - std::exp(-1.0f / (1.20f * static_cast<float>(sr_)));    // come back over 1.2 s
+    reset();
+}
+
+void Unmask::reset()
+{
+    for (auto& s : sNear_) s = Split{};
+    for (auto& s : sFar_) s = Split{};
+    for (float& e : env_) e = 0.0f;
+    for (float& g : gain_) g = 1.0f;
+}
+
+void Unmask::set(float amount) { amount_ = clampv(amount, 0.0f, 1.0f); }
+
+void Unmask::process(const float* nearL, const float* nearR, float* farL, float* farR, int n)
+{
+    if (amount_ <= 0.0f) return;
+    const float depth = 0.85f * amount_;   // at most about 16 dB of duck
+    for (int i = 0; i < n; ++i) {
+        // Near bus, mono, into three bands.
+        const float x = 0.5f * (nearL[i] + nearR[i]);
+        sNear_[0].lo += c1_ * (x - sNear_[0].lo);
+        sNear_[0].mid += c2_ * (x - sNear_[0].mid);
+        const float nb[3] = { sNear_[0].lo, sNear_[0].mid - sNear_[0].lo, x - sNear_[0].mid };
+        for (int b = 0; b < 3; ++b) {
+            const float mag = std::fabs(nb[b]);
+            env_[b] += (mag > env_[b] ? aCoef_ : rCoef_) * (mag - env_[b]);
+            // A gain that falls smoothly with the foreground's level and returns on its own.
+            const float target = 1.0f / (1.0f + depth * env_[b] * 24.0f);
+            gain_[b] += (target < gain_[b] ? aCoef_ : rCoef_) * (target - gain_[b]);
+        }
+        // Far bus, the same split, each band scaled, then put back together.
+        for (int ch = 0; ch < 2; ++ch) {
+            float* f = ch == 0 ? farL : farR;
+            Split& sp = sFar_[ch];
+            const float y = f[i];
+            sp.lo += c1_ * (y - sp.lo);
+            sp.mid += c2_ * (y - sp.mid);
+            const float lo = sp.lo, mid = sp.mid - sp.lo, hi = y - sp.mid;
+            f[i] = lo * gain_[0] + mid * gain_[1] + hi * gain_[2];
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Patina
+
+void Patina::prepare(double sampleRate, uint64_t seed)
+{
+    sr_ = sampleRate;
+    const int size = 1 << 12;   // 85 ms at 48 kHz: room for the wow's swing and its centre delay
+    bufL_.assign(static_cast<size_t>(size), 0.0f);
+    bufR_.assign(static_cast<size_t>(size), 0.0f);
+    mask_ = size - 1;
+    w_ = 0;
+    rng_.seed(seed);
+    wowDrift_.init(rng_);
+    reset();
+}
+
+void Patina::reset()
+{
+    std::fill(bufL_.begin(), bufL_.end(), 0.0f);
+    std::fill(bufR_.begin(), bufR_.end(), 0.0f);
+    lpL_ = lpR_ = 0.0f;
+    env_ = 0.0f;
+    w_ = 0;
+}
+
+void Patina::set(float amount, float wow, float hiss, float age)
+{
+    amount_ = clampv(amount, 0.0f, 1.0f);
+    wow_ = clampv(wow, 0.0f, 1.0f);
+    hiss_ = clampv(hiss, 0.0f, 1.0f);
+    age_ = clampv(age, 0.0f, 1.0f);
+    // Age: the top end a worn machine and worn tape no longer carry. 20 kHz down to 4 kHz.
+    const float hc = 20000.0f * std::pow(2.0f, -2.32f * age_ * amount_);
+    lpC_ = hc >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * hc / static_cast<float>(sr_));
+}
+
+void Patina::process(float* L, float* R, int n)
+{
+    if (amount_ <= 0.0f) return;
+    const float dt = static_cast<float>(n / sr_);
+    // Wow (slow, irregular) and flutter (a steady 6 Hz), as a moving read point in the ring. Its
+    // centre delay is fixed, so the effect is a wavering pitch and not a delay.
+    const float wowV = wowDrift_.update(dt, 0.35f, rng_);
+    const float centre = 0.004f * static_cast<float>(sr_);
+    const float swing = 0.0022f * static_cast<float>(sr_) * wow_ * amount_;
+    for (int i = 0; i < n; ++i) {
+        flutterPh_ += 6.0 / sr_; if (flutterPh_ >= 1.0) flutterPh_ -= 1.0;
+        const float d = centre + swing * (0.8f * wowV + 0.2f * sin01(flutterPh_));
+        bufL_[static_cast<size_t>(w_ & mask_)] = L[i];
+        bufR_[static_cast<size_t>(w_ & mask_)] = R[i];
+        const float rp = static_cast<float>(w_) - d;
+        const int i0 = static_cast<int>(std::floor(rp));
+        const float f = rp - static_cast<float>(i0);
+        auto read = [&](const std::vector<float>& b) {
+            const float a = b[static_cast<size_t>(i0 & mask_)], c = b[static_cast<size_t>((i0 + 1) & mask_)];
+            return a + f * (c - a);
+        };
+        float l = read(bufL_), r = read(bufR_);
+        ++w_;
+        // The lost top end.
+        if (lpC_ < 1.0f) { lpL_ += lpC_ * (l - lpL_); lpR_ += lpC_ * (r - lpR_); l = lpL_; r = lpR_; }
+        // A noise floor that lives with the music: mostly constant, a little louder when the tape
+        // is being asked to carry more (that is what modulation noise is).
+        if (hiss_ > 0.0f) {
+            const float mag = std::fabs(0.5f * (l + r));
+            env_ += (mag > env_ ? 0.01f : 0.0002f) * (mag - env_);
+            const float floorLevel = hiss_ * amount_ * 0.0016f * (1.0f + 3.0f * env_);
+            l += floorLevel * rng_.bipolar();
+            r += floorLevel * rng_.bipolar();
+        }
+        // Gentle asymmetric saturation: the third harmonic a tape adds before it ever clips.
+        const float drive = 1.0f + 1.5f * amount_;
+        l = softClip(l * drive) / drive;
+        r = softClip(r * drive) / drive;
+        L[i] = l;
+        R[i] = r;
+    }
+}
+
 // ---------------------------------------------------------------- Reverb
 
 void Reverb::prepare(double sampleRate)

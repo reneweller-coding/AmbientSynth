@@ -163,6 +163,7 @@ private:
     // Room (convolution) on the far plane: level, source, pre-delay ring, tail low-pass
     Convolver    room_;
     bool         userImpulse_ = false;
+    float        masterGain_ = -6.0f;
     float        roomMaxSeconds_ = 8.0f;
     // modulation
     Lfo          lfo_[kNumLfos];

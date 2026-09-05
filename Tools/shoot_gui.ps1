@@ -21,6 +21,7 @@ if ($Page -eq "perform") { $env:AMBIENT_PERFORM = "1" } else { Remove-Item env:A
 if ($Page -eq "browse") { $env:AMBIENT_BROWSE = "1" }
 elseif ($Page -eq "browse-map") { $env:AMBIENT_BROWSE = "map" }
 else { Remove-Item env:AMBIENT_BROWSE -ErrorAction SilentlyContinue }
+if ($Page -eq "mod") { $env:AMBIENT_MOD = "1" } else { Remove-Item env:AMBIENT_MOD -ErrorAction SilentlyContinue }
 
 if ($Fresh) {
     $settings = Join-Path $env:APPDATA "AmbientSynth\AmbientSynth.settings"

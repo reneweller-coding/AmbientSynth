@@ -573,6 +573,7 @@ void Engine::readParams()
         textureInUse_.store(a, std::memory_order_release);
         vp_.texture = (a >= 0 && !textures_[a].empty()) ? &textures_[a] : nullptr;
     }
+    masterGain_     = g(ParamId::MasterGain);   // through g(), so the matrix can reach it
     subLevel_       = g(ParamId::SubLevel);
     subOctave_      = std::lround(g(ParamId::SubOctave)) == 0 ? 1 : 2;
     subGlide_       = g(ParamId::SubGlide);
@@ -989,7 +990,7 @@ void Engine::renderChunk(float* L, float* R, int n)
         std::memset(sl, 0, bytes); std::memset(sr, 0, bytes);
     }
 
-    const float master = dbToGain(effectiveParam(ParamId::MasterGain));
+    const float master = dbToGain(masterGain_);
     for (int i = 0; i < n; ++i) {
         const float far = smFarLevel_.next(farLevel_);
         L[i] = nl[i] + fl[i] * far;

@@ -19,7 +19,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AmbientSynthProcessor::creat
                 id, d.name, range, d.def,
                 juce::AudioParameterFloatAttributes()
                     .withLabel(d.unit)
-                    .withStringFromValueFunction([decimals](float v, int) { return juce::String(v, decimals); })));
+                    // A rate of 0.004 Hz printed with one decimal is "0.0": below one, show enough
+                    // digits that the number means something.
+                    .withStringFromValueFunction([decimals](float v, int) {
+                        const int dp = std::abs(v) < 1.0f ? juce::jmax(decimals, std::abs(v) < 0.1f ? 3 : 2) : decimals;
+                        return juce::String(v, dp);
+                    })));
             break;
         }
         case ParamKind::Int:

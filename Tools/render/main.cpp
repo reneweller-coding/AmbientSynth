@@ -50,12 +50,102 @@ bool writeWav(const std::string& path, const std::vector<float>& interleaved, in
 
 } // namespace
 
+// ---------------------------------------------------------------- --measure
+//
+// Renders and prints the descriptors instead of writing a file. The measurement pass over the
+// library used to render each preset to a temporary WAV and read it straight back: five thousand
+// presets times twelve seconds of stereo float is twenty-three gigabytes written and read again
+// for nothing, and all of it stayed in the file cache afterwards.
+namespace {
+
+// In-place radix-2 FFT on interleaved real/imag, n a power of two.
+void fft(std::vector<float>& re, std::vector<float>& im)
+{
+    const int n = static_cast<int>(re.size());
+    for (int i = 1, j = 0; i < n; ++i) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { std::swap(re[i], re[j]); std::swap(im[i], im[j]); }
+    }
+    for (int len = 2; len <= n; len <<= 1) {
+        const double ang = -2.0 * 3.14159265358979323846 / len;
+        const float wr = static_cast<float>(std::cos(ang)), wi = static_cast<float>(std::sin(ang));
+        for (int i = 0; i < n; i += len) {
+            float cr = 1.0f, ci = 0.0f;
+            for (int k = 0; k < len / 2; ++k) {
+                const int a = i + k, b = i + k + len / 2;
+                const float xr = re[b] * cr - im[b] * ci;
+                const float xi = re[b] * ci + im[b] * cr;
+                re[b] = re[a] - xr; im[b] = im[a] - xi;
+                re[a] += xr;        im[a] += xi;
+                const float nr = cr * wr - ci * wi;
+                ci = cr * wi + ci * wr; cr = nr;
+            }
+        }
+    }
+}
+
+// Centroid, flatness, flux, low-band share, stereo width and level of the settled half.
+void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, int voices)
+{
+    const size_t n = L.size();
+    if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%d\n", voices); return; }
+    const size_t half = n / 2;
+    const int win = 2048, hop = 1024;
+    std::vector<float> re(win), im(win), mag(win / 2 + 1), prev(win / 2 + 1, 0.0f), hann(win);
+    for (int i = 0; i < win; ++i) hann[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(6.28318530718f * i / (win - 1));
+    double centroid = 0.0, flatness = 0.0, flux = 0.0, bass = 0.0;
+    int frames = 0;
+    for (size_t start = half; start + static_cast<size_t>(win) < n; start += static_cast<size_t>(hop)) {
+        for (int i = 0; i < win; ++i) {
+            re[static_cast<size_t>(i)] = 0.5f * (L[start + static_cast<size_t>(i)] + R[start + static_cast<size_t>(i)]) * hann[static_cast<size_t>(i)];
+            im[static_cast<size_t>(i)] = 0.0f;
+        }
+        fft(re, im);
+        double sum = 0.0, wsum = 0.0, logsum = 0.0, low = 0.0, d = 0.0;
+        for (int k = 0; k <= win / 2; ++k) {
+            const float m = std::sqrt(re[static_cast<size_t>(k)] * re[static_cast<size_t>(k)] + im[static_cast<size_t>(k)] * im[static_cast<size_t>(k)]) + 1e-12f;
+            mag[static_cast<size_t>(k)] = m;
+            const double f = static_cast<double>(k) * sr / win;
+            const double p = static_cast<double>(m) * m;
+            sum += p; wsum += p * f; logsum += std::log(static_cast<double>(m));
+            if (f < 150.0) low += p;
+        }
+        if (frames > 0) {
+            double na = 0.0, nb = 0.0;
+            for (int k = 0; k <= win / 2; ++k) { na += mag[static_cast<size_t>(k)]; nb += prev[static_cast<size_t>(k)]; }
+            for (int k = 0; k <= win / 2; ++k)
+                d += std::fabs(mag[static_cast<size_t>(k)] / std::max(na, 1e-12) - prev[static_cast<size_t>(k)] / std::max(nb, 1e-12));
+            flux += d;
+        }
+        prev = mag;
+        centroid += wsum / std::max(sum, 1e-20);
+        flatness += std::exp(logsum / (win / 2 + 1)) / std::max(sum > 0.0 ? std::sqrt(sum / (win / 2 + 1)) : 1e-12, 1e-12);
+        bass += low / std::max(sum, 1e-20);
+        ++frames;
+    }
+    const double inv = 1.0 / std::max(frames, 1);
+    double sq = 0.0, ml = 0.0, mr = 0.0, vl = 0.0, vr = 0.0, cov = 0.0;
+    for (size_t i = half; i < n; ++i) { sq += L[i] * L[i] + R[i] * R[i]; ml += L[i]; mr += R[i]; }
+    const double cnt = static_cast<double>(n - half);
+    ml /= cnt; mr /= cnt;
+    for (size_t i = half; i < n; ++i) { const double a = L[i] - ml, b = R[i] - mr; vl += a * a; vr += b * b; cov += a * b; }
+    const double corr = (vl > 1e-18 && vr > 1e-18) ? cov / std::sqrt(vl * vr) : 1.0;
+    const double rms = std::sqrt(sq / (2.0 * cnt));
+    std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d\n",
+                20.0 * std::log10(rms + 1e-12), centroid * inv, flatness * inv,
+                frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices);
+}
+
+} // namespace
+
 int main(int argc, char** argv)
 {
     std::string out = "ambient.wav";
     double seconds = 60.0;
     int sr = 48000, block = 256;
-    bool stats = false, dump = false, useMap = false;
+    bool stats = false, dump = false, useMap = false, measure = false;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
@@ -74,6 +164,7 @@ int main(int argc, char** argv)
         else if (a == "--sr") sr = std::atoi(next().c_str());
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
+        else if (a == "--measure") measure = true;   // print descriptors instead of writing a file
         else if (a == "--dump") dump = true;
         else if (a == "--map") {   // render at a map position: x y [radius]
             mapX = std::atof(next().c_str()); mapY = std::atof(next().c_str());
@@ -334,6 +425,12 @@ int main(int argc, char** argv)
     const double rmsL = std::sqrt(sumSq[0] / std::max<long>(total, 1)), rmsR = std::sqrt(sumSq[1] / std::max<long>(total, 1));
     std::printf("rendered %.1f s @ %d Hz: rms %.1f / %.1f dBFS, peak %.3f, non-finite %ld, voices at end %d\n",
                 seconds, sr, 20.0 * std::log10(rmsL + 1e-20), 20.0 * std::log10(rmsR + 1e-20), peak, nans, engine.activeVoices());
+    if (measure) {   // descriptors straight from the buffer: no temporary file at all
+        std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);
+        for (size_t k = 0; k + 1 < wav.size(); k += 2) { ml[k / 2] = wav[k]; mr[k / 2] = wav[k + 1]; }
+        printMeasurements(ml, mr, sr, engine.activeVoices());
+        return nans == 0 ? 0 : 1;
+    }
     if (!writeWav(out, wav, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", out.c_str()); return 1; }
     std::printf("wrote %s\n", out.c_str());
     return nans == 0 ? 0 : 1;

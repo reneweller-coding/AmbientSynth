@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "PluginProcessor.h"
 #include "AmbientLookAndFeel.h"
+#include "ambient/Modulation.h"
 #include <vector>
 #include <memory>
 #include <map>
@@ -201,6 +202,45 @@ private:
         int selected = -1;
     };
     std::unique_ptr<BrowseView> browse_;
+    // Modulation page: the eight LFOs and six envelopes, each as a curve you can see moving,
+    // with its knobs beside it -- and the matrix underneath. A modulator you cannot see is a
+    // modulator you cannot aim, which is the whole reason the shapes are drawn here at all.
+    struct ModView : juce::Component, juce::Timer {
+        explicit ModView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        void timerCallback() override;
+
+        // One LFO or one envelope: a curve plus the controls that shape it.
+        struct Row {
+            std::vector<std::unique_ptr<juce::Component>> controls;
+            std::vector<std::unique_ptr<juce::Label>> labels;
+            std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliders;
+            std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> combos;
+            juce::Rectangle<int> curve;      // where the shape is drawn
+            juce::String title;
+        };
+        Row lfos[ambient::kNumLfos];
+        Row envs[ambient::kNumModEnvs];
+
+        void paintLfo(juce::Graphics&, int i);
+        void paintEnv(juce::Graphics&, int i);
+        ambient::LfoSpec specOf(int i) const;
+
+        AmbientSynthProcessor& proc;
+        // The matrix as text, the way the gesture mappings already are: thirty-two rows of
+        // controls would be a page of their own, and the text form is what the preset stores.
+        juce::TextEditor matrixText;
+        juce::TextButton applyMatrix{ "Apply" }, clearMatrix{ "Clear" };
+        juce::Label matrixInfo, hint;
+        void pushMatrix();
+        void pullMatrix();
+    };
+    std::unique_ptr<ModView> mod_;
+    // The page is taller than most windows -- eight LFOs, six envelopes and the matrix -- so it
+    // scrolls rather than shrinking its rows until the curves are unreadable.
+    juce::Viewport modPort_;
+    std::unique_ptr<juce::TextButton> modButton_;
     std::unique_ptr<juce::TextButton> browseButton_;
     void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();

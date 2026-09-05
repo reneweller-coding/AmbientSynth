@@ -159,6 +159,15 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*master_);
     masterAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, "master_gain", *master_);
 
+    modButton_ = std::make_unique<juce::TextButton>("Mod");
+    modButton_->setClickingTogglesState(true);
+    modButton_->onClick = [this] { setPage(modButton_->getToggleState() ? 3 : 0); };
+    addAndMakeVisible(*modButton_);
+    mod_ = std::make_unique<ModView>(proc_);
+    modPort_.setViewedComponent(mod_.get(), false);
+    modPort_.setScrollBarsShown(true, false);
+    addChildComponent(modPort_);
+
     scope_ = std::make_unique<ScopeView>(proc_);
     addAndMakeVisible(*scope_);
 
@@ -185,6 +194,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);   // open on the perform page
     {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
+        if (juce::SystemStats::getEnvironmentVariable("AMBIENT_MOD", "").isNotEmpty()) setPage(3);
         const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");
         if (br.isNotEmpty()) { setPage(2); if (br == "map") browse_->setMode(1); }
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
@@ -395,9 +405,18 @@ void AmbientSynthEditor::resized()
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
     if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
+    if (modButton_) modButton_->setBounds(1200, 8, 52, 24);
     const int W = designW_, H = juce::roundToInt(getHeight() / scale_);
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
     if (browse_) browse_->setBounds(0, kHeaderH, W, H - kHeaderH);
+    modPort_.setBounds(0, kHeaderH, W, H - kHeaderH);
+    if (mod_) {
+        // Eight LFO rows, six envelope rows and the matrix: a fixed content height, so the rows
+        // keep a size at which the curves can be read.
+        const int need = 14 + ambient::kNumLfos * 100 + 14;
+        mod_->setBounds(0, 0, juce::jmax(600, modPort_.getMaximumVisibleWidth()),
+                        juce::jmax(need, modPort_.getMaximumVisibleHeight()));
+    }
     routing_ = { 12, 40, 900, kHeaderH - 46 };
     const int scopeX = 930, scopeR = W - 300;
     if (scope_) scope_->setBounds(scopeX, 38, juce::jmax(160, scopeR - scopeX), kHeaderH - 46);
@@ -464,9 +483,320 @@ void AmbientSynthEditor::setPage(int page)
     viewport_.setVisible(page == 0);
     perform_->setVisible(page == 1);
     browse_->setVisible(page == 2);
+    modPort_.setVisible(page == 3);
     if (performButton_->getToggleState() != (page == 1)) performButton_->setToggleState(page == 1, juce::dontSendNotification);
     if (browseButton_->getToggleState() != (page == 2)) browseButton_->setToggleState(page == 2, juce::dontSendNotification);
+    if (modButton_ && modButton_->getToggleState() != (page == 3)) modButton_->setToggleState(page == 3, juce::dontSendNotification);
     if (page == 2) browse_->applyFilter();
+    if (page == 3 && mod_) mod_->pullMatrix();
+}
+
+// ---------------------------------------------------------------- modulation page
+
+AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p) : proc(p)
+{
+    auto addKnob = [this](Row& row, const char* key, const juce::String& name) {
+        const ParamDesc* d = findParam(key);
+        if (d == nullptr) return;
+        if (d->kind == ParamKind::Choice) {
+            auto cb = std::make_unique<juce::ComboBox>();
+            for (int i = 0; i < d->numChoices; ++i) cb->addItem(d->choices[i], i + 1);
+            addAndMakeVisible(*cb);
+            row.combos.push_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.apvts, key, *cb));
+            row.controls.push_back(std::move(cb));
+        } else {
+            auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+            if (d->unit[0] != 0) s->setTextValueSuffix(juce::String(" ") + d->unit);
+            s->setColour(juce::Slider::rotarySliderFillColourId, ui::accent);
+            addAndMakeVisible(*s);
+            row.sliders.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, key, *s));
+            row.controls.push_back(std::move(s));
+        }
+        auto l = std::make_unique<juce::Label>(juce::String(), name);
+        l->setJustificationType(juce::Justification::centred);
+        l->setFont(ui::body(10.5f));
+        l->setColour(juce::Label::textColourId, ui::dim);
+        addAndMakeVisible(*l);
+        row.labels.push_back(std::move(l));
+    };
+
+    for (int i = 0; i < ambient::kNumLfos; ++i) {
+        Row& r = lfos[static_cast<size_t>(i)];
+        r.title = "LFO " + juce::String(i + 1);
+        const juce::String n(i + 1);
+        addKnob(r, ("lfo" + n + "_shape").toRawUTF8(), "Shape");
+        addKnob(r, ("lfo" + n + "_rate").toRawUTF8(), "Rate");
+        addKnob(r, ("lfo" + n + "_phase").toRawUTF8(), "Phase");
+        addKnob(r, ("lfo" + n + "_depth").toRawUTF8(), "Depth");
+        addKnob(r, ("lfo" + n + "_mode").toRawUTF8(), "Mode");
+        addKnob(r, ("lfo" + n + "_table").toRawUTF8(), "Table");
+    }
+    for (int i = 0; i < ambient::kNumModEnvs; ++i) {
+        Row& r = envs[static_cast<size_t>(i)];
+        r.title = "ENV " + juce::String(i + 1);
+        const juce::String n(i + 1);
+        addKnob(r, ("env" + n + "_mode").toRawUTF8(), "Mode");
+        addKnob(r, ("env" + n + "_time").toRawUTF8(), "Time");
+        addKnob(r, ("env" + n + "_depth").toRawUTF8(), "Depth");
+    }
+
+    matrixText.setMultiLine(true, false);
+    matrixText.setReturnKeyStartsNewLine(true);
+    matrixText.setFont(ui::body(12.0f));
+    addAndMakeVisible(matrixText);
+    applyMatrix.onClick = [this] { pushMatrix(); };
+    clearMatrix.onClick = [this] { matrixText.setText({}, false); pushMatrix(); };
+    addAndMakeVisible(applyMatrix);
+    addAndMakeVisible(clearMatrix);
+    matrixInfo.setFont(ui::body(11.5f));
+    matrixInfo.setColour(juce::Label::textColourId, ui::dim);
+    addAndMakeVisible(matrixInfo);
+    hint.setText("source > target : depth [: via] [: u]     one per line, e.g.  lfo1 > cutoff : 0.25",
+                 juce::dontSendNotification);
+    hint.setFont(ui::body(11.5f));
+    hint.setColour(juce::Label::textColourId, ui::faint);
+    addAndMakeVisible(hint);
+    pullMatrix();
+    startTimerHz(30);
+}
+
+void AmbientSynthEditor::ModView::pullMatrix()
+{
+    char buf[4096];
+    const int n = proc.engine().writeModMatrix(buf, sizeof(buf));
+    juce::String t(juce::CharPointer_UTF8(buf), static_cast<size_t>(juce::jmax(0, n)));
+    matrixText.setText(t.replace(";", "\n"), false);
+    matrixInfo.setText(juce::String(proc.engine().modMatrix().count()) + " of 32 routes",
+                       juce::dontSendNotification);
+}
+
+void AmbientSynthEditor::ModView::pushMatrix()
+{
+    const juce::String t = matrixText.getText().replaceCharacters("\n", ";").removeCharacters(" ");
+    if (proc.engine().setModMatrixText(t.toRawUTF8())) {
+        matrixInfo.setColour(juce::Label::textColourId, ui::dim);
+        matrixInfo.setText(juce::String(proc.engine().modMatrix().count()) + " of 32 routes",
+                           juce::dontSendNotification);
+    } else {
+        matrixInfo.setColour(juce::Label::textColourId, juce::Colour(0xffd08a8a));
+        matrixInfo.setText("a line could not be read; the previous matrix is kept", juce::dontSendNotification);
+    }
+}
+
+void AmbientSynthEditor::ModView::timerCallback()
+{
+    if (isShowing()) repaint();
+}
+
+ambient::LfoSpec AmbientSynthEditor::ModView::specOf(int i) const
+{
+    const juce::String n(i + 1);
+    auto get = [this](const juce::String& key) {
+        auto* v = proc.apvts.getRawParameterValue(key);
+        return v != nullptr ? v->load() : 0.0f;
+    };
+    ambient::LfoSpec sp;
+    sp.shape  = static_cast<ambient::LfoShape>(juce::jlimit(0, ambient::kNumLfoShapes - 1,
+                    static_cast<int>(std::lround(get("lfo" + n + "_shape")))));
+    sp.rateHz = get("lfo" + n + "_rate");
+    sp.phase  = get("lfo" + n + "_phase");
+    sp.depth  = get("lfo" + n + "_depth");
+    sp.table  = static_cast<int>(std::lround(get("lfo" + n + "_table")));
+    return sp;
+}
+
+namespace {
+void curveFrame(juce::Graphics& g, juce::Rectangle<int> r, bool lit)
+{
+    g.setColour(ui::bg0.withAlpha(0.6f));
+    g.fillRoundedRectangle(r.toFloat(), 5.0f);
+    g.setColour(lit ? ui::accent.withAlpha(0.35f) : ui::cardEdge);
+    g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 5.0f, 1.0f);
+    g.setColour(ui::track.withAlpha(0.7f));
+    g.drawLine(static_cast<float>(r.getX() + 4), r.toFloat().getCentreY(),
+               static_cast<float>(r.getRight() - 4), r.toFloat().getCentreY(), 1.0f);
+}
+}
+
+void AmbientSynthEditor::ModView::paintLfo(juce::Graphics& g, int i)
+{
+    const Row& row = lfos[static_cast<size_t>(i)];
+    const auto r = row.curve;
+    if (r.isEmpty()) return;
+    const ambient::LfoSpec sp = specOf(i);
+    const bool lit = sp.depth > 0.001f;
+    curveFrame(g, r, lit);
+
+    // One cycle of the shape. Random and Steps need the live oscillator, or the picture would be
+    // a shape the instrument is not actually playing.
+    const ambient::Lfo& live = proc.engine().lfo(i);
+    juce::Path p;
+    const float x0 = static_cast<float>(r.getX() + 5), w = static_cast<float>(r.getWidth() - 10);
+    const float cy = r.toFloat().getCentreY(), h = r.getHeight() * 0.38f;
+    const int steps = juce::jlimit(64, 400, r.getWidth());
+    for (int s = 0; s <= steps; ++s) {
+        const float t = static_cast<float>(s) / static_cast<float>(steps);
+        const float v = ambient::Lfo::shapeAt(sp, t + sp.phase, nullptr, &live) * sp.depth;
+        const float y = cy - juce::jlimit(-1.0f, 1.0f, v) * h;
+        if (s == 0) p.startNewSubPath(x0 + t * w, y); else p.lineTo(x0 + t * w, y);
+    }
+    g.setColour(ui::accent.withAlpha(lit ? 0.22f : 0.08f));
+    g.strokePath(p, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(lit ? ui::accent : ui::faint);
+    g.strokePath(p, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // The running dot: where the oscillator is right now.
+    const float ph = proc.engine().lfoPhase(i);
+    const float v = proc.engine().modSource(static_cast<int>(ambient::ModSource::Lfo1) + i);
+    const float dx = x0 + ph * w, dy = cy - juce::jlimit(-1.0f, 1.0f, v) * h;
+    g.setColour(ui::live.withAlpha(0.30f));
+    g.fillEllipse(dx - 7.0f, dy - 7.0f, 14.0f, 14.0f);
+    g.setColour(ui::live);
+    g.fillEllipse(dx - 3.0f, dy - 3.0f, 6.0f, 6.0f);
+
+    // Period, because "0.004 Hz" tells nobody anything.
+    const float hz = juce::jmax(1.0e-5f, sp.rateHz);
+    const float period = 1.0f / hz;
+    const juce::String txt = period >= 90.0f ? juce::String(period / 60.0f, 1) + " min"
+                                             : juce::String(period, period < 10.0f ? 2 : 1) + " s";
+    g.setColour(ui::dim);
+    g.setFont(ui::body(10.5f));
+    g.drawText(txt, r.reduced(8, 4), juce::Justification::topRight, false);
+    g.setColour(lit ? ui::text : ui::faint);
+    g.setFont(ui::title(11.0f));
+    g.drawText(row.title, r.reduced(8, 4), juce::Justification::topLeft, false);
+}
+
+void AmbientSynthEditor::ModView::paintEnv(juce::Graphics& g, int i)
+{
+    const Row& row = envs[static_cast<size_t>(i)];
+    const auto r = row.curve;
+    if (r.isEmpty()) return;
+    const ambient::ModEnv& e = proc.engine().envShape(i);
+    const juce::String n(i + 1);
+    auto get = [this](const juce::String& key) {
+        auto* v = proc.apvts.getRawParameterValue(key);
+        return v != nullptr ? v->load() : 0.0f;
+    };
+    const float depth = get("env" + n + "_depth");
+    const float scale = juce::jmax(0.01f, get("env" + n + "_time"));
+    const auto mode = static_cast<ambient::EnvMode>(juce::jlimit(0, ambient::kNumEnvModes - 1,
+                          static_cast<int>(std::lround(get("env" + n + "_mode")))));
+    const bool lit = depth > 0.001f && e.count() > 1;
+    curveFrame(g, r, lit);
+
+    const float x0 = static_cast<float>(r.getX() + 5), w = static_cast<float>(r.getWidth() - 10);
+    const float cy = r.toFloat().getCentreY(), h = r.getHeight() * 0.38f;
+    const float len = juce::jmax(0.001f, e.length());
+
+    // The loop region as a lighter band, so a looping shape reads as one at a glance.
+    if (e.loopFrom() >= 0 && e.loopTo() > e.loopFrom() && e.loopTo() < e.count()) {
+        const float a = e.point(e.loopFrom()).time / len, b = e.point(e.loopTo()).time / len;
+        g.setColour(ui::accent.withAlpha(0.07f));
+        g.fillRect(x0 + a * w, static_cast<float>(r.getY() + 4), (b - a) * w, static_cast<float>(r.getHeight() - 8));
+    }
+
+    juce::Path p;
+    const int steps = juce::jlimit(64, 400, r.getWidth());
+    for (int s = 0; s <= steps; ++s) {
+        const float t = static_cast<float>(s) / static_cast<float>(steps) * len;
+        const float v = e.at(t, ambient::EnvMode::OneShot, true) * depth;
+        const float y = cy - juce::jlimit(-1.0f, 1.0f, v) * h;
+        const float x = x0 + (t / len) * w;
+        if (s == 0) p.startNewSubPath(x, y); else p.lineTo(x, y);
+    }
+    g.setColour(ui::foreCol.withAlpha(lit ? 0.22f : 0.08f));
+    g.strokePath(p, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(lit ? ui::foreCol : ui::faint);
+    g.strokePath(p, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Breakpoints, and the sustain point as a ring.
+    for (int k = 0; k < e.count(); ++k) {
+        const ambient::EnvPoint& pt = e.point(k);
+        const float x = x0 + (pt.time / len) * w;
+        const float y = cy - juce::jlimit(-1.0f, 1.0f, pt.value * depth) * h;
+        g.setColour(lit ? ui::foreCol.withAlpha(0.8f) : ui::faint);
+        g.fillEllipse(x - 2.5f, y - 2.5f, 5.0f, 5.0f);
+        if (k == e.sustain()) { g.setColour(ui::live); g.drawEllipse(x - 5.0f, y - 5.0f, 10.0f, 10.0f, 1.4f); }
+    }
+
+    // Where the envelope is now, on its phrase clock.
+    const float t = proc.engine().envTime() / scale;
+    if (lit && t <= len * 1.02f) {
+        const float v = proc.engine().modSource(static_cast<int>(ambient::ModSource::Env1) + i);
+        const float dx = x0 + juce::jlimit(0.0f, 1.0f, t / len) * w;
+        const float dy = cy - juce::jlimit(-1.0f, 1.0f, v) * h;
+        g.setColour(ui::live.withAlpha(0.30f));
+        g.fillEllipse(dx - 7.0f, dy - 7.0f, 14.0f, 14.0f);
+        g.setColour(ui::live);
+        g.fillEllipse(dx - 3.0f, dy - 3.0f, 6.0f, 6.0f);
+    }
+
+    g.setColour(ui::dim);
+    g.setFont(ui::body(10.5f));
+    g.drawText(juce::String(len * scale, len * scale < 10.0f ? 1 : 0) + " s   "
+                   + juce::String(ambient::kEnvModeNames[static_cast<int>(mode)]),
+               r.reduced(8, 4), juce::Justification::topRight, false);
+    g.setColour(lit ? ui::text : ui::faint);
+    g.setFont(ui::title(11.0f));
+    g.drawText(row.title, r.reduced(8, 4), juce::Justification::topLeft, false);
+}
+
+void AmbientSynthEditor::ModView::paint(juce::Graphics& g)
+{
+    g.fillAll(ui::bg0);
+    for (int i = 0; i < ambient::kNumLfos; ++i) paintLfo(g, i);
+    for (int i = 0; i < ambient::kNumModEnvs; ++i) paintEnv(g, i);
+    g.setColour(ui::text);
+    g.setFont(ui::title(12.0f));
+    g.drawText("MATRIX", matrixText.getX(), matrixText.getY() - 20, 200, 16, juce::Justification::centredLeft);
+}
+
+void AmbientSynthEditor::ModView::resized()
+{
+    auto area = getLocalBounds().reduced(14);
+    auto left = area.removeFromLeft(area.getWidth() * 55 / 100);
+    area.removeFromLeft(14);
+
+    auto layoutRow = [](Row& row, juce::Rectangle<int> r, int curveWidth) {
+        row.curve = r.removeFromLeft(curveWidth);
+        r.removeFromLeft(10);
+        const int n = juce::jmax(1, static_cast<int>(row.controls.size()));
+        const int cw = r.getWidth() / n;
+        for (int k = 0; k < n; ++k) {
+            auto cell = r.removeFromLeft(cw);
+            row.labels[static_cast<size_t>(k)]->setBounds(cell.removeFromBottom(13));
+            if (dynamic_cast<juce::ComboBox*>(row.controls[static_cast<size_t>(k)].get()) != nullptr)
+                row.controls[static_cast<size_t>(k)]->setBounds(cell.withSizeKeepingCentre(cell.getWidth() - 4, 22));
+            else
+                row.controls[static_cast<size_t>(k)]->setBounds(cell.reduced(3, 1));
+        }
+    };
+
+    const int lfoH = 94;
+    for (int i = 0; i < ambient::kNumLfos; ++i) {
+        auto r = left.removeFromTop(lfoH);
+        left.removeFromTop(6);
+        layoutRow(lfos[static_cast<size_t>(i)], r, juce::jmax(120, r.getWidth() * 40 / 100));
+    }
+
+    auto matrix = area.removeFromBottom(juce::jmax(170, area.getHeight() - 6 * 100));
+    const int envH = 94;
+    for (int i = 0; i < ambient::kNumModEnvs; ++i) {
+        auto r = area.removeFromTop(envH);
+        area.removeFromTop(6);
+        layoutRow(envs[static_cast<size_t>(i)], r, juce::jmax(120, r.getWidth() * 52 / 100));
+    }
+
+    matrix.removeFromTop(24);
+    auto bottom = matrix.removeFromBottom(26);
+    hint.setBounds(matrix.removeFromBottom(18));
+    matrixText.setBounds(matrix);
+    applyMatrix.setBounds(bottom.removeFromLeft(74));
+    bottom.removeFromLeft(8);
+    clearMatrix.setBounds(bottom.removeFromLeft(74));
+    bottom.removeFromLeft(12);
+    matrixInfo.setBounds(bottom);
 }
 
 // ---------------------------------------------------------------- browse page

@@ -25,10 +25,8 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 
 import numpy as np
-import soundfile as sf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -44,6 +42,12 @@ TARGET_LO = -30.0
 GAIN_MIN, GAIN_MAX = -40.0, 12.0
 
 
+# Every field of a pack line, in order. Reading a short list and writing it back is how the
+# impulse, the matrix and the envelope shapes were silently dropped from all 5000 presets: the
+# measurement pass rewrote each line with five fields instead of eight.
+FIELDS = ["name", "settings", "meta", "texture", "wavetable", "impulse", "mod", "envs"]
+
+
 def read_pack(path):
     head, rows = [], []
     for line in open(path, encoding="utf-8"):
@@ -52,9 +56,9 @@ def read_pack(path):
             head.append(t)
             continue
         f = t.split("|")
-        while len(f) < 5:
+        while len(f) < len(FIELDS):
             f.append("")
-        rows.append({"name": f[0], "settings": f[1], "meta": f[2], "texture": f[3], "wavetable": f[4]})
+        rows.append({k: f[i] for i, k in enumerate(FIELDS)})
     return head, rows
 
 
@@ -63,54 +67,44 @@ def write_pack(path, head, rows):
         for h in head:
             f.write(h + "\n")
         for r in rows:
-            f.write(f"{r['name']}|{r['settings']}|{r['meta']}|{r['texture']}|{r['wavetable']}\n")
+            f.write("|".join(r[k] for k in FIELDS) + "\n")
 
 
-def describe(x, sr):
-    """Spectral centroid, flatness, flux, stereo width and low-band energy of the settled half."""
-    tail = x[len(x) // 2:]
-    mono = tail.mean(axis=1)
-    win = 2048
-    hop = 1024
-    n = max(1, (len(mono) - win) // hop)
-    mags = []
-    for i in range(n):
-        seg = mono[i * hop:i * hop + win] * np.hanning(win)
-        mags.append(np.abs(np.fft.rfft(seg)) + 1e-12)
-    M = np.array(mags)
-    f = np.fft.rfftfreq(win, 1.0 / sr)
-    e = M ** 2
-    centroid = float(np.mean((e * f).sum(axis=1) / e.sum(axis=1)))
-    flatness = float(np.mean(np.exp(np.log(M).mean(axis=1)) / M.mean(axis=1)))
-    flux = float(np.mean(np.abs(np.diff(M / M.sum(axis=1, keepdims=True), axis=0)).sum(axis=1))) if len(M) > 1 else 0.0
-    bass = float(np.mean(e[:, f < 150].sum(axis=1) / e.sum(axis=1)))
-    if tail.shape[1] > 1 and tail[:, 0].std() > 1e-9 and tail[:, 1].std() > 1e-9:
-        width = 1.0 - abs(float(np.corrcoef(tail[:, 0], tail[:, 1])[0, 1]))
-    else:
-        width = 0.0
-    rms_db = float(20 * np.log10(np.sqrt((tail ** 2).mean()) + 1e-12))
-    return {"centroid": centroid, "flatness": flatness, "flux": flux, "bass": bass,
-            "width": width, "rms_db": rms_db}
+MEASURE = re.compile(r"^measure: (.*)$", re.M)
 
 
-VOICES = re.compile(r"voices at end (\d+)")
+# Renders run below normal priority. Five of them at full speed on a 24-thread machine still
+# made the desktop stutter, and a batch that takes twenty minutes must not cost the machine.
+LOW_PRIORITY = {"creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {}
 
 
 def render(name, packs, seconds):
-    with tempfile.TemporaryDirectory() as td:
-        wav = os.path.join(td, "p.wav")
-        res = subprocess.run([RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
-                              "--notes", "45,52,59", "--set", "brain_rate=6", "--out", wav],
-                             capture_output=True, text=True, encoding="utf-8", errors="replace")
-        if res.returncode != 0 or not os.path.isfile(wav):
-            return None
-        x, sr = sf.read(wav, dtype="float32", always_2d=True)
-        m = VOICES.search(res.stdout or "")
-    if not np.all(np.isfinite(x)):
+    """The synth measures its own render and prints one line. It used to write a twelve-second
+    stereo WAV to a temporary file and read it straight back -- five thousand presets is
+    twenty-three gigabytes written and read for nothing, and every byte stayed in the file cache
+    afterwards, which is what made the machine unusable."""
+    res = subprocess.run([RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
+                          "--notes", "45,52,59", "--set", "brain_rate=6", "--measure"],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace",
+                         **LOW_PRIORITY)
+    if res.returncode != 0:
         return None
-    d = describe(x, sr)
-    d["voices"] = float(m.group(1)) if m else 0.0
+    m = MEASURE.search(res.stdout or "")
+    if not m:
+        return None
+    d = {}
+    for tok in m.group(1).split():
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            try:
+                d[k] = float(v)
+            except ValueError:
+                return None
+    if not {"rms", "centroid", "flatness", "flux", "bass", "width", "voices"} <= set(d):
+        return None
+    d["rms_db"] = d.pop("rms")
     return d
+
 
 
 def set_gain(settings, gain_db):
@@ -162,7 +156,8 @@ def tag_bits(settings, d):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--packs", default=os.path.join(ROOT, "Library", "Packs"))
-    ap.add_argument("--jobs", type=int, default=6)
+    ap.add_argument("--jobs", type=int, default=3,
+                    help="renders in parallel; three leaves a 24-thread machine usable")
     ap.add_argument("--seconds", type=float, default=12.0)
     ap.add_argument("--limit", type=int, default=0, help="only the first N presets (a dry run)")
     a = ap.parse_args()
@@ -229,7 +224,12 @@ def main():
             head.insert(1, "# Descriptors and map positions measured by Tools/library/measure_packs.py "
                            "from a 12 s render of every preset.")
         write_pack(os.path.join(a.packs, name), head, rr)
-    print(f"rewrote {len(packs)} packs")
+    # Report what actually survived the rewrite: dropping a field silently is exactly how the
+    # impulses, the matrix and the envelope shapes disappeared from all 5000 presets once.
+    kept = {k: sum(1 for _, _, rr in packs for r in rr if r.get(k, "").strip("~ "))
+            for k in ("texture", "wavetable", "impulse", "mod", "envs")}
+    print(f"rewrote {len(packs)} packs; presets carrying "
+          + ", ".join(f"{k} {v}" for k, v in kept.items()))
     return 1 if bad else 0
 
 

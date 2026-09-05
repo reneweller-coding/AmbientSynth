@@ -603,6 +603,18 @@ into the automation list for very little gain.
 Modulation is added after the inertia glide: a modulator moves at its own rate, it is not slewed
 by the setting that exists to slow the performer's hand down.
 
+### Measuring without a temporary file
+
+`ambient_render --measure` renders and prints the descriptors as one line instead of writing a
+WAV. The measurement pass over the library used to render each preset to a temporary file and
+read it straight back: five thousand presets times twelve seconds of stereo float is twenty-three
+gigabytes written and read for nothing, and all of it stayed in the file cache. On a machine with
+64 GB that filled the standby list to 38 GB, at which point Windows began trimming the working
+sets of the applications on screen and switching between them stuttered. The WAV reader also asks
+for `FILE_FLAG_SEQUENTIAL_SCAN`, so the clips it reads are aged out of the cache instead of kept.
+Measured afterwards: a full pass grows the standby list by well under a gigabyte instead of
+tens of them.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

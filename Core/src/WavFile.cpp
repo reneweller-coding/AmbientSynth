@@ -2,8 +2,39 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#if defined(_WIN32)
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <windows.h>
+  #include <io.h>
+  #include <fcntl.h>
+#endif
 
 namespace ambient {
+
+namespace {
+// A sample is read once and then never again, but the file cache has no way of knowing that: a
+// batch that renders five thousand presets reads eleven gigabytes of clips and impulses, and
+// every byte of it stays resident afterwards. Windows filled its standby list to 38 GB that way
+// and started trimming the working sets of the applications on screen instead.
+// FILE_FLAG_SEQUENTIAL_SCAN tells the cache manager to age these pages out immediately.
+FILE* openRead(const char* path)
+{
+#if defined(_WIN32)
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return std::fopen(path, "rb");   // fall back rather than fail
+    const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(h), _O_RDONLY | _O_BINARY);
+    if (fd < 0) { CloseHandle(h); return std::fopen(path, "rb"); }
+    FILE* f = _fdopen(fd, "rb");
+    if (f == nullptr) { _close(fd); return std::fopen(path, "rb"); }
+    return f;
+#else
+    return std::fopen(path, "rb");
+#endif
+}
+} // namespace
 
 bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
 {
@@ -18,7 +49,7 @@ bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
 bool readWavChannels(const char* path, std::vector<std::vector<float>>& channelsOut, int& sampleRate)
 {
     channelsOut.clear();
-    FILE* f = std::fopen(path, "rb");
+    FILE* f = openRead(path);
     if (!f) return false;
     auto rd32 = [&](uint32_t& v) { return std::fread(&v, 4, 1, f) == 1; };
     auto rd16 = [&](uint16_t& v) { return std::fread(&v, 2, 1, f) == 1; };

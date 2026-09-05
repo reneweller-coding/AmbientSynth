@@ -35,6 +35,10 @@ from analyze import read_wav  # noqa: E402
 LIMITS = {"rms_db": -12.0, "peak": 0.98, "jump": 0.30, "dc": 0.02, "silent_db": -60.0, "mono_loss": 6.0}
 
 
+# Renders run below normal priority, so a long batch does not make the machine unusable.
+LOW_PRIORITY = {"creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {}
+
+
 def check_preset(name, seconds, packs=None):
     with tempfile.TemporaryDirectory() as td:
         wav = os.path.join(td, "p.wav")
@@ -43,7 +47,8 @@ def check_preset(name, seconds, packs=None):
             cmd += ["--packs", packs]
         cmd += ["--preset", name, "--seconds", str(seconds), "--notes", "45,52,59", "--set", "brain_rate=6", "--out", wav]
         res = subprocess.run(cmd,
-                             capture_output=True, text=True, encoding="utf-8", errors="replace")
+                             capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             **LOW_PRIORITY)
         if res.returncode != 0 or not os.path.isfile(wav):
             return {"name": name, "error": (res.stderr or res.stdout).strip()[-200:], "fail": ["render"]}
         m = re.search(r"non-finite (\d+)", res.stdout)
@@ -80,7 +85,8 @@ def main():
     ap.add_argument("--packs", default=None, help="also load the preset packs in this directory")
     ap.add_argument("--sample", type=int, default=0, help="check a random N of the presets instead of all")
     ap.add_argument("--seed", type=int, default=1, help="which random sample")
-    ap.add_argument("--jobs", type=int, default=1, help="renders in parallel; keep it below the core count")
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="renders in parallel; three is plenty, they run below normal priority")
     a = ap.parse_args()
     listcmd = [RENDER] + (["--packs", a.packs] if a.packs else []) + ["--list-presets"]
     names = [n for n in subprocess.run(listcmd, capture_output=True, text=True, encoding="utf-8").stdout.splitlines()

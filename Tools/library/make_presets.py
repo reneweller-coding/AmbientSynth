@@ -257,8 +257,9 @@ def modulation_for(p, style, rng, shade_name):
                 p[f"lfo{lfo}_table"] = rng.randrange(0, 32)
         depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
         row = f"lfo{lfo}>{target}:{depth:.3f}"
-        # Now and then a macro decides how much of the route gets through.
-        if rng.random() < 0.18:
+        # Now and then a macro decides how much of the route gets through. Sparingly: a macro is
+        # performance state and starts at zero, so such a route is silent until a hand opens it.
+        if rng.random() < 0.07:
             row += ":macro_" + "abcdefgh"[rng.randrange(8)]
         elif rng.random() < 0.15:
             row += ":none:u"

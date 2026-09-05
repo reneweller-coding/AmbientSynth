@@ -67,7 +67,13 @@ minutes for five thousand renders.
 
 ```
 python Tools/library/measure_packs.py --jobs 6
+python Tools/library/verify_packs.py          # again: the pass rewrites every line
 ```
+
+Verify **after** measuring as well as before. The measurement pass rewrites all five thousand
+lines, and the first version of it read five fields and wrote five -- silently dropping the
+impulse, the matrix and the envelope shapes from the whole library. It now names the fields once
+and reports how many presets still carry each of them.
 
 ## Installing it
 
@@ -116,6 +122,21 @@ synth's own parameters, chosen by ear.
 | Void Station | Tholen | cold science fiction, slow z-plane sweeps |
 | Strings at Rest | Stars of the Lid | consonant bowed swells |
 | Tape Saturation | Tim Hecker | bright, distorted, damaged |
+
+## Modulation in the library
+
+Every preset carries a matrix -- about four and a half rows on average -- and most carry one or
+two envelope shapes. Which targets a preset may use depends on what it actually switched on:
+`z_x` only where the z-plane filter runs, `cloud_density` only where the cloud does.
+
+Depths are read per target, because a depth is a fraction of the target's own range: 0.3 on a mix
+is a third of it, 0.3 on the cutoff would be 5.4 kHz. The rates are drone rates, log-uniform
+between one cycle in eight seconds and one in forty minutes, so the median route takes a bit over
+two minutes to come round. That is deliberate and it means a short render will not show much:
+the instrument is built for half-hour pieces.
+
+The shade decides how much of it there is. *still* gets one to three slow rows, *astir* four to
+seven at 2.6 times the rate.
 
 ## Metadata
 

@@ -710,6 +710,8 @@ void Engine::readParams()
     vp_.decay       = g(ParamId::Decay);
     vp_.sustain     = g(ParamId::Sustain);
     vp_.release     = g(ParamId::Release);
+    vp_.filterOn    = g(ParamId::FilterOn) >= 0.5f;
+    vp_.filterParallel = std::lround(g(ParamId::ZRoute)) == 1;
     vp_.filterModel = static_cast<int>(std::lround(g(ParamId::FilterModel)));
     vp_.filterDrive = g(ParamId::FilterDrive);
     vp_.cutoff      = g(ParamId::Cutoff);

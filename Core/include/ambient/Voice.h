@@ -35,6 +35,8 @@ struct VoiceParams {
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
     int   filterModel = 1;      // FilterModel (Filter.h); 1 = the 12 dB state-variable low pass
     float filterDrive = 0.0f;
+    bool  filterOn = true;      // the voice filter can be switched out; z-plane Replace also bypasses it
+    bool  filterParallel = false;   // both filters on: z-plane after the filter (false) or beside it (true)
     // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
     int   zMode = 0, zShape = 0;
     float zX = 0.5f, zY = 0.5f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
@@ -120,6 +122,7 @@ private:
     float    rateMul_ = 1.0f;
     Envelope env_;
     VoiceFilter filt_;
+    bool     lastFilterOn_ = true;
     Svf      airL_, airR_;
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;

@@ -71,7 +71,8 @@ detune and stacks), Wavetable (a table of spectra), FM, Texture (granular,
 up to 64 grains) or Noise (ten colours); so three additive banks, three
 granular players or any mix are a matter of three choices. **Nine filter
 models** sit behind the same knobs: LP 6/12/24, HP, BP, notch, peak, a
-saturating ladder and a tuned comb, with Drive ahead of them. **Clock.**
+saturating ladder and a tuned comb, with Drive ahead of them; the filter and
+the z-plane each switch on and off and run in series or in parallel. **Clock.**
 Every rate that wants the grid -- the eight LFOs, the six envelopes, both
 delays, ensemble, cloud, brain, arc, grain density -- has a Sync choice from
 64 bars to 1/32 next to its free knob. The tempo comes from the DAW's play

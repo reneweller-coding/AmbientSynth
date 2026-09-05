@@ -277,6 +277,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
                         - 2.5f * distEff_;
     const float cut = p.cutoff * std::pow(2.0f, octaves);
     filt_.set(static_cast<FilterModel>(clampv(p.filterModel, 0, kNumFilterModels - 1)), cut, p.resonance, p.filterDrive);
+    if (p.filterOn != lastFilterOn_) { if (p.filterOn) filt_.reset(); lastFilterOn_ = p.filterOn; }   // switched back in: from rest
 
     // Z-plane: the point wanders around (X, Y) on two Drifters, the frame is interpolated from
     // the shape's corners, resonance narrows the bandwidths, key tracking moves the frame with
@@ -349,6 +350,11 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         // the slot below and the bank stays silent.
         const bool bank = p.slot[0].type == SourceType::Additive;
         const int unison = bank ? clampv(p.unison, 1, kMaxStrands) : 0;
+        // The two filters: each on or off, and with both on either in series (the z-plane hears
+        // the filter) or in parallel (both hear the dry sum, Mix balances them).
+        const bool fOn = p.filterOn && zModeCur_ != 2;
+        const bool zOn = zModeCur_ != 0;
+        const bool parallel = p.filterParallel;
         const bool air = airGain_ > 0.0f;
         const bool ghost = ghostGain_ > 0.0f;
         // Extra sources render block-wise into their own buffers, then join the strands
@@ -402,19 +408,21 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 accR += sum * s.gainR;
             }
             float outL, outR;
-            if (zModeCur_ == 2) {   // Replace: the z-plane cascade is the filter
+            if (fOn && zOn) {
+                filt_.tick(accL, accR, outL, outR);
+                float zl = parallel ? accL : outL, zr = parallel ? accR : outR;
+                for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
+                outL = outL * zDry_ + zl * zNorm_ * zWet_;
+                outR = outR * zDry_ + zr * zNorm_ * zWet_;
+            } else if (fOn) {
+                filt_.tick(accL, accR, outL, outR);
+            } else if (zOn) {   // the z-plane alone (Replace, or the filter switched off)
                 float zl = accL, zr = accR;
                 for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
                 outL = accL * zDry_ + zl * zNorm_ * zWet_;
                 outR = accR * zDry_ + zr * zNorm_ * zWet_;
             } else {
-                filt_.tick(accL, accR, outL, outR);
-                if (zModeCur_ == 1) {   // Series: after the state-variable filter
-                    float zl = outL, zr = outR;
-                    for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
-                    outL = outL * zDry_ + zl * zNorm_ * zWet_;
-                    outR = outR * zDry_ + zr * zNorm_ * zWet_;
-                }
+                outL = accL; outR = accR;
             }
             if (air) {
                 float lp, bp, hp;

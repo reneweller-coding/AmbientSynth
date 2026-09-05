@@ -264,7 +264,9 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 11;   // one row with the two Sync choices
-            if (s.name == "Filter" || s.name == "Cloud") s.maxUnits = 8;      // one row each, with Model / Sync
+            if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
+            if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
+            if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -1408,6 +1410,9 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
     const int zMode = static_cast<int>(std::lround(rawParam(proc, "z_mode")));
     const int zShape = juce::jlimit(0, ambient::kZShapes - 1, static_cast<int>(std::lround(rawParam(proc, "z_shape"))));
     const float zMix = rawParam(proc, "z_mix");
+    const bool fOn = rawParam(proc, "filter_on") >= 0.5f && zMode != 2;
+    const bool zOn = zMode != 0;
+    const bool parallel = std::lround(rawParam(proc, "z_route")) == 1;
 
     // The z-plane cascade, from the frame the engine would build at this point.
     ambient::ZBiquad zb[ambient::kZSections];
@@ -1425,18 +1430,20 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
         const float hz = 20.0f * std::pow(1000.0f, t);
         const float w = juce::MathConstants<float>::twoPi * hz / sr;
         // the chosen model's own response, from the same maths the voice uses
-        const float hs = ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr);
+        const float hs = fOn ? ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr) : 1.0f;
         float hz_ = 1.0f;
         if (zUsed > 0) { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
+        // Magnitudes combine as the voice combines the signals; the parallel sum ignores the phase
+        // between the two branches, which is the one thing this picture cannot show.
         float combined = hs;
-        if (zMode == 1) combined = hs * ((1.0f - zMix) + zMix * hz_);           // series: dry/wet of the z stage
-        else if (zMode == 2) combined = (1.0f - zMix) * 1.0f + zMix * hz_;      // replace: the SVF is out of the path
+        if (fOn && zOn) combined = parallel ? (1.0f - zMix) * hs + zMix * hz_ : hs * ((1.0f - zMix) + zMix * hz_);
+        else if (zOn) combined = (1.0f - zMix) + zMix * hz_;
         const float x = plot.getX() + t * plot.getWidth();
         auto db = [](float m) { return 20.0f * std::log10(juce::jmax(m, 1.0e-6f)); };
         if (i == 0) { svf.startNewSubPath(x, yForDb(plot, db(hs))); zp.startNewSubPath(x, yForDb(plot, db(hz_))); both.startNewSubPath(x, yForDb(plot, db(combined))); }
         else        { svf.lineTo(x, yForDb(plot, db(hs)));           zp.lineTo(x, yForDb(plot, db(hz_)));           both.lineTo(x, yForDb(plot, db(combined))); }
     }
-    if (zMode != 2) { g.setColour(ui::voiceCol.withAlpha(0.55f)); g.strokePath(svf, juce::PathStrokeType(1.2f)); }
+    if (fOn) { g.setColour(ui::voiceCol.withAlpha(0.55f)); g.strokePath(svf, juce::PathStrokeType(1.2f)); }
     if (zUsed > 0)  { g.setColour(ui::accent.withAlpha(0.55f));   g.strokePath(zp,  juce::PathStrokeType(1.2f)); }
     g.setColour(ui::text.withAlpha(0.25f));
     g.strokePath(both, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
@@ -1445,8 +1452,8 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
 
     g.setColour(ui::dim);
     g.setFont(ui::body(10.0f));
-    juce::String legend = juce::String(ambient::kFilterModelNames[model]) + "   " + juce::String(cutoff, 0) + " Hz";
-    if (zMode != 0) legend += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (zMode == 2 ? "  (replace)" : "  (series)");
+    juce::String legend = fOn ? juce::String(ambient::kFilterModelNames[model]) + "   " + juce::String(cutoff, 0) + " Hz" : juce::String("filter off");
+    if (zOn) legend += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (!fOn ? "  (alone)" : parallel ? "  (parallel)" : "  (series)");
     g.drawText(legend, r.reduced(9, 5), juce::Justification::topRight, false);
 }
 

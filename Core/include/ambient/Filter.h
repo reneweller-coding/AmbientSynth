@@ -17,6 +17,7 @@ namespace ambient {
 enum class FilterModel : int { Lp6 = 0, Lp12, Lp24, Hp12, Bp12, Notch, Peak, Ladder, Comb, Count };
 constexpr int kNumFilterModels = static_cast<int>(FilterModel::Count);
 extern const char* const kFilterModelNames[kNumFilterModels];
+extern const char* const kFilterRouteNames[2];   // Series, Parallel
 
 constexpr int kCombMax = 2048;   // longest comb delay in samples (40 Hz at 48 kHz needs 1200)
 

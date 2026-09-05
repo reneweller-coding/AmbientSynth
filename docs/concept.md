@@ -261,6 +261,15 @@ its own magnitude response (`VoiceFilter::magnitude`, the same maths as the
 audio path), which is what the filter display draws. A model change resets the
 filter states, since they mean different things in different models.
 
+The voice filter and the z-plane are two filters, each with its own switch
+(*On* in the Filter section; the z-plane's *Mode*, where *Replace* is the
+z-plane alone), and with both on the z-plane's *Route* puts them in **series**
+(the z-plane hears the filter, *Mix* is its dry/wet) or in **parallel** (both
+hear the dry sum and *Mix* balances them). The display combines the two
+responses the same way; the parallel sum ignores the phase between the
+branches, which is the one thing the picture cannot show. Switching the
+filter back in starts it from rest.
+
 ### Z-plane filter
 
 After the idea Dave Rossum built into the E-mu Morpheus: four filter

@@ -7,6 +7,7 @@ namespace ambient {
 const char* const kFilterModelNames[kNumFilterModels] = {
     "LP 6", "LP 12", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "Comb",
 };
+const char* const kFilterRouteNames[2] = { "Series", "Parallel" };
 
 void VoiceFilter::reset()
 {

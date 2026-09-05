@@ -166,6 +166,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Sustain,     "sustain",      "Sustain",       "Envelope",   0.f,   1.f,    0.8f,  1.f,  ""),
     F(ParamId::Release,     "release",      "Release",       "Envelope",   0.05f, 120.f,  12.f,  0.3f, "s"),
 
+    B(ParamId::FilterOn,    "filter_on",    "On",            "Filter",     true),
     C(ParamId::FilterModel, "filter_model", "Model",         "Filter",     kFilterModelNames, kNumFilterModels, 1),
     F(ParamId::Cutoff,      "cutoff",       "Cutoff",        "Filter",     40.f,  18000.f, 2500.f, 0.25f, "Hz"),
     F(ParamId::Resonance,   "resonance",    "Resonance",     "Filter",     0.f,   1.f,    0.15f, 1.f,  ""),
@@ -175,6 +176,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FilterDrive, "filter_drive", "Drive",         "Filter",     0.f,   1.f,    0.f,   1.f,  ""),
 
     C(ParamId::ZMode,       "z_mode",       "Mode",          "Z-Plane",    kZModeNames, 3, 0),
+    C(ParamId::ZRoute,      "z_route",      "Route",         "Z-Plane",    kFilterRouteNames, 2, 0),
     C(ParamId::ZShape,      "z_shape",      "Shape",         "Z-Plane",    kZShapeNames, kZShapes, 0),
     F(ParamId::ZX,          "z_x",          "X",             "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
     F(ParamId::ZY,          "z_y",          "Y",             "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),

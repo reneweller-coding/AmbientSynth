@@ -50,7 +50,7 @@ enum class ParamId : int {
     // Phase Width: two all-pass pairs per voice, drifting in opposite directions on the two ears,
     // so the room seems to change size rather than the sound to move; Doppler: the breathing
     // distance bends the pitch a little as a voice approaches or recedes
-    PhaseWidth, PhaseRate, Doppler,
+    PhaseWidth, PhaseRate, Doppler, Externalise,
     // Expression: what a key's pressure, its sideways slide and its own pitch bend do.
     // With an MPE controller each finger has all three; a plain keyboard shares them.
     PressDistance, PressBright, PressLevel, SlideCutoff, SlideZ, BendRange, MpeOn,
@@ -71,7 +71,7 @@ enum class ParamId : int {
     // partial. Throttled by the output level so it hisses and holds instead of running away.
     FeedbackBus, FeedbackFm, FeedbackTone, FeedbackDrive,
     // Room: convolution reverb with a loaded (or generated) impulse, in parallel on the far plane
-    RoomLevel, RoomSource, RoomPreDelay, RoomHighcut,
+    RoomLevel, RoomSource, RoomPreDelay, RoomHighcut, RoomMorph,
     // Cosmos: science-fiction / deep-space path (send from the near bus)
     CosmosSend, CosmosShift, CosmosShiftDrift, CosmosRes, CosmosResPitch, CosmosResFeedback,
     CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,

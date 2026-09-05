@@ -145,11 +145,12 @@ def write_cpp(rows, fams, stub=False):
     lines.append("    " + ", ".join(f'"{t}"' for t in TAGS))
     lines += ["};", "const PresetMeta kMeta[] = {"]
     for r in rows:
-        lines.append("    { %.4ff, %.4ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %d, 0x%xu },   // %s" %
-                     (r["x"], r["y"], r["bright"], r["motion"], r["width"], r["noisy"], r["bass"], r["density"], r["family"], r["tags"], r["name"]))
+        lines.append("    { %.4ff, %.4ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %d, 0x%xu, %.1ff },   // %s" %
+                     (r["x"], r["y"], r["bright"], r["motion"], r["width"], r["noisy"], r["bass"], r["density"],
+                      r["family"], r["tags"], r.get("rms", 0.0), r["name"]))
     lines += ["};", "}", "",
               "int builtinPresetMetaCount() { return %s; }" % ("0" if stub else "static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0]))"),
-              "const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };"
+              "const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f };"
               " return (index >= 0 && index < builtinPresetMetaCount()) ? kMeta[index] : none; }",
               "int builtinPresetFamilyCount() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }",
               "const char* builtinPresetFamilyName(int family) { return (family >= 0 && family < builtinPresetFamilyCount()) ? kFamilies[family] : \"\"; }",
@@ -166,7 +167,7 @@ def main():
     a = ap.parse_args()
     fams = families()
     if a.stub:
-        rows = [{"name": "stub", "x": 0.5, "y": 0.5, "bright": 0.5, "motion": 0.5, "width": 0.5, "noisy": 0.5, "bass": 0.5, "density": 0.5, "family": 0, "tags": 0}]
+        rows = [{"name": "stub", "x": 0.5, "y": 0.5, "bright": 0.5, "motion": 0.5, "width": 0.5, "noisy": 0.5, "bass": 0.5, "density": 0.5, "family": 0, "tags": 0, "rms": 0.0}]
         write_cpp(rows, fams, stub=True)
         print("stub written:", OUT_CPP); return 0
     names = subprocess.run([RENDER, "--list-presets"], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
@@ -213,7 +214,8 @@ def main():
         bits = sum(1 << TAGS.index(t) for t in tags)
         rows.append({"name": m["name"], "x": float(xy[i, 0]), "y": float(xy[i, 1]), "bright": float(r["centroid"][i]), "motion": float(r["flux"][i]),
                      "width": float(r["width"][i]), "noisy": float(r["flatness"][i]), "bass": float(r["bass"][i]), "density": float(r["voices"][i]),
-                     "family": family_of(i, fams), "tags": bits, "tagNames": sorted(tags)})
+                     "family": family_of(i, fams), "tags": bits, "tagNames": sorted(tags),
+                     "rms": float(m.get("rms", 0.0))})
     write_cpp(rows, fams)
     with open(a.json, "w", encoding="utf-8") as f:
         json.dump({"presets": rows, "families": [n for _, n in fams], "measurements": [{k: v for k, v in m.items() if k != "params"} for m in measured]}, f, indent=1)

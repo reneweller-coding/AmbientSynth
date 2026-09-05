@@ -211,6 +211,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::PhaseWidth,  "phase_width",  "Phase Width",   "Space",      0.f,   1.f,    0.f,   1.f,  ""),
     F(ParamId::PhaseRate,   "phase_rate",   "Phase Rate",    "Space",      0.005f, 0.5f,  0.03f, 0.5f, "Hz"),
     F(ParamId::Doppler,     "doppler",      "Doppler",       "Space",      0.f,   1.f,    0.f,   1.f,  ""),
+    F(ParamId::Externalise, "externalise",  "Externalise",   "Space",      0.f,   1.f,    0.f,   1.f,  ""),
 
     F(ParamId::PressDistance, "press_distance", "Press Near",  "Expression", 0.f,  1.f,   0.f,  1.f, ""),
     F(ParamId::PressBright,   "press_bright",   "Press Bright","Expression", -1.f, 1.f,   0.f,  1.f, ""),
@@ -273,6 +274,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::RoomSource,   "room_source",   "Source",    "Room", kRoomSourceNames, 2, 0),
     F(ParamId::RoomPreDelay, "room_predelay", "Pre-Delay", "Room", 0.f,   300.f,   20.f,   0.5f, "ms"),
     F(ParamId::RoomHighcut,  "room_highcut",  "Tail Cut",  "Room", 500.f, 16000.f, 5000.f, 0.3f, "Hz"),
+    F(ParamId::RoomMorph,   "room_morph",  "Morph A/B", "Room", 0.f,  1.f,  0.f,  1.f,  ""),
 
     F(ParamId::CosmosSend,        "cosmos_send",        "Send",        "Cosmos", 0.f,    1.f,    0.f,   1.f,  ""),
     F(ParamId::CosmosShift,       "cosmos_shift",       "Shift",       "Cosmos", -300.f, 300.f,  0.f,   1.f,  "Hz"),

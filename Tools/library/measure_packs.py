@@ -194,6 +194,7 @@ def main():
             delta = min(TARGET_LO - rms, 6.0)          # never shout a quiet preset awake
         if abs(delta) > 0.2:
             r["settings"] = set_gain(r["settings"], get_gain(r["settings"]) + delta)
+            r["gain_delta"] = delta       # the meta line stores the loudness after this correction
             moved += 1
     rmsv = np.array([r["m"]["rms_db"] for r in good])
     print(f"loudness before: median {np.median(rmsv):.1f} dBFS, {int((rmsv > TARGET_HI).sum())} above "
@@ -213,7 +214,7 @@ def main():
         bits = tag_bits(r["settings"], d)
         r["meta"] = (" ".join(f"{v:.3f}" for v in (xy[i, 0], xy[i, 1], d["bright"], d["motion"],
                                                    d["width"], d["noisy"], d["bass"], d["density"]))
-                     + f" {bits}")
+                     + f" {bits} {r['m']['rms_db'] + r.get('gain_delta', 0.0):.1f}")   # tenth token: the loudness it now plays at
 
     if a.limit:
         print("dry run (--limit): the pack files were not rewritten")

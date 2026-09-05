@@ -62,6 +62,10 @@ public:
     bool hasTexture() const { return textureActive_.load(std::memory_order_relaxed) >= 0; }
     // Convolution room: a stereo (R may be null) impulse response, message thread.
     void  setImpulse(const float* L, const float* R, int n, double sampleRate) { room_.setImpulse(L, R, n, sampleRate); userImpulse_ = true; }
+    // The room's second impulse: Room Morph crossfades between the two. Both convolutions only
+    // run while the morph is between them, so a room that is not morphing costs what it always did.
+    void  setImpulseB(const float* L, const float* R, int n, double sampleRate) { roomB_.setImpulse(L, R, n, sampleRate); hasImpulseB_ = true; }
+    bool  hasImpulseB() const { return hasImpulseB_; }
     float impulseSeconds() const { return room_.impulseSeconds(); }
     bool  hasUserImpulse() const { return userImpulse_; }
     // Longest impulse the Room keeps (memory and CPU grow with it); call before prepare().
@@ -207,8 +211,11 @@ private:
     Smoother     smBody_;
     MidSide      midSide_;
     // Room (convolution) on the far plane: level, source, pre-delay ring, tail low-pass
-    Convolver    room_;
-    bool         userImpulse_ = false;
+    Convolver    room_, roomB_;
+    bool         userImpulse_ = false, hasImpulseB_ = false;
+    float        roomMorph_ = 0.0f;
+    Smoother     smRoomMorph_;
+    std::vector<float> roomBL_, roomBR_;
     float        masterGain_ = -6.0f;
     float        roomMaxSeconds_ = 8.0f;
     // modulation

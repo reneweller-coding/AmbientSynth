@@ -281,6 +281,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
             if (s.name == "Far Reverb") s.maxUnits = 10;                     // one row with Rotate and Unmask
             if (s.name == "Body") s.maxUnits = 7;                            // one row
+            if (s.name == "Room") s.maxUnits = 9;                            // one row with Morph and both impulses
             if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;
             if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
@@ -347,9 +348,12 @@ void AmbientSynthEditor::buildCells()
     auto texture = std::make_unique<juce::TextButton>("Texture...");
     texture->onClick = [this] { chooseSourceFile(false); };
     textureCell_ = addExtraCell("Source 3", std::move(texture), "Texture file", 2);
-    auto impulse = std::make_unique<juce::TextButton>("Impulse...");
-    impulse->onClick = [this] { chooseImpulseFile(); };
+    auto impulse = std::make_unique<juce::TextButton>("Impulse A...");
+    impulse->onClick = [this] { chooseImpulseFile(false); };
     impulseCell_ = addExtraCell("Room", std::move(impulse), "Dark Hall (built in)", 2);
+    auto impulseB = std::make_unique<juce::TextButton>("Impulse B...");
+    impulseB->onClick = [this] { chooseImpulseFile(true); };
+    impulseBCell_ = addExtraCell("Room", std::move(impulseB), "no second room", 2);
 
     auto boxA = std::make_unique<juce::ComboBox>();
     boxA->setTextWhenNothingSelected("A: preset");
@@ -2761,6 +2765,7 @@ void AmbientSynthEditor::updateSourceCells()
     nameCell(tableCell_, "User table", proc_.wavetableName());
     nameCell(textureCell_, "Texture file", proc_.textureName());
     nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());
+    nameCell(impulseBCell_, "no second room", proc_.impulseBName());
 }
 
 void AmbientSynthEditor::showMappingEditor()
@@ -2814,14 +2819,15 @@ void AmbientSynthEditor::chooseSourceFile(bool wavetable)
         });
 }
 
-void AmbientSynthEditor::chooseImpulseFile()
+void AmbientSynthEditor::chooseImpulseFile(bool second)
 {
-    chooser_ = std::make_unique<juce::FileChooser>("Load an impulse response (mono or stereo)", juce::File(), "*.wav;*.aif;*.aiff;*.flac");
+    chooser_ = std::make_unique<juce::FileChooser>(second ? "Load the second impulse response (Room Morph fades to it)"
+                                                          : "Load an impulse response (mono or stereo)", juce::File(), "*.wav;*.aif;*.aiff;*.flac");
     chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc) {
+        [this, second](const juce::FileChooser& fc) {
             const auto file = fc.getResult();
             if (!file.existsAsFile()) return;
-            if (!proc_.loadImpulseFile(file))
+            if (!proc_.loadImpulseFile(file, second))
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Impulse", "Could not read this audio file.");
             repaint();
         });

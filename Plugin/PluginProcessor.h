@@ -45,8 +45,14 @@ public:
     // Pitch = Note) and a user wavetable (2048-sample frames). Paths are kept in the state.
     bool loadTextureFile(const juce::File& file);
     bool loadWavetableFile(const juce::File& file);
-    bool loadImpulseFile(const juce::File& file);   // convolution room, mono or stereo
+    bool loadImpulseFile(const juce::File& file, bool second = false);   // convolution room, mono or stereo
     juce::String impulseName() const { return impulseFile_.existsAsFile() ? impulseFile_.getFileNameWithoutExtension() : juce::String(); }
+    juce::String impulseBName() const { return impulseBFile_.existsAsFile() ? impulseBFile_.getFileNameWithoutExtension() : juce::String(); }
+    // Level matching: while it is on, loading a preset trims the master gain by the difference
+    // between the loudness that was measured for it and a common target, so auditioning a
+    // hundred presets is not a ride on the volume knob. It never touches a preset's own settings.
+    void setLevelMatch(bool on) { levelMatch_ = on; }
+    bool levelMatch() const { return levelMatch_; }
     juce::String textureName() const  { return textureFile_.existsAsFile() ? textureFile_.getFileNameWithoutExtension() : juce::String(); }
     juce::String wavetableName() const { return wavetableFile_.existsAsFile() ? wavetableFile_.getFileNameWithoutExtension() : juce::String(); }
     // User presets as files (full state including a loaded Scala scale).
@@ -114,7 +120,9 @@ private:
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
-    juce::File textureFile_, wavetableFile_, impulseFile_;
+    juce::File textureFile_, wavetableFile_, impulseFile_, impulseBFile_;
+    bool       levelMatch_ = false;
+    void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;
     juce::String routeText_;
     // set timeline (recording appends on the audio thread; save/load on the message thread while stopped)

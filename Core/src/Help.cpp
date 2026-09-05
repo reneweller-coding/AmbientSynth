@@ -118,6 +118,7 @@ const HelpEntry kHelp[] = {
     { "breath_rate", "How fast the distances breathe. 0.03 Hz is half a minute per swing." },
     { "phase_width", "Two all-pass stages per ear whose corners drift in opposite directions: the phase between left and right changes slowly and the room seems to change size rather than the sound to move. Off at 0." },
     { "phase_rate", "How fast the phase field drifts. Keep it slow: the effect is space, not tremolo." },
+    { "externalise", "The two cues a headphone image needs to sit outside the head: the notch the pinna cuts into what arrives from the side, and the reflection off the shoulder a quarter of a millisecond later. Both follow each voice's own position. On speakers leave it off." },
     { "doppler", "As a voice breathes closer or further away its pitch bends a little, the way a moving source does. A few cents at most; the ear reads approach and retreat from it." },
 
     // ---- ensemble
@@ -177,6 +178,7 @@ const HelpEntry kHelp[] = {
     { "room_source", "What the room reverberates: the far sends (before the far reverb) or the finished near bus." },
     { "room_predelay", "Milliseconds before the room's response starts." },
     { "room_highcut", "Low-pass on the room's tail." },
+    { "room_morph", "Crossfades between the two loaded impulses, A and B: one room becomes another over as long as you like. Both convolutions run only while the morph is between them, so at 0 or 1 it costs what one room costs." },
 
     // ---- cosmos
     { "cosmos_send", "How much of the near bus goes into the Cosmos path (frequency shifter, resonator, vowel, nebula). The dry signal is untouched; Cosmos is additive." },

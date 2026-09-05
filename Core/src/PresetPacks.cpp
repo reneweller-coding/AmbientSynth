@@ -16,7 +16,7 @@ namespace {
 
 struct PackEntry {
     std::string name, settings, texture, wavetable, impulse, mod, envs;
-    PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };
+    PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f };
 };
 struct Pack {
     std::string name;
@@ -96,7 +96,8 @@ bool loadPresetPack(const char* path)
             for (const std::string& tok : m) {
                 if (tok.empty()) continue;
                 if (j < 8) v[j] = static_cast<float>(std::atof(tok.c_str()));
-                else e.meta.tags = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 0));
+                else if (j == 8) e.meta.tags = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 0));
+                else if (j == 9) e.meta.loudDb = static_cast<float>(std::atof(tok.c_str()));   // optional: older packs have none
                 ++j;
             }
             e.meta.x = v[0]; e.meta.y = v[1]; e.meta.bright = v[2]; e.meta.motion = v[3];

@@ -97,6 +97,10 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     smBlur_.setTime(0.02f, sr_);
     smBody_.setTime(0.02f, sr_);
     unmask_.prepare(sr_);
+    roomB_.prepare(sr_, roomMaxSeconds_);
+    roomBL_.assign(static_cast<size_t>(maxBlock_ + Convolver::kBlock), 0.0f);
+    roomBR_.assign(static_cast<size_t>(maxBlock_ + Convolver::kBlock), 0.0f);
+    smRoomMorph_.setTime(0.05f, sr_);
     body_.prepare(sr_, 0xB0D1B0D1ull);
     patina_.prepare(sr_, 0x9A7104ull);
     blur_.prepare(sr_, 0x5EED5EEDull);
@@ -762,6 +766,7 @@ void Engine::readParams()
     vp_.phaseWidth  = g(ParamId::PhaseWidth);
     vp_.phaseRate   = g(ParamId::PhaseRate);
     vp_.doppler     = g(ParamId::Doppler);
+    vp_.externalise = g(ParamId::Externalise);
     vp_.strikeLevel = g(ParamId::StrikeLevel);
     vp_.strikeType  = static_cast<int>(std::lround(g(ParamId::StrikeType)));
     vp_.strikeDecay = g(ParamId::StrikeDecay);
@@ -854,6 +859,7 @@ void Engine::readParams()
     roomSource_   = static_cast<int>(std::lround(g(ParamId::RoomSource)));
     roomPreDelay_ = static_cast<int>(g(ParamId::RoomPreDelay) * 0.001f * static_cast<float>(sr_));
     roomHighcut_  = g(ParamId::RoomHighcut);
+    roomMorph_    = hasImpulseB_ ? g(ParamId::RoomMorph) : 0.0f;
     fbBus_   = g(ParamId::FeedbackBus);
     fbFm_    = g(ParamId::FeedbackFm);
     fbTone_  = g(ParamId::FeedbackTone);
@@ -1250,6 +1256,17 @@ void Engine::renderChunk(float* L, float* R, int n)
     if (roomOn) {
         float* ol = roomOutL_.data(); float* orr = roomOutR_.data();
         room_.process(rl, rr, ol, orr, n);
+        // Morph: the second impulse's answer to the same input, faded in. Only computed while
+        // the morph is actually between the two rooms.
+        if (roomMorph_ > 0.0005f || smRoomMorph_.value > 1.0e-4f) {
+            float* bl = roomBL_.data(); float* br = roomBR_.data();
+            roomB_.process(rl, rr, bl, br, n);
+            for (int i = 0; i < n; ++i) {
+                const float x = smRoomMorph_.next(roomMorph_);
+                ol[i] += (bl[i] - ol[i]) * x;
+                orr[i] += (br[i] - orr[i]) * x;
+            }
+        }
         const float lpc = 1.0f - std::exp(-kTwoPi * roomHighcut_ / static_cast<float>(sr_));
         const float levelC = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));
         // An energy-normalised impulse returns the far sends at their own power, which is far

@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "ambient/PresetMeta.h"
 #include "PluginEditor.h"
 #include "ambient/Tuning.h"
 #include "ambient/Presets.h"
@@ -341,6 +342,23 @@ void AmbientSynthProcessor::applySoundPreset(int index)
     soundIndex_ = index;
     applyScoped(preset(index), PresetScope::Sound);
     loadPresetFiles(index);
+    applyLevelMatch(index);
+}
+
+// The loudness of every preset was measured from a twelve-second render (Tools/preset_map.py
+// for the built-ins, measure_packs.py for the library). A preset that was never measured has
+// none, and is then left alone rather than guessed at.
+void AmbientSynthProcessor::applyLevelMatch(int index)
+{
+    if (!levelMatch_ || index < 0 || index >= numPresetMeta()) return;
+    const float loud = presetMeta(index).loudDb;
+    if (loud >= -0.5f || loud < -80.0f) return;         // 0 means "never measured"
+    constexpr float kTarget = -24.0f;                   // where the built-in presets sit on average
+    if (auto* p = apvts.getParameter(paramDesc(ParamId::MasterGain).key)) {
+        const float now = engine_.getParam(ParamId::MasterGain);
+        const float want = juce::jlimit(-40.0f, 12.0f, now + juce::jlimit(-12.0f, 12.0f, kTarget - loud));
+        p->setValueNotifyingHost(p->convertTo0to1(want));
+    }
 }
 
 void AmbientSynthProcessor::applyCosmosPreset(int index)
@@ -401,7 +419,7 @@ bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
     return true;
 }
 
-bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file)
+bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
 {
     juce::AudioFormatManager fm;
     fm.registerBasicFormats();
@@ -410,8 +428,10 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file)
     const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 12.0)));
     juce::AudioBuffer<float> buf(static_cast<int>(reader->numChannels), n);
     if (!reader->read(&buf, 0, n, 0, true, true)) return false;
-    engine_.setImpulse(buf.getReadPointer(0), buf.getNumChannels() > 1 ? buf.getReadPointer(1) : nullptr, n, reader->sampleRate);
-    impulseFile_ = file;
+    const float* L = buf.getReadPointer(0);
+    const float* R = buf.getNumChannels() > 1 ? buf.getReadPointer(1) : nullptr;
+    if (second) { engine_.setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
+    else        { engine_.setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
     return true;
 }
 

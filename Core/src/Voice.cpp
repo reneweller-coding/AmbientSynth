@@ -339,6 +339,16 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-centre, 0.0f));
     shadowCoefL_ = fcL >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcL / static_cast<float>(sr_));
     shadowCoefR_ = fcR >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcR / static_cast<float>(sr_));
+    // Externalisation: the pinna's notch sits near 7 kHz for a source in front and climbs towards
+    // 9 kHz as it moves to the side; the shoulder reflection arrives about a quarter of a
+    // millisecond later. Together they are most of what tells the ear a sound is outside the head.
+    extAmt_ = clampv(p.externalise, 0.0f, 1.0f);
+    if (extAmt_ > 0.0f) {
+        const float lat = std::fabs(centre);
+        pinnaL_.setQ(clampv(7000.0f + 2000.0f * lat, 2000.0f, 0.45f * static_cast<float>(sr_)), 2.2f, static_cast<float>(sr_));
+        pinnaR_.copyCoefficients(pinnaL_);
+        shoulder_ = std::max(1, static_cast<int>(0.00026 * sr_));
+    }
 
     // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
     const float fd = filterDrift_.update(dt, driftRate * 0.5f, rng_);
@@ -545,6 +555,17 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             ++itdW_;
             shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
             shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
+            if (extAmt_ > 0.0f) {
+                // The shoulder's copy comes out of the same ring the interaural delay reads, one
+                // more tap further back; the pinna's notch is the state-variable filter's low plus
+                // high output, mixed in by the amount.
+                const int sL = static_cast<int>(itdL_) + shoulder_, sR = static_cast<int>(itdR_) + shoulder_;
+                outL += 0.32f * extAmt_ * itdBufL_[(itdW_ - sL) & (kItdBuffer - 1)];
+                outR += 0.32f * extAmt_ * itdBufR_[(itdW_ - sR) & (kItdBuffer - 1)];
+                float lp, bp, hp;
+                pinnaL_.tick(outL, lp, bp, hp); outL += extAmt_ * ((lp + hp) - outL) * 0.8f;
+                pinnaR_.tick(outR, lp, bp, hp); outR += extAmt_ * ((lp + hp) - outR) * 0.8f;
+            }
             if (phaseOn_) {   // first-order all-passes: y = c x + x1 - c y1, two per ear
                 float* c = apC_[0]; float* x1 = apX_[0]; float* y1 = apY_[0];
                 for (int st = 0; st < 2; ++st) { const float y = c[st] * outL + x1[st] - c[st] * y1[st]; x1[st] = outL; y1[st] = y; outL = y; }

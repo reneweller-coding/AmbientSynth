@@ -41,6 +41,7 @@ struct VoiceParams {
     // Expression: how far this voice's own pressure, slide and bend reach
     float pressDistance = 0.0f, pressBright = 0.0f, pressLevel = 0.0f;
     float slideCutoff = 0.0f, slideZ = 0.0f;
+    float externalise = 0.0f;   // pinna notch + shoulder reflection, for headphones
     float pitchMul = 1.0f;
     float strikeLevel = 0.0f, strikeDecay = 0.4f, strikeDamp = 0.5f;
     int   strikeType = 0;       // String, Wood, Metal
@@ -190,6 +191,11 @@ private:
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;
     float    shadowL_ = 0.0f, shadowR_ = 0.0f, shadowCoefL_ = 1.0f, shadowCoefR_ = 1.0f;   // head shadow on the far ear
+    // Externalisation (Brown and Duda's structural model, the parts that need no measured data):
+    // the pinna's notch, whose frequency moves with the source's angle, and the shoulder echo.
+    Svf      pinnaL_, pinnaR_;
+    float    extAmt_ = 0.0f;
+    int      shoulder_ = 0;
     int      note_ = -1;
     int      owner_ = 0;
     int      lastUnison_ = 0;

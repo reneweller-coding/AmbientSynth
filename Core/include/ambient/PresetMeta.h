@@ -26,6 +26,7 @@ struct PresetMeta {
     float density;              // 0..1 rank of the mean voice count
     int   family;               // index into familyName()
     uint32_t tags;              // PresetTag bits
+    float loudDb;               // measured RMS of a 12 s render, dBFS; 0 = never measured
 };
 
 // Public view: the built-in table followed by the loaded packs (see Presets.h).

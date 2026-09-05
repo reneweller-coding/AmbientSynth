@@ -4,6 +4,8 @@ add_library(AmbientCore STATIC
     src/Voice.cpp
     src/Effects.cpp
     src/Engine.cpp
+    src/EngineControl.cpp
+    src/EngineRender.cpp
     src/Presets.cpp
     src/Cosmos.cpp
     src/Gesture.cpp

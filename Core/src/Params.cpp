@@ -470,6 +470,59 @@ const std::array<ParamDesc, kNumParams> kTable = {{
 
 const std::array<ParamDesc, kNumParams>& paramTable() { return kTable; }
 
+namespace {
+const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
+    // Source 1: its type and its slot fields, then the Oscillator parameters that are its level
+    // and its additive spectrum, then its grain-density sync and its pitch drift.
+    { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
+      ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
+      ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
+      ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate,
+      ParamId::Src1DensitySync, ParamId::Src1Drift },
+    { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
+      ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
+      ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
+      ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate,
+      ParamId::Src2DensitySync, ParamId::Src2Drift },
+    { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
+      ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
+      ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
+      ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate,
+      ParamId::Src3DensitySync, ParamId::Src3Drift },
+};
+
+struct SectionName { const char* name; ParamSection section; };
+const SectionName kSections[] = {
+    { "Master", ParamSection::Master }, { "Source 1", ParamSection::Source1 }, { "Strands", ParamSection::Strands },
+    { "Source 2", ParamSection::Source2 }, { "Source 3", ParamSection::Source3 }, { "Strike", ParamSection::Strike },
+    { "Foundation", ParamSection::Foundation }, { "Air", ParamSection::Air }, { "Envelope", ParamSection::Envelope },
+    { "Filter", ParamSection::Filter }, { "Z-Plane", ParamSection::ZPlane }, { "Expression", ParamSection::Expression },
+    { "Space", ParamSection::Space }, { "Ensemble", ParamSection::Ensemble }, { "Delay", ParamSection::Delay },
+    { "Delay 2", ParamSection::Delay2 }, { "Near Reverb", ParamSection::NearReverb }, { "Far Reverb", ParamSection::FarReverb },
+    { "Blur", ParamSection::Blur }, { "Feedback", ParamSection::Feedback }, { "Room", ParamSection::Room },
+    { "Body", ParamSection::Body }, { "Patina", ParamSection::Patina }, { "Cosmos", ParamSection::Cosmos },
+    { "Cloud", ParamSection::Cloud }, { "Cluster Brain", ParamSection::ClusterBrain }, { "Brain 2", ParamSection::Brain2 },
+    { "Tuning", ParamSection::Tuning }, { "Coherence", ParamSection::Coherence }, { "Clock", ParamSection::Clock },
+    { "Morph", ParamSection::Morph }, { "Macros", ParamSection::Macros }, { "Map", ParamSection::Map },
+    { "Route", ParamSection::Route },
+};
+} // namespace
+
+const ParamId* slotParamIds(int slot)
+{
+    return (slot >= 0 && slot < kSourceSlots) ? kSlotIds[slot] : nullptr;
+}
+
+ParamSection sectionOf(const char* name)
+{
+    if (name == nullptr) return ParamSection::Unknown;
+    // The eight LFOs and six envelopes each have their own numbered section ("LFO 3", "Env 5").
+    if (std::strncmp(name, "LFO ", 4) == 0) return ParamSection::Lfo;
+    if (std::strncmp(name, "Env ", 4) == 0) return ParamSection::ModEnvelope;
+    for (const SectionName& s : kSections) if (std::strcmp(s.name, name) == 0) return s.section;
+    return ParamSection::Unknown;
+}
+
 const ParamDesc* findParam(const char* key)
 {
     if (key == nullptr) return nullptr;

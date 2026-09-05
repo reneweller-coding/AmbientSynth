@@ -1811,6 +1811,31 @@ void testModulation()
 // samples with the rate it was prepared at. That only stays true if it is checked: until this
 // test existed every single check ran at 48 kHz, so a coefficient that had quietly become a
 // number of samples would never have shown up. Three rates, the ones a host actually uses.
+// The parameter table's own invariants. Both of these would otherwise fail silently: a slot field
+// added to one of the two id tables and not the other used to be a real hazard (there were two
+// tables), and a mistyped section name makes a predicate answer no forever.
+void testParamTable()
+{
+    CHECK(kSourceSlots == kSlots, "the parameter table and the engine agree on how many slots there are");
+    for (int k = 0; k < kSourceSlots; ++k) {
+        const ParamId* ids = slotParamIds(k);
+        CHECK(ids != nullptr, "every slot has a field table");
+        if (ids == nullptr) continue;
+        for (int f = 0; f < kSlotFields; ++f) {
+            CHECK(static_cast<int>(ids[f]) >= 0 && static_cast<int>(ids[f]) < kNumParams, "a slot field names a real parameter");
+            for (int g2 = 0; g2 < f; ++g2) CHECK(ids[f] != ids[g2], "a slot names each parameter once");
+        }
+        // The three slots must line up field for field, or the shared code that reads them by
+        // offset would read a different thing for each slot.
+        if (k > 0) for (int f = 0; f < kSlotFields; ++f)
+            CHECK(std::strcmp(paramDesc(ids[f]).name, paramDesc(slotParamIds(0)[f]).name) == 0
+                  || f == 1 || f >= 17,   // Level and the spectrum have their own names in Source 1
+                  "the slots' fields line up");
+    }
+    for (const ParamDesc& d : paramTable())
+        CHECK(sectionOf(d.section) != ParamSection::Unknown, (std::string("section known: ") + d.section).c_str());
+}
+
 void testSampleRates()
 {
     for (double sr : { 44100.0, 48000.0, 96000.0 }) {
@@ -2191,6 +2216,7 @@ int main()
     testTimeline();
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
+    testParamTable();
     testSampleRates();
     testExpressionBodyPatina();
     testFilterModels();

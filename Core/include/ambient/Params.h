@@ -170,6 +170,28 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 
 // Names used by the Scale choice parameter; index == built-in scale index,
 // the last entry is the user slot filled by a loaded Scala file.
+// The three source slots have the same twenty-six fields, but their parameter ids are not
+// consecutive (Source 1's level and spectrum are the classic Oscillator parameters). The table
+// that maps slot and field to an id used to be written out twice -- once in the engine, once in
+// the editor -- and every field added since had to be added to both. It lives here now.
+constexpr int kSourceSlots = 3;    // the self test checks this against kSlots in Sources.h
+constexpr int kSlotFields  = 26;
+const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
+
+// What section a parameter belongs to, as something the compiler can check. The section string in
+// the table stays (the editor shows it), but everything that asks a question about a parameter --
+// is this performance state, is this part of the Cosmos layer -- asks it through this, so a
+// mistyped section name is an Unknown the self test catches instead of a predicate that silently
+// answers no forever.
+enum class ParamSection : int {
+    Master, Source1, Strands, Source2, Source3, Strike, Foundation, Air, Envelope, Filter, ZPlane,
+    Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
+    Patina, Cosmos, Cloud, ClusterBrain, Brain2, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
+    Macros, Map, Route, Unknown
+};
+ParamSection sectionOf(const char* sectionName);
+inline ParamSection sectionOf(ParamId id) { return sectionOf(paramDesc(id).section); }
+
 constexpr int kNumScaleChoices = 12;
 extern const char* const kScaleNames[kNumScaleChoices];
 extern const char* const kRootNames[12];

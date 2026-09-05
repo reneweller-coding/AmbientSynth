@@ -35,12 +35,12 @@ const Preset& builtinPreset(int index);
 int numCosmosPresets();                   // Cosmos-only bank
 const Preset& cosmosPreset(int index);
 
-inline bool isCosmosParam(ParamId id) { return std::strcmp(paramDesc(id).section, "Cosmos") == 0; }
-inline bool isMorphParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Morph") == 0; }
-inline bool isMacroParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Macros") == 0; }
-inline bool isMapParam(ParamId id)    { return std::strcmp(paramDesc(id).section, "Map") == 0; }
-inline bool isRouteParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Route") == 0; }
-inline bool isClockParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Clock") == 0; }
+inline bool isCosmosParam(ParamId id) { return sectionOf(id) == ParamSection::Cosmos; }
+inline bool isMorphParam(ParamId id)  { return sectionOf(id) == ParamSection::Morph; }
+inline bool isMacroParam(ParamId id)  { return sectionOf(id) == ParamSection::Macros; }
+inline bool isMapParam(ParamId id)    { return sectionOf(id) == ParamSection::Map; }
+inline bool isRouteParam(ParamId id)  { return sectionOf(id) == ParamSection::Route; }
+inline bool isClockParam(ParamId id)  { return sectionOf(id) == ParamSection::Clock; }
 // Morph controls, macros, the map cursor, the route and the clock are performance state, never part of any preset.
 inline bool isPerformanceParam(ParamId id) { return isMorphParam(id) || isMacroParam(id) || isMapParam(id) || isRouteParam(id) || isClockParam(id); }
 inline bool inScope(ParamId id, PresetScope scope)

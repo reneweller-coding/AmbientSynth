@@ -1194,22 +1194,10 @@ void AmbientSynthEditor::updateSourceCells()
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
     enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5 };
-    static const ParamId kIds[3][26] = {
-        { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
-          ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
-          ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
-          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync, ParamId::Src1Drift },
-        { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
-          ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
-          ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
-          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync, ParamId::Src2Drift },
-        { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
-          ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
-          ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
-          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync, ParamId::Src3Drift },
-    };
+    // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     for (int k = 0; k < 3; ++k) {
-        const int type = static_cast<int>(std::lround(proc_.engine().getParam(kIds[k][0])));
+        const ParamId* ids = slotParamIds(k);
+        const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
         for (int off = 1; off <= 25; ++off) {
             bool on = type != Off;
             switch (off) {
@@ -1230,7 +1218,7 @@ void AmbientSynthEditor::updateSourceCells()
             case 25: on = type != Off && type != Noise; break;                    // pitch drift
             default: break;
             }
-            const int ci = cellForParam(kIds[k][off]);
+            const int ci = cellForParam(ids[off]);
             if (ci < 0) continue;
             Cell& c = cells_[static_cast<size_t>(ci)];
             if (c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }

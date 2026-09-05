@@ -588,6 +588,43 @@ const Preset kPresets[] = {
     { "Turning Sky",
       "far_rotate=0.8;far_level=1;far_size=3;far_decay=70;far_asym=0.8;phase_width=0.5;phase_rate=0.012;"
       "osc_level=0.5;partials=12;brightness=0.45;attack=14;release=45;depth=1;width=1.4;master_gain=-11" },
+
+    // ---------------------------------------------------------------- 178..186 body and place
+    // The stages that are about the room rather than the sound: a body under everything, a
+    // background that steps aside, a machine that has aged, a headphone image outside the head,
+    // and a second conductor answering the first.
+    { "Soundboard",
+      "body_level=0.8;body_material=Wood;body_pitch=0.5;body_decay=3;body_tone=0.3;body_spread=0.7;"
+      "osc_level=0.6;partials=16;tilt=1.4;brightness=0.5;attack=10;release=30;far_decay=35;depth=0.8;master_gain=-13" },
+    { "Struck Plate",
+      "body_level=0.7;body_material=Plate;body_decay=6;body_tone=0.6;strike_level=0.4;strike_type=Metal;"
+      "strike_decay=1.5;strike_damp=0.3;osc_level=0.45;partials=14;brightness=0.55;attack=6;release=25;"
+      "keys_depth=0.15;far_decay=40;master_gain=-13" },
+    { "Cathedral Bell",
+      "body_level=0.75;body_material=Bell;body_pitch=1;body_decay=14;body_tone=0.7;body_spread=0.8;"
+      "osc_level=0.4;partials=18;inharmonic=0.25;brightness=0.6;attack=12;release=40;"
+      "far_size=3;far_decay=60;far_level=1;depth=0.95;master_gain=-14" },
+    { "Sympathetic Strings",
+      "body_level=0.6;body_material=String;body_decay=5;body_tone=0.5;brain2_on=on;brain2_rate=45;"
+      "brain2_density=2;brain2_interval=7;brain2_depth=0.95;osc_level=0.55;partials=20;attack=14;release=35;"
+      "far_decay=45;depth=0.85;master_gain=-13" },
+    { "Clearing Fog",
+      "far_unmask=0.85;far_level=1;far_size=2.6;far_decay=55;osc_level=0.6;partials=16;brightness=0.55;"
+      "attack=8;release=28;dly_mix=0.25;dly_to_far=0.7;depth=0.9;master_gain=-11" },
+    { "Old Machine",
+      "patina=0.85;patina_wow=0.7;patina_hiss=0.5;patina_age=0.6;osc_level=0.6;partials=14;brightness=0.5;"
+      "attack=12;release=35;dly_mix=0.3;dly_feedback=0.7;dly_absorb=0.7;far_decay=40;master_gain=-11" },
+    { "Around The Head",
+      "externalise=0.9;phase_width=0.6;phase_rate=0.02;itd=0.9;pan_drift=0.6;breath=0.35;doppler=0.5;"
+      "osc_level=0.55;partials=16;brightness=0.6;attack=10;release=30;far_decay=40;depth=0.75;width=1.3;master_gain=-12" },
+    { "Two Conductors",
+      "brain2_on=on;brain2_rate=30;brain2_density=3;brain2_interval=-12;brain2_low=24;brain2_high=48;"
+      "brain2_depth=1;brain_rate=35;brain_density=4;brain_low=48;brain_high=79;osc_level=0.5;partials=16;"
+      "attack=12;release=35;far_decay=50;depth=0.9;master_gain=-12" },
+    { "Under The Hand",
+      "brain_on=off;keys_depth=0.7;press_distance=0.8;press_bright=0.4;press_level=0.5;slide_cutoff=2;"
+      "slide_z=0.6;bend_range=12;mpe=on;attack=1.5;release=8;osc_level=0.7;partials=20;brightness=0.4;"
+      "z_mode=Series;z_shape=Vowel Morph;z_mix=0.6;far_decay=25;master_gain=-11" },
 };
 }
 

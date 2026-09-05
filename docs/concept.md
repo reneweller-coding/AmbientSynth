@@ -1066,8 +1066,21 @@ arm64-v8a. Details in `docs/quest-plan.md`.
    granular cloud, independent Sound/Cosmos preset layers. Open: per-preset
    random seeds, a "morph" between two full presets over minutes, MIDI
    learn for the standalone.
-2. **Performance** — Chebyshev sine recurrence when inharmonicity is 0, SIMD
-   across partials, voice rendering in parallel on desktop.
+2. **Performance** — SIMD across partials is done (`Core/include/ambient/Simd.h`,
+   AVX2 with a scalar path): the median preset went from about 39× to 52×
+   realtime on one core, the slowest from 17× to 17×.
+
+   **Voice rendering in parallel was measured and dropped, deliberately.** The
+   voices are rendered per control block of 64 samples with the conductor
+   interleaved between blocks; the work per block is a few microseconds, which
+   is the same order as the cost of synchronising two threads, so splitting the
+   voices there would buy nothing. Making it worthwhile would mean rendering a
+   whole chunk per voice group, which moves the conductor's decisions from a
+   1.3 ms grid to a 10 ms one and changes every render. At 52× realtime in the
+   median and 17× in the worst case, on one core, there is nothing to buy: the
+   instrument is not short of time. If a future feature changes that (many more
+   sources per voice, say), this is the note that says what to do and what it
+   would cost.
 3. **Quest** — CMake toolchain for the Android NDK (arm64-v8a), Oboe for
    low-latency audio, OpenXR for hands and head; the visual layer is a
    separate concern and can reuse the Kaleidoscope engine's ideas (calm

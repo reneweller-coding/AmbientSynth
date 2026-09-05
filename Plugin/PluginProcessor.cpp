@@ -353,7 +353,7 @@ void AmbientSynthProcessor::applyLevelMatch(int index)
     if (!levelMatch_ || index < 0 || index >= numPresetMeta()) return;
     const float loud = presetMeta(index).loudDb;
     if (loud >= -0.5f || loud < -80.0f) return;         // 0 means "never measured"
-    constexpr float kTarget = -24.0f;                   // where the built-in presets sit on average
+    constexpr float kTarget = -20.5f;                   // the measured median of the built-in presets
     if (auto* p = apvts.getParameter(paramDesc(ParamId::MasterGain).key)) {
         const float now = engine_.getParam(ParamId::MasterGain);
         const float want = juce::jlimit(-40.0f, 12.0f, now + juce::jlimit(-12.0f, 12.0f, kTarget - loud));

@@ -110,8 +110,10 @@ def main():
                     problems.append(f"{where}: {k}={x} outside [{lo}, {hi}]")
             if len(f) > 2 and f[2].strip():
                 m = f[2].split()
-                if len(m) != 9:
-                    problems.append(f"{where}: metadata has {len(m)} fields, expected 9")
+                # Nine numbers plus the tag bits; a tenth token is the measured loudness, which
+                # measure_packs.py has written since the level-matching option existed.
+                if len(m) not in (9, 10):
+                    problems.append(f"{where}: metadata has {len(m)} fields, expected 9 or 10")
                 else:
                     try:
                         vals = [float(x) for x in m[:8]]

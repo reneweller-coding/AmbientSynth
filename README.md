@@ -47,7 +47,7 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 
 Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in two independent layers that combine
-freely: the **Sound** box (148 built-in presets: voices, space, delays,
+freely: the **Sound** box (187 built-in presets: voices, space, delays,
 reverbs, brain, tuning) and the **Cosmos** box (32 presets for the Cosmos
 section only). Loading one layer never touches the other. In a DAW the full
 presets are the plugin's programs (both layers at once).

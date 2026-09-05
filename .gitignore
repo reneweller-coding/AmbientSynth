@@ -27,3 +27,4 @@ Library/Impulses/
 /build-noavx/
 Deploy/stage/
 Deploy/out/
+Deploy/content/

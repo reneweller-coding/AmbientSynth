@@ -59,17 +59,28 @@ Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<
 
 Nothing has to be installed first. The runtime is linked in
 (`-DAMBIENT_STATIC_RUNTIME=ON`), so there is no Visual C++ redistributable to chase — the script
-checks that with `dumpbin` and refuses to package a binary that still asks for one. AVX2 is off in
-this build: the instrument runs at about 39x realtime without it and 52x with it, and since
-neither is anywhere near the 1x that matters, a build for other people takes compatibility with
-every x86-64 machine over a speed nobody can hear. Build with `-DAMBIENT_AVX2=ON` for your own.
+checks that with `dumpbin` and refuses to package a binary that still asks for one. The build is
+AVX2 (52x realtime against 39x without it, both measured); every x86-64 processor since 2013 has
+it, and the setup asks the processor before installing rather than letting an older one die on an
+illegal instruction with no explanation.
 
 The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (25 packs, 5000 presets) into `ProgramData\AmbientSynth\Packs` — on by
-  default.
+* the **preset library** (25 packs, 5000 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **sample library** — 1214 samples, wavetables and impulse responses, 3.1 GB, downloaded
+  from the release and checked against its hash — into the same folder,
+
+all four on by default.
+
+The sample library is built by `Tools/make_content_pack.py`, which takes only what the packs
+actually name (the library folder holds more) and converts the 32-bit float samples to 24-bit,
+a quarter off the size for headroom they do not use: they all peak at exactly -6 dBFS, and the
+error the conversion adds sits at -149 dBFS. Rendered against both, every measured descriptor of
+a preset is identical — only the sample hash differs, as it must. Too big for git, so it lives on
+the release; the archives' names, sizes and hashes are generated into `Deploy/content-files.iss`
+for the installer to verify.
 
 It runs for everybody on the machine by default and asks for administrator rights once; without
 them, "just for me" (or `/CURRENTUSER`) installs into your own folders instead. The instrument

@@ -1151,10 +1151,11 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   everyday one in three ways, each for a reason worth writing down. The MSVC
   runtime is linked in, so there is no redistributable to chase -- and the
   release script proves it with `dumpbin` rather than trusting the flag: it
-  refuses to package a binary whose imports still name `VCRUNTIME`. AVX2 is
-  off, because 39x realtime and 52x realtime are both so far past the 1x that
-  matters that compatibility with every x86-64 machine is worth more than the
-  difference. And it builds in its own tree, so the everyday one is left alone.
+  refuses to package a binary whose imports still name `VCRUNTIME`. It is built
+  for AVX2 (52x realtime against 39x), which every x86-64 processor since 2013
+  has; the setup asks the processor first, because a machine without it does
+  not fail gracefully, it takes an illegal instruction and dies with nothing
+  said. And it builds in its own tree, so the everyday one is left alone.
   The tests are run in that configuration, not in the developer's: a static
   runtime and a missing AVX2 are exactly the kind of change that is fine until
   it is not. The setup itself (Inno Setup) installs the standalone, the VST3
@@ -1163,6 +1164,27 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   way because every path in it is an `{auto...}` one. The packs go into a
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
+
+* **The sample library** (`Tools/make_content_pack.py`). The 5000 presets in
+  the packs name 1214 samples, wavetables and impulse responses that are far
+  too big for git -- so they are a downloaded package, and the setup fetches
+  and unpacks it. Two things happen on the way in. Only what is referenced
+  travels: the library folder holds more than the packs use, and shipping the
+  rest would add gigabytes nobody's preset asks for. And the samples, which
+  are generated as 32-bit float, become 24-bit PCM. That is a quarter off the
+  size for headroom they do not have: measured, every one of them peaks at
+  exactly 0.5, and the error the conversion adds sits at -149 dBFS RMS. The
+  wavetables (16-bit) and impulse responses (24-bit) were already PCM and are
+  copied untouched -- which is worth saying, because the first version of the
+  script reported them as "would have clipped", a number that was simply
+  false. The proof that it is inaudible is not the arithmetic but the render:
+  four pack presets measured against both libraries agree in every descriptor
+  to the last digit printed, and differ only in the sample hash, as they must.
+  4.86 GB of source becomes 3.06 GB in three archives -- deflate at level 6,
+  measured at 85 % where level 9 is also 85 % -- because a release asset may
+  not exceed 2 GB. Names, sizes and SHA-256 are generated into an include the
+  installer reads, since a hash that does not match what is on the release is
+  a download that fails at the last possible moment.
 * Editor: sections flow-laid-out from the table (knobs, toggles, combo boxes),
   header with preset box, voice count, brain root, scale, arc value and a
   keyboard strip where near notes are bright and far notes dim; *Load Scala…*

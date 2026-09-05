@@ -1,0 +1,233 @@
+"""AmbientSynth -- build the downloadable content package: the media the preset packs name.
+
+The 25 packs in Library/Packs reference samples, wavetables and impulse responses by relative
+path. They are far too big for git and are not in it; this makes the archives that the installer
+downloads instead, and the manifest the installer needs to verify them.
+
+    python Tools/make_content_pack.py                  # build everything into Deploy/content
+    python Tools/make_content_pack.py --check-only     # just say what would go in and how big
+
+Two things happen on the way in.
+
+Only what is referenced travels. The library folder holds more than the packs use (unreferenced
+textures from earlier generation runs, the .txt prompts beside each sample); shipping those would
+add gigabytes nobody's preset asks for.
+
+The samples are generated as 32-bit float and are converted to 24-bit PCM, which is a quarter off
+the size for headroom no texture has: they are normalised material well inside +-1, and 24 bits
+put the quantisation floor at -144 dBFS, far below anything the instrument's own arithmetic
+contributes. Any file that turns out to peak above full scale is left as float rather than
+clipped, and said so. The core's WAV reader takes 8/16/24/32-bit PCM and 32-bit float alike
+(Core/src/WavFile.cpp), so nothing has to change to read them.
+"""
+import argparse
+import hashlib
+import json
+import os
+import struct
+import sys
+import zipfile
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, ".."))
+PACKS = os.path.join(ROOT, "Library", "Packs")
+OUT = os.path.join(ROOT, "Deploy", "content")
+KINDS = ("Textures", "Wavetables", "Impulses")
+
+
+def referenced():
+    """Every media file the packs name, as (kind, filename) -> absolute source path."""
+    want = {}
+    for name in sorted(os.listdir(PACKS)):
+        if not name.endswith(".ambientpack"):
+            continue
+        with open(os.path.join(PACKS, name), encoding="utf-8", errors="replace") as f:
+            for line in f:
+                t = line.strip()
+                if not t or t.startswith("#"):
+                    continue
+                for field in t.split("|"):
+                    field = field.strip()
+                    if not field.lower().endswith(".wav"):
+                        continue
+                    src = os.path.normpath(os.path.join(PACKS, field))
+                    kind = os.path.basename(os.path.dirname(src))
+                    if kind not in KINDS:
+                        print("  ignored (not a library folder): %s" % field)
+                        continue
+                    want[(kind, os.path.basename(src))] = src
+    return want
+
+
+def read_wav(path):
+    """(format tag, channels, rate, bits, raw data bytes) -- the file as it is, no conversion."""
+    with open(path, "rb") as f:
+        head = f.read(12)
+        if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+            return None
+        fmt = None
+        while True:
+            hdr = f.read(8)
+            if len(hdr) < 8:
+                break
+            cid, size = hdr[:4], struct.unpack("<I", hdr[4:8])[0]
+            body = f.read(size + (size & 1))[:size]
+            if cid == b"fmt ":
+                tag, ch, rate, _, _, bits = struct.unpack("<HHIIHH", body[:16])
+                if tag == 0xFFFE and len(body) >= 40:
+                    tag = struct.unpack("<H", body[24:26])[0]
+                fmt = (tag, ch, rate, bits)
+            elif cid == b"data" and fmt is not None:
+                return fmt + (body,)
+    return None
+
+
+def to_24bit(path):
+    """(bytes, why) -- the file as 24-bit PCM, or (None, why) when it is left exactly as it is.
+
+    `why` is one of "converted", "already pcm" (the wavetables are 16-bit and the impulse
+    responses 24-bit already) or "above full scale" (a float file that would clip, and is
+    therefore not touched). Three separate answers, because reporting them as one number said
+    that four hundred files would have clipped when in fact none of them would.
+    """
+    got = read_wav(path)
+    if got is None:
+        return None, "unreadable"
+    tag, ch, rate, bits, data = got
+    if tag != 3 or bits != 32:
+        return None, "already pcm"
+    n = len(data) // 4
+    samples = np.frombuffer(data[:n * 4], dtype="<f4")
+    if samples.size == 0 or float(np.max(np.abs(samples))) > 1.0:
+        return None, "above full scale"    # louder than full scale: leave it alone, do not clip
+    # Round to nearest rather than truncate: truncation is a DC-biased error, and on quiet
+    # material that bias is the one thing a listener could actually hear.
+    ints = np.rint(samples.astype(np.float64) * 8388607.0).astype(np.int32)
+    np.clip(ints, -8388608, 8388607, out=ints)
+    out = ints.astype("<i4").view(np.uint8).reshape(-1, 4)[:, :3].tobytes()
+    block = ch * 3
+    header = b"RIFF" + struct.pack("<I", 36 + len(out)) + b"WAVEfmt " + struct.pack(
+        "<IHHIIHH", 16, 1, ch, rate, rate * block, block, 24) + b"data" + struct.pack("<I", len(out))
+    return header + bytes(out), "converted"
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def write_installer_include(manifest):
+    """The [Files] lines for the installer, generated rather than kept by hand: the sizes and the
+    hashes change with every rebuild of the package, and a hash that does not match what is on the
+    release is a download that fails at the very last moment. Included by Deploy/AmbientSynth.iss."""
+    inc = os.path.join(ROOT, "Deploy", "content-files.iss")
+    total = sum(p["bytes"] for p in manifest["parts"])
+    nl, cont = chr(10), chr(92)          # a line ending, and Inno's line-continuation backslash
+    with open(inc, "w", encoding="utf-8") as f:
+        f.write("; Generated by Tools/make_content_pack.py -- do not edit." + nl)
+        f.write("; Content package %s: %d archives, %.2f GB." % (
+            manifest["version"], len(manifest["parts"]), total / 1e9) + nl)
+        for p in manifest["parts"]:
+            f.write('Source: "{#ContentBaseUrl}/%s"; DestName: "%s"; DestDir: "{code:LibDir}"; %s%s'
+                    '    ExternalSize: %d; Hash: "%s"; Components: packs%scontent; %s%s'
+                    '    Flags: external download extractarchive recursesubdirs ignoreversion%s'
+                    % (p["name"], p["name"], cont, nl,
+                       p["bytes"], p["sha256"], cont, cont, nl, nl))
+    with open(os.path.join(ROOT, "Deploy", "content-size.txt"), "w", encoding="utf-8") as f:
+        f.write("%.1f" % (total / 1e9))
+    print("installer include: %s (%d archives, %.2f GB)" % (inc, len(manifest["parts"]), total / 1e9))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--version", default="v1", help="content package version, part of every name")
+    ap.add_argument("--max-part-mb", type=int, default=1800,
+                    help="largest archive to write; GitHub refuses a release asset over 2 GB")
+    ap.add_argument("--check-only", action="store_true")
+    ap.add_argument("--emit-only", action="store_true",
+                    help="regenerate the installer's include from an existing manifest, no rebuild")
+    a = ap.parse_args()
+
+    if a.emit_only:
+        with open(os.path.join(OUT, "content-manifest.json"), encoding="utf-8") as f:
+            write_installer_include(json.load(f))
+        return
+
+    want = referenced()
+    kinds = {k: 0 for k in KINDS}
+    total = 0
+    for (kind, _), src in want.items():
+        if not os.path.isfile(src):
+            sys.exit("missing: %s" % src)
+        kinds[kind] += 1
+        total += os.path.getsize(src)
+    print("referenced: %d files, %.2f GB" % (len(want), total / 1e9))
+    for k in KINDS:
+        print("  %-12s %5d" % (k, kinds[k]))
+    if a.check_only:
+        return
+
+    os.makedirs(OUT, exist_ok=True)
+    staged, why_count, saved = [], {}, 0
+    for i, ((kind, name), src) in enumerate(sorted(want.items())):
+        dst_dir = os.path.join(OUT, kind)
+        os.makedirs(dst_dir, exist_ok=True)
+        dst = os.path.join(dst_dir, name)
+        conv, why = to_24bit(src)
+        why_count[why] = why_count.get(why, 0) + 1
+        if conv is None:
+            with open(src, "rb") as f:
+                conv = f.read()
+        else:
+            saved += os.path.getsize(src) - len(conv)
+        with open(dst, "wb") as f:
+            f.write(conv)
+        staged.append((kind, name, dst))
+        if (i + 1) % 200 == 0:
+            print("  %d/%d" % (i + 1, len(want)), flush=True)
+    print("%s -- saved %.2f GB" % (", ".join("%s: %d" % kv for kv in sorted(why_count.items())), saved / 1e9))
+
+    # ---------------------------------------------------------------- archives
+    # Deflated at level 6. Measured on the converted samples: stored is the full size, level 6
+    # gets to 85 %, level 9 also gets to 85 % and takes no longer -- so 6, and the last 15 % of
+    # three gigabytes is worth the inflating at the other end.
+    limit = a.max_part_mb * 1024 * 1024
+    parts, part, size = [], [], 0
+    for kind, name, path in staged:
+        n = os.path.getsize(path)
+        if part and size + n > limit:
+            parts.append(part)
+            part, size = [], 0
+        part.append((kind, name, path))
+        size += n
+    if part:
+        parts.append(part)
+
+    manifest = {"version": a.version, "parts": []}
+    for idx, part in enumerate(parts, 1):
+        zip_name = "AmbientSynth-content-%s-part%d.zip" % (a.version, idx)
+        zip_path = os.path.join(OUT, zip_name)
+        print("writing %s (%d files)" % (zip_name, len(part)), flush=True)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, allowZip64=True, compresslevel=6) as z:
+            for kind, name, path in part:
+                z.write(path, "%s/%s" % (kind, name))
+        manifest["parts"].append({"name": zip_name, "bytes": os.path.getsize(zip_path),
+                                  "sha256": sha256(zip_path), "files": len(part)})
+        print("  %.2f GB" % (os.path.getsize(zip_path) / 1e9))
+
+    with open(os.path.join(OUT, "content-manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    print("manifest: %s" % os.path.join(OUT, "content-manifest.json"))
+
+    write_installer_include(manifest)
+    for p in manifest["parts"]:
+        print("  %s  %.2f GB  %s" % (p["name"], p["bytes"] / 1e9, p["sha256"][:16] + "..."))
+
+
+if __name__ == "__main__":
+    main()

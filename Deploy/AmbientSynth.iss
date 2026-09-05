@@ -16,6 +16,16 @@
 #define Publisher "Rene Weller"
 #define AppURL "https://github.com/reneweller-coding/AmbientSynth"
 #define Stage "stage"
+; Where the sample library is downloaded from. The archives are release assets; the lines that
+; name them, with their sizes and hashes, are generated into content-files.iss by
+; Tools/make_content_pack.py, because both change with every rebuild of the package.
+#ifndef ContentBaseUrl
+  #define ContentBaseUrl "https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0"
+#endif
+#define HaveContent FileExists(AddBackslash(SourcePath) + "content-files.iss")
+#if HaveContent
+  #define ContentSize FileRead(FileOpen(AddBackslash(SourcePath) + "content-size.txt"))
+#endif
 
 [Setup]
 AppId={{7C3B9E14-5A2D-4C88-9E1F-2B6A0D5F3A41}
@@ -36,7 +46,9 @@ UninstallDisplayIcon={app}\AmbientSynth.exe
 UninstallDisplayName={#AppName} {#Version}
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
+WizardStyle=modern dynamic
+; Lets the [Files] section unpack a downloaded archive on its own (Inno 6.4+).
+ArchiveExtraction=auto
 ; For everybody on the machine by default -- the VST3 belongs in the shared plug-in folder, which
 ; needs administrator rights. Anyone who does not have them can choose "just for me" in the first
 ; dialog (or pass /CURRENTUSER) and gets the per-user plug-in folder instead; the instrument looks
@@ -62,11 +74,15 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 en.CompStandalone=Standalone application
 en.CompVst3=VST3 plug-in (for a DAW)
 en.CompPacks=Preset library (25 packs, 5000 presets)
+en.CompContent=Sample library: the samples, wavetables and impulse responses the presets use (downloaded, %1 GB)
 en.TaskDesktop=Create a desktop shortcut
+en.NoAvx2=This processor reports no AVX2 support.%n%nAmbientSynth is built for AVX2, which every x86-64 processor since 2013 has. Without it, it will not start.%n%nInstall anyway?
 de.CompStandalone=Eigenstaendiges Programm
 de.CompVst3=VST3-Plugin (fuer eine DAW)
 de.CompPacks=Preset-Bibliothek (25 Pakete, 5000 Presets)
+de.CompContent=Sample-Bibliothek: die Samples, Wavetables und Impulsantworten der Presets (wird geladen, %1 GB)
 de.TaskDesktop=Verknuepfung auf dem Desktop anlegen
+de.NoAvx2=Dieser Prozessor meldet keine AVX2-Unterstuetzung.%n%nAmbientSynth ist fuer AVX2 gebaut, das jeder x86-64-Prozessor seit 2013 hat. Ohne AVX2 startet es nicht.%n%nTrotzdem installieren?
 
 [Types]
 Name: "full"; Description: "{code:FullTypeName}"
@@ -76,6 +92,11 @@ Name: "custom"; Description: "{code:CustomTypeName}"; Flags: iscustom
 Name: "standalone"; Description: "{cm:CompStandalone}"; Types: full custom; Flags: fixed
 Name: "vst3";       Description: "{cm:CompVst3}";       Types: full custom
 Name: "packs";      Description: "{cm:CompPacks}";      Types: full custom
+#if HaveContent
+; The presets name their samples by relative path, so the sample library only makes sense
+; alongside the packs -- hence "packs" is a dependency, not just a suggestion.
+Name: "packs\content"; Description: "{cm:CompContent,{#ContentSize}}"; Types: full custom
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:TaskDesktop}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; Components: standalone
@@ -91,10 +112,14 @@ Source: "{#Stage}\AmbientSynth.vst3\*"; DestDir: "{autocf}\VST3\AmbientSynth.vst
 ; administrator rights, per user -- so that removing them again can never take a pack the user put
 ; there themselves along with it. The instrument reads both of these as well as each user's own
 ; Documents\AmbientSynth\Packs (see Core/src/PresetPacks.cpp).
-Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{commonappdata}\AmbientSynth\Packs"; \
-    Check: IsAdminInstallMode; Components: packs; Flags: ignoreversion
-Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{localappdata}\AmbientSynth\Packs"; \
-    Check: not IsAdminInstallMode; Components: packs; Flags: ignoreversion
+Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{code:LibDir}\Packs"; \
+    Components: packs; Flags: ignoreversion
+#if HaveContent
+; The sample library: downloaded from the release, checked against its hash, unpacked into the
+; library folder beside the packs (the archives hold Textures\, Wavetables\ and Impulses\, which
+; is exactly what the packs' relative paths expect) and deleted again afterwards.
+#include "content-files.iss"
+#endif
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\AmbientSynth.exe"; Components: standalone
@@ -110,11 +135,42 @@ Filename: "{app}\AmbientSynth.exe"; Description: "{cm:LaunchProgram,{#AppName}}"
 ; own Documents is theirs and is never touched.
 Type: filesandordirs; Name: "{autocf}\VST3\AmbientSynth.vst3"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Packs"
+Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Textures"
+Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Wavetables"
+Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Impulses"
 Type: dirifempty;     Name: "{commonappdata}\AmbientSynth"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Packs"
+Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Textures"
+Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Wavetables"
+Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Impulses"
 Type: dirifempty;     Name: "{localappdata}\AmbientSynth"
 
 [Code]
+// AVX2 is a hard requirement of the shipped binaries, and a processor without it does not fail
+// gracefully -- it takes an illegal instruction and dies with no explanation at all. Asked here,
+// where there is still somewhere to say it. Answered rather than enforced: the query is a Windows
+// feature flag, and being told "no" by an old Windows is not the same as the processor lacking it.
+function IsProcessorFeaturePresent(Feature: DWord): Boolean;
+  external 'IsProcessorFeaturePresent@kernel32.dll stdcall';
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if not IsProcessorFeaturePresent(40) then                    // PF_AVX2_INSTRUCTIONS_AVAILABLE
+    Result := MsgBox(CustomMessage('NoAvx2'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+end;
+
+// Where the preset packs and their samples live: one folder, machine-wide or per user, so that
+// the relative paths inside the packs ("../Textures/x.wav") land where they are looked for. Never
+// the user's own Documents\AmbientSynth, which is theirs and must survive an uninstall.
+function LibDir(Param: String): String;
+begin
+  if IsAdminInstallMode then
+    Result := ExpandConstant('{commonappdata}\AmbientSynth')
+  else
+    Result := ExpandConstant('{localappdata}\AmbientSynth');
+end;
+
 function FullTypeName(Param: String): String;
 begin
   if ActiveLanguage = 'de' then Result := 'Vollstaendig' else Result := 'Full installation';

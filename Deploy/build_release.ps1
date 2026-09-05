@@ -6,10 +6,9 @@
 #
 #   * the MSVC runtime is linked in (AMBIENT_STATIC_RUNTIME), so nothing has to be installed
 #     first -- no redistributable, no DLL beside the executable;
-#   * AVX2 is off. The instrument runs at roughly 39x realtime without it and 52x with it (both
-#     measured), and neither number is anywhere near the 1x that matters, so a build for other
-#     people takes compatibility with every x86-64 machine over a speed nobody can hear. Anyone
-#     building for their own computer can turn it back on with -DAMBIENT_AVX2=ON;
+#   * AVX2 is on (39x realtime without it, 52x with it, both measured). Every x86-64 processor
+#     since 2013 has it, which is every machine anybody makes music on; the setup checks for it
+#     before installing rather than letting an old one fail with an illegal instruction;
 #   * it builds in its own folder, so the everyday build tree is left alone.
 #
 # The result is Deploy\out\AmbientSynth-<version>-Setup.exe plus Deploy\out\AmbientSynth-<version>-portable.zip
@@ -37,7 +36,7 @@ $out = Join-Path $root "Deploy\out"
 if (-not $SkipBuild) {
     # A build for other people is not worth having in a hurry: -j 2 leaves the machine usable.
     cmake -S . -B $buildDir -G "Visual Studio 18 2026" -A x64 `
-        -DAMBIENT_STATIC_RUNTIME=ON -DAMBIENT_AVX2=OFF -DAMBIENT_BUILD_TOOLS=ON `
+        -DAMBIENT_STATIC_RUNTIME=ON -DAMBIENT_AVX2=ON -DAMBIENT_BUILD_TOOLS=ON `
         "-DFETCHCONTENT_SOURCE_DIR_JUCE=$root/build/_deps/juce-src"   # the JUCE already fetched
     if ($LASTEXITCODE -ne 0) { throw "configure failed" }
     cmake --build $buildDir --config Release --parallel 2

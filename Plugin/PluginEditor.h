@@ -202,45 +202,74 @@ private:
         int selected = -1;
     };
     std::unique_ptr<BrowseView> browse_;
-    // Modulation page: the eight LFOs and six envelopes, each as a curve you can see moving,
-    // with its knobs beside it -- and the matrix underneath. A modulator you cannot see is a
-    // modulator you cannot aim, which is the whole reason the shapes are drawn here at all.
+    // The modulation strip along the bottom of the main page, in the shape Pigments uses: a lane
+    // of every modulator as a small card with its live curve, a row of tabs, and the full editors
+    // for whichever group is open. A modulator you cannot see is a modulator you cannot aim.
     struct ModView : juce::Component, juce::Timer {
-        explicit ModView(AmbientSynthProcessor& p);
+        ModView(AmbientSynthProcessor& p, AmbientSynthEditor& o);
         void paint(juce::Graphics&) override;
         void resized() override;
         void timerCallback() override;
+        void mouseDown(const juce::MouseEvent&) override;
+        void mouseDrag(const juce::MouseEvent&) override;
+        void mouseUp(const juce::MouseEvent&) override;
+        void mouseMove(const juce::MouseEvent&) override;
 
-        // One LFO or one envelope: a curve plus the controls that shape it.
-        struct Row {
+        struct Row {   // one LFO or one envelope: its curve and the controls that shape it
             std::vector<std::unique_ptr<juce::Component>> controls;
             std::vector<std::unique_ptr<juce::Label>> labels;
             std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliders;
             std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> combos;
-            juce::Rectangle<int> curve;      // where the shape is drawn
+            juce::Rectangle<int> curve;
             juce::String title;
         };
         Row lfos[ambient::kNumLfos];
         Row envs[ambient::kNumModEnvs];
 
+        // A card in the lane: one modulation source, drawn with its own live shape.
+        struct Card {
+            ambient::ModSource source = ambient::ModSource::None;
+            juce::String label;
+            juce::Colour colour;
+            juce::Rectangle<int> bounds;
+            int tab = 0;                 // which tab this card belongs to
+            int index = 0;               // LFO or envelope number, for the curve
+        };
+        std::vector<Card> cards;
+        int tab = 0;                     // 0 LFO, 1 envelopes, 2 matrix
+        int hoverCard = -1;
+        int dragCard = -1;               // the card being dragged onto a knob
+        juce::Point<int> dragPos;
+
+        void setTab(int t);
+        void paintLane(juce::Graphics&);
+        void paintCard(juce::Graphics&, const Card&, bool hot);
         void paintLfo(juce::Graphics&, int i);
         void paintEnv(juce::Graphics&, int i);
         ambient::LfoSpec specOf(int i) const;
+        // Where a drag ended: the parameter under the mouse, or none.
+        int paramUnder(juce::Point<int> screenPos) const;
 
         AmbientSynthProcessor& proc;
-        // The matrix as text, the way the gesture mappings already are: thirty-two rows of
-        // controls would be a page of their own, and the text form is what the preset stores.
+        AmbientSynthEditor& owner;
+        juce::TextButton tabLfo{ "LFO" }, tabEnv{ "ENVELOPES" }, tabMatrix{ "MATRIX" };
         juce::TextEditor matrixText;
         juce::TextButton applyMatrix{ "Apply" }, clearMatrix{ "Clear" };
         juce::Label matrixInfo, hint;
+        juce::Rectangle<int> lane, tabsArea, content;
         void pushMatrix();
         void pullMatrix();
+        // Adds a route from a dragged source to a parameter, with a small default depth.
+        bool addRoute(ambient::ModSource src, ambient::ParamId target);
     };
     std::unique_ptr<ModView> mod_;
-    // The page is taller than most windows -- eight LFOs, six envelopes and the matrix -- so it
-    // scrolls rather than shrinking its rows until the curves are unreadable.
     juce::Viewport modPort_;
     std::unique_ptr<juce::TextButton> modButton_;
+public:
+    // The cells the modulation strip needs to find a drop target and to mark modulated knobs.
+    int cellParamAt(juce::Point<int> screenPos) const;
+    juce::Rectangle<int> cellScreenBounds(int cellIndex) const;
+private:
     std::unique_ptr<juce::TextButton> browseButton_;
     void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();

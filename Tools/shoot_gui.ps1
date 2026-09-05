@@ -42,11 +42,16 @@ public class Win {
   // PrintWindow with PW_RENDERFULLCONTENT captures the window itself, so anything lying on top
   // of it (a browser, an alert) does not end up in the picture -- CopyFromScreen does.
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+  // Without this the process is DPI-virtualised: GetWindowRect comes back in logical pixels and
+  // PrintWindow renders only the top-left part of the window at physical size. At 150 % that
+  // showed two thirds of the editor, and every layout "bug" it seemed to reveal was this.
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 }
 "@
 
+[void][Win]::SetProcessDPIAware()
 $proc = Start-Process -FilePath $exe -PassThru
 try {
     $deadline = (Get-Date).AddSeconds($Wait + 25)

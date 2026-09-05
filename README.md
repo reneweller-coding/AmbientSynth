@@ -159,10 +159,11 @@ builds for Android arm64 with the NDK.
 
 **Layout.** The sections are grouped the way the signal flows: VOICE,
 FOREGROUND and BACKGROUND on the left, CONDUCTOR (brain, tuning), COSMOS and
-MORPH on the right, Master mid/side in the header. The header draws the
-routing map: voices into the foreground chain, the parallel Cosmos return, the
-cloud and far sends into the background reverb, and both planes into the
-mid/side output.
+MORPH on the right, Master mid/side in the header. The header carries the
+help line: point at any control and it names it, shows its value and says
+what it does (the same text as its tooltip). *Help* (or F1) opens the manual:
+thirteen topics with a signal-flow diagram, pictures of the sections as they
+stand on the panel, the live displays, and a list of every parameter.
 
 Preset families: sleep and night pieces, cathedral and glass, deep and sub,
 breath and voice, exotic tunings, shimmer and delay, thirty Cosmos

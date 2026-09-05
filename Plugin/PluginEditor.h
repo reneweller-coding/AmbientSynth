@@ -37,7 +37,46 @@ private:
     void buildCells();
     void colourCellsByGroup();
     int  addExtraCell(const juce::String& section, std::unique_ptr<juce::Component> comp, const juce::String& label, int units);
-    void paintRoutingMap(juce::Graphics&, juce::Rectangle<int> area);
+    // Help: the line in the header follows the mouse; the page is the manual by topic.
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    bool keyPressed(const juce::KeyPress&) override;
+    int  hoveredCell_ = -1;
+    struct HelpView : juce::Component, juce::ListBoxModel {
+        HelpView(AmbientSynthProcessor&, AmbientSynthEditor&);
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        int  getNumRows() override;
+        void paintListBoxItem(int row, juce::Graphics&, int w, int h, bool selected) override;
+        void selectedRowsChanged(int row) override;
+        void showTopic(int row);
+        AmbientSynthProcessor& proc;
+        AmbientSynthEditor& owner;
+        juce::ListBox topics;
+        juce::TextEditor text;
+        juce::String parameters;   // the generated last topic: every parameter with its help
+        // The pictures: snapshots of the topic's sections, fresh from the panel with its current
+        // values, and a live display of the unit -- the same component the page uses, a second copy.
+        std::vector<juce::Image> pics;
+        std::vector<juce::Rectangle<int>> picRects;
+        std::unique_ptr<juce::Component> live;
+        // The signal flow, drawn large enough to read: what the routing map in the header was for.
+        struct FlowDiagram : juce::Component {
+            explicit FlowDiagram(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); }
+            void paint(juce::Graphics&) override;
+            AmbientSynthProcessor& proc;
+        };
+        FlowDiagram flow;
+        int topic = 0;
+    };
+    // Snapshots for the manual: a section as it stands on the panel (its tab is switched in for
+    // the picture and back again), the modulation strip, the browser page.
+    juce::Image snapshotSection(const juce::String& name);
+    juce::Image snapshotStrip();
+    juce::Image snapshotBrowse();
+    std::unique_ptr<HelpView> help_;
+    std::unique_ptr<juce::TextButton> helpButton_;
+    std::unique_ptr<juce::TooltipWindow> tooltips_;
 
     struct Cell {
         std::unique_ptr<juce::Component> comp;
@@ -373,7 +412,7 @@ private:
     juce::ComboBox* morphABox_ = nullptr;   // owned by their cells
     juce::ComboBox* morphBBox_ = nullptr;
     std::unique_ptr<juce::FileChooser> chooser_;
-    juce::Rectangle<int> header_, routing_, keys_;
+    juce::Rectangle<int> header_, helpLine_, keys_;
     bool sounding_[128] = {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AmbientSynthEditor)

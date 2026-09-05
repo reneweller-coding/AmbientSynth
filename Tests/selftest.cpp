@@ -7,6 +7,7 @@
 #include "ambient/Effects.h"
 #include "ambient/Cosmos.h"
 #include "ambient/Presets.h"
+#include "ambient/Help.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
 #include "ambient/Menu.h"
@@ -287,6 +288,7 @@ void testPresets()
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
         int perf = 0; for (const ParamDesc& d : paramTable()) perf += isPerformanceParam(d.id) ? 1 : 0;
+        for (const ParamDesc& d : paramTable()) CHECK(paramHelp(d.id)[0] != 0, (std::string("help text for ") + d.key).c_str());
         CHECK(count == kNumParams - perf, "preset sets every parameter except the performance state (morph, macros, inertia, map, route, clock)");
     }
     Engine e;

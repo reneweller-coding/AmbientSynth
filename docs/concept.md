@@ -944,6 +944,18 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   matrix as text. A modulated knob wears a thin ring in its source's colour
   and a second arc from its value to where the modulation is pushing it this
   instant; its right-click menu lists what drives it, each route removable.
+  Help (`Core/include/ambient/Help.h`): one or two sentences for every
+  parameter (`paramHelp`, families share their text so the three slots and
+  eight LFOs cannot drift apart; the self test insists every parameter has
+  one) and the manual by topic (`helpTopicText`). The plugin shows them as
+  tooltips, as the header line that follows the mouse (name, value, text,
+  how many routes drive it), and as the Help page (button or F1): topics on
+  the left, the text at a readable line length, and to its right the
+  pictures -- a drawn signal-flow diagram for the overview, and for the other
+  topics snapshots of the topic's sections taken from the panel that moment
+  (the tab is switched in for the picture and back) plus a second, live copy
+  of the unit's display. Texts live in the core so every shell tells the
+  same story.
 
 ## Roadmap
 

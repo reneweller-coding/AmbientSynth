@@ -2,6 +2,7 @@
 #include "AmbientLookAndFeel.h"
 #include <cstdlib>
 #include "ambient/Params.h"
+#include "ambient/Help.h"
 #include "ambient/Presets.h"
 #include "ambient/PresetMeta.h"
 #include "ambient/PresetMap.h"
@@ -120,6 +121,16 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*browseButton_);
     browse_ = std::make_unique<BrowseView>(proc_);
     addChildComponent(*browse_);
+    helpButton_ = std::make_unique<juce::TextButton>("Help");
+    helpButton_->setTooltip("The manual, by topic (F1)");
+    helpButton_->setClickingTogglesState(true);
+    helpButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    helpButton_->onClick = [this] { setPage(helpButton_->getToggleState() ? 3 : 0); };
+    addAndMakeVisible(*helpButton_);
+    help_ = std::make_unique<HelpView>(proc_, *this);
+    addChildComponent(*help_);
+    tooltips_ = std::make_unique<juce::TooltipWindow>(nullptr, 600);
+    setWantsKeyboardFocus(true);
 
     // Header controls
     soundBox_ = std::make_unique<juce::ComboBox>();
@@ -232,6 +243,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
         const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");
         if (br.isNotEmpty()) { setPage(2); if (br == "map") browse_->setMode(1); }
+        const int hv = juce::SystemStats::getEnvironmentVariable("AMBIENT_HELP", "0").getIntValue();   // AMBIENT_HELP=<topic+1>: open the manual there
+        if (hv > 0) { setPage(3); if (help_) help_->topics.selectRow(hv - 1); }
         const juce::String sc = juce::SystemStats::getEnvironmentVariable("AMBIENT_SCROLL", "");
         if (sc.isNotEmpty()) juce::MessageManager::callAsync([this, y = sc.getIntValue()] { viewport_.setViewPosition(0, y); });
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
@@ -312,6 +325,7 @@ void AmbientSynthEditor::buildCells()
         }
         }
         c.comp->addMouseListener(this, false);
+        if (auto* tc = dynamic_cast<juce::SettableTooltipClient*>(c.comp.get())) tc->setTooltip(ambient::paramHelp(d.id));
         cellOf_[c.comp.get()] = static_cast<int>(cells_.size());
         sec->cells.push_back(static_cast<int>(cells_.size()));
         cells_.push_back(std::move(c));
@@ -468,16 +482,18 @@ void AmbientSynthEditor::resized()
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
     if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
+    if (helpButton_) helpButton_->setBounds(1200, 8, 56, 24);
 
     const int W = designW_, H = designH_;
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
     if (browse_) browse_->setBounds(0, kHeaderH, W, H - kHeaderH);
+    if (help_) help_->setBounds(0, kHeaderH, W, H - kHeaderH);
     // The modulation strip sits along the bottom of the main page, the way Pigments puts its
     // modulator lane there: the sources are always in sight, and a route is a drag away.
     const int stripH = kStripH;
     if (mod_) { mod_->setBounds(0, H - stripH, W, stripH); mod_->toFront(false); }
-    routing_ = { 12, 40, 900, kHeaderH - 46 };
-    keys_ = { 930, 42, juce::jmax(160, W - 930 - 340), 26 };
+    helpLine_ = { 12, 40, W / 2 - 30, kHeaderH - 62 };
+    keys_ = { W / 2, 44, juce::jmax(160, W - W / 2 - 360), 24 };
     if (master_) master_->setBounds(W - 74, 6, 66, 52);
 
     // The Master section (mid/side) sits in the header, left of the master knob.
@@ -623,9 +639,11 @@ void AmbientSynthEditor::setPage(int page)
     viewport_.setVisible(page == 0);
     perform_->setVisible(page == 1);
     browse_->setVisible(page == 2);
+    if (help_) help_->setVisible(page == 3);
     if (mod_) mod_->setVisible(page == 0);
     if (performButton_->getToggleState() != (page == 1)) performButton_->setToggleState(page == 1, juce::dontSendNotification);
     if (browseButton_->getToggleState() != (page == 2)) browseButton_->setToggleState(page == 2, juce::dontSendNotification);
+    if (helpButton_ && helpButton_->getToggleState() != (page == 3)) helpButton_->setToggleState(page == 3, juce::dontSendNotification);
 
     if (page == 2) browse_->applyFilter();
 
@@ -656,12 +674,14 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
         if (d->kind == ParamKind::Choice) {
             auto cb = std::make_unique<juce::ComboBox>();
             for (int i = 0; i < d->numChoices; ++i) cb->addItem(d->choices[i], i + 1);
+            cb->setTooltip(ambient::paramHelp(d->id));
             addAndMakeVisible(*cb);
             row.combos.push_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.apvts, key, *cb));
             row.controls.push_back(std::move(cb));
         } else {
             auto s = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
             if (d->unit[0] != 0) s->setTextValueSuffix(juce::String(" ") + d->unit);
+            s->setTooltip(ambient::paramHelp(d->id));
             s->setColour(juce::Slider::rotarySliderFillColourId, ui::accent);
             addAndMakeVisible(*s);
             row.sliders.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, key, *s));
@@ -2128,7 +2148,7 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         g.setColour(kText); g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText(preset(hover).name, static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 20, 260, 14, juce::Justification::centredLeft);
         g.setColour(kDim); g.setFont(juce::FontOptions(10.5f));
-        g.drawText(juce::String(presetFamilyName(m.family)) + "  ·  " + tags.trim(), static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 6, 360, 14, juce::Justification::centredLeft);
+        g.drawText(juce::String(presetFamilyName(m.family)) + "  -  " + tags.trim(), static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 6, 360, 14, juce::Justification::centredLeft);
     }
     // legend
     g.setFont(juce::FontOptions(10.5f));
@@ -2326,6 +2346,279 @@ void AmbientSynthEditor::mouseDown(const juce::MouseEvent& e)
     });
 }
 
+void AmbientSynthEditor::mouseEnter(const juce::MouseEvent& e)
+{
+    auto it = cellOf_.find(e.eventComponent);
+    const int cell = it != cellOf_.end() ? it->second : -1;
+    if (cell != hoveredCell_) { hoveredCell_ = cell; repaint(); }
+}
+
+void AmbientSynthEditor::mouseExit(const juce::MouseEvent& e)
+{
+    auto it = cellOf_.find(e.eventComponent);
+    if (it != cellOf_.end() && it->second == hoveredCell_) { hoveredCell_ = -1; repaint(); }
+}
+
+bool AmbientSynthEditor::keyPressed(const juce::KeyPress& k)
+{
+    if (k == juce::KeyPress::F1Key) { setPage(help_ && help_->isVisible() ? 0 : 3); return true; }
+    if (k == juce::KeyPress::escapeKey && help_ && help_->isVisible()) { setPage(0); return true; }
+    return false;
+}
+
+// ---------------------------------------------------------------- help page
+
+juce::Image AmbientSynthEditor::snapshotSection(const juce::String& name)
+{
+    Section* sec = findSection(name);
+    if (sec == nullptr) return {};
+    // If the section lives on a tab that is not open, open it for the picture and put it back.
+    TabRow* row = nullptr; int was = 0;
+    for (auto& t : tabRows_)
+        for (size_t pi = 0; pi < t.pages.size(); ++pi)
+            for (auto& n : t.pages[pi]) if (n == name && static_cast<int>(pi) != t.active) { row = &t; was = t.active; t.active = static_cast<int>(pi); }
+    if (row != nullptr) layoutBody();
+    juce::Image img = content_.createComponentSnapshot(sec->bounds.expanded(2), true, 1.0f);
+    if (row != nullptr) { row->active = was; layoutBody(); }
+    return img;
+}
+
+juce::Image AmbientSynthEditor::snapshotStrip()
+{
+    if (!mod_) return {};
+    const bool vis = mod_->isVisible();
+    mod_->setVisible(true);
+    juce::Image img = mod_->createComponentSnapshot(mod_->getLocalBounds(), true, 1.0f);
+    mod_->setVisible(vis);
+    return img;
+}
+
+juce::Image AmbientSynthEditor::snapshotBrowse()
+{
+    if (!browse_) return {};
+    const bool vis = browse_->isVisible();
+    browse_->setVisible(true);
+    juce::Image img = browse_->createComponentSnapshot(browse_->getLocalBounds(), true, 1.0f);
+    browse_->setVisible(vis);
+    return img;
+}
+
+AmbientSynthEditor::HelpView::HelpView(AmbientSynthProcessor& p, AmbientSynthEditor& o)
+    : proc(p), owner(o), flow(p)
+{
+    addChildComponent(flow);
+    topics.setModel(this);
+    topics.setRowHeight(26);
+    topics.setColour(juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
+    addAndMakeVisible(topics);
+    text.setMultiLine(true, true);
+    text.setReadOnly(true);
+    text.setCaretVisible(false);
+    text.setScrollbarsShown(true);
+    text.setFont(ui::body(15.0f));
+    text.setColour(juce::TextEditor::backgroundColourId, ui::card.withAlpha(0.5f));
+    text.setColour(juce::TextEditor::outlineColourId, ui::cardEdge);
+    text.setColour(juce::TextEditor::textColourId, ui::text);
+    text.setIndents(14, 12);
+    addAndMakeVisible(text);
+    // The last topic is generated: every parameter, by section, with its help text.
+    juce::String last;
+    for (const ParamDesc& d : paramTable()) {
+        if (last != d.section) { last = d.section; parameters += (parameters.isEmpty() ? "" : "\n") + juce::String(d.section).toUpperCase() + "\n"; }
+        juce::String range;
+        if (d.kind == ParamKind::Choice) { for (int i = 0; i < d.numChoices; ++i) range += (i ? " / " : "") + juce::String(d.choices[i]); }
+        else if (d.kind == ParamKind::Bool) range = "on / off";
+        else range = juce::String(d.min, d.kind == ParamKind::Int ? 0 : 2) + " .. " + juce::String(d.max, d.kind == ParamKind::Int ? 0 : 2) + (d.unit[0] ? juce::String(" ") + d.unit : juce::String());
+        parameters += "  " + juce::String(d.name) + "  (" + d.key + ", " + range + ")\n      " + ambient::paramHelp(d.id) + "\n";
+    }
+    topics.updateContent();
+    topics.selectRow(0, false, true);
+    selectedRowsChanged(0);
+}
+
+void AmbientSynthEditor::HelpView::paint(juce::Graphics& g)
+{
+    g.fillAll(ui::bg0);
+    g.setColour(ui::group);
+    g.fillRoundedRectangle(getLocalBounds().reduced(10).toFloat(), 8.0f);
+    for (size_t i = 0; i < pics.size() && i < picRects.size(); ++i) {
+        if (!pics[i].isValid() || picRects[i].isEmpty()) continue;
+        g.drawImage(pics[i], picRects[i].toFloat(), juce::RectanglePlacement::stretchToFit);
+        g.setColour(ui::cardEdge); g.drawRoundedRectangle(picRects[i].toFloat().reduced(0.5f), 4.0f, 1.0f);
+    }
+    g.setColour(ui::text);
+    g.setFont(ui::title(13.0f));
+    g.drawText("MANUAL", 26, 18, 200, 20, juce::Justification::centredLeft, false);
+    g.setColour(ui::dim);
+    g.setFont(ui::body(11.0f));
+    g.drawText("F1 or Help closes it again  --  the pictures are the panel as it stands right now, and the displays are live", 120, 18, getWidth() - 160, 20, juce::Justification::centredLeft, false);
+}
+
+void AmbientSynthEditor::HelpView::resized()
+{
+    auto r = getLocalBounds().reduced(20).withTrimmedTop(26);
+    topics.setBounds(r.removeFromLeft(230));
+    r.removeFromLeft(12);
+    // Text on the left at a readable line length, the pictures in the column to its right.
+    const int textW = juce::jlimit(360, 820, r.getWidth() * 42 / 100);
+    text.setBounds(r.removeFromLeft(textW));
+    r.removeFromLeft(16);
+    flow.setBounds(r);
+    picRects.clear();
+    auto col = r;
+    for (const auto& img : pics) {
+        if (!img.isValid() || col.getHeight() < 60) { picRects.push_back({}); continue; }
+        const float scale = juce::jmin(1.0f, static_cast<float>(col.getWidth()) / static_cast<float>(img.getWidth()),
+                                       static_cast<float>(juce::jmin(320, col.getHeight() - (live ? 240 : 0))) / static_cast<float>(img.getHeight()));
+        const int w = juce::roundToInt(img.getWidth() * scale), h = juce::roundToInt(img.getHeight() * scale);
+        picRects.push_back(col.removeFromTop(h).withWidth(w));
+        col.removeFromTop(10);
+    }
+    if (live) live->setBounds(col.removeFromTop(juce::jmin(260, col.getHeight())));
+}
+
+void AmbientSynthEditor::HelpView::showTopic(int row)
+{
+    topic = row;
+    pics.clear();
+    live.reset();
+    flow.setVisible(row == 0);
+    // Which sections and which live display belong to a topic. The order follows kTopics in Help.cpp.
+    struct Spec { std::vector<juce::String> sections; int liveKind; };   // liveKind: 0 none, 1 source, 2 filter, 3 stage, 4 cosmos, 5 brain, 6 env
+    static const Spec kSpecs[] = {
+        { {}, 0 },                                          // overview: the diagram
+        { { "Source 1", "Strands", "Source 3" }, 1 },       // sources
+        { { "Filter", "Z-Plane" }, 2 },                     // filters
+        { { "Space", "Foundation", "Air" }, 3 },            // space
+        { { "Delay", "Far Reverb", "Feedback" }, 0 },       // effects
+        { { "Cosmos" }, 4 },                                // cosmos
+        { { "Cluster Brain", "Tuning", "Coherence" }, 5 },  // conductor
+        { {}, 0 },                                          // modulation: the strip
+        { { "Morph", "Macros" }, 6 },                       // morph
+        { {}, 0 },                                          // presets: the browser
+        { { "Clock" }, 0 },                                 // clock
+        { { "Master" }, 0 },                                // midi / osc / files
+        { {}, 0 },                                          // shortcuts
+    };
+    const int n = static_cast<int>(sizeof(kSpecs) / sizeof(kSpecs[0]));
+    if (row >= 0 && row < n) {
+        for (const auto& name : kSpecs[row].sections) { juce::Image img = owner.snapshotSection(name); if (img.isValid()) pics.push_back(img); }
+        if (row == 7) pics.push_back(owner.snapshotStrip());
+        if (row == 9) pics.push_back(owner.snapshotBrowse());
+        switch (kSpecs[row].liveKind) {
+        case 1: live = std::make_unique<SourceView>(proc, 1); break;
+        case 2: live = std::make_unique<FilterView>(proc); break;
+        case 3: live = std::make_unique<StageView>(proc); break;
+        case 4: live = std::make_unique<CosmosView>(proc); break;
+        case 5: live = std::make_unique<BrainView>(proc); break;
+        case 6: live = std::make_unique<EnvView>(proc); break;
+        default: break;
+        }
+        if (live) addAndMakeVisible(*live);
+    }
+    resized();
+    repaint();
+}
+
+int AmbientSynthEditor::HelpView::getNumRows() { return ambient::numHelpTopics() + 1; }
+
+void AmbientSynthEditor::HelpView::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool selected)
+{
+    if (selected) { g.setColour(ui::accent.withAlpha(0.22f)); g.fillRoundedRectangle(2.0f, 1.0f, static_cast<float>(w - 4), static_cast<float>(h - 2), 4.0f); }
+    g.setColour(selected ? ui::text : ui::dim);
+    g.setFont(ui::body(12.5f));
+    const juce::String title = row < ambient::numHelpTopics() ? ambient::helpTopicTitle(row) : "All parameters";
+    g.drawText(title, 10, 0, w - 14, h, juce::Justification::centredLeft, true);
+}
+
+void AmbientSynthEditor::HelpView::selectedRowsChanged(int row)
+{
+    if (row < 0) return;
+    text.setText(row < ambient::numHelpTopics() ? juce::String(juce::CharPointer_UTF8(ambient::helpTopicText(row))) : parameters, false);
+    text.moveCaretToTop(false);
+    showTopic(row);
+}
+
+// The signal flow as a picture: the units as boxes in their group colours, the buses as arrows.
+void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
+{
+    // Drawn on a 1000 x 560 canvas, scaled to fit whatever the column offers.
+    const float sx = getWidth() / 1000.0f, sy = getHeight() / 560.0f, sc = juce::jmin(sx, sy);
+    if (sc <= 0.05f) return;
+    g.addTransform(juce::AffineTransform::scale(sc));
+    auto node = [&](float x, float y, float w, float h, const juce::String& t, juce::Colour c, float fs = 12.0f) {
+        juce::Rectangle<float> r(x, y, w, h);
+        g.setColour(ui::card); g.fillRoundedRectangle(r, 6.0f);
+        g.setColour(c.withAlpha(0.9f)); g.drawRoundedRectangle(r.reduced(0.5f), 6.0f, 1.2f);
+        g.setColour(ui::text); g.setFont(ui::body(fs));
+        g.drawFittedText(t, r.reduced(6.0f, 2.0f).toNearestInt(), juce::Justification::centred, 3, 0.9f);
+        return r;
+    };
+    auto arrow = [&](juce::Point<float> a, juce::Point<float> b, juce::Colour c, bool dashed = false) {
+        g.setColour(c.withAlpha(0.85f));
+        juce::Line<float> l(a, b);
+        if (dashed) { const float d[] = { 5.0f, 4.0f }; juce::Path p; p.startNewSubPath(a); p.lineTo(b); juce::PathStrokeType(1.4f).createDashedStroke(p, p, d, 2); g.fillPath(p); }
+        else g.drawLine(l, 1.4f);
+        juce::Path head; const auto u = (b - a) / juce::jmax(1.0f, l.getLength()); const juce::Point<float> nrm(-u.y, u.x);
+        head.startNewSubPath(b); head.lineTo(b - u * 7.0f + nrm * 3.5f); head.lineTo(b - u * 7.0f - nrm * 3.5f); head.closeSubPath();
+        g.fillPath(head);
+    };
+    auto label = [&](float x, float y, const juce::String& t, juce::Colour c) { g.setColour(c); g.setFont(ui::body(10.5f)); g.drawText(t, juce::roundToInt(x), juce::roundToInt(y), 480, 14, juce::Justification::centredLeft, false); };
+
+    const juce::Colour V = ui::voiceCol, F = ui::foreCol, B = ui::backCol, C = ui::cosmosCol, K = ui::condCol, M = ui::masterCol, A = ui::accent;
+    // conductors
+    auto brain = node(20, 16, 150, 40, "Cluster Brain", K);
+    auto keys  = node(185, 16, 120, 40, "MIDI keys", K);
+    auto hands = node(320, 16, 130, 40, "OSC / hands / macros", K, 11.0f);
+    label(20, 60, "every note gets a DISTANCE: 0 at the ear, 1 the infinite background", ui::dim);
+    // the voice
+    g.setColour(V.withAlpha(0.35f)); g.drawRoundedRectangle(14.0f, 82.0f, 442.0f, 210.0f, 8.0f, 1.0f);
+    g.setColour(V); g.setFont(ui::title(10.5f)); g.drawText("VOICE  x16", 24, 86, 200, 14, juce::Justification::centredLeft, false);
+    auto s1 = node(24, 104, 130, 40, "Source 1\nadditive bank / any", V, 11.0f);
+    auto s2 = node(164, 104, 130, 40, "Source 2\nwavetable / FM / grains / noise", V, 10.0f);
+    auto s3 = node(304, 104, 130, 40, "Source 3\n+ Air (noise on the note)", V, 10.0f);
+    auto filt = node(24, 160, 200, 40, "Filter (nine models)", V);
+    auto zp   = node(234, 160, 200, 40, "Z-plane filter", V);
+    auto env  = node(24, 216, 410, 40, "Envelope  -  x (1 - distance/2)  -  interaural time difference  -  presence on the near plane", V, 10.5f);
+    arrow(brain.getBottomLeft().translated(75, 0), { 95, 104 }, K);
+    arrow(keys.getBottomLeft().translated(60, 0), { 229, 104 }, K);
+    arrow(hands.getBottomLeft().translated(65, 0), { 369, 104 }, K, true);
+    for (auto* r : { &s1, &s2, &s3 }) arrow({ r->getCentreX(), r->getBottom() }, { juce::jlimit(124.0f, 334.0f, r->getCentreX()), 160.0f }, V);
+    label(232, 146, "series / parallel", ui::dim);
+    arrow({ 124, 200 }, { 124, 216 }, V); arrow({ 334, 200 }, { 334, 216 }, V);
+    // the split
+    arrow({ 434, 236 }, { 500, 130 }, F); label(440, 172, "near = cos(d)", F);
+    arrow({ 434, 236 }, { 500, 330 }, B); label(440, 290, "far = sin(d)", B);
+    // near chain
+    auto ens = node(500, 110, 100, 40, "Ensemble", F);
+    auto d1  = node(612, 110, 100, 40, "Delay", F);
+    auto d2  = node(724, 110, 100, 40, "Delay 2", F);
+    auto nr  = node(836, 110, 130, 40, "Near reverb", F);
+    arrow({ 600, 130 }, { 612, 130 }, F); arrow({ 712, 130 }, { 724, 130 }, F); arrow({ 824, 130 }, { 836, 130 }, F);
+    label(500, 92, "NEAR  --  the dry, bright foreground", F);
+    auto cos = node(500, 190, 330, 40, "Cosmos (parallel): frequency shifter -> resonator -> vowel -> nebula", C, 10.5f);
+    arrow({ 550, 150 }, { 550, 190 }, C); arrow({ 780, 190 }, { 780, 150 }, C); label(590, 236, "send / return -- added, never replacing", ui::dim);
+    auto cloud = node(846, 190, 120, 40, "Cloud (grains)", B, 11.0f);
+    arrow({ 900, 150 }, { 900, 190 }, B); arrow({ 906, 230 }, { 906, 320 }, B);
+    arrow({ 668, 150 }, { 668, 320 }, B, true); label(672, 250, "to far", B);
+    // far
+    label(500, 302, "FAR  --  the infinite background, 100 % wet", B);
+    auto fr  = node(500, 320, 150, 40, "Far reverb", B);
+    auto rm  = node(662, 320, 150, 40, "Room (convolution)", B, 11.0f);
+    auto sh  = node(824, 320, 142, 40, "Shimmer loop", B);
+    arrow({ 650, 340 }, { 662, 340 }, B); arrow({ 895, 360 }, { 575, 380 }, B, true);
+    // output
+    auto out = node(500, 420, 466, 44, "Mid / Side  (bass mono, side air, width)   ->   Master   ->   soft clip", M, 11.5f);
+    arrow({ 901, 150 }, { 940, 420 }, F); arrow({ 575, 360 }, { 575, 420 }, B); arrow({ 737, 360 }, { 737, 420 }, B);
+    label(500, 470, "no compressor anywhere: what you hear is the dynamics of the drone", ui::dim);
+    // feedback, modulation, clock
+    arrow({ 500, 452 }, { 120, 452 }, A, true); arrow({ 120, 452 }, { 120, 256 }, A, true);
+    label(130, 458, "Feedback: to bus / to pitch (phase-modulates every partial), tape", A);
+    node(20, 494, 436, 44, "Modulation: 8 LFOs - 6 envelopes - matrix -> any knob        Clock: internal / host / MIDI, Sync on every rate", A, 10.5f);
+    node(500, 494, 466, 44, "Foundation sub (root or difference tone), mono, after mid/side", M, 11.0f);
+    juce::ignoreUnused(ens, d1, d2, nr, cos, cloud, fr, rm, sh, out, env, filt, zp);
+}
+
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
@@ -2378,8 +2671,8 @@ void AmbientSynthEditor::timerCallback()
         if (c.param < 0) continue;
         const int cc = proc_.midiCcFor(static_cast<ParamId>(c.param));
         juce::String text = c.baseLabel;
-        if (learn == c.param) text += " · learn";
-        else if (cc >= 0) text += " · CC" + juce::String(cc);
+        if (learn == c.param) text += " - learn";
+        else if (cc >= 0) text += " - CC" + juce::String(cc);
         if (c.label->getText() != text) {
             c.label->setText(text, juce::dontSendNotification);
             c.label->setColour(juce::Label::textColourId, (cc >= 0 || learn == c.param) ? kAccent : kDim);
@@ -2542,69 +2835,6 @@ void AmbientSynthEditor::chooseScalaFile()
 
 // ---------------------------------------------------------------- painting
 
-void AmbientSynthEditor::paintRoutingMap(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    // Node boxes in header coordinates; arrows follow the real signal flow.
-    struct Node { juce::String text; juce::Colour col; juce::Rectangle<float> r; };
-    const float y0 = static_cast<float>(area.getY()), h = 20.0f;
-    const float x = static_cast<float>(area.getX());
-    std::vector<Node> nodes = {
-        { "Brain / MIDI",               kConductor, { x,         y0,        92.0f, h } },
-        { "Voices",                     kVoice,     { x + 108,   y0,        60.0f, h } },
-        { "Ensemble > Delay > Delay 2 > Near", kFore, { x + 184, y0,        208.0f, h } },
-        { "Mid/Side > Out",             kMaster,    { x + 760,   y0,        110.0f, h } },
-        { "Cosmos (parallel, returns)", kCosmos,    { x + 184,   y0 + 32,   170.0f, h } },
-        { "Cloud",                      kBack,      { x + 410,   y0 + 32,   50.0f, h } },
-        { "Far Reverb + Shimmer",       kBack,      { x + 476,   y0 + 32,   150.0f, h } },
-        { "Morph A<->B",                kMorph,     { x + 660,   y0 + 32,   84.0f, h } },
-    };
-    auto arrow = [&](juce::Point<float> a, juce::Point<float> b, juce::Colour c) {
-        g.setColour(c.withAlpha(0.8f));
-        g.drawLine(juce::Line<float>(a, b), 1.2f);
-        const auto d = (b - a); const float len = std::max(d.getDistanceFromOrigin(), 1.0f);
-        const juce::Point<float> u(d.x / len, d.y / len), n(-u.y, u.x);
-        juce::Path p; p.startNewSubPath(b); p.lineTo(b - u * 6.0f + n * 3.0f); p.lineTo(b - u * 6.0f - n * 3.0f); p.closeSubPath();
-        g.fillPath(p);
-    };
-    auto right = [](const juce::Rectangle<float>& r) { return juce::Point<float>(r.getRight(), r.getCentreY()); };
-    auto left  = [](const juce::Rectangle<float>& r) { return juce::Point<float>(r.getX(), r.getCentreY()); };
-    auto bottom = [](const juce::Rectangle<float>& r, float fx) { return juce::Point<float>(r.getX() + r.getWidth() * fx, r.getBottom()); };
-    auto top = [](const juce::Rectangle<float>& r, float fx) { return juce::Point<float>(r.getX() + r.getWidth() * fx, r.getY()); };
-
-    arrow(right(nodes[0].r), left(nodes[1].r), kConductor);
-    arrow(right(nodes[1].r), left(nodes[2].r), kVoice);
-    arrow(right(nodes[2].r), left(nodes[3].r), kFore);                                  // foreground -> out
-    arrow(bottom(nodes[2].r, 0.15f), top(nodes[4].r, 0.15f), kFore);                    // send to cosmos
-    arrow(top(nodes[4].r, 0.5f), bottom(nodes[2].r, 0.5f), kCosmos);                    // cosmos return
-    arrow(bottom(nodes[2].r, 0.9f), top(nodes[5].r, 0.3f), kFore);                      // cloud send
-    arrow(right(nodes[5].r), left(nodes[6].r), kBack);
-    arrow(bottom(nodes[1].r, 0.7f), top(nodes[6].r, 0.1f), kVoice);                     // far send of the voices
-    arrow(right(nodes[4].r), left(nodes[6].r), kCosmos);                                // cosmos to far
-    arrow(right(nodes[6].r), juce::Point<float>(nodes[3].r.getCentreX(), nodes[3].r.getBottom()), kBack);   // far -> out
-    {   // feedback: the mix returns to the voices (bus and phase modulation), drawn between the rows
-        const float yf = y0 + h + 6.0f;
-        const juce::Point<float> a(nodes[3].r.getX() + 8.0f, yf), b(nodes[1].r.getCentreX() + 12.0f, yf);
-        g.setColour(kBack.withAlpha(0.6f));
-        g.drawLine(juce::Line<float>(nodes[3].r.getX() + 8.0f, nodes[3].r.getBottom(), a.x, a.y), 1.0f);
-        arrow(a, b, kBack.withAlpha(0.7f));
-        g.setFont(juce::FontOptions(9.0f));
-        g.drawText("feedback", static_cast<int>(b.x) + 30, static_cast<int>(yf) - 6, 60, 12, juce::Justification::centredLeft);
-    }
-    for (auto& n : nodes) {
-        g.setColour(n.col.withAlpha(0.18f));
-        g.fillRoundedRectangle(n.r, 4.0f);
-        g.setColour(n.col);
-        g.drawRoundedRectangle(n.r, 4.0f, 1.0f);
-        g.setFont(juce::FontOptions(10.5f));
-        g.drawText(n.text, n.r, juce::Justification::centred);
-    }
-    g.setColour(kDim);
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("signal flow", area.getX(), area.getBottom() - 12, 80, 12, juce::Justification::centredLeft);
-}
-
-// ---------------------------------------------------------------- oscillator scope
-
 void AmbientSynthEditor::ScopeView::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
@@ -2697,7 +2927,35 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     g.setColour(kText);
     g.setFont(juce::FontOptions(22.0f, juce::Font::bold));
     g.drawText("AmbientSynth", 14, 6, 180, 26, juce::Justification::centredLeft);
-    paintRoutingMap(g, routing_);
+    {   // The help line: the control under the mouse, its value and what it does -- otherwise
+        // the three things worth knowing first. This is where the routing map used to be; the
+        // signal flow is in the manual now, where it can be read rather than deciphered.
+        g.setColour(ui::card.withAlpha(0.6f));
+        g.fillRoundedRectangle(helpLine_.toFloat(), 5.0f);
+        juce::String title, body;
+        if (hoveredCell_ >= 0 && hoveredCell_ < static_cast<int>(cells_.size()) && cells_[static_cast<size_t>(hoveredCell_)].param >= 0) {
+            const Cell& c = cells_[static_cast<size_t>(hoveredCell_)];
+            const ParamId id = static_cast<ParamId>(c.param);
+            const ParamDesc& d = paramDesc(id);
+            juce::String value;
+            if (auto* sl = dynamic_cast<juce::Slider*>(c.comp.get())) value = sl->getTextFromValue(sl->getValue());
+            else if (auto* cb = dynamic_cast<juce::ComboBox*>(c.comp.get())) value = cb->getText();
+            else if (auto* tb = dynamic_cast<juce::ToggleButton*>(c.comp.get())) value = tb->getToggleState() ? "on" : "off";
+            title = juce::String(d.section).toUpperCase() + "   " + d.name + "      " + value;
+            body = ambient::paramHelp(id);
+            const int mods = [&] { int n = 0; const auto& m = proc_.engine().modMatrix(); for (int k = 0; k < m.count(); ++k) if (m.route(k).target == id) ++n; return n; }();
+            if (mods > 0) body += "   [" + juce::String(mods) + (mods == 1 ? " modulation route" : " modulation routes") + " -- right-click to see them]";
+        } else {
+            title = "AmbientSynth";
+            body = "Point at any control to read what it does. Help (or F1) opens the manual. Right-click a knob for MIDI learn and its modulation routes; drag a card from the strip at the bottom onto a knob to modulate it.";
+        }
+        g.setColour(kText);
+        g.setFont(ui::title(10.5f));
+        g.drawText(title, helpLine_.reduced(10, 5), juce::Justification::topLeft, false);
+        g.setColour(kDim);
+        g.setFont(ui::body(11.5f));
+        g.drawFittedText(body, helpLine_.reduced(10, 5).withTrimmedTop(17), juce::Justification::topLeft, 3, 1.0f);
+    }
 
     // Keyboard strip with near (bright) / far (dim) notes and the brain's root.
     const int root = proc_.engine().brainRoot();
@@ -2733,7 +2991,7 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
           + "  dist " + juce::String(gl.input(GestureInput::HandDistance), 2) + "  pinch " + juce::String(clutch, 2);
     g.setColour(kDim);
     g.setFont(juce::FontOptions(11.0f));
-    g.drawText(info, routing_.getX() + 90, header_.getBottom() - 16, getWidth() - routing_.getX() - 400, 14, juce::Justification::centredLeft);
+    g.drawText(info, 14, header_.getBottom() - 16, designW_ - 420, 14, juce::Justification::centredLeft);
 
     if (proc_.isRecording()) {
         g.setColour(juce::Colour(0xffe05050));

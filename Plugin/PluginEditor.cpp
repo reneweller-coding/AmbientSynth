@@ -425,7 +425,16 @@ const juce::Colour kFamilyColours[] = {
     juce::Colour(0xffb094d8), juce::Colour(0xff70c8c8), juce::Colour(0xffe09a60), juce::Colour(0xffa0b8e0),
     juce::Colour(0xffc8d870), juce::Colour(0xffd880b8), juce::Colour(0xff90d0f0), juce::Colour(0xffd0d0d0),
 };
-juce::Colour familyColour(int f) { return kFamilyColours[static_cast<size_t>(std::max(f, 0)) % (sizeof(kFamilyColours) / sizeof(kFamilyColours[0]))]; }
+// The twelve built-in families keep their colours; loaded packs get their own hues, spaced by
+// the golden angle so neighbouring packs never look alike.
+juce::Colour familyColour(int f)
+{
+    constexpr int kBuiltIn = static_cast<int>(sizeof(kFamilyColours) / sizeof(kFamilyColours[0]));
+    if (f < 0) f = 0;
+    if (f < kBuiltIn) return kFamilyColours[static_cast<size_t>(f)];
+    const float hue = std::fmod(0.08f + 0.6180339f * static_cast<float>(f - kBuiltIn + 1), 1.0f);
+    return juce::Colour::fromHSV(hue, 0.42f, 0.82f, 1.0f);
+}
 }
 
 AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), map(*this)
@@ -556,15 +565,26 @@ void AmbientSynthEditor::BrowseView::Column::paintListBoxItem(int row, juce::Gra
     if (on) g.fillAll(kAccent.withAlpha(0.18f));
     g.setColour(on ? kText : kDim); g.setFont(juce::FontOptions(12.5f));
     g.drawText(items[row], 8, 0, w - 40, h, juce::Justification::centredLeft);
-    // count of presets this row would leave
+    // count of presets this row would leave -- cached, because counting five thousand presets
+    // per painted row per repaint is not something a list box should be doing
     if (row > 0 && owner != nullptr) {
-        int n = 0;
-        for (int i = 0; i < numPresets(); ++i) {
-            const PresetMeta& m = presetMeta(i);
-            if ((familyIdx[static_cast<size_t>(row)] >= 0 && m.family == familyIdx[static_cast<size_t>(row)]) || (tagBits[static_cast<size_t>(row)] && (m.tags & tagBits[static_cast<size_t>(row)]))) ++n;
+        updateCounts();
+        if (static_cast<size_t>(row) < counts.size()) {
+            g.setColour(kDim.withAlpha(0.7f)); g.setFont(juce::FontOptions(10.5f));
+            g.drawText(juce::String(counts[static_cast<size_t>(row)]), w - 34, 0, 28, h, juce::Justification::centredRight);
         }
-        g.setColour(kDim.withAlpha(0.7f)); g.setFont(juce::FontOptions(10.5f));
-        g.drawText(juce::String(n), w - 34, 0, 28, h, juce::Justification::centredRight);
+    }
+}
+
+void AmbientSynthEditor::BrowseView::Column::updateCounts()
+{
+    if (countsFor == numPresets() && counts.size() == static_cast<size_t>(items.size())) return;
+    countsFor = numPresets();
+    counts.assign(static_cast<size_t>(items.size()), 0);
+    for (int i = 0; i < numPresets(); ++i) {
+        const PresetMeta& m = presetMeta(i);
+        for (size_t r = 1; r < counts.size(); ++r)
+            if ((familyIdx[r] >= 0 && m.family == familyIdx[r]) || (tagBits[r] && (m.tags & tagBits[r]))) ++counts[r];
     }
 }
 

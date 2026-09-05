@@ -140,6 +140,9 @@ private:
             std::vector<uint32_t> tagBits;    // per item: tag mask (0 for family columns / All)
             std::vector<int> familyIdx;       // per item: family index or -1
             std::set<int> chosen;             // chosen rows (empty = All)
+            std::vector<int> counts;          // presets per row, rebuilt when the list grows
+            int countsFor = -1;               // the numPresets() the counts were taken at
+            void updateCounts();
             juce::ListBox box;
             int  getNumRows() override { return items.size(); }
             void paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool selected) override;

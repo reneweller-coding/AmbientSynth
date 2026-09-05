@@ -76,12 +76,14 @@ en.CompVst3=VST3 plug-in (for a DAW)
 en.CompPacks=Preset library (25 packs, 5000 presets)
 en.CompContent=Sample library: the samples, wavetables and impulse responses the presets use (downloaded, %1 GB)
 en.TaskDesktop=Create a desktop shortcut
+en.DownloadFailed=The sample library could not be downloaded:%n%n%1%n%nEverything else installs and works without it; presets that want a sample fall back to the built-in sources. You can install the library later by unpacking the content archives from the release into the AmbientSynth folder.%n%nInstall without the sample library?
 en.NoAvx2=This processor reports no AVX2 support.%n%nAmbientSynth is built for AVX2, which every x86-64 processor since 2013 has. Without it, it will not start.%n%nInstall anyway?
 de.CompStandalone=Eigenstaendiges Programm
 de.CompVst3=VST3-Plugin (fuer eine DAW)
 de.CompPacks=Preset-Bibliothek (25 Pakete, 5000 Presets)
 de.CompContent=Sample-Bibliothek: die Samples, Wavetables und Impulsantworten der Presets (wird geladen, %1 GB)
 de.TaskDesktop=Verknuepfung auf dem Desktop anlegen
+de.DownloadFailed=Die Sample-Bibliothek konnte nicht geladen werden:%n%n%1%n%nAlles andere wird installiert und funktioniert auch ohne sie; Presets, die ein Sample moechten, greifen auf die eingebauten Quellen zurueck. Die Bibliothek laesst sich spaeter nachlegen, indem man die Content-Archive aus dem Release in den AmbientSynth-Ordner entpackt.%n%nOhne die Sample-Bibliothek installieren?
 de.NoAvx2=Dieser Prozessor meldet keine AVX2-Unterstuetzung.%n%nAmbientSynth ist fuer AVX2 gebaut, das jeder x86-64-Prozessor seit 2013 hat. Ohne AVX2 startet es nicht.%n%nTrotzdem installieren?
 
 [Types]
@@ -115,9 +117,10 @@ Source: "{#Stage}\AmbientSynth.vst3\*"; DestDir: "{autocf}\VST3\AmbientSynth.vst
 Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{code:LibDir}\Packs"; \
     Components: packs; Flags: ignoreversion
 #if HaveContent
-; The sample library: downloaded from the release, checked against its hash, unpacked into the
-; library folder beside the packs (the archives hold Textures\, Wavetables\ and Impulses\, which
-; is exactly what the packs' relative paths expect) and deleted again afterwards.
+; The sample library: fetched by the [Code] section below (which can survive a failure), checked
+; against its hash on the way in, and unpacked here into the library folder beside the packs --
+; the archives hold Textures\, Wavetables\ and Impulses\, which is exactly what the packs'
+; relative paths expect.
 #include "content-files.iss"
 #endif
 
@@ -146,6 +149,57 @@ Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Impulses"
 Type: dirifempty;     Name: "{localappdata}\AmbientSynth"
 
 [Code]
+#if HaveContent
+var
+  DownloadPage: TDownloadWizardPage;
+  ContentOk: Boolean;
+
+// Which archives to fetch, with their hashes: generated, because both change with the package.
+#include "content-code.iss"
+
+// Guards the [Files] lines for the archives. False when the component was not chosen, or when
+// the download did not happen -- there is nothing in {tmp} to unpack then.
+function ContentDownloaded: Boolean;
+begin
+  Result := ContentOk;
+end;
+
+procedure InitializeWizard;
+begin
+  DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), SetupMessage(msgPreparingDesc), nil);
+  DownloadPage.ShowBaseNameInsteadOfUrl := True;
+  ContentOk := False;
+end;
+
+// The sample library is three gigabytes over somebody else's network, and it is an extra: a
+// download that fails must not cost the instrument as well. So it is fetched here, where the
+// answer to "it did not work" can be "install the rest anyway" -- which is also what a silent
+// install does, since that is the default button.
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = wpReady) and WizardIsComponentSelected('packs\content') then begin
+    DownloadPage.Clear;
+    AddContentDownloads(DownloadPage);
+    DownloadPage.Show;
+    try
+      try
+        DownloadPage.Download;
+        ContentOk := True;
+      except
+        if DownloadPage.AbortedByUser then
+          Result := False
+        else
+          Result := SuppressibleMsgBox(FmtMessage(CustomMessage('DownloadFailed'), [GetExceptionMessage]),
+                                       mbError, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDYES;
+      end;
+    finally
+      DownloadPage.Hide;
+    end;
+  end;
+end;
+#endif
+
 // AVX2 is a hard requirement of the shipped binaries, and a processor without it does not fail
 // gracefully -- it takes an illegal instruction and dies with no explanation at all. Asked here,
 // where there is still somewhere to say it. Answered rather than enforced: the query is a Windows

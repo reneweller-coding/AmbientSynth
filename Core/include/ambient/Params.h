@@ -20,14 +20,14 @@ enum class ParamId : int {
     Stack, RateWander,
     // Source 1's slot fields, for the non-additive types (level is OscLevel, spectrum the eight above)
     Src1Octave, Src1Ratio, Src1Pan, Src1Table, Src1Position, Src1PosDrift,
-    Src1FmRatio, Src1FmIndex, Src1Grain, Src1Density, Src1Follow, Src1Grains, Src1Spread, Src1Noise, Src1NoiseQ,
+    Src1FmRatio, Src1FmIndex, Src1Grain, Src1Density, Src1DensitySync, Src1Follow, Src1Grains, Src1Spread, Src1Noise, Src1NoiseQ,
     // Source 2 / Source 3: the same slot, laid out identically (the engine reads them by offset):
     // 17 slot fields, then the seven of the slot's own additive bank
     Src2Type, Src2Level, Src2Octave, Src2Ratio, Src2Pan, Src2Table, Src2Position, Src2PosDrift,
-    Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2Follow, Src2Grains, Src2Spread, Src2Noise, Src2NoiseQ,
+    Src2FmRatio, Src2FmIndex, Src2Grain, Src2Density, Src2DensitySync, Src2Follow, Src2Grains, Src2Spread, Src2Noise, Src2NoiseQ,
     Src2Partials, Src2Tilt, Src2Bright, Src2OddEven, Src2Inharm, Src2Shimmer, Src2ShimmerRate,
     Src3Type, Src3Level, Src3Octave, Src3Ratio, Src3Pan, Src3Table, Src3Position, Src3PosDrift,
-    Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3Follow, Src3Grains, Src3Spread, Src3Noise, Src3NoiseQ,
+    Src3FmRatio, Src3FmIndex, Src3Grain, Src3Density, Src3DensitySync, Src3Follow, Src3Grains, Src3Spread, Src3Noise, Src3NoiseQ,
     Src3Partials, Src3Tilt, Src3Bright, Src3OddEven, Src3Inharm, Src3Shimmer, Src3ShimmerRate,
     // Foundation: a sub voice that follows the brain's root or the ghost tone (difference
     // tone of the two lowest sounding voices); Pad Low Cut keeps the pads out of its register
@@ -42,13 +42,13 @@ enum class ParamId : int {
     ZMode, ZShape, ZX, ZY, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,
     // presence bell for the near plane, slow breathing of every voice's distance
-    Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, Presence, Breath, BreathRate,
+    Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, ArcSync, Presence, Breath, BreathRate,
     // Ensemble
-    EnsembleMix, EnsembleDepth, EnsembleRate,
+    EnsembleMix, EnsembleDepth, EnsembleRate, EnsembleSync,
     // Stereo delay (asymmetric L/R)
-    DelayTimeL, DelayTimeR, DelayFeedback, DelayCross, DelayDamp, DelayMix, DelayToFar,
+    DelayTimeL, DelayTimeR, DelaySyncL, DelaySyncR, DelayFeedback, DelayCross, DelayDamp, DelayMix, DelayToFar,
     // Second stereo delay, in series after the first
-    Delay2TimeL, Delay2TimeR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Mix, Delay2ToFar,
+    Delay2TimeL, Delay2TimeR, Delay2SyncL, Delay2SyncR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Mix, Delay2ToFar,
     // Near reverb (foreground room)
     NearMix, NearDecay, NearDamp,
     // Far reverb (the infinite background)
@@ -64,11 +64,11 @@ enum class ParamId : int {
     CosmosVowel, CosmosVowelRate, CosmosNebula, CosmosSmear, CosmosShimmer, CosmosShimmerPitch,
     CosmosReturn, CosmosToFar,
     // Granular cloud on the far plane
-    CloudSend, CloudDensity, CloudSize, CloudPitch, CloudSpray, CloudLevel,
+    CloudSend, CloudDensity, CloudSync, CloudSize, CloudPitch, CloudSpray, CloudLevel,
     // Mid/side master stage
     BassMono, SideAir, Width,
     // Cluster brain (generative sleep-concert mode)
-    BrainOn, BrainDensity, BrainRate, BrainHoldMin, BrainHoldMax,
+    BrainOn, BrainDensity, BrainRate, BrainSync, BrainHoldMin, BrainHoldMax,
     BrainLow, BrainHigh, BrainConsonance, BrainWander,
     // Tuning
     Scale, KeyMap, RootNote, RefPitch, Seed, Hold,
@@ -88,20 +88,20 @@ enum class ParamId : int {
     Coherence, CoherenceDepth, CoherenceRate,
     // Modulation: eight free LFOs and six multi-segment envelopes. Their shapes and the matrix
     // rows are data, not parameters (see Modulation.h); what sits here is what a host automates.
-    Lfo1Shape, Lfo1Rate, Lfo1Phase, Lfo1Depth, Lfo1Mode, Lfo1Table,
-    Lfo2Shape, Lfo2Rate, Lfo2Phase, Lfo2Depth, Lfo2Mode, Lfo2Table,
-    Lfo3Shape, Lfo3Rate, Lfo3Phase, Lfo3Depth, Lfo3Mode, Lfo3Table,
-    Lfo4Shape, Lfo4Rate, Lfo4Phase, Lfo4Depth, Lfo4Mode, Lfo4Table,
-    Lfo5Shape, Lfo5Rate, Lfo5Phase, Lfo5Depth, Lfo5Mode, Lfo5Table,
-    Lfo6Shape, Lfo6Rate, Lfo6Phase, Lfo6Depth, Lfo6Mode, Lfo6Table,
-    Lfo7Shape, Lfo7Rate, Lfo7Phase, Lfo7Depth, Lfo7Mode, Lfo7Table,
-    Lfo8Shape, Lfo8Rate, Lfo8Phase, Lfo8Depth, Lfo8Mode, Lfo8Table,
-    Env1Mode, Env1Time, Env1Depth,
-    Env2Mode, Env2Time, Env2Depth,
-    Env3Mode, Env3Time, Env3Depth,
-    Env4Mode, Env4Time, Env4Depth,
-    Env5Mode, Env5Time, Env5Depth,
-    Env6Mode, Env6Time, Env6Depth,
+    Lfo1Shape, Lfo1Rate, Lfo1Phase, Lfo1Depth, Lfo1Mode, Lfo1Table, Lfo1Sync,
+    Lfo2Shape, Lfo2Rate, Lfo2Phase, Lfo2Depth, Lfo2Mode, Lfo2Table, Lfo2Sync,
+    Lfo3Shape, Lfo3Rate, Lfo3Phase, Lfo3Depth, Lfo3Mode, Lfo3Table, Lfo3Sync,
+    Lfo4Shape, Lfo4Rate, Lfo4Phase, Lfo4Depth, Lfo4Mode, Lfo4Table, Lfo4Sync,
+    Lfo5Shape, Lfo5Rate, Lfo5Phase, Lfo5Depth, Lfo5Mode, Lfo5Table, Lfo5Sync,
+    Lfo6Shape, Lfo6Rate, Lfo6Phase, Lfo6Depth, Lfo6Mode, Lfo6Table, Lfo6Sync,
+    Lfo7Shape, Lfo7Rate, Lfo7Phase, Lfo7Depth, Lfo7Mode, Lfo7Table, Lfo7Sync,
+    Lfo8Shape, Lfo8Rate, Lfo8Phase, Lfo8Depth, Lfo8Mode, Lfo8Table, Lfo8Sync,
+    Env1Mode, Env1Time, Env1Depth, Env1Sync,
+    Env2Mode, Env2Time, Env2Depth, Env2Sync,
+    Env3Mode, Env3Time, Env3Depth, Env3Sync,
+    Env4Mode, Env4Time, Env4Depth, Env4Sync,
+    Env5Mode, Env5Time, Env5Depth, Env5Sync,
+    Env6Mode, Env6Time, Env6Depth, Env6Sync,
     // Morph between two stored full presets (A/B); never part of a preset itself
     MorphActive, MorphPos, MorphGlide,
     // Macros: eight performance controls routed through the gesture layer (Custom0..7);
@@ -115,6 +115,9 @@ enum class ParamId : int {
     MapActive, MapX, MapY, MapRadius,
     // Route: the engine walks a route of waypoints over the map (Route.h); performance state
     RouteActive, RouteSpeed, RouteLoop,
+    // Clock (Clock.h): where the tempo comes from, the internal tempo, and whether the internal
+    // clock runs; performance state -- the tempo belongs to the session, not to a preset
+    ClockSource, Tempo, ClockRun,
     Count
 };
 

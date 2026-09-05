@@ -58,7 +58,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence" } }, {}, 1 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Tuning", "Coherence", "Clock" } }, {}, 1 },
     };
     tabRows_ = {
         { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" } } },
@@ -66,7 +66,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" } } },
-        { 5, 0, { "BRAIN", "TUNING", "COHERENCE" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" } } },
+        { 5, 0, { "BRAIN", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
     };
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
@@ -192,7 +192,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get() };
         tabRows_[1].displays = { filterView_.get(), nullptr };
     }
-    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
+    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | TUNING | COHERENCE
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -254,6 +254,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Foundation") s.maxUnits = 5;
             if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
             if (s.name == "Strands") s.maxUnits = 10;
+            if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 11;   // one row with the two Sync choices
             if (s.name == "Z-Plane") s.maxUnits = 11;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -671,6 +672,8 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
         addKnob(r, "lfo" + n + "_phase", "Phase");
         addKnob(r, "lfo" + n + "_depth", "Depth");
         addKnob(r, "lfo" + n + "_mode", "Mode");
+        addKnob(r, "lfo" + n + "_table", "Table");
+        addKnob(r, "lfo" + n + "_sync", "Sync");
     }
     for (int i = 0; i < ambient::kNumModEnvs; ++i) {
         Row& r = envs[static_cast<size_t>(i)];
@@ -679,6 +682,7 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
         addKnob(r, "env" + n + "_mode", "Mode");
         addKnob(r, "env" + n + "_time", "Time");
         addKnob(r, "env" + n + "_depth", "Depth");
+        addKnob(r, "env" + n + "_sync", "Sync");
     }
 
     // The lane: every source that can drive something, in the order the matrix names them.
@@ -802,6 +806,8 @@ ambient::LfoSpec AmbientSynthEditor::ModView::specOf(int i) const
     sp.phase  = get("lfo" + n + "_phase");
     sp.depth  = get("lfo" + n + "_depth");
     sp.table  = static_cast<int>(std::lround(get("lfo" + n + "_table")));
+    const int sync = static_cast<int>(std::lround(get("lfo" + n + "_sync")));
+    if (ambient::syncOn(sync)) sp.rateHz = static_cast<float>(ambient::syncHz(sync, proc.engine().tempo()));
     return sp;
 }
 
@@ -2170,23 +2176,23 @@ void AmbientSynthEditor::updateSourceCells()
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
     enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5 };
-    static const ParamId kIds[3][24] = {
+    static const ParamId kIds[3][25] = {
         { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
           ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
           ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
-          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate },
+          ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync },
         { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
           ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
           ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
-          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate },
+          ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync },
         { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
           ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
           ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
-          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate },
+          ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync },
     };
     for (int k = 0; k < 3; ++k) {
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(kIds[k][0])));
-        for (int off = 1; off <= 23; ++off) {
+        for (int off = 1; off <= 24; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
@@ -2202,6 +2208,7 @@ void AmbientSynthEditor::updateSourceCells()
             case 15:
             case 16: on = type == Noise; break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: on = type == Additive; break;
+            case 24: on = type == Texture || type == Noise; break;                // density sync
             default: break;
             }
             const int ci = cellForParam(kIds[k][off]);
@@ -2484,7 +2491,9 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     juce::String info = juce::String(voices) + " voice" + (voices == 1 ? "" : "s")
         + "   root " + juce::MidiMessage::getMidiNoteName(root, true, true, 4)
         + "   " + juce::String(proc_.engine().scale().name)
-        + "   arc " + juce::String(proc_.engine().arcValue(), 2);
+        + "   arc " + juce::String(proc_.engine().arcValue(), 2)
+        + "   " + juce::String(proc_.engine().tempo(), 1) + " bpm  bar " + juce::String(1 + static_cast<int>(std::floor(proc_.engine().beatPosition() / 4.0)))
+        + (proc_.engine().clockRunning() ? "" : " (stopped)");
     if (proc_.userScaleName().isNotEmpty()) info += "   (user: " + proc_.userScaleName() + ")";
     info += proc_.oscRunning() ? "   OSC :" + juce::String(proc_.oscPort()) + " (" + juce::String(static_cast<juce::int64>(proc_.oscMessages())) + " msg)"
                                : "   OSC off: " + proc_.oscError();

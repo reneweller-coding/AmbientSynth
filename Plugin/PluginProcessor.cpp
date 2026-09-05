@@ -145,6 +145,16 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     for (int i = 0; i < kNumParams; ++i)
         engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
 
+    // The host's play head, when there is one (the standalone has none and the engine then runs
+    // its own clock).
+    if (auto* ph = getPlayHead()) {
+        if (const auto pos = ph->getPosition()) {
+            const double bpm = pos->getBpm().hasValue() ? *pos->getBpm() : 0.0;
+            const double ppq = pos->getPpqPosition().hasValue() ? *pos->getPpqPosition() : 0.0;
+            engine_.setHostClock(bpm, ppq, pos->getIsPlaying());
+        }
+    }
+
     // Route: the engine walks it and moves the cursor; mirror the cursor (and the switches the
     // route flips) into the host parameters so the GUI and automation see it.
     {
@@ -200,6 +210,14 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         if (m.isNoteOn())            engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity());
         else if (m.isNoteOff())      engine_.noteOff(m.getNoteNumber());
         else if (m.isAllNotesOff() || m.isAllSoundOff()) engine_.allNotesOff();
+        else if (m.isMidiClock()) {   // 24 a quarter; the interval between two carries the tempo
+            const double t = clockSamples_ + meta.samplePosition;
+            engine_.midiClockTick(lastClockSample_ >= 0.0 ? (t - lastClockSample_) / getSampleRate() : 0.0);
+            lastClockSample_ = t;
+        }
+        else if (m.isMidiStart())    engine_.midiClockStart();
+        else if (m.isMidiContinue()) engine_.midiClockContinue();
+        else if (m.isMidiStop())     engine_.midiClockStop();
         else if (m.isController()) {
             const int cc = m.getControllerNumber();
             if (cc < 0 || cc >= 128) continue;
@@ -215,6 +233,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
     midi.clear();
+    clockSamples_ += buffer.getNumSamples();
 
     const int n = buffer.getNumSamples();
     if (scratch_.getNumSamples() < n) scratch_.setSize(2, n, false, false, true);

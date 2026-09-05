@@ -19,6 +19,7 @@ add_library(AmbientCore STATIC
     src/Route.cpp
     src/ZPlane.cpp
     src/Filter.cpp
+    src/Clock.cpp
     src/Timeline.cpp
 )
 if(WIN32)

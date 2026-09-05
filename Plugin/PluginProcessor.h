@@ -130,6 +130,7 @@ private:
     void loadPresetFiles(int index);   // a pack preset's own sample and wavetable
     std::array<std::atomic<int>, 128> ccMap_{};   // controller -> parameter index, -1 = none
     std::atomic<int> learnTarget_{ -1 };
+    double clockSamples_ = 0.0, lastClockSample_ = -1.0;   // MIDI clock: running sample count, for the tick intervals
     juce::String slotName_[2] = { "Init", "Init" };
 
     // OscSink

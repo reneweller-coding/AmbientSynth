@@ -286,7 +286,8 @@ void testPresets()
         const bool ok = applyPreset(preset(p), [&](ParamId id, float) { touched[static_cast<int>(id)] = true; });
         CHECK(ok, "preset settings all refer to known parameters");
         int count = 0; for (bool t : touched) count += t ? 1 : 0;
-        CHECK(count == kNumParams - 19, "preset sets every parameter except morph, macros, inertia, map cursor and route");
+        int perf = 0; for (const ParamDesc& d : paramTable()) perf += isPerformanceParam(d.id) ? 1 : 0;
+        CHECK(count == kNumParams - perf, "preset sets every parameter except the performance state (morph, macros, inertia, map, route, clock)");
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");

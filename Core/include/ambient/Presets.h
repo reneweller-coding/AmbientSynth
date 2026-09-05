@@ -40,8 +40,9 @@ inline bool isMorphParam(ParamId id)  { return std::strcmp(paramDesc(id).section
 inline bool isMacroParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Macros") == 0; }
 inline bool isMapParam(ParamId id)    { return std::strcmp(paramDesc(id).section, "Map") == 0; }
 inline bool isRouteParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Route") == 0; }
-// Morph controls, macros, the map cursor and the route are performance state, never part of any preset.
-inline bool isPerformanceParam(ParamId id) { return isMorphParam(id) || isMacroParam(id) || isMapParam(id) || isRouteParam(id); }
+inline bool isClockParam(ParamId id)  { return std::strcmp(paramDesc(id).section, "Clock") == 0; }
+// Morph controls, macros, the map cursor, the route and the clock are performance state, never part of any preset.
+inline bool isPerformanceParam(ParamId id) { return isMorphParam(id) || isMacroParam(id) || isMapParam(id) || isRouteParam(id) || isClockParam(id); }
 inline bool inScope(ParamId id, PresetScope scope)
 {
     if (isPerformanceParam(id)) return false;

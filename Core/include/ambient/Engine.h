@@ -14,6 +14,7 @@
 #include "Convolution.h"
 #include "Route.h"
 #include "Modulation.h"
+#include "Clock.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include <atomic>
@@ -102,6 +103,20 @@ public:
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
     float coherencePhase(int i) const { return kuraPhase_[i & 3]; }   // Kuramoto oscillator phases, for pictures
 
+    // ---- clock (Clock.h). A host with a play head calls setHostClock() once per block, before
+    // process(); MIDI clock messages arrive through midiClock*() (audio thread). Which of them
+    // the engine follows is the ClockSource parameter; without either it runs its own tempo.
+    void setHostClock(double bpm, double beatPosition, bool playing)
+    { hostBpm_ = bpm; hostBeat_ = beatPosition; hostPlaying_ = playing; hostSeen_ = true; }
+    void midiClockTick(double secondsSinceLastTick);   // one 0xF8; the interval may be 0 when unknown
+    void midiClockStart();
+    void midiClockContinue();
+    void midiClockStop();
+    // What the engine is following right now, for displays.
+    double tempo() const        { return tempoOut_.load(std::memory_order_relaxed); }
+    double beatPosition() const { return beatOut_.load(std::memory_order_relaxed); }
+    bool   clockRunning() const { return runningOut_.load(std::memory_order_relaxed); }
+
     // ---- modulation (message thread for the setters; see Modulation.h for the text forms)
     // The matrix rows and the envelope shapes are data, published the way the route and the user
     // scale are: written into a pending copy and picked up at the next block.
@@ -183,6 +198,18 @@ private:
     bool         envHeld_ = false;
     float        randomPerNote_ = 0.0f;
     void         stepModulation(float dt);
+    // clock: the three candidates and the one resolved for this block
+    double       hostBpm_ = 0.0, hostBeat_ = 0.0;
+    bool         hostPlaying_ = false, hostSeen_ = false;
+    double       midiBpm_ = 0.0, midiBeat_ = 0.0, midiSilence_ = 0.0;
+    int          midiTicks_ = 0;
+    bool         midiRunning_ = true;
+    double       intBeat_ = 0.0;
+    double       bpm_ = 90.0, beat_ = 0.0;
+    bool         running_ = true;
+    std::atomic<double> tempoOut_{ 90.0 }, beatOut_{ 0.0 };
+    std::atomic<bool>   runningOut_{ true };
+    void         stepClock(double dt);
 
     Route        route_, routePending_;
     std::atomic<int> routeVersion_{ 0 };

@@ -457,7 +457,7 @@ void Engine::stepModulation(float dt)
     }
 
     for (int i = 0; i < kNumLfos; ++i) {
-        const int base = static_cast<int>(ParamId::Lfo1Shape) + i * 6;
+        const int base = static_cast<int>(ParamId::Lfo1Shape) + i * 7;
         LfoSpec& sp = lfoSpec_[i];
         sp.shape  = static_cast<LfoShape>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumLfoShapes - 1));
         sp.rateHz = getParam(static_cast<ParamId>(base + 1));
@@ -465,6 +465,14 @@ void Engine::stepModulation(float dt)
         sp.depth  = getParam(static_cast<ParamId>(base + 3));
         sp.mode   = static_cast<LfoMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 4)))), 0, kNumLfoModes - 1));
         sp.table  = static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 5))));
+        const int sync = clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 6)))), 0, kNumSyncDivs - 1);
+        if (syncOn(sync)) {
+            // One cycle per division, and the phase follows the clock: the step below lands
+            // exactly on the beat's position, so a synced LFO stays on the grid however long
+            // it runs and wherever the transport jumps.
+            sp.rateHz = static_cast<float>(syncHz(sync, bpm_));
+            if (running_) lfo_[i].setPhase(static_cast<float>(syncPhase(sync, beat_)) - sp.rateHz * dt);
+        }
         const Wavetable* table = userTable_.frames > 0 ? &userTable_ : nullptr;
         modSrc_[static_cast<int>(ModSource::Lfo1) + i] = lfo_[i].step(dt, sp, table);
     }
@@ -473,10 +481,13 @@ void Engine::stepModulation(float dt)
     envHeld_ = false;
     for (const auto& v : voices_) if (v.isActive() && !v.isReleasing()) { envHeld_ = true; break; }
     for (int i = 0; i < kNumModEnvs; ++i) {
-        const int base = static_cast<int>(ParamId::Env1Mode) + i * 3;
+        const int base = static_cast<int>(ParamId::Env1Mode) + i * 4;
         ModEnvSpec& sp = envSpec_[i];
         sp.mode      = static_cast<EnvMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumEnvModes - 1));
         sp.timeScale = std::max(0.01f, getParam(static_cast<ParamId>(base + 1)));
+        const int sync = clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 3)))), 0, kNumSyncDivs - 1);
+        if (syncOn(sync))   // synced: the whole shape spans one division
+            sp.timeScale = static_cast<float>(std::max(0.01, syncSeconds(sync, bpm_) / std::max(static_cast<double>(envShape_[i].length()), 1e-3)));
         sp.depth     = getParam(static_cast<ParamId>(base + 2));
         const float t = static_cast<float>(envTime_) / sp.timeScale;
         modSrc_[static_cast<int>(ModSource::Env1) + i] = envShape_[i].at(t, sp.mode, envHeld_) * sp.depth;
@@ -504,6 +515,48 @@ void Engine::stepModulation(float dt)
     for (const ParamDesc& d : paramTable())
         if (isPerformanceParam(d.id)) modOut_[static_cast<int>(d.id)] = 0.0f;
 }
+
+// ---------------------------------------------------------------- clock
+
+void Engine::stepClock(double dt)
+{
+    const int src = clampv(static_cast<int>(std::lround(getParam(ParamId::ClockSource))), 0, kNumClockSources - 1);
+    const double internal = clampv(getParam(ParamId::Tempo), 20.0f, 300.0f);
+    const bool run = getParam(ParamId::ClockRun) >= 0.5f;
+    midiSilence_ += dt;
+    const bool useHost = src == static_cast<int>(ClockSource::Host) && hostSeen_ && hostBpm_ > 1.0;
+    const bool useMidi = src == static_cast<int>(ClockSource::Midi) && midiTicks_ >= 24 && midiBpm_ > 1.0 && midiSilence_ < 2.0;
+    if (useHost)      { bpm_ = hostBpm_; beat_ = hostBeat_; running_ = hostPlaying_; }
+    else if (useMidi) { bpm_ = midiBpm_; beat_ = midiBeat_; running_ = midiRunning_; }
+    else {
+        // The internal clock: the Tempo knob, counting beats while Run is on. Also what Host and
+        // MIDI fall back to when nothing arrives -- the standalone has no play head.
+        bpm_ = internal;
+        running_ = run;
+        if (run) intBeat_ += bpm_ / 60.0 * dt;
+        beat_ = intBeat_;
+    }
+    tempoOut_.store(bpm_, std::memory_order_relaxed);
+    beatOut_.store(beat_, std::memory_order_relaxed);
+    runningOut_.store(running_, std::memory_order_relaxed);
+}
+
+void Engine::midiClockTick(double interval)
+{
+    // 24 ticks a quarter. The tempo settles over a beat's worth of ticks, so jitter in the
+    // interface does not wobble every synced LFO.
+    if (interval > 0.002 && interval < 2.0) {
+        const double bpm = 60.0 / (24.0 * interval);
+        midiBpm_ = midiTicks_ < 24 || midiBpm_ <= 1.0 ? bpm : midiBpm_ + (bpm - midiBpm_) * 0.08;
+    }
+    if (midiRunning_) midiBeat_ += 1.0 / 24.0;
+    ++midiTicks_;
+    midiSilence_ = 0.0;
+}
+
+void Engine::midiClockStart()    { midiBeat_ = 0.0; midiRunning_ = true; }
+void Engine::midiClockContinue() { midiRunning_ = true; }
+void Engine::midiClockStop()     { midiRunning_ = false; }
 
 void Engine::readParams()
 {
@@ -548,19 +601,19 @@ void Engine::readParams()
     {   // Source slots: 24 fields each. Source 2 and 3 are laid out consecutively from their Type;
         // Source 1's fields are scattered (its level and spectrum are the classic Oscillator
         // parameters, read above), so every slot goes through one table of ids.
-        static const ParamId kSlotIds[kSlots][24] = {
+        static const ParamId kSlotIds[kSlots][25] = {
             { ParamId::Src1Type, ParamId::OscLevel, ParamId::Src1Octave, ParamId::Src1Ratio, ParamId::Src1Pan, ParamId::Src1Table,
               ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
               ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
-              ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate },
+              ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate, ParamId::Src1DensitySync },
             { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
               ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
               ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
-              ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate },
+              ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate, ParamId::Src2DensitySync },
             { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
               ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
               ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
-              ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate },
+              ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate, ParamId::Src3DensitySync },
         };
         for (int k = 0; k < kSlots; ++k) {
             // Source 1's level and spectrum were read into vp_ above; reading them again would step
@@ -591,6 +644,10 @@ void Engine::readParams()
             s.fmIndex       = at(9);
             s.grainMs       = at(10);
             s.density       = at(11);
+            {   // Sync: a grain (or a crackle) per division instead of per second
+                const int dsync = clampv(static_cast<int>(std::lround(getParam(kSlotIds[k][24]))), 0, kNumSyncDivs - 1);
+                if (syncOn(dsync)) s.density = static_cast<float>(syncHz(dsync, bpm_));
+            }
             s.follow        = at(12) >= 0.5f;
             s.grains        = static_cast<int>(std::lround(at(13)));
             s.spread        = at(14);
@@ -646,10 +703,20 @@ void Engine::readParams()
     keysDepth_   = g(ParamId::KeysDepth);
     arcAmount_   = g(ParamId::ArcAmount);
     arcPeriodMin_ = g(ParamId::ArcPeriod);
+    // Sync choices: when set, the division at the current tempo replaces the free knob.
+    auto syncedSeconds = [this](ParamId sync, float free) {
+        const int d = clampv(static_cast<int>(std::lround(getParam(sync))), 0, kNumSyncDivs - 1);
+        return syncOn(d) ? static_cast<float>(syncSeconds(d, bpm_)) : free;
+    };
+    auto syncedHz = [this](ParamId sync, float free) {
+        const int d = clampv(static_cast<int>(std::lround(getParam(sync))), 0, kNumSyncDivs - 1);
+        return syncOn(d) ? static_cast<float>(syncHz(d, bpm_)) : free;
+    };
+    arcPeriodMin_ = syncedSeconds(ParamId::ArcSync, arcPeriodMin_ * 60.0f) / 60.0f;
 
     bp_.on          = g(ParamId::BrainOn) >= 0.5f;
     bp_.density     = static_cast<int>(std::lround(g(ParamId::BrainDensity)));
-    bp_.rateSeconds = g(ParamId::BrainRate);
+    bp_.rateSeconds = syncedSeconds(ParamId::BrainSync, g(ParamId::BrainRate));
     bp_.holdMin     = g(ParamId::BrainHoldMin);
     bp_.holdMax     = g(ParamId::BrainHoldMax);
     bp_.low         = static_cast<int>(std::lround(g(ParamId::BrainLow)));
@@ -663,14 +730,16 @@ void Engine::readParams()
     vp_.brightness = clampv(vp_.brightness * (1.0f + 0.25f * a), 0.0f, 1.0f);
     depth_ = clampv(depth_ * (1.0f + 0.3f * a), 0.0f, 1.0f);
 
-    ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), g(ParamId::EnsembleRate));
-    delay_.set(g(ParamId::DelayTimeL), g(ParamId::DelayTimeR), g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp));
+    ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), syncedHz(ParamId::EnsembleSync, g(ParamId::EnsembleRate)));
+    delay_.set(syncedSeconds(ParamId::DelaySyncL, g(ParamId::DelayTimeL)), syncedSeconds(ParamId::DelaySyncR, g(ParamId::DelayTimeR)),
+               g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp));
     delayMix_   = g(ParamId::DelayMix);
     delayToFar_ = g(ParamId::DelayToFar);
-    delay2_.set(g(ParamId::Delay2TimeL), g(ParamId::Delay2TimeR), g(ParamId::Delay2Feedback), g(ParamId::Delay2Cross), g(ParamId::Delay2Damp));
+    delay2_.set(syncedSeconds(ParamId::Delay2SyncL, g(ParamId::Delay2TimeL)), syncedSeconds(ParamId::Delay2SyncR, g(ParamId::Delay2TimeR)),
+                g(ParamId::Delay2Feedback), g(ParamId::Delay2Cross), g(ParamId::Delay2Damp));
     delay2Mix_   = g(ParamId::Delay2Mix);
     delay2ToFar_ = g(ParamId::Delay2ToFar);
-    cloud_.set(g(ParamId::CloudDensity), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
+    cloud_.set(syncedHz(ParamId::CloudSync, g(ParamId::CloudDensity)), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
     cloudSend_ = g(ParamId::CloudSend);
     nearReverb_.setSpace(0.3f, 20000.0f);
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
@@ -806,6 +875,7 @@ void Engine::process(float* L, float* R, int n)
         morphCur_.store(cur, std::memory_order_relaxed);
     }
     updateBlend(n);
+    stepClock(n / sr_);
     stepModulation(static_cast<float>(n / sr_));
     readParams();
     if (retune_)   // tuning purity / drift: every sounding voice glides to its current frequency

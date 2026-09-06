@@ -260,8 +260,8 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
     const auto r = getLocalBounds();
     const juce::String pre = "src" + juce::String(slot) + "_";
     const int type = static_cast<int>(std::lround(rawParam(proc, (pre + "type").toRawUTF8())));
-    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR", "ADDITIVE BANK" };
-    displayFrame(g, r, kTitles[juce::jlimit(0, 5, type)], ui::voiceCol);
+    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR", "ADDITIVE BANK", "STRETCH" };
+    displayFrame(g, r, kTitles[juce::jlimit(0, 6, type)], ui::voiceCol);
     const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
     const float cy = plot.getCentreY(), hh = plot.getHeight() * 0.42f;
     g.setColour(ui::track.withAlpha(0.6f));
@@ -308,6 +308,48 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         });
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText("ratio " + juce::String(ratio, 2) + "   index " + juce::String(idx, 2), r.reduced(9, 5), juce::Justification::topRight, false);
+    } else if (type == 6) {   // stretch: the clip's envelope, the read position and the window being analysed
+        const ambient::Texture* tex = proc.engine().displayTexture(slot - 1);
+        if (tex == nullptr || tex->empty()) {
+            g.setColour(ui::faint); g.setFont(ui::body(11.0f));
+            g.drawText("no clip loaded -- Texture... below, or a pack preset", plot, juce::Justification::centred, false);
+            return;
+        }
+        const int n = static_cast<int>(tex->mono.size());
+        const int cols = juce::jmax(32, static_cast<int>(plot.getWidth()));
+        g.setColour(ui::voiceCol.withAlpha(0.55f));
+        for (int c = 0; c < cols; ++c) {
+            const int a = static_cast<int>(static_cast<long long>(c) * n / cols), b = juce::jmax(a + 1, static_cast<int>(static_cast<long long>(c + 1) * n / cols));
+            float peak = 0.0f;
+            const int stride = juce::jmax(1, (b - a) / 64);
+            for (int i = a; i < b; i += stride) peak = juce::jmax(peak, std::fabs(tex->mono[static_cast<size_t>(i)]));
+            const float x = plot.getX() + c * plot.getWidth() / cols;
+            g.drawVerticalLine(juce::roundToInt(x), cy - peak * hh * 2.0f, cy + peak * hh * 2.0f);
+        }
+        const float pos = rawParam(proc, (pre + "pos").toRawUTF8());
+        const float grainMs = rawParam(proc, (pre + "grain").toRawUTF8());
+        const float stretch = rawParam(proc, (pre + "stretch").toRawUTF8());
+        const float xfade = rawParam(proc, (pre + "xfade").toRawUTF8());
+        const float clipSec = static_cast<float>(tex->mono.size() / juce::jmax(1.0, tex->sampleRate));
+        // the window, centred on Position, as wide as it reads
+        const float ww = juce::jmax(3.0f, grainMs * 0.001f / juce::jmax(0.05f, clipSec) * plot.getWidth());
+        const float px = plot.getX() + juce::jlimit(0.0f, 1.0f, pos) * plot.getWidth();
+        g.setColour(ui::live.withAlpha(0.18f));
+        g.fillRect(px - ww * 0.5f, plot.getY(), ww, plot.getHeight());
+        g.setColour(ui::live);
+        g.drawVerticalLine(juce::roundToInt(px), plot.getY(), plot.getBottom());
+        if (!tex->seamless && xfade > 0.001f) {   // the seam's crossfade zone, at the end of the clip
+            const float zw = juce::jlimit(0.0f, 0.25f, 0.5f * xfade) * plot.getWidth();
+            g.setColour(ui::accent.withAlpha(0.15f));
+            g.fillRect(plot.getRight() - zw, plot.getY(), zw, plot.getHeight());
+        }
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        const float secs = clipSec * stretch;
+        const juce::String length = secs < 90.0f ? juce::String(secs, 0) + " s" : secs < 5400.0f ? juce::String(secs / 60.0f, 1) + " min" : juce::String(secs / 3600.0f, 1) + " h";
+        g.drawText(juce::String(clipSec, 1) + " s clip  x " + juce::String(stretch, 0) + "  =  " + length
+                       + (tex->seamless ? "   seamless" : ""),
+                   r.reduced(9, 5), juce::Justification::topRight, false);
+        return;
     } else if (type == 3) {   // texture: the clip's envelope, and the window the grains are drawn from
         const ambient::Texture* tex = proc.engine().displayTexture(slot - 1);
         if (tex == nullptr || tex->empty()) {

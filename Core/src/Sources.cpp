@@ -5,10 +5,11 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <memory>      // the shared transforms of the Stretch type
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive", "Stretch" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
     "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
 };
@@ -97,6 +98,20 @@ const Wavetable& builtinTable(int index)
     return builtins().t[clampv(index, 0, kNumTables - 2)];
 }
 
+bool loopFromName(const char* fileName)
+{
+    if (fileName == nullptr) return false;
+    const char* base = fileName;
+    for (const char* p = fileName; *p; ++p) if (*p == '/' || *p == '\\') base = p + 1;
+    // Lower-case copy without the extension, then look for the token.
+    char buf[256];
+    int n = 0;
+    for (const char* p = base; *p && n < 255; ++p) buf[n++] = static_cast<char>((*p >= 'A' && *p <= 'Z') ? *p + 32 : *p);
+    buf[n] = 0;
+    for (int i = n - 1; i > 0; --i) if (buf[i] == '.') { buf[i] = 0; break; }
+    return std::strstr(buf, "_loop") != nullptr || std::strstr(buf, "-loop") != nullptr;
+}
+
 double baseHzFromName(const char* fileName)
 {
     if (fileName == nullptr) return 0.0;
@@ -183,6 +198,26 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     for (auto& g : grains_) g.on = false;
     spawnIn_ = 0.0;
     gL_ = gR_ = 0.0f;
+    // Stretch: the buffers, sized once for the longest window; the shared transforms, built here
+    // on the message thread so render() only ever reads them.
+    st_.out.assign(static_cast<size_t>(2 * kStretchMaxN), 0.0f);
+    st_.re.assign(static_cast<size_t>(kStretchMaxN), 0.0f);
+    st_.im.assign(static_cast<size_t>(kStretchMaxN), 0.0f);
+    st_.win.assign(static_cast<size_t>(kStretchMaxN), 0.0f);
+    st_.n = 0; st_.outPos = 0; st_.hopLeft = 0; st_.advance = 0.0;
+    for (int n = kStretchMinN; n <= kStretchMaxN; n <<= 1) (void)stretchFft(n);
+}
+
+const Fft& SourceSlot::stretchFft(int n)
+{
+    // One transform per size, shared by every slot of every voice: the tables are read-only once
+    // built, and building them in prepare() keeps the allocation off the audio thread.
+    static std::vector<std::unique_ptr<Fft>> table;
+    static std::vector<int> sizes;
+    for (size_t i = 0; i < sizes.size(); ++i) if (sizes[i] == n) return *table[i];
+    table.push_back(std::make_unique<Fft>(n));
+    sizes.push_back(n);
+    return *table.back();
 }
 
 void SourceSlot::noteOn(bool fresh)
@@ -194,6 +229,7 @@ void SourceSlot::noteOn(bool fresh)
     hpX_ = hpY_ = 0.0f;
     for (auto& g : grains_) g.on = false;
     spawnIn_ = 0.0;
+    st_.advance = 0.0;   // a fresh note reads from Position again
 }
 
 void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const SlotParams& p,
@@ -206,6 +242,8 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         for (int h = 0; h < kTablePartials; ++h) { amp_[h] = ampStep_[h] = 0.0f; }
         active_ = 0;
         for (auto& g : grains_) g.on = false;
+        if (!st_.out.empty()) std::fill(st_.out.begin(), st_.out.end(), 0.0f);
+        st_.n = 0; st_.hopLeft = 0;
         lastType_ = p.type;
     }
     double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
@@ -239,6 +277,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
     if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt);
     else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Stretch) renderStretch(scratch_, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
     else renderFm(scratch_, n, hz, p, dt);
     for (int i = 0; i < n; ++i) {
         gL_ += sL; gR_ += sR;
@@ -441,6 +480,110 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             g.wc = nc;
             g.pos += g.rate; ++g.age;
         }
+    }
+}
+
+// ---------------------------------------------------------------- stretch
+//
+// Paulstretch, in a voice. A window of the clip is transformed, its magnitudes are kept and its
+// phases thrown away and drawn afresh, and the result is overlap-added at a quarter of the
+// window -- the same machinery as the Cosmos's Nebula, pointed at a recording instead of at the
+// mix. Every frame is a plausible piece of the clip's spectrum with no memory of where its
+// transients were, so the analysis position can crawl through the recording at a thousandth of
+// its speed and what comes out is a continuum: twenty seconds of rain becoming an evening of it.
+//
+// Pitch is applied when the window is READ, as a resampling step through the clip, and the
+// stretch is applied to how far the read position moves between frames. The two do not know
+// about each other, which is the point: Follow = Note plays a chromatic sample across the
+// keyboard without a high note ending sooner than a low one.
+
+void SourceSlot::stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N)
+{
+    const float* s = tex->mono.data();
+    const int len = static_cast<int>(tex->mono.size());
+    if (st_.n != N) {   // a new window size: its Hann, and a clean start for the overlap
+        st_.n = N;
+        for (int i = 0; i < N; ++i) st_.win[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(kTwoPi * i / N);
+    }
+    // The seam. A clip marked seamless wraps straight round; any other loops over [zone, len)
+    // and fades its last `zone` samples into its first `zone`, so the wrap lands on the sample
+    // the fade has been arriving at. Half of Xfade of the clip, at most a quarter of it.
+    const double zone = tex->seamless ? 0.0 : clampv(0.5 * static_cast<double>(p.xfade), 0.0, 0.25) * len;
+    const double loopLen = static_cast<double>(len) - zone;
+    auto wrap = [&](double q) {
+        if (loopLen <= 1.0) return 0.0;
+        while (q >= len) q -= loopLen;
+        while (q < zone) q += loopLen;
+        return q;
+    };
+    auto read = [&](double q) {
+        q = wrap(q);
+        const int ip = static_cast<int>(q);
+        const float f = static_cast<float>(q - ip);
+        const int ip1 = ip + 1 < len ? ip + 1 : ip;
+        float v = s[ip] + f * (s[ip1] - s[ip]);
+        if (zone > 0.0 && q > len - zone) {
+            const double a = (q - (len - zone)) / zone;          // 0 at the start of the fade, 1 at the end
+            double q2 = q - loopLen;                              // the matching point near the clip's start
+            if (q2 < 0.0) q2 = 0.0;
+            const int jp = static_cast<int>(q2);
+            const float g = static_cast<float>(q2 - jp);
+            const int jp1 = jp + 1 < len ? jp + 1 : jp;
+            const float w = s[jp] + g * (s[jp1] - s[jp]);
+            v = static_cast<float>((1.0 - a) * v + a * w);
+        }
+        return v;
+    };
+    // The window, read around the analysis position at the pitch's rate.
+    const double centre = clampv(static_cast<double>(p.position), 0.0, 1.0) * loopLen + zone + st_.advance;
+    const double start = centre - 0.5 * N * rate;
+    for (int i = 0; i < N; ++i) {
+        st_.re[static_cast<size_t>(i)] = read(start + i * rate) * st_.win[static_cast<size_t>(i)];
+        st_.im[static_cast<size_t>(i)] = 0.0f;
+    }
+    const Fft& fft = stretchFft(N);
+    fft.transform(st_.re.data(), st_.im.data(), false);
+    // Keep the magnitudes, draw the phases: what makes it a continuum rather than a loop.
+    for (int k = 0; k <= N / 2; ++k) {
+        const float m = std::sqrt(st_.re[static_cast<size_t>(k)] * st_.re[static_cast<size_t>(k)] + st_.im[static_cast<size_t>(k)] * st_.im[static_cast<size_t>(k)]);
+        const float ph = rng_.uniform();
+        const float r = m * sin01(ph + 0.25 >= 1.0 ? ph - 0.75 : ph + 0.25), q = m * sin01(ph);
+        st_.re[static_cast<size_t>(k)] = r; st_.im[static_cast<size_t>(k)] = q;
+        if (k > 0 && k < N / 2) { st_.re[static_cast<size_t>(N - k)] = r; st_.im[static_cast<size_t>(N - k)] = -q; }
+    }
+    st_.im[0] = 0.0f; st_.im[static_cast<size_t>(N / 2)] = 0.0f;
+    fft.transform(st_.re.data(), st_.im.data(), true);
+    // Overlap-add at a quarter of the window. 1.3 is the Nebula's measured unity constant for
+    // random-phase resynthesis at this hop with Hann in and out; the clip's own gain brings a
+    // quiet recording to the level the other types normalise themselves to.
+    const int outMask = 2 * kStretchMaxN - 1;
+    const float g = 1.3f * tex->gain;
+    for (int i = 0; i < N; ++i)
+        st_.out[static_cast<size_t>((st_.outPos + i) & outMask)] += st_.re[static_cast<size_t>(i)] * st_.win[static_cast<size_t>(i)] * g;
+    // The read moves on by a hop, slowed by the stretch. At 1000 that is four samples of clip per
+    // frame of a third of a second.
+    st_.advance += (0.25 * N) * rate / std::max(static_cast<double>(p.stretch), 1.0);
+    if (loopLen > 1.0) while (st_.advance >= loopLen) st_.advance -= loopLen;
+    st_.hopLeft += N / 4;
+}
+
+void SourceSlot::renderStretch(float* out, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt)
+{
+    if (tex == nullptr || tex->empty() || st_.out.empty()) { std::memset(out, 0, sizeof(float) * static_cast<size_t>(n)); return; }
+    // Position wanders the way it does for the grains, and the window comes from Grain.
+    (void)posDrift_.update(dt, 0.02f, rng_);
+    int N = kStretchMinN;
+    while (N < static_cast<int>(p.grainMs * 0.001f * static_cast<float>(sr_)) && N < kStretchMaxN) N <<= 1;
+    const double resample = tex->sampleRate / sr_;
+    const double rate = (p.follow ? hz / std::max(tex->baseHz, 20.0) : speed) * resample;
+    const int outMask = 2 * kStretchMaxN - 1;
+    for (int i = 0; i < n; ++i) {
+        while (st_.hopLeft <= 0) stretchFrame(p, tex, rate, N);
+        const size_t o = static_cast<size_t>(st_.outPos & outMask);
+        out[i] = st_.out[o];
+        st_.out[o] = 0.0f;
+        ++st_.outPos;
+        --st_.hopLeft;
     }
 }
 

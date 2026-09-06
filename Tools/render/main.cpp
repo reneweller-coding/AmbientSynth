@@ -211,8 +211,9 @@ int main(int argc, char** argv)
             if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) baseHz = std::atof(argv[++i]);
             std::vector<float> mono; int rate = 0;
             if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
-            engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz);
-            std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz);
+            engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz, loopFromName(path.c_str()));
+            std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz%s)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz,
+                        loopFromName(path.c_str()) ? ", seamless" : "");
         }
         else if (a == "--route") {   // walk a route preset (by name) or a route text over the map
             const std::string spec = next();
@@ -391,11 +392,28 @@ int main(int argc, char** argv)
         const char* tab = presetFilePath(presetIndex, 1);
         std::vector<float> mono; int rate = 0;
         if (tex && *tex) {
-            if (readWavMono(tex, mono, rate)) {
-                double base = baseHzFromName(tex); if (base <= 0.0) base = 261.6256;
-                engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base);
-                std::printf("preset texture: %s\n", tex);
-            } else std::fprintf(stderr, "preset texture missing: %s\n", tex);
+            // One path goes into every slot; up to four separated by ';' go one per slot, an empty
+            // one meaning that slot has none -- the same reading the plugin gives the field.
+            const std::string all(tex);
+            const bool perSlot = all.find(';') != std::string::npos;
+            size_t start = 0;
+            for (int slot = 0; slot < ambient::kSlots; ++slot) {
+                const size_t semi = all.find(';', start);
+                std::string one = all.substr(start, semi == std::string::npos ? std::string::npos : semi - start);
+                while (!one.empty() && one.front() == ' ') one.erase(one.begin());
+                while (!one.empty() && one.back() == ' ') one.pop_back();
+                if (!one.empty()) {
+                    if (readWavMono(one.c_str(), mono, rate)) {
+                        double base = baseHzFromName(one.c_str()); if (base <= 0.0) base = 261.6256;
+                        const bool seamless = loopFromName(one.c_str());
+                        if (perSlot) engine.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base, seamless);
+                        else         engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base, seamless);
+                        std::printf("preset texture%s: %s\n", perSlot ? (" " + std::to_string(slot + 1)).c_str() : "", one.c_str());
+                    } else std::fprintf(stderr, "preset texture missing: %s\n", one.c_str());
+                }
+                if (semi == std::string::npos) break;
+                start = semi + 1;
+            }
         }
         if (tab && *tab) {
             if (readWavMono(tab, mono, rate) && engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))

@@ -523,6 +523,15 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src4Shimmer,     "src4_shimmer",      "Shimmer",      "Source 4", 0.f,   1.f,    0.4f,   1.f,  ""),
     F(ParamId::Src4ShimmerRate, "src4_shimmer_rate", "Shimmer Rate", "Source 4", 0.01f, 2.f,    0.15f,  0.4f, "Hz"),
     F(ParamId::Src4Drift,       "src4_drift",        "Drift",        "Source 4", 0.f,   30.f,   0.f,    0.6f, "ct"),
+    // ---- Stretch: factor and loop crossfade, one pair per slot
+    F(ParamId::Src1Stretch, "src1_stretch", "Stretch",   "Source 1", 1.f, 1000.f, 40.f, 0.25f, "x"),
+    F(ParamId::Src1Xfade,   "src1_xfade",   "Loop Fade", "Source 1", 0.f, 1.f,    0.1f, 1.f,   ""),
+    F(ParamId::Src2Stretch, "src2_stretch", "Stretch",   "Source 2", 1.f, 1000.f, 40.f, 0.25f, "x"),
+    F(ParamId::Src2Xfade,   "src2_xfade",   "Loop Fade", "Source 2", 0.f, 1.f,    0.1f, 1.f,   ""),
+    F(ParamId::Src3Stretch, "src3_stretch", "Stretch",   "Source 3", 1.f, 1000.f, 40.f, 0.25f, "x"),
+    F(ParamId::Src3Xfade,   "src3_xfade",   "Loop Fade", "Source 3", 0.f, 1.f,    0.1f, 1.f,   ""),
+    F(ParamId::Src4Stretch, "src4_stretch", "Stretch",   "Source 4", 1.f, 1000.f, 40.f, 0.25f, "x"),
+    F(ParamId::Src4Xfade,   "src4_xfade",   "Loop Fade", "Source 4", 0.f, 1.f,    0.1f, 1.f,   ""),
 }};
 } // namespace
 
@@ -536,22 +545,22 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
       ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
       ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate,
-      ParamId::Src1DensitySync, ParamId::Src1Drift },
+      ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
       ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate,
-      ParamId::Src2DensitySync, ParamId::Src2Drift },
+      ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
       ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate,
-      ParamId::Src3DensitySync, ParamId::Src3Drift },
+      ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
       ParamId::Src4Partials, ParamId::Src4Tilt, ParamId::Src4Bright, ParamId::Src4OddEven, ParamId::Src4Inharm, ParamId::Src4Shimmer, ParamId::Src4ShimmerRate,
-      ParamId::Src4DensitySync, ParamId::Src4Drift },
+      ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade },
 };
 
 struct SectionName { const char* name; ParamSection section; };

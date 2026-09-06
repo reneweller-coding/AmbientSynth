@@ -289,7 +289,7 @@ bool Engine::loadUserWavetable(const float* mono, int n, int frameLen)
     return true;
 }
 
-void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz)
+void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz, bool seamless)
 {
     if (slot < 0 || slot >= kSlots) return;
     const int active = textureActive_[slot].load(std::memory_order_acquire);
@@ -301,6 +301,7 @@ void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, d
     t.mono.assign(mono, mono + std::max(n, 0));
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
+    t.seamless = seamless;
     t.measure();
     textureActive_[slot].store(target, std::memory_order_release);
 }

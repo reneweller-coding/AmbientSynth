@@ -517,7 +517,8 @@ bool AmbientSynthProcessor::loadTextureFile(int slot, const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
-    engine_.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
+    engine_.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+                       ambient::loopFromName(file.getFileName().toRawUTF8()));
     textureFile_[slot] = file;
     return true;
 }
@@ -527,7 +528,8 @@ bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());
-    engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
+    engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+                       ambient::loopFromName(file.getFileName().toRawUTF8()));
     for (auto& f : textureFile_) f = file;
     return true;
 }

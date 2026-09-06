@@ -14,10 +14,18 @@
 //   Texture   -- a granular player over a loaded sample (field recording, flute air,
 //                metal), grains around Position with a slow wander; Follow = Note pitches
 //                the sample to the note (assuming it was recorded at C4).
+//   Stretch   -- the same clip read as a continuum instead of as grains: a spectral time
+//                stretch (window, transform, keep the magnitudes, random phases, overlap-add)
+//                by a factor of 1 to 1000, so a twenty-second recording becomes hours of
+//                weather with no grain rhythm and no transient left standing. Pitch is set by
+//                resampling BEFORE the stretch, so a note played higher does not get shorter.
+//                Loops with a crossfade at the seam, or without one for a clip that is marked
+//                seamless in its file name ("_loop").
 // Every slot has level, octave, a just ratio to the note and a pan, and goes through the
 // voice's filter, envelope and distance like the main bank.
 #pragma once
 #include "Dsp.h"
+#include "Cosmos.h"   // Fft, for the Stretch type
 #include <cstdint>
 #include <vector>
 
@@ -28,10 +36,16 @@ constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
 constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use
 
-// Additive sits last so the indices the presets store for the other types stay what they were.
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive };
+// Additive sat last so the indices the presets store for the other types stayed what they were;
+// Stretch came after it and is appended for the same reason.
+enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch };
 
-constexpr int kNumSourceTypes = 6;
+constexpr int kNumSourceTypes = 7;
+// The longest spectral window the Stretch type analyses: 16384 samples, a third of a second at
+// 48 kHz. Paulstretch's own default is a quarter of a second, which is where the smooth results
+// start; longer windows are smoother still but cost memory in every slot of every voice.
+constexpr int kStretchMaxN = 16384;
+constexpr int kStretchMinN = 256;
 constexpr int kNumTables      = 6;      // Classic, Organ, Vocal, Glass, Metal, User
 constexpr int kNumSlotRatios  = 10;
 extern const char* const kSourceTypeNames[kNumSourceTypes];
@@ -64,6 +78,9 @@ const Wavetable& builtinTable(int index);   // 0 .. kNumTables-2 (the last index
 // Base pitch from a texture file name: a trailing "_A3" / "-C#4" / " Bb2" note token before
 // the extension (as written by Tools/TextureGen) gives the frequency at A4 = 440 Hz; 0 if none.
 double baseHzFromName(const char* fileName);
+// Whether the file name marks the clip as seamless ("_loop" or "-loop" anywhere before the
+// extension, any case): the Stretch type then wraps without a crossfade.
+bool loopFromName(const char* fileName);
 
 struct Texture {
     std::vector<float> mono;
@@ -72,6 +89,7 @@ struct Texture {
     // Reading gain, from the clip's own RMS: the wavetable and FM slots normalise themselves to
     // unity, so without this a quiet recording enters the mix 20 dB below them at the same Level.
     float  gain = 1.0f;
+    bool   seamless = false;    // the end runs into the start: no crossfade needed at the seam
     bool empty() const { return mono.size() < 64; }
     void measure();             // sets gain from mono
 };
@@ -98,6 +116,10 @@ struct SlotParams {
     int   partials = 16;
     float tilt = 1.2f, bright = 0.7f, oddEven = 0.0f, inharm = 0.0f, shimmer = 0.4f, shimmerRate = 0.15f;
     float drift = 0.0f;          // cents of slow, independent pitch drift (the asymmetric detune)
+    // Stretch: the factor, and the crossfade at the loop seam as a fraction of the clip (ignored
+    // for a clip marked seamless). The spectral window is Grain, the read position Position.
+    float stretch = 40.0f;
+    float xfade = 0.1f;
 };
 
 class SourceSlot {
@@ -127,6 +149,9 @@ private:
     void renderFm(float* out, int n, double hz, const SlotParams& p, float dt);
     void renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
+    void renderStretch(float* out, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
+    void stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N);
+    static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
 
     // Wavetable: phasor bank like Voice::Strand.
     float  pc_[kTablePartials] = {}, ps_[kTablePartials] = {};
@@ -163,6 +188,15 @@ public:
     };
 private:
     NoiseState noise_[2];
+    // Stretch: an overlap-add ring twice the longest window, the transform pair, and where the
+    // analysis reads in the clip. Allocated in prepare(), never in render().
+    struct StretchState {
+        std::vector<float> out, re, im, win;
+        int    n = 0;            // the window in use (0 = none yet)
+        int    outPos = 0, hopLeft = 0;
+        double advance = 0.0;    // how far the read has travelled from Position, in clip samples
+    };
+    StretchState st_;
     Drifter noiseDrift_;
     Drifter posDrift_, idxDrift_, pitchDrift_;
     Rng    rng_;

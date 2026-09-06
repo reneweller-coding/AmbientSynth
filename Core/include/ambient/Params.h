@@ -172,6 +172,8 @@ enum class ParamId : int {
     Src4Type, Src4Level, Src4Octave, Src4Ratio, Src4Pan, Src4Table, Src4Position, Src4PosDrift,
     Src4FmRatio, Src4FmIndex, Src4Grain, Src4Density, Src4DensitySync, Src4Follow, Src4Grains, Src4Spread, Src4Noise, Src4NoiseQ,
     Src4Partials, Src4Tilt, Src4Bright, Src4OddEven, Src4Inharm, Src4Shimmer, Src4ShimmerRate, Src4Drift,
+    // The Stretch type's two settings, one pair per slot, fields 26 and 27 of the slot.
+    Src1Stretch, Src1Xfade, Src2Stretch, Src2Xfade, Src3Stretch, Src3Xfade, Src4Stretch, Src4Xfade,
     Count
 };
 
@@ -206,7 +208,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 26;
+constexpr int kSlotFields  = 28;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in

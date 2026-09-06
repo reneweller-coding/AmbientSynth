@@ -376,6 +376,8 @@ void Engine::readParams()
             s.spread        = at(14);
             s.noise         = static_cast<NoiseKind>(clampv(static_cast<int>(std::lround(at(15))), 0, kNumNoiseKinds - 1));
             s.noiseQ        = at(16);
+            s.stretch       = at(26);
+            s.xfade         = at(27);
         }
         // ---- the Vector
         //

@@ -1423,29 +1423,32 @@ void AmbientSynthEditor::updateSourceCells()
     // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
-    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5 };
+    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
-    for (int k = 0; k < 3; ++k) {
+    // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
+    for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        for (int off = 1; off <= 25; ++off) {
+        for (int off = 1; off <= 27; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
-            case 6:  on = type == Table || type == Texture || type == Noise; break;   // position / centre
+            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch; break;   // position / centre
             case 7:  on = type != Off;  break;                                   // pos drift moves all of them
             case 8:
             case 9:  on = type == Fm; break;
-            case 10:
+            case 10: on = type == Texture || type == Stretch; break;             // grain: the grain, or the spectral window
             case 13:
-            case 14: on = type == Texture; break;                                // grain, grains, spread
+            case 14: on = type == Texture; break;                                // grains, spread
             case 11: on = type == Texture || type == Noise; break;               // density: grains or crackle
-            case 12: on = type == Texture || type == Noise; break;               // pitch follow
+            case 12: on = type == Texture || type == Noise || type == Stretch; break;   // pitch follow
             case 15:
             case 16: on = type == Noise; break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: on = type == Additive; break;
             case 24: on = type == Texture || type == Noise; break;                // density sync
             case 25: on = type != Off && type != Noise; break;                    // pitch drift
+            case 26:
+            case 27: on = type == Stretch; break;                                 // stretch, loop fade
             default: break;
             }
             const int ci = cellForParam(ids[off]);

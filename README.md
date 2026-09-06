@@ -162,8 +162,23 @@ the brain's root.
 Additive (a 32-partial bank shaped by tilt, brightness, odd/even, inharmonic
 stretch and shimmer -- in Source 1 the classic strand bank with unison,
 detune and stacks), Wavetable (a table of spectra), FM, Texture (granular,
-up to 64 grains) or Noise (ten colours); so four additive banks, four
-granular players or any mix are a matter of four choices. Each slot has its
+up to 64 grains), **Stretch** or Noise (ten colours); so four additive banks,
+four granular players or any mix are a matter of four choices.
+
+**Stretch** is the same clip read as a continuum instead of as grains: a
+spectral time stretch after Paulstretch — a window of the recording is
+transformed, its magnitudes kept, its phases drawn afresh and the result
+overlap-added, while the read position crawls through the clip at one
+*Stretch*-th of its speed, from 1 to 1000. No grain rhythm and no transient
+left standing: twenty seconds of rain become an evening of it. Pitch (*Pitch*
+= Note or Free, with octave and ratio) is applied by resampling *before* the
+stretch, so a chromatic sample plays across the keyboard without the high
+notes getting shorter; *Grain* is the spectral window; the loop's seam is
+crossfaded by *Loop Fade*, or not at all for a clip whose name carries
+`_loop`, which marks it seamless. Measured against the granular player on the
+same recording: the same level within a decibel, a lower flux (smoother), a
+sample-to-sample jump under 0.011 against a limit of 0.3, and the pitch
+identical to the last decimal in both Follow modes. Each slot has its
 own clip, so four Texture slots can play four different recordings; a pack
 preset names them as up to four paths separated by `;`, and a preset that
 names one file still puts it in every slot, as it always did. **Nine filter

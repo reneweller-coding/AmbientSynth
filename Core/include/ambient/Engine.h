@@ -80,9 +80,9 @@ public:
     // recordings -- which is what makes the Vector's four corners four landscapes. The slotless
     // form loads the same clip into every slot: what the instrument always did, and what a preset
     // that names one file still means.
-    void setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz = 261.6256);
-    void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256)
-    { for (int k = 0; k < kSlots; ++k) setTexture(k, mono, n, sampleRate, baseHz); }
+    void setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false);
+    void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false)
+    { for (int k = 0; k < kSlots; ++k) setTexture(k, mono, n, sampleRate, baseHz, seamless); }
     void clearTexture(int slot);
     bool hasTexture(int slot = 0) const
     { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }

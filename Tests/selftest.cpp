@@ -1874,6 +1874,55 @@ void testModulation()
             m.reset();
             CHECK(m.read().integrated < -100.0f, "reset clears the meter");
         }
+        {   // The Stretch type: a clip read as a continuum. Two seconds of a 110 Hz tone with a
+            // little vibrato go in; what must come out is sound (not silence), at the clip's own
+            // pitch when Free, at the played note when Note, and different for a different
+            // stretch factor -- the factor moves the read, so a render must not be blind to it.
+            std::vector<float> clip(96000);
+            for (size_t i = 0; i < clip.size(); ++i)
+                clip[i] = 0.3f * std::sin(2.0f * 3.14159265f * 110.0f * static_cast<float>(i) / 48000.0f
+                                          * (1.0f + 0.01f * std::sin(static_cast<float>(i) * 0.0003f)));
+            auto render = [&](const char* type, bool follow, float stretch, int note) {
+                Engine e;
+                e.prepare(48000.0, 256);
+                e.setTexture(clip.data(), static_cast<int>(clip.size()), 48000.0, 110.0, false);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Src1Type, static_cast<float>(SourceType::Additive));
+                e.setParam(ParamId::OscLevel, 0.0f);
+                e.setParam(ParamId::Src2Type, paramValueFromText(paramDesc(ParamId::Src2Type), type));
+                e.setParam(ParamId::Src2Level, 0.8f);
+                e.setParam(ParamId::Src2Follow, follow ? 1.0f : 0.0f);
+                e.setParam(ParamId::Src2Stretch, stretch);
+                e.setParam(ParamId::Src2Grain, 300.0f);
+                e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+                e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Attack, 0.01f);
+                // Air is on by default -- a noise band three times the note -- and a zero-crossing
+                // count through it read 327 Hz for a 110 Hz tone. Measured with it off: 110.7.
+                e.setParam(ParamId::Air, 0.0f);
+                e.noteOn(note, 1.0f);
+                std::vector<float> l(256), r(256), all;
+                for (int b = 0; b < 3 * 48000 / 256; ++b) {
+                    e.process(l.data(), r.data(), 256);
+                    if (b >= 48000 / 256) all.insert(all.end(), l.begin(), l.end());   // skip the first second
+                }
+                double sq = 0.0; for (float v : all) sq += static_cast<double>(v) * v;
+                // the dominant frequency, by the zero-crossing rate: crude, but a sine's is exact
+                int zc = 0; for (size_t i = 1; i < all.size(); ++i) if ((all[i - 1] < 0.0f) != (all[i] < 0.0f)) ++zc;
+                const double hz = 0.5 * zc / (static_cast<double>(all.size()) / 48000.0);
+                uint64_t h = 1469598103934665603ull;
+                for (float v : all) { const int q = static_cast<int>(v * 1.0e5f); h ^= static_cast<uint64_t>(q); h *= 1099511628211ull; }
+                return std::make_tuple(std::sqrt(sq / std::max<size_t>(all.size(), 1)), hz, h);
+            };
+            const auto free1 = render("Stretch", false, 40.0f, 57);
+            CHECK(std::get<0>(free1) > 0.01, "the Stretch type makes sound");
+            CHECK(std::fabs(std::get<1>(free1) - 110.0) < 8.0, "Free keeps the clip's own pitch");
+            const auto note1 = render("Stretch", true, 40.0f, 69);    // A4: 440 Hz, four times the clip's 110
+            CHECK(std::fabs(std::get<1>(note1) - 440.0) < 25.0, "Note plays the clip at the played note, the pitch set before the stretch");
+            const auto free2 = render("Stretch", false, 400.0f, 57);
+            CHECK(std::get<2>(free2) != std::get<2>(free1), "a different stretch factor is a different render");
+            CHECK(loopFromName("rain_on_tin_LOOP.wav") && loopFromName("x/forest-loop_A3.wav") && !loopFromName("forest_A3.wav"),
+                  "the seamless mark is read from the file name");
+        }
         ModEnv l;
         CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");
         CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");

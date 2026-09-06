@@ -455,6 +455,48 @@ stream in order, and a fourth fork advanced that stream by one draw and moved
 every random decision after it -- the oracle reported all 39 presets changed.
 Slot 4 seeds from a side stream instead, and the oracle is back to 39
 identical.
+
+### Stretch: a recording as a continuum
+
+The Texture type reads a clip as grains; Stretch reads the same clip as a
+continuum. It is Paulstretch inside a voice: a window of the recording
+(Grain, up to a third of a second) is transformed, its magnitudes are kept
+and its phases thrown away and drawn afresh, and the frame is overlap-added
+at a quarter of the window -- the Cosmos's Nebula, pointed at a clip rather
+than at the mix. Every frame is a plausible slice of the clip's spectrum with
+no memory of where its transients were, so the analysis position can crawl
+through the recording at a thousandth of its speed and what comes out has no
+grain rhythm and no attack left standing. This is the tool the ambient
+literature describes for Rich's *Perpetual*: field material stretched by
+factors up to a thousand until only the overtone weave remains.
+
+Two decisions shape it. Pitch is applied when the window is *read*, as a
+resampling step through the clip, and the stretch is applied to how far the
+read moves between frames; the two do not know about each other, so
+Follow = Note plays a chromatic sample across the keyboard without a high
+note ending sooner than a low one -- measured, the pitch comes out identical
+to the granular player's in both modes (110.7 Hz Free, 220.3 Hz at A3). And
+the loop's seam is crossfaded over the last part of the clip into its first,
+so the wrap lands on the sample the fade has been arriving at, unless the
+file name carries `_loop`: the generator marks clips it has made seamless,
+and those wrap straight round.
+
+Cost: a 16384-point transform per hop per voice per slot. Nine voices with
+four Stretch slots each render at 6x realtime on the development machine
+against 20x for four Texture slots; one slot in a few voices, which is what a
+patch actually does, is not a number anyone will notice. The transforms are
+shared across all slots of all voices, built once in `prepare()`, read-only
+after; the buffers are sized once for the longest window and never touched
+by an allocation in `render()`.
+
+Three measurements that had to be made rather than assumed: the type makes
+sound (a silent new source type is the easiest thing in the world to ship),
+a different stretch factor is a different render (the factor moves the read,
+and a render blind to it would mean the read was not moving), and the
+seamless mark is read from the name. The first draft of the pitch test failed
+at 327 Hz for a 110 Hz clip -- not the stretch, the Air band, on by default at
+three times the note and counted by a zero-crossing detector. With Air off:
+110.7.
 Additive in Source 2 or 3 is a single 32-partial bank inside the slot with
 the same spectrum formula (partials, tilt, brightness window, odd/even,
 inharmonic stretch, per-partial shimmer) -- one strand, the cost of a

@@ -96,12 +96,21 @@ def paragraphs(text):
     """The help texts are plain prose with blank lines between paragraphs, and the occasional
     line that is a heading because it is short and ends without a full stop."""
     out = []
-    for block in re.split(r"\n\s*\n", text.strip()):
+    for block in re.split(r"\n\s*\n", text.strip("\n")):
+        raw_lines = block.strip("\n").split("\n")
+        if raw_lines and all(l.startswith("    ") or not l.strip() for l in raw_lines):
+            # A formula or a table, indented by hand: printed as it stands, never as a heading and
+            # never with its spaces collapsed. Checked before the block is stripped, or the first
+            # line's indentation is gone and the formula becomes a heading -- which it did.
+            out.append("<pre>%s</pre>" % html.escape("\n".join(l[4:] for l in raw_lines)))
+            continue
         block = block.strip()
         if not block:
             continue
         lines = block.split("\n")
-        if len(block) < 60 and len(lines) == 1 and not block.endswith((".", ":", "?")):
+        # A heading is a short single line in capitals without a full stop. The capitals matter:
+        # a short line of prose that introduces a formula is not a heading.
+        if len(block) < 70 and len(lines) == 1 and not block.endswith((".", ":", "?")) and block == block.upper():
             out.append("<h3>%s</h3>" % html.escape(block))
         elif len(lines) > 3 and (block.count("->") > 2 or block.count("  ") > 4):
             # A block drawn in text: the signal flow, a table of shortcuts. Collapsing its line

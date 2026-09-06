@@ -38,9 +38,9 @@ constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may
 
 // Additive sat last so the indices the presets store for the other types stayed what they were;
 // Stretch came after it and is appended for the same reason.
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch };
+enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch, Bow };
 
-constexpr int kNumSourceTypes = 7;
+constexpr int kNumSourceTypes = 8;
 // The longest spectral window the Stretch type analyses: 16384 samples, a third of a second at
 // 48 kHz. Paulstretch's own default is a quarter of a second, which is where the smooth results
 // start; longer windows are smoother still but cost memory in every slot of every voice.
@@ -116,6 +116,8 @@ struct SlotParams {
     int   partials = 16;
     float tilt = 1.2f, bright = 0.7f, oddEven = 0.0f, inharm = 0.0f, shimmer = 0.4f, shimmerRate = 0.15f;
     float drift = 0.0f;          // cents of slow, independent pitch drift (the asymmetric detune)
+    // Bow: how hard the bow presses and how fast it travels. The string is the slot's pitch.
+    float bowForce = 0.4f, bowSpeed = 0.3f;
     // Stretch: the factor, and the crossfade at the loop seam as a fraction of the clip (ignored
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
@@ -150,6 +152,7 @@ private:
     void renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
     void renderStretch(float* out, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
+    void renderBow(float* out, int n, double hz, const SlotParams& p, float dt);
     void stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N);
     static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
 
@@ -190,6 +193,13 @@ private:
     NoiseState noise_[2];
     // Stretch: an overlap-add ring twice the longest window, the transform pair, and where the
     // analysis reads in the clip. Allocated in prepare(), never in render().
+    // Bow: one period of string, its loop filter's state, and whether it has been started.
+    static constexpr int kBowMax = 4096;   // 12 Hz at 48 kHz
+    float bowNut_[kBowMax] = {}, bowBridge_[kBowMax] = {};
+    int   bowW_ = 0;
+    float bowLp_ = 0.0f;
+    bool  bowReady_ = false;
+
     struct StretchState {
         std::vector<float> out, re, im, win;
         int    n = 0;            // the window in use (0 = none yet)

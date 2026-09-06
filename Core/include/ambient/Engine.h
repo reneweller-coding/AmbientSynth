@@ -257,6 +257,7 @@ private:
     float        sympathy_ = 0.0f;
     Unmask       unmask_;
     HaasBand     haas_;
+    EarlyRoom    early_;
     Body         body_;
     Patina       patina_;
     float        bodyLevel_ = 0.0f, bodyPitch_ = 1.0f;

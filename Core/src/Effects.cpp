@@ -24,8 +24,54 @@ void Ensemble::prepare(double sampleRate)
 
 void Ensemble::process(float* L, float* R, int n)
 {
-    if (mode_ == 1) processShift(L, R, n);
-    else            processChorus(L, R, n);
+    if (mode_ == 2)      processVelvet(L, R, n);
+    else if (mode_ == 1) processShift(L, R, n);
+    else                 processChorus(L, R, n);
+}
+
+// Velvet noise: kVelvetTaps impulses of +-1, one in each equal interval of the sequence, at a
+// random position inside its interval. Because the impulses are sparse and signed, the sequence
+// is spectrally flat -- convolving with it decorrelates without colouring -- and because they are
+// one per interval, they never clump into an audible echo.
+void Ensemble::buildVelvet(uint64_t seed)
+{
+    velvetLen_ = std::max(64, static_cast<int>(0.030 * sr_));   // 30 ms
+    const float gain = 1.0f / std::sqrt(static_cast<float>(kVelvetTaps));
+    const double spacing = static_cast<double>(velvetLen_) / kVelvetTaps;
+    uint64_t s = seed | 1ull;
+    auto next = [&s]() { s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s; };
+    for (int ch = 0; ch < 2; ++ch) {
+        for (int k = 0; k < kVelvetTaps; ++k) {
+            const double u = static_cast<double>(next() >> 11) / 9007199254740992.0;
+            int pos = static_cast<int>(k * spacing + u * spacing);
+            velvetPos_[ch][k] = std::min(velvetLen_ - 1, std::max(0, pos));
+            velvetSign_[ch][k] = (next() & 1ull) ? gain : -gain;
+        }
+    }
+}
+
+void Ensemble::processVelvet(float* L, float* R, int n)
+{
+    if (velvetLen_ <= 0) buildVelvet(0x9E3779B97F4A7C15ull);
+    const float mix = clampv(mix_, 0.0f, 1.0f);
+    // Depth shortens the sequence: a short one decorrelates less and sounds tighter, a long one
+    // opens the picture further. Depth 1 is the whole 30 ms.
+    const int taps = std::max(8, static_cast<int>(kVelvetTaps * clampv(depth_, 0.1f, 1.0f)));
+    const float norm = std::sqrt(static_cast<float>(kVelvetTaps) / static_cast<float>(taps));
+    float* bl = bufL_.data();
+    float* br = bufR_.data();
+    for (int i = 0; i < n; ++i) {
+        bl[w_ & mask_] = L[i];
+        br[w_ & mask_] = R[i];
+        float wetL = 0.0f, wetR = 0.0f;
+        for (int k = 0; k < taps; ++k) {
+            wetL += velvetSign_[0][k] * bl[(w_ - velvetPos_[0][k]) & mask_];
+            wetR += velvetSign_[1][k] * br[(w_ - velvetPos_[1][k]) & mask_];
+        }
+        L[i] = L[i] * (1.0f - mix) + wetL * norm * mix;
+        R[i] = R[i] * (1.0f - mix) + wetR * norm * mix;
+        ++w_;
+    }
 }
 
 // Two delay-line pitch shifters, +c cents on the left and -c on the right. A read pointer that
@@ -458,6 +504,10 @@ void Reverb::setSpace(float asymmetry, float highcutHz, float lowcutHz)
 void Reverb::set(float size, float decaySeconds, float damping, float preDelayMs, bool freeze, float mix)
 {
     static const float kBaseMs[kLines] = { 29.7f, 37.1f, 41.1f, 43.7f, 53.3f, 61.9f, 71.3f, 79.9f };
+    // Searched by Tools/optimise_fdn.py (seed 7, 60 draws) over mutually prime lengths spread
+    // across the same span, scored on the spread of the simulated tail's third-octave
+    // magnitudes: 0.314 dB against the classic set's 0.474 dB.
+    static const float kFlatMs[kLines] = { 29.7f, 31.4f, 39.3f, 46.6f, 55.1f, 58.6f, 68.4f, 89.0f };
     size_ = clampv(size, 0.5f, 3.0f);
     decay_ = std::max(decaySeconds, 0.1f);
     damp_ = clampv(damping, 0.0f, 1.0f);
@@ -466,7 +516,8 @@ void Reverb::set(float size, float decaySeconds, float damping, float preDelayMs
     const float maxLen = static_cast<float>(mask_) - 8.0f;
     for (int l = 0; l < kLines; ++l) {
         const float stretch = (l >= kLines / 2) ? (1.0f + 0.08f * asym_) : 1.0f;   // right-hand group runs longer
-        lenTarget_[l] = std::min(kBaseMs[l] * size_ * stretch * static_cast<float>(sr_ / 1000.0), maxLen);
+        const float baseMs = (mode_ == 2) ? kFlatMs[l] : kBaseMs[l];
+        lenTarget_[l] = std::min(baseMs * size_ * stretch * static_cast<float>(sr_ / 1000.0), maxLen);
         if (lenCur_[l] <= 0.0f) lenCur_[l] = lenTarget_[l];
         gain_[l] = freeze_ ? 1.0f : std::pow(10.0f, -3.0f * lenTarget_[l] / (decay_ * static_cast<float>(sr_)));
     }
@@ -503,7 +554,7 @@ void Reverb::process(float* L, float* R, int n)
             if (modPh_[l] >= 1.0) modPh_[l] -= 1.0;
             const float d = lenCur_[l] + 1.5f * sin01(modPh_[l]) + 2.0f;
             float v = ringRead(line_[l].data(), mask_, w_, d);
-            if (mode_ == 1) {   // scattering: a Schroeder all-pass in the loop, gain 0.5
+            if (mode_ != 0) {   // scattering (and colourless, which also scatters)
                 float* sb = sc_[l].data();
                 const float sd = sb[(w_ - scLen_[l]) & mask_];
                 const float sy = sd - 0.5f * v;

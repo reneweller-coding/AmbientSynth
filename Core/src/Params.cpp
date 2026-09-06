@@ -32,8 +32,8 @@ const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
-const char* const kEnsModeNames[2] = { "Chorus", "Microshift" };
-const char* const kFarModeNames[2] = { "Classic", "Scattering" };
+const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
+const char* const kFarModeNames[3] = { "Classic", "Scattering", "Colourless" };
 const char* const kBinauralNames[2] = { "Off", "Headphones" };
 const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
@@ -537,16 +537,30 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src4Xfade,   "src4_xfade",   "Loop Fade", "Source 4", 0.f, 1.f,    0.1f, 1.f,   ""),
     // ---- the mixing desk's four, all neutral at their defaults
     F(ParamId::FarWidth,   "far_width",   "Width",     "Far Reverb", 0.f, 1.5f,  1.f,  1.f,  ""),
-    C(ParamId::EnsMode,    "ens_mode",    "Mode",      "Ensemble",   kEnsModeNames, 2, 0),
+    C(ParamId::EnsMode,    "ens_mode",    "Mode",      "Ensemble",   kEnsModeNames, 3, 0),
     F(ParamId::Haas,       "haas",        "Haas",      "Space",      0.f, 1.f,   0.f,  1.f,  ""),
     F(ParamId::HaasTime,   "haas_time",   "Haas Time", "Space",      6.f, 28.f,  15.f, 1.f,  "ms"),
     F(ParamId::FilterFold, "filter_fold", "Fold",      "Filter",     0.f, 1.f,   0.f,  1.f,  ""),
     // ---- after the classics: all neutral at their defaults
     F(ParamId::TuneStretch,     "stretch",           "Stretch",  "Tuning",     0.f, 30.f, 0.f, 1.f, "ct"),
-    C(ParamId::FarMode,         "far_mode",          "Mode",     "Far Reverb", kFarModeNames, 2, 0),
+    C(ParamId::FarMode,         "far_mode",          "Mode",     "Far Reverb", kFarModeNames, 3, 0),
     F(ParamId::FarUnmaskSpread, "far_unmask_spread", "Spread",   "Far Reverb", 0.f, 1.f,  0.f, 1.f, ""),
     C(ParamId::Binaural,        "binaural",          "Binaural", "Space",      kBinauralNames, 2, 0),
     F(ParamId::BrainTimbre,     "brain_timbre",      "Timbre",   "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::BrainSpacing,    "brain_spacing",     "Spacing",  "Cluster Brain", -1.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::EarlyLevel,      "early_level",       "Early",    "Early Room", 0.f,  1.f,  0.f,  1.f, ""),
+    F(ParamId::EarlySize,       "early_size",        "Size",     "Early Room", 2.f,  40.f, 8.f,  0.5f, "m"),
+    F(ParamId::EarlyAbsorb,     "early_absorb",      "Absorb",   "Early Room", 0.f,  1.f,  0.35f, 1.f, ""),
+    F(ParamId::EarlyWidth,      "early_width",       "Width",    "Early Room", 0.f,  1.5f, 1.f,  1.f, ""),
+    // ---- Bow: the pair per slot
+    F(ParamId::Src1BowForce, "src1_bow_force", "Bow Force", "Source 1", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src1BowSpeed, "src1_bow_speed", "Bow Speed", "Source 1", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src2BowForce, "src2_bow_force", "Bow Force", "Source 2", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src2BowSpeed, "src2_bow_speed", "Bow Speed", "Source 2", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src3BowForce, "src3_bow_force", "Bow Force", "Source 3", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src3BowSpeed, "src3_bow_speed", "Bow Speed", "Source 3", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src4BowForce, "src4_bow_force", "Bow Force", "Source 4", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src4BowSpeed, "src4_bow_speed", "Bow Speed", "Source 4", 0.f, 1.f, 0.3f, 1.f, ""),
 }};
 } // namespace
 
@@ -560,22 +574,26 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src1Position, ParamId::Src1PosDrift, ParamId::Src1FmRatio, ParamId::Src1FmIndex, ParamId::Src1Grain, ParamId::Src1Density,
       ParamId::Src1Follow, ParamId::Src1Grains, ParamId::Src1Spread, ParamId::Src1Noise, ParamId::Src1NoiseQ,
       ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate,
-      ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade },
+      ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade,
+      ParamId::Src1BowForce, ParamId::Src1BowSpeed },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
       ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate,
-      ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade },
+      ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade,
+      ParamId::Src2BowForce, ParamId::Src2BowSpeed },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
       ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate,
-      ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade },
+      ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade,
+      ParamId::Src3BowForce, ParamId::Src3BowSpeed },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
       ParamId::Src4Partials, ParamId::Src4Tilt, ParamId::Src4Bright, ParamId::Src4OddEven, ParamId::Src4Inharm, ParamId::Src4Shimmer, ParamId::Src4ShimmerRate,
-      ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade },
+      ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade,
+      ParamId::Src4BowForce, ParamId::Src4BowSpeed },
 };
 
 struct SectionName { const char* name; ParamSection section; };
@@ -588,7 +606,7 @@ const SectionName kSections[] = {
     { "Filter", ParamSection::Filter }, { "Z-Plane", ParamSection::ZPlane }, { "Expression", ParamSection::Expression },
     { "Space", ParamSection::Space }, { "Ensemble", ParamSection::Ensemble }, { "Delay", ParamSection::Delay },
     { "Delay 2", ParamSection::Delay2 }, { "Near Reverb", ParamSection::NearReverb }, { "Far Reverb", ParamSection::FarReverb },
-    { "Blur", ParamSection::Blur }, { "Feedback", ParamSection::Feedback }, { "Room", ParamSection::Room },
+    { "Blur", ParamSection::Blur }, { "Feedback", ParamSection::Feedback }, { "Room", ParamSection::Room }, { "Early Room", ParamSection::Room },
     { "Body", ParamSection::Body }, { "Patina", ParamSection::Patina }, { "Cosmos", ParamSection::Cosmos },
     { "Cloud", ParamSection::Cloud }, { "Cluster Brain", ParamSection::ClusterBrain }, { "Brain 2", ParamSection::Brain2 },
     { "Autoplay", ParamSection::Autoplay },

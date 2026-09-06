@@ -184,7 +184,12 @@ enum class ParamId : int {
     TuneStretch, FarMode, FarUnmaskSpread, Binaural,
     // The conductor judging intervals by the spectrum it actually plays (Sethares), not by
     // the ratio alone. 0 = the ratio score it always had.
-    BrainTimbre,
+    BrainTimbre, BrainSpacing,
+    // The room's early reflections, from its geometry (see Effects.h): off at Level 0.
+    EarlyLevel, EarlySize, EarlyAbsorb, EarlyWidth,
+    // The Bow type's two: how hard the bow presses and how fast it travels. Fields 28 and 29
+    // of every slot.
+    Src1BowForce, Src1BowSpeed, Src2BowForce, Src2BowSpeed, Src3BowForce, Src3BowSpeed, Src4BowForce, Src4BowSpeed,
     Count
 };
 
@@ -219,7 +224,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 28;
+constexpr int kSlotFields  = 30;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in
@@ -244,8 +249,8 @@ extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
-extern const char* const kEnsModeNames[2];      // "Chorus" (modulated) or "Microshift" (static detune)
-extern const char* const kFarModeNames[2];      // "Classic" or "Scattering" (all-passes inside the loop)
+extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)
+extern const char* const kFarModeNames[3];      // "Classic", "Scattering" (all-passes in the loop), "Colourless" (also flat-searched lengths)
 extern const char* const kBinauralNames[2];     // "Off" or "Headphones"
 extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal
 extern const char* const kStrikeWhoNames[2];    // Keys, Keys + Brain     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)

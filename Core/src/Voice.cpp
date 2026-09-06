@@ -374,7 +374,32 @@ void Voice::control(int blockLen, const VoiceParams& p)
         itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
         itdRTarget_ = centre < 0.0f ? -centre * maxItd : 0.0f;
     }
-    // Head shadow: the far ear also loses highs (20 kHz -> ~3 kHz at full lateral position).
+    // Head shadow. In the plain mode a one-pole on the far ear, which is enough for a pan.
+    // In the binaural mode the spherical-head filter of Brown and Duda (1998): a sphere of
+    // radius a diffracts sound into a shadow whose transfer function is well approximated by
+    //     H(s) = (1 + alpha beta s) / (1 + beta s),   beta = a / (2 c),
+    // where alpha depends on the angle of incidence at that ear --
+    //     alpha(t) = 1 + amin/2 + (1 - amin/2) cos(t / tmin * pi),  amin = 0.1, tmin = 150 deg --
+    // so the ipsilateral ear is lifted (alpha near 2), the contralateral one shadowed (alpha
+    // near 0.1) and the shadow is a shelf rather than a low pass: the far ear keeps a little of
+    // its top, which is what a real head does and what a plain one-pole cannot.
+    sphereShadow_ = p.binaural;
+    if (sphereShadow_) {
+        const float az = std::asin(clampv(lateral, -1.0f, 1.0f));       // radians, +right
+        const float c = static_cast<float>(sr_) * (0.0875f / 343.0f);   // 1 / (w0 T), w0 = c/a
+        for (int ch = 0; ch < 2; ++ch) {
+            // Angle of incidence at this ear: 0 when the source is at the ear itself.
+            const float earSign = (ch == 0) ? -1.0f : 1.0f;             // left ear points left
+            float theta = std::fabs(az - earSign * 0.5f * kPi) * (180.0f / kPi);
+            if (theta > 180.0f) theta = 360.0f - theta;
+            const float amin = 0.1f, tmin = 150.0f;
+            const float alpha = 1.0f + 0.5f * amin + (1.0f - 0.5f * amin) * std::cos(theta / tmin * kPi);
+            const float den = 1.0f + c;
+            sphB0_[ch] = (1.0f + alpha * c) / den;
+            sphB1_[ch] = (1.0f - alpha * c) / den;
+            sphA1_[ch] = (1.0f - c) / den;
+        }
+    }
     const float fcL = 20000.0f * std::pow(2.0f, -shadowOct * std::max(lateral, 0.0f));
     const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-lateral, 0.0f));
     shadowCoefL_ = fcL >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcL / static_cast<float>(sr_));
@@ -613,8 +638,15 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 outR = a + f * (b - a);
             }
             ++itdW_;
-            shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
-            shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
+            if (sphereShadow_) {
+                const float yl = sphB0_[0] * outL + sphB1_[0] * sphX1_[0] - sphA1_[0] * sphY1_[0];
+                sphX1_[0] = outL; sphY1_[0] = yl; outL = yl;
+                const float yr = sphB0_[1] * outR + sphB1_[1] * sphX1_[1] - sphA1_[1] * sphY1_[1];
+                sphX1_[1] = outR; sphY1_[1] = yr; outR = yr;
+            } else {
+                shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
+                shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
+            }
             if (extAmt_ > 0.0f) {
                 // The shoulder's copy comes out of the same ring the interaural delay reads, one
                 // more tap further back; the pinna's notch is the state-variable filter's low plus

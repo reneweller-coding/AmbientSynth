@@ -82,7 +82,26 @@ struct BrainParams {
     // Timbre: how much of the consonance is judged from the actual spectrum (Sethares) rather
     // than from the ratio alone. 0 is the ratio score the conductor always had.
     float timbre = 0.0f;
+    // Spacing: how strongly the conductor avoids putting a note within a critical band of one
+    // that is already sounding. Two tones closer than about an equivalent rectangular bandwidth
+    // excite overlapping regions of the cochlea, and the ear fuses them into one rough sound
+    // instead of hearing two (Glasberg and Moore 1990; Bregman 1990). Negative values seek that
+    // crowding out instead, which is what a cluster is. 0 leaves the choice as it was.
+    float spacing = 0.0f;
     const BrainSpectrum* spectrum = nullptr;
+    // The equivalent rectangular bandwidth of the auditory filter at f, in hertz
+    // (Glasberg and Moore 1990): ERB = 24.7 (0.00437 f + 1).
+    static double erbAt(double f) { return 24.7 * (0.00437 * f + 1.0); }
+    // How much a candidate at fa is discouraged by a sounding tone at fb. 1 leaves it alone.
+    float crowding(double fa, double fb) const
+    {
+        if (spacing == 0.0f) return 1.0f;
+        const double d = std::fabs(fa - fb) / erbAt(0.5 * (fa + fb));   // in critical bandwidths
+        const double closeness = std::exp(-d * d * 2.0);                // 1 at the same pitch, gone past one ERB
+        const double s = static_cast<double>(spacing);
+        return static_cast<float>(s > 0.0 ? (1.0 - 0.95 * s * closeness) : (1.0 - s * closeness));
+    }
+
     // The consonance of two frequencies, as this conductor currently hears it.
     double consonanceOf(double fa, double fb) const
     {
@@ -185,6 +204,8 @@ public:
             float w = static_cast<float>(std::pow(cons, p.consonance * 3.0f));
             w *= 0.6f + 0.4f * static_cast<float>(1.0 - std::fabs(c - mid) / half);
             for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) w *= 0.15f;  // octave doubling is rare
+            if (p.spacing != 0.0f)
+                for (auto& s : slots_) if (s.note >= 0) w *= p.crowding(fc, freqOf(s.note));
             if (pitchClassEqual(fc, rootFreq)) w *= rootSounding ? 0.25f : 3.0f;                       // keep a foundation
             weights[c] = w;
             total += w;

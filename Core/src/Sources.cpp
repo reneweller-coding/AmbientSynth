@@ -9,7 +9,7 @@
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive", "Stretch" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
     "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
 };
@@ -278,6 +278,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt);
     else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Stretch) renderStretch(scratch_, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
+    else if (p.type == SourceType::Bow) renderBow(scratch_, n, hz, p, dt);
     else renderFm(scratch_, n, hz, p, dt);
     for (int i = 0; i < n; ++i) {
         gL_ += sL; gR_ += sR;
@@ -732,6 +733,100 @@ void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p,
         const float l = outL[i], r = scratch_[i];
         outL[i] = l * gl;
         scratch_[i] = r * gr;
+    }
+}
+
+
+// ---------------------------------------------------------------- Bow
+//
+// A bowed string, after McIntyre, Schumacher and Woodhouse (1983) and the waveguide form of Smith
+// (2010). The instrument had a struck source (Strike) but nothing continuously excited, and the
+// two are not the same thing: a struck body rings and dies, a bowed one is driven for as long as
+// the bow moves and settles into a stick-slip oscillation of its own -- which is exactly what a
+// drone wants, a note that sustains because it is being fed rather than because its release is long.
+//
+// The string is two waveguides meeting at the bow -- one to the nut, one to the bridge -- so that
+// the bow's position along the string decides which partials it favours, as it does on a real
+// instrument. The nut reflects and inverts; the bridge reflects, inverts and loses the highs,
+// which is what makes the upper partials die first. Every sample the friction between bow and string is evaluated:
+//
+//     dv   = v_bow - v_string           the relative velocity at the bow
+//     rho  = min(1, (F / (|dv| + eps))^0.8)   the Stribeck curve: sticking while dv is small,
+//                                             slipping once it is not
+//     out  = dv * rho
+//
+// so a slow bow with a heavy hand sticks for most of the period and releases suddenly -- the
+// Helmholtz motion -- and a fast bow with a light hand slips more and gives the thinner, airier
+// tone. The friction force is fed back into the string, and the string's own motion changes the
+// relative velocity on the next sample, which is the loop that makes it oscillate at all.
+//
+// It is guarded rather than trusted: the loop gain is below one by construction, the injected
+// force is clamped, and a non-finite state resets the string. A physical model that runs away is
+// a burst of full-scale noise, and this instrument's whole point is that it never does that.
+void SourceSlot::renderBow(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    const double f0 = hz > 20.0 ? hz : 20.0;
+    const int len = static_cast<int>(sr_ / f0);
+    if (len < 4 || len >= kBowMax) { std::memset(out, 0, sizeof(float) * static_cast<size_t>(n)); return; }
+    if (!bowReady_) {
+        std::memset(bowNut_, 0, sizeof(bowNut_));
+        std::memset(bowBridge_, 0, sizeof(bowBridge_));
+        bowW_ = 0; bowLp_ = 0.0f; bowReady_ = true;
+        // A breath of noise to start it: a string exactly at rest is a fixed point, and the
+        // friction curve alone would never leave it.
+        for (int i = 0; i < kBowMax; ++i) { bowNut_[i] = 0.002f * rng_.bipolar(); bowBridge_[i] = 0.002f * rng_.bipolar(); }
+    }
+    // The friction characteristic is the whole model. It has to FALL as the slipping gets
+    // faster -- more slip, less force -- because that negative resistance is what feeds the
+    // oscillation; a curve that merely saturates has a stable fixed point, and the string sticks
+    // to the bow and stays there. The first version of this did exactly that, and measured as a
+    // constant with no pitch at all. The shape below is the one the waveguide literature uses
+    // (Smith 2010; the bow table of the Synthesis ToolKit): a steep inverse power of the
+    // relative velocity, whose width is set by how hard the bow presses.
+    const float slope = 5.0f - 4.0f * clampv(p.bowForce, 0.0f, 1.0f);   // heavier hand, wider stick
+    const float speed = clampv(p.bowSpeed, 0.0f, 1.0f);
+    const float vBow = 0.6f * speed;                                    // a bow at rest bows nothing
+    // A bow that has stopped is still lying on the string, and hair that does not move absorbs:
+    // stop bowing and the note dies in a tenth of a second, it does not ring on like a plucked
+    // string. Without this the junction is a lossless termination and the string keeps its energy
+    // for seconds, which is what the test measured. The loss is confined to the bottom sixth of
+    // the Speed range, so nothing that is being played is touched by it.
+    const float rest = std::max(0.0f, 1.0f - 6.0f * speed);
+    const float contact = 1.0f - 0.02f * rest * clampv(p.bowForce, 0.0f, 1.0f);
+    // Where the bow sits, as a fraction of the string, kept away from the ends.
+    const float rel = 0.06f + 0.34f * clampv(p.position, 0.0f, 1.0f);
+    // The string is two waveguides that meet at the bow: from the bow to the nut and back is 2a
+    // samples, to the bridge and back 2b, and the two together are one period.
+    const int a = std::max(1, static_cast<int>(rel * len * 0.5f));
+    const int b = std::max(1, len / 2 - a);
+    // The bridge's reflection loses the highs, which is what makes a string's upper partials die
+    // first. Bright is the slot's own brightness knob, used here for the same thing.
+    const float damp = 0.55f - 0.45f * clampv(p.bright, 0.0f, 1.0f);
+    for (int i = 0; i < n; ++i) {
+        // What arrives at the bow from each side, having been reflected at its end: the nut
+        // inverts, the bridge inverts and damps.
+        const float vl = -bowNut_[(bowW_ - 2 * a + kBowMax) & (kBowMax - 1)];
+        bowLp_ += (1.0f - damp) * (bowBridge_[(bowW_ - 2 * b + kBowMax) & (kBowMax - 1)] - bowLp_);
+        const float vr = -0.995f * bowLp_;
+        const float dv = vBow - (vl + vr);
+        float rho = std::pow(std::fabs((dv - 0.001f) * slope) + 0.75f, -4.0f);
+        if (rho > 1.0f) rho = 1.0f;
+        float f = dv * rho;
+        if (f > 1.0f) f = 1.0f; else if (f < -1.0f) f = -1.0f;
+        float toNut = (vr + f) * contact, toBridge = (vl + f) * contact;
+        if (!(toNut > -8.0f && toNut < 8.0f) || !(toBridge > -8.0f && toBridge < 8.0f)) {
+            std::memset(bowNut_, 0, sizeof(bowNut_)); std::memset(bowBridge_, 0, sizeof(bowBridge_));
+            bowLp_ = 0.0f; toNut = toBridge = 0.0f;
+        }
+        bowNut_[bowW_ & (kBowMax - 1)] = toNut;
+        bowBridge_[bowW_ & (kBowMax - 1)] = toBridge;
+        ++bowW_;
+        // What the bridge radiates. The factor is measured, not guessed: with the same note, the
+        // same Level and everything after the sources switched off, a wavetable slot renders at
+        // an RMS of 0.103, and this brings the string to within a decibel of it. The selftest
+        // measures both and fails if they drift more than six decibels apart.
+        out[i] += vr * 0.78f;
     }
 }
 

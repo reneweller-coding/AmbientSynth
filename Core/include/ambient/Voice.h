@@ -211,6 +211,11 @@ private:
     int      itdW_ = 0;
     float    itdL_ = 0.0f, itdR_ = 0.0f, itdLTarget_ = 0.0f, itdRTarget_ = 0.0f;
     float    shadowL_ = 0.0f, shadowR_ = 0.0f, shadowCoefL_ = 1.0f, shadowCoefR_ = 1.0f;   // head shadow on the far ear
+    // The binaural mode's head shadow is a one-pole/one-zero rather than a one-pole: the
+    // spherical-head model (Brown and Duda 1998), whose zero moves with the angle.
+    bool     sphereShadow_ = false;
+    float    sphB0_[2] = { 1.0f, 1.0f }, sphB1_[2] = {}, sphA1_[2] = {};
+    float    sphX1_[2] = {}, sphY1_[2] = {};
     // Externalisation (Brown and Duda's structural model, the parts that need no measured data):
     // the pinna's notch, whose frequency moves with the source's angle, and the shoulder echo.
     Svf      pinnaL_, pinnaR_;

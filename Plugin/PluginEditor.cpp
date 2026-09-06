@@ -35,7 +35,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina" } }, {}, 1 },
         // Strike shares the Cosmos group as a tab: like the Cosmos it is a sound source that is
         // not one of the four oscillators, and beside them it read as a fifth.
         { "COSMOS",     kCosmos,    { { "Cosmos", "Strike" } }, {}, 1 },
@@ -56,7 +56,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
-        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Body", "Patina" } } },
+        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "EARLY ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Early Room" }, { "Body", "Patina" } } },
         { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
         // Appended, so the indices the code above uses for the other rows stay what they were.
         { 4, 0, { "COSMOS", "STRIKE" }, { { "Cosmos" }, { "Strike" } } },
@@ -363,6 +363,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Foundation") s.maxUnits = 5;
             // Source 1 is narrower than the others on purpose: its page shares the row with the
             // strand bank under the display, and the display column needs the width for it.
+            if (s.name == "Early Room") s.maxUnits = 4;                      // one row
             if (s.name == "Source 1") s.maxUnits = 9;
             else if (s.name == "Source 2" || s.name == "Source 3" || s.name == "Source 4") s.maxUnits = 12;
             s.wideUnits = 0;   // filled in below, after every section knows its natural width
@@ -1848,17 +1849,17 @@ void AmbientSynthEditor::updateSourceCells()
     // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
-    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6 };
+    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        for (int off = 1; off <= 27; ++off) {
+        for (int off = 1; off <= 29; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
-            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch; break;   // position / centre
+            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch || type == Bow; break;   // position, or where the bow sits
             case 7:  on = type != Off;  break;                                   // pos drift moves all of them
             case 8:
             case 9:  on = type == Fm; break;
@@ -1869,11 +1870,14 @@ void AmbientSynthEditor::updateSourceCells()
             case 12: on = type == Texture || type == Noise || type == Stretch; break;   // pitch follow
             case 15:
             case 16: on = type == Noise; break;
-            case 17: case 18: case 19: case 20: case 21: case 22: case 23: on = type == Additive; break;
+            case 19: on = type == Additive || type == Bow; break;                 // bright: the bank's window, or the string's loop filter
+            case 17: case 18: case 20: case 21: case 22: case 23: on = type == Additive; break;
             case 24: on = type == Texture || type == Noise; break;                // density sync
             case 25: on = type != Off && type != Noise; break;                    // pitch drift
             case 26:
             case 27: on = type == Stretch; break;                                 // stretch, loop fade
+            case 28:
+            case 29: on = type == Bow; break;                                     // bow force, bow speed
             default: break;
             }
             const int ci = cellForParam(ids[off]);

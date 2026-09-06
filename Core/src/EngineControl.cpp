@@ -385,6 +385,8 @@ void Engine::readParams()
             s.noiseQ        = at(16);
             s.stretch       = at(26);
             s.xfade         = at(27);
+            s.bowForce      = at(28);
+            s.bowSpeed      = at(29);
         }
         // ---- the Vector
         //
@@ -492,7 +494,7 @@ void Engine::readParams()
     blur_.set(g(ParamId::BlurSmear));
     farRotate_  = g(ParamId::FarRotate);
     farWidth_   = g(ParamId::FarWidth);
-    farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 1));
+    farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 2));
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
@@ -520,6 +522,8 @@ void Engine::readParams()
     bp_.wander      = g(ParamId::BrainWander);
     // The spectrum the conductor judges by: the bank's own template, as the voice renders it.
     bp_.timbre = g(ParamId::BrainTimbre);
+    bp_.spacing = g(ParamId::BrainSpacing);
+    bp2_.spacing = bp_.spacing;
     if (bp_.timbre > 0.0f) {
         const int count = std::min(BrainSpectrum::kMax, std::max(1, vp_.partials));
         const float hc = 1.0f + vp_.brightness * vp_.brightness * 31.0f;
@@ -579,8 +583,21 @@ void Engine::readParams()
     depth_ = clampv(depth_ * (1.0f + 0.3f * a), 0.0f, 1.0f);
 
     ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), syncedHz(ParamId::EnsembleSync, g(ParamId::EnsembleRate)));
-    ensemble_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::EnsMode))), 0, 1));
+    ensemble_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::EnsMode))), 0, 2));
     haas_.set(g(ParamId::Haas), g(ParamId::HaasTime));
+    early_.setRoom(g(ParamId::EarlySize), g(ParamId::EarlyAbsorb), g(ParamId::EarlyWidth));
+    early_.setLevel(g(ParamId::EarlyLevel));
+    {   // Where the room thinks the sound is: the level-weighted mean of the sounding voices'
+        // pan and distance. One position for the whole near bus, which is the simplification the
+        // class documents; it follows the music, which is what the early pattern is for.
+        float wsum = 0.0f, pan = 0.0f, dist = 0.0f;
+        for (const auto& v : voices_) {
+            if (!v.isActive()) continue;
+            const float wgt = v.level();
+            wsum += wgt; pan += wgt * v.pan(); dist += wgt * v.distance();
+        }
+        if (wsum > 1.0e-6f) early_.setSource(pan / wsum, dist / wsum);
+    }
     delay_.set(syncedSeconds(ParamId::DelaySyncL, g(ParamId::DelayTimeL)), syncedSeconds(ParamId::DelaySyncR, g(ParamId::DelayTimeR)),
                g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp), g(ParamId::DelayAbsorb));
     delay_.setDuck(g(ParamId::DelayDuck));

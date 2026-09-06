@@ -21,11 +21,23 @@ public:
     // sum -- two channels a few cents apart are never at a fixed phase, so there is no comb to
     // cancel into -- where a deep chorus at 13 to 22 ms is exactly a comb filter waiting to be
     // summed. Depth becomes the detune in cents, Rate a very slow wander of it.
+    // Velvet (2) is the third way, and the one the decorrelation literature settled on
+    // (Valimaki, Alary and Politis 2017): each channel is convolved with its own sparse
+    // random impulse response -- a few hundred impulses of +-1 a second, one per equal
+    // interval at a random position inside it, which is "velvet noise". A sparse sequence of
+    // signed unit impulses has a flat magnitude response, so the two channels come out
+    // decorrelated without being coloured, and nothing is modulated, so nothing warbles.
     void setMode(int mode) { mode_ = mode; }
     void process(float* L, float* R, int n);
 private:
     void processChorus(float* L, float* R, int n);
     void processShift(float* L, float* R, int n);
+    void processVelvet(float* L, float* R, int n);
+    void buildVelvet(uint64_t seed);
+    static constexpr int kVelvetTaps = 96;      // impulses per channel
+    int   velvetPos_[2][kVelvetTaps] = {};      // where each impulse sits, in samples
+    float velvetSign_[2][kVelvetTaps] = {};     // +-1, with the 1/sqrt(N) gain folded in
+    int   velvetLen_ = 0;                       // the sequence's length in samples
     std::vector<float> bufL_, bufR_;
     int    mask_ = 0, w_ = 0;
     double sr_ = 48000.0;
@@ -79,6 +91,13 @@ public:
     // network then scatters every echo into many, so the echo density grows much faster
     // (measured: 0.60 -> 0.76 of Gaussian after 50 ms) while the late tail stays at least as
     // smooth. Same decay, same level, same lines; a denser texture of tail.
+    //
+    // Colourless (2) is Scattering with a second change: the eight line lengths are not the
+    // hand-picked primes of the classic network but a set searched offline for the flattest
+    // magnitude response (Tools/optimise_fdn.py, after the colourless-FDN work of Dal Santo,
+    // Prawda, Schlecht and Valimaki). A delay network's tail is a sum of modes at the lines'
+    // own frequencies, and where those pile up the tail rings; lengths chosen against that
+    // measure ring less -- 0.31 dB of third-octave spread against the classic set's 0.47.
     void setMode(int mode) { mode_ = mode; }
     void process(float* L, float* R, int n);
 private:
@@ -289,6 +308,199 @@ private:
     double sr_ = 48000.0;
     Svf    hp_[1], lp_[1];
     float  amount_ = 0.0f, smAmount_ = 0.0f, timeMs_ = 15.0f, smDelay_ = 0.0f;
+};
+
+
+
+// The early reflections of a room, from its geometry rather than from a reverb's statistics.
+//
+// A feedback delay network makes a plausible tail out of numbers that mean nothing in particular.
+// The first reflections are not statistics: they arrive from the six surfaces of the room at times
+// and from directions that follow from where the source is standing, and the ear reads those times
+// and directions as the size of the room and the distance of the source (Blauert 1997 for the
+// direction, Bronkhorst and Houtgast 1999 for the distance). A reverb whose early part does not
+// move when the source moves is a room the source is not in.
+//
+// This is the scattering delay network of De Sena, Hacihabiboglu and Cvetkovic (2015) in its
+// simplest useful form: one node at the centre of each of the six walls of a shoebox, a delay from
+// the source to each node and from each node to the listener, an absorption filter at each node,
+// and a single scattering stage that feeds every node from all the others so the reflections go on
+// reflecting. The first arrivals are then at the geometrically right times, from the right
+// directions, and they move when the source does -- which is the whole point -- while the later
+// energy is handed to the far reverb, whose job it already is.
+//
+// One simplification is worth naming. The source position is one position for the whole near bus,
+// taken from where the voices actually are (the level-weighted mean of their pan and distance),
+// not one per voice: six delay lines per voice would cost more than the rest of the instrument.
+// What that buys is a room whose early pattern follows the music; what it gives up is a different
+// early pattern for two voices sounding at once from different places.
+class EarlyRoom {
+public:
+    static constexpr int kWalls = 6;
+
+    void prepare(double sampleRate)
+    {
+        sr_ = sampleRate;
+        // Long enough for the longest path in the largest room: forty metres across is a hundred
+        // and seventeen milliseconds, and every delay in here is shorter than that.
+        int size = 1;
+        while (size < static_cast<int>(0.14 * sr_) + 8) size <<= 1;
+        in_.assign(static_cast<size_t>(size), 0.0f);
+        for (auto& v : press_) v.assign(static_cast<size_t>(size), 0.0f);
+        for (auto& row : pair_) for (auto& v : row) v.assign(static_cast<size_t>(size), 0.0f);
+        mask_ = size - 1;
+        w_ = 0;
+        for (int k = 0; k < kWalls; ++k) { lp_[k] = 0.0f; dSrc_[k] = 1.0f; gSrc_[k] = 0.0f; }
+        setRoom(8.0f, 0.35f, 1.0f);
+        setSource(0.0f, 0.4f);
+        for (int k = 0; k < kWalls; ++k) { dSrc_[k] = dSrcT_[k]; gSrc_[k] = gSrcT_[k]; }
+    }
+
+    // size: the room's longest dimension in metres (the shoebox is size x 0.8 size x 0.45 size,
+    // proportions with no simple ratio between them, so its own modes do not pile up).
+    // absorb: how much each surface takes out per reflection, and how dark what comes back is.
+    void setRoom(float sizeMetres, float absorb, float width)
+    {
+        room_ = clampv(sizeMetres, 2.0f, 40.0f);
+        absorb_ = clampv(absorb, 0.0f, 1.0f);
+        width_ = clampv(width, 0.0f, 1.5f);
+        const float d = room_, w = room_ * 0.8f, h = room_ * 0.45f;
+        half_[0] = w * 0.5f; half_[1] = w * 0.5f;    // left, right
+        half_[2] = d * 0.5f; half_[3] = d * 0.5f;    // front, back
+        half_[4] = h * 0.5f; half_[5] = h * 0.5f;    // ceiling, floor
+        // Each wall's node sits at the centre of that wall; the listener is at the origin.
+        for (int k = 0; k < kWalls; ++k) {
+            for (int a = 0; a < 3; ++a) node_[k][a] = 0.0f;
+            node_[k][k / 2] = (k & 1) ? half_[k] : -half_[k];
+        }
+        // How dark a reflection comes back: a one-pole whose corner falls with the absorption.
+        const float fc = 16000.0f * std::pow(2.0f, -5.0f * absorb_);
+        lpCoef_ = 1.0f - std::exp(-kTwoPi * fc / static_cast<float>(sr_));
+        roomGeometry();
+        sourceGeometry();
+    }
+
+    // Where the source stands, from the near bus's own voices: pan -1..1 across the room, and
+    // distance 0..1 from the listener towards the far wall.
+    void setSource(float pan, float distance)
+    {
+        const float p = clampv(pan, -1.0f, 1.0f), d = clampv(distance, 0.0f, 1.0f);
+        src_[0] = p * (half_[0] - 0.5f);
+        src_[1] = 0.8f + d * (half_[2] - 1.0f);   // in front of the listener
+        src_[2] = 0.0f;
+        sourceGeometry();
+    }
+
+    void setLevel(float level) { level_ = clampv(level, 0.0f, 1.0f); }
+    bool active() const { return level_ > 0.0f || smLevel_ > 1.0e-5f; }
+
+    // Adds the room's early reflections to L/R. `in` is the near bus, mono.
+    void process(const float* in, float* L, float* R, int n)
+    {
+        if (!active()) { w_ = (w_ + n) & 0x3FFFFFFF; return; }
+        const float lvlStep = 1.0f / static_cast<float>(std::max(1, n));
+        // Every reflection loses this much on top of what the wall filter takes: the matrix below
+        // conserves energy exactly, so this factor alone decides how long the early field runs.
+        const float g = (1.0f - absorb_) * 0.8f;
+        for (int i = 0; i < n; ++i) {
+            smLevel_ += (level_ - smLevel_) * lvlStep;
+            in_[static_cast<size_t>(w_ & mask_)] = in[i];
+            // The source's own path glides rather than jumps: a delay that steps is a click, and
+            // the near bus's centre of gravity moves whenever a voice starts or stops.
+            float inc[kWalls][kWalls];
+            float sum[kWalls], inject[kWalls];
+            for (int k = 0; k < kWalls; ++k) {
+                dSrc_[k] += 0.0005f * (dSrcT_[k] - dSrc_[k]);
+                gSrc_[k] += 0.0005f * (gSrcT_[k] - gSrc_[k]);
+                inject[k] = ringRead(in_.data(), mask_, w_, dSrc_[k]) * gSrc_[k];
+                float s = inject[k];
+                for (int j = 0; j < kWalls; ++j) {
+                    if (j == k) { inc[j][k] = 0.0f; continue; }
+                    inc[j][k] = ringRead(pair_[j][k].data(), mask_, w_, dPair_[j][k]);
+                    s += inc[j][k];
+                }
+                sum[k] = s;
+            }
+            float wetL = 0.0f, wetR = 0.0f;
+            for (int k = 0; k < kWalls; ++k) {
+                // The wall takes its bite out of everything that reaches it.
+                lp_[k] += lpCoef_ * (sum[k] - lp_[k]);
+                // Isotropic scattering: what leaves towards one neighbour is the average of
+                // everything that arrived, less what that neighbour itself sent. Written out over
+                // five incoming waves the factor is two fifths, and the matrix it forms is its own
+                // inverse -- it moves energy between the walls without creating or losing any.
+                const float c = 0.4f * lp_[k];
+                for (int m = 0; m < kWalls; ++m) {
+                    if (m == k) continue;
+                    pair_[k][m][static_cast<size_t>(w_ & mask_)] = g * (c - inc[m][k]);
+                }
+                // What the listener hears of this wall, delayed by its own distance and placed by
+                // its direction.
+                press_[k][static_cast<size_t>(w_ & mask_)] = c;
+                const float toEar = ringRead(press_[k].data(), mask_, w_, dEar_[k]) * gEar_[k];
+                wetL += toEar * panL_[k];
+                wetR += toEar * panR_[k];
+            }
+            L[i] += wetL * smLevel_;
+            R[i] += wetR * smLevel_;
+            ++w_;
+        }
+    }
+
+private:
+    // Wall to wall and wall to listener: these change only when the room changes.
+    void roomGeometry()
+    {
+        const float c = 343.0f;
+        const float maxD = static_cast<float>(mask_ - 8);
+        for (int k = 0; k < kWalls; ++k) {
+            float dnl = 0.0f;
+            for (int a = 0; a < 3; ++a) dnl += node_[k][a] * node_[k][a];
+            dnl = std::sqrt(dnl);
+            dEar_[k] = std::min(maxD, dnl / c * static_cast<float>(sr_) + 1.0f);
+            gEar_[k] = (1.0f - absorb_) / (1.0f + dnl);
+            // Direction: the wall's own axis, widened or narrowed by Width.
+            const float x = node_[k][0] / std::max(0.001f, dnl);
+            const float pan = clampv(x * width_, -1.0f, 1.0f);
+            panL_[k] = std::sqrt(0.5f * (1.0f - pan));
+            panR_[k] = std::sqrt(0.5f * (1.0f + pan));
+            for (int m = 0; m < kWalls; ++m) {
+                if (m == k) { dPair_[k][m] = 1.0f; continue; }
+                float d2 = 0.0f;
+                for (int a = 0; a < 3; ++a) { const float u = node_[m][a] - node_[k][a]; d2 += u * u; }
+                dPair_[k][m] = std::min(maxD, std::sqrt(d2) / c * static_cast<float>(sr_) + 1.0f);
+            }
+        }
+    }
+
+    // Source to wall: recomputed whenever the source moves, and glided into place per sample.
+    void sourceGeometry()
+    {
+        const float c = 343.0f;
+        const float maxD = static_cast<float>(mask_ - 8);
+        for (int k = 0; k < kWalls; ++k) {
+            float dsn = 0.0f;
+            for (int a = 0; a < 3; ++a) { const float u = node_[k][a] - src_[a]; dsn += u * u; }
+            dsn = std::sqrt(dsn);
+            dSrcT_[k] = std::min(maxD, dsn / c * static_cast<float>(sr_) + 1.0f);
+            gSrcT_[k] = 1.0f / (1.0f + dsn);          // spherical spreading over the first leg
+        }
+    }
+
+    std::vector<float> in_;
+    std::vector<float> press_[kWalls];
+    std::vector<float> pair_[kWalls][kWalls];
+    int    mask_ = 0, w_ = 0;
+    double sr_ = 48000.0;
+    float  node_[kWalls][3] = {}, half_[kWalls] = {};
+    float  src_[3] = { 0.0f, 2.0f, 0.0f };
+    float  dPair_[kWalls][kWalls] = {};
+    float  dSrc_[kWalls] = {}, dSrcT_[kWalls] = {}, gSrc_[kWalls] = {}, gSrcT_[kWalls] = {};
+    float  dEar_[kWalls] = {}, gEar_[kWalls] = {};
+    float  panL_[kWalls] = {}, panR_[kWalls] = {};
+    float  lp_[kWalls] = {};
+    float  lpCoef_ = 1.0f;
+    float  room_ = 8.0f, absorb_ = 0.35f, width_ = 1.0f, level_ = 0.0f, smLevel_ = 0.0f;
 };
 
 } // namespace ambient

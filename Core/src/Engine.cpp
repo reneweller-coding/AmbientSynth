@@ -99,6 +99,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     smBody_.setTime(0.02f, sr_);
     unmask_.prepare(sr_);
     haas_.prepare(sr_);
+    early_.prepare(sr_);
     diffuser_.prepare(sr_);
     coupleBuf_.assign(static_cast<size_t>(maxBlock_), 0.0f);
     roomB_.prepare(sr_, roomMaxSeconds_);

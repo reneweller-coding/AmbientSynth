@@ -383,6 +383,13 @@ void Engine::renderChunk(float* L, float* R, int n)
     // The Haas band, on the foreground only: the background has the reverb's own width and does
     // not need help. After the unmask, so what the side chain measured is the plane as it was.
     haas_.process(nl, nr, n);
+    // The room's early reflections, from the near bus and added to it: they belong in front of
+    // the listener with the dry sound, not behind it with the tail.
+    if (early_.active()) {
+        float* mono = wl;   // the delay scratch is free by now
+        for (int i = 0; i < n; ++i) mono[i] = 0.5f * (nl[i] + nr[i]);
+        early_.process(mono, nl, nr, n);
+    }
     // Sympathy: this block's foreground is what the voices will hear of each other in the next
     // one. A block of delay is what makes the loop safe, and at these depths inaudible.
     if (sympathy_ > 0.0f && static_cast<int>(coupleBuf_.size()) >= n)

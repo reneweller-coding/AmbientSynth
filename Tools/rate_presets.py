@@ -38,6 +38,19 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 
 FIELDS = ("rms", "centroid", "flatness", "flux", "bass", "width")
 
+# A comment between two of a preset's string literals breaks any pattern that expects the run of
+# literals to be unbroken -- and it does not break it loudly, it simply stops finding that preset.
+# Two of the built-in presets carry one, and this file's parsers reported 194 of 196 for a while
+# without a word. Comments that begin a line are removed before matching; a "//" inside a literal
+# is left alone, because none of them start a line.
+def strip_line_comments(text):
+    out = []
+    for line in text.split(chr(10)):
+        stripped = line.lstrip()
+        out.append("" if stripped.startswith("//") else line)
+    return chr(10).join(out)
+
+
 
 def measure(name, seconds, settings="", extra=None):
     """One render. A preset with the conductor switched off is a playable patch and makes no
@@ -67,7 +80,7 @@ def preset_names(with_packs):
     out = []
     p = os.path.join(ROOT, "Core", "src", "Presets.cpp")
     with open(p, encoding="utf-8") as f:
-        text = f.read()
+        text = strip_line_comments(f.read())
     body = text[text.index("const Preset kPresets[]"):text.index("int numCosmosPresets")]
     # A preset is { "name", "settings" } with the settings possibly split over several lines,
     # and since Tools/enrich_presets.py ran, most of them carry four more fields:

@@ -154,6 +154,15 @@ const HelpEntry kHelp[] = {
     { "far_predelay", "Milliseconds before the far reverb starts, separating it from the near plane." },
     { "far_asym", "Stretches the right half of the reverb's lines and delays its output slightly, so the two ears hear different reflections." },
     { "far_highcut", "Low-pass on the far reverb's tail." },
+    { "far_lowcut", "High-pass on the far reverb's tail, 12 dB/oct, off at 20 Hz. The other end of the funnel a mixing engineer puts on a reverb return: dense tails and synthetic textures pile up between 200 and 450 Hz, and that is exactly where a background stops being behind the music and starts covering it. Somewhere between 300 and 500 Hz the tail loses its weight and lays itself behind the notes instead of over them." },
+    { "near_lowcut", "The same for the near room: the small reverb's own low end, taken out so the foreground keeps its body." },
+    { "room_lowcut", "The same for the convolution room. Real impulse responses of large spaces carry a lot of low-mid energy, which is what makes them sound real and what makes them muddy in a mix." },
+    { "subsonic", "A steep high-pass (24 dB/oct) on the finished output, off at 0. Below about 20 Hz there is nothing to hear, but there is plenty to move: it takes headroom, it drives amplifiers and speaker cones for nothing, and it makes mastering processors distort early. Off by default and adjustable rather than fixed, because the Foundation two octaves under a low root reaches about 16 Hz -- a mastering engineer's 20 Hz cut would take this instrument's deepest tone with it. Set it under the lowest note you actually want." },
+    { "vec_amount", "How much of the Vector: at 0 each source slot plays at the level it is set to and nothing here does anything. Turned up, the levels are taken over by a point in a square (X, Y) whose corners are Source 1, Source 2, Source 3 and the three of them together -- the Prophet VS and Wavestation idea, where the timbre is a place rather than a setting." },
+    { "vec_x", "Left to right in the square: Source 1 at the left edge, Source 2 at the right." },
+    { "vec_y", "Bottom to top: Source 3 at the top left, all three together at the top right." },
+    { "vec_wander", "The point drifts on its own by this much, on two slow curves that share no ratio, so it never traces the same path twice." },
+    { "vec_rate", "How fast it drifts. Drone rates: a whole cycle takes minutes at the low end." },
     { "far_freeze", "Holds the far reverb's tail forever: an instant infinite pad of whatever was in it." },
     { "far_unmask", "The background steps aside for the foreground, band by band: while a voice sounds, the far reverb loses that part of the spectrum and lets it back in over a second when the voice goes. A dense pad keeps its own notes audible instead of swallowing them." },
     { "body_level", "Level of the resonating body: twelve modes tuned to the root, fed from the finished mix and returned to it. Not a reverb -- a reverb is a statistical tail, this is a handful of pitched resonances, which is the difference the ear hears between a room and an instrument." },
@@ -398,7 +407,9 @@ TEXTURE  A granular player over a loaded clip (Texture... button, or the preset'
 
 NOISE  Ten colours: White, Pink, Brown, Blue, Violet, Grey, Band (a resonant band at Position, Q from Noise Q, tracking the note with Pitch = Note), Wind (a wandering band), Crackle (sparse impulses at Density), Digital (sample-and-hold at a rate from Position). Levels are matched so a colour change does not change the loudness.
 
-Every slot also has Octave, a just Ratio to the note (3/2 a fifth up, 7/4 a harmonic seventh -- ratios, so the scale stays pure) and Pan. In Source 1 these move the strand bank as well.)" },
+Every slot also has Octave, a just Ratio to the note (3/2 a fifth up, 7/4 a harmonic seventh -- ratios, so the scale stays pure) and Pan. In Source 1 these move the strand bank as well.
+
+THE VECTOR is the three slots read as a place rather than as three levels, after the Prophet VS and the Korg Wavestation: a point in a square whose corners are Source 1, Source 2, Source 3 and the three of them together. Amount is how much of it there is, and at 0 nothing here does anything -- each slot plays at the level it is set to. Drag the point, or turn X and Y. The centre of the square is neutral by construction: at (0.5, 0.5) every factor is exactly 1, so turning Amount up on a patch you like changes nothing until you move. Wander lets the point drift on its own, on two curves whose rates share no simple ratio, so it never traces the same path twice; Rate is how fast. The bars beside the square say what the point is doing to each slot.)" },
 
     { "Filters and Z-plane",
 R"(Two filters, each with its own switch, in series or in parallel.
@@ -418,6 +429,8 @@ Cutoff is moved by Key Track (1 keeps the same partials in the passband on every
 THE Z-PLANE FILTER (after the E-mu Morpheus idea): four filter frames sit on the corners of a square and a point (X, Y) inside it is a filter interpolated from all four -- on the pole and zero parameters, so every point is stable. Sixteen Shapes in six families (vowel morphs, bell clusters, resonator banks, sweeps); the point wanders at Rate by Depth; Resonance narrows every section; Key Track moves the frame with the note. Mode: Off, Series or Replace (the z-plane alone). Route: with both filters on, Series puts the z-plane after the voice filter (Mix is its dry/wet), Parallel feeds both the dry sum and Mix balances them.
 
 The FILTER RESPONSE display draws the voice filter (in the voice colour), the z-plane (in the accent) and what a note actually meets after both, from the same maths the audio path uses.
+
+The three reverb returns each have a LOW CUT beside their high cut now. Together they are the filter funnel a mixing engineer puts on a return: dense tails pile up between 200 and 450 Hz, which is exactly where a background stops sitting behind the music and starts covering it, and taking that out is what lets a 40-second tail be enormous and transparent at the same time.
 
 The OUTPUT SPECTRUM along the bottom of the left column is the other half of that picture: what is actually coming out, with the same filter curve laid over it on the same decibel scale. Its window is 16384 samples -- 2.9 Hz at 48 kHz -- which is long enough to show the partials of a low drone as separate lines rather than one hump, so a fifth sitting exactly on the third partial is something you can see, and see come apart as Purity Drift loosens it. The bars are the moment; the faint line above them is the loudest each band has been in the last few seconds; the ticks along the bottom edge are the fundamentals of the notes sounding now. Point at it to read a frequency, its nearest note and that band's level.)" },
 

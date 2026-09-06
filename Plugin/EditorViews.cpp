@@ -425,56 +425,169 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------- the output's spectrum
 
-AmbientSynthEditor::OutputView::OutputView(AmbientSynthProcessor& p)
-    : proc(p), re(kN), im(kN), window(kN), fft(std::make_unique<ambient::Fft>(kN))
+// ---------------------------------------------------------------- the Vector's square
+
+juce::Rectangle<float> AmbientSynthEditor::VectorView::square() const
 {
-    setInterceptsMouseClicks(false, false);
-    for (int i = 0; i < kN; ++i) window[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * i / kN);
-    for (float& b : bins) b = -90.0f;
-    startTimerHz(15);
+    const auto plot = getLocalBounds().toFloat().reduced(12.0f, 9.0f).withTrimmedTop(15.0f);
+    const float side = juce::jmin(plot.getWidth(), plot.getHeight());
+    return juce::Rectangle<float>(plot.getCentreX() - side * 0.5f, plot.getCentreY() - side * 0.5f, side, side);
 }
 
-void AmbientSynthEditor::OutputView::timerCallback()
+void AmbientSynthEditor::VectorView::drag(const juce::MouseEvent& e)
 {
-    if (!isShowing()) return;
-    proc.engine().outputTap(re.data(), kN);
-    float peak = 0.0f;
-    for (int i = 0; i < kN; ++i) { peak = juce::jmax(peak, std::fabs(re[static_cast<size_t>(i)])); re[static_cast<size_t>(i)] *= window[static_cast<size_t>(i)]; im[static_cast<size_t>(i)] = 0.0f; }
-    peakDb = 20.0f * std::log10(peak + 1.0e-6f);
-    fft->transform(re.data(), im.data(), false);
-    const float sr = static_cast<float>(proc.getSampleRate() > 0 ? proc.getSampleRate() : 48000.0);
-    for (int b = 0; b < kBins; ++b) {
-        const float f0 = 30.0f * std::pow(16000.0f / 30.0f, static_cast<float>(b) / kBins);
-        const float f1 = 30.0f * std::pow(16000.0f / 30.0f, static_cast<float>(b + 1) / kBins);
-        int k0 = juce::jmax(1, static_cast<int>(f0 / sr * kN)), k1 = juce::jmax(k0 + 1, static_cast<int>(f1 / sr * kN));
-        float p = 0.0f;
-        for (int k = k0; k < juce::jmin(k1, kN / 2); ++k) p = juce::jmax(p, re[static_cast<size_t>(k)] * re[static_cast<size_t>(k)] + im[static_cast<size_t>(k)] * im[static_cast<size_t>(k)]);
-        const float db = 10.0f * std::log10(p / (kN * kN * 0.0625f) + 1.0e-12f);
-        bins[b] = db > bins[b] ? db : bins[b] + (db - bins[b]) * 0.2f;   // fast up, slow down, like a meter
+    const auto sq = square();
+    if (sq.getWidth() < 4.0f) return;
+    const float x = juce::jlimit(0.0f, 1.0f, (e.position.x - sq.getX()) / sq.getWidth());
+    const float y = juce::jlimit(0.0f, 1.0f, 1.0f - (e.position.y - sq.getY()) / sq.getHeight());
+    if (auto* px = proc.apvts.getParameter(paramDesc(ambient::ParamId::VecX).key)) px->setValueNotifyingHost(x);
+    if (auto* py = proc.apvts.getParameter(paramDesc(ambient::ParamId::VecY).key)) py->setValueNotifyingHost(y);
+}
+
+void AmbientSynthEditor::VectorView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds();
+    displayFrame(g, r, "VECTOR", ui::voiceCol);
+    const auto sq = square();
+    if (sq.getWidth() < 20.0f) return;
+
+    const float amount = rawParam(proc, "vec_amount");
+    const float vx = rawParam(proc, "vec_x"), vy = rawParam(proc, "vec_y");
+    auto toXY = [&](float x, float y) {
+        return juce::Point<float>(sq.getX() + x * sq.getWidth(), sq.getBottom() - y * sq.getHeight());
+    };
+
+    g.setColour(ui::card);
+    g.fillRoundedRectangle(sq, 4.0f);
+    g.setColour(ui::track.withAlpha(0.5f));
+    for (int i = 1; i < 4; ++i) {
+        g.drawHorizontalLine(juce::roundToInt(sq.getY() + sq.getHeight() * i / 4.0f), sq.getX(), sq.getRight());
+        g.drawVerticalLine(juce::roundToInt(sq.getX() + sq.getWidth() * i / 4.0f), sq.getY(), sq.getBottom());
     }
+    g.setColour(ui::faint);
+    g.drawRoundedRectangle(sq, 4.0f, 1.0f);
+
+    // The corners, named for what is at them.
+    g.setFont(ui::body(9.0f));
+    g.setColour(ui::dim);
+    g.drawText("SRC 1", sq.getX() + 3.0f, sq.getBottom() - 12.0f, 44.0f, 11.0f, juce::Justification::left, false);
+    g.drawText("SRC 2", sq.getRight() - 47.0f, sq.getBottom() - 12.0f, 44.0f, 11.0f, juce::Justification::right, false);
+    g.drawText("SRC 3", sq.getX() + 3.0f, sq.getY() + 2.0f, 44.0f, 11.0f, juce::Justification::left, false);
+    g.drawText("ALL", sq.getRight() - 47.0f, sq.getY() + 2.0f, 44.0f, 11.0f, juce::Justification::right, false);
+
+    // Where the wander has actually been. The point on the panel is where the knobs are; the trail
+    // is where the engine's own drift has taken it, which is the part a knob cannot show.
+    const bool live = amount > 0.0005f;
+    const float wander = rawParam(proc, "vec_wander");
+    if (live && wander > 0.0005f) {
+        tx[head] = vx; ty[head] = vy;                 // the drift itself is inside the engine; this
+        head = (head + 1) % kTrail;                    // records where the setting has been
+        if (filled < kTrail) ++filled;
+        juce::Path trail;
+        for (int k = 0; k < filled; ++k) {
+            const auto p = toXY(tx[(head - filled + k + kTrail) % kTrail], ty[(head - filled + k + kTrail) % kTrail]);
+            if (k == 0) trail.startNewSubPath(p); else trail.lineTo(p);
+        }
+        g.setColour(ui::accent.withAlpha(0.25f));
+        g.strokePath(trail, juce::PathStrokeType(1.0f));
+    }
+
+    // The three slot weights, as a bar in each corner: what the point is actually doing.
+    const float w00 = (1.0f - vx) * (1.0f - vy), w10 = vx * (1.0f - vy);
+    const float w01 = (1.0f - vx) * vy, w11 = vx * vy;
+    const float f[3] = { w00 + w11 / 3.0f, w10 + w11 / 3.0f, w01 + w11 / 3.0f };
+    const juce::Point<float> corner[3] = { toXY(0.0f, 0.0f), toXY(1.0f, 0.0f), toXY(0.0f, 1.0f) };
+    for (int k = 0; k < 3; ++k) {
+        const float t = juce::jlimit(0.0f, 1.0f, 3.0f * f[k] / 3.0f);
+        g.setColour(ui::accent.withAlpha(0.15f + 0.5f * t));
+        g.fillEllipse(corner[k].x - 4.0f - 10.0f * t, corner[k].y - 4.0f - 10.0f * t,
+                      8.0f + 20.0f * t, 8.0f + 20.0f * t);
+    }
+
+    const auto p = toXY(vx, vy);
+    g.setColour(live ? ui::live : ui::dim.withAlpha(0.5f));
+    g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
+    g.setColour(ui::text.withAlpha(live ? 0.9f : 0.4f));
+    g.drawEllipse(p.x - 7.0f, p.y - 7.0f, 14.0f, 14.0f, 1.2f);
+
+    // The three weights as bars beside the square: the picture says where the point is, these say
+    // what that does to each slot, which is the question the ear is actually asking.
+    const float barX = sq.getRight() + 18.0f;
+    const float barW = r.getRight() - 14.0f - barX;
+    if (barW > 90.0f) {
+        static const char* const kNames[3] = { "SOURCE 1", "SOURCE 2", "SOURCE 3" };
+        const float rowH = 20.0f;
+        float by = sq.getCentreY() - 1.5f * rowH;
+        g.setFont(ui::body(9.5f));
+        for (int k = 0; k < 3; ++k, by += rowH) {
+            g.setColour(ui::dim);
+            g.drawText(kNames[k], barX, by, 58.0f, 12.0f, juce::Justification::left, false);
+            const float x0 = barX + 62.0f, w = barW - 62.0f - 34.0f;
+            g.setColour(ui::track.withAlpha(0.5f));
+            g.fillRoundedRectangle(x0, by + 2.0f, w, 8.0f, 3.0f);
+            // The factor the engine applies, which is what the level is multiplied by.
+            const float factor = live ? 1.0f + amount * (3.0f * f[k] - 1.0f) : 1.0f;
+            g.setColour(ui::accent.withAlpha(0.35f + 0.5f * juce::jlimit(0.0f, 1.0f, factor / 3.0f)));
+            g.fillRoundedRectangle(x0, by + 2.0f, juce::jmax(2.0f, w * juce::jlimit(0.0f, 1.0f, factor / 3.0f)), 8.0f, 3.0f);
+            g.setColour(ui::text.withAlpha(0.75f));
+            g.drawText(juce::String(factor, 2) + "x", x0 + w + 4.0f, by, 30.0f, 12.0f, juce::Justification::left, false);
+        }
+        g.setColour(ui::faint);
+        g.drawText("the factor on each slot's own level", barX, sq.getCentreY() + 1.9f * rowH, barW, 12.0f,
+                   juce::Justification::left, false);
+    }
+
+    g.setColour(ui::dim);
+    g.setFont(ui::body(9.5f));
+    g.drawText(live ? juce::String("drag the point") : juce::String("Amount is 0: the slots play at their own levels"),
+               r.reduced(9, 5), juce::Justification::topRight, false);
+}
+
+// ---------------------------------------------------------------- loudness, in the header
+
+void AmbientSynthEditor::LoudnessView::mouseDown(const juce::MouseEvent&)
+{
+    proc.engine().resetLoudness();
     repaint();
 }
 
-void AmbientSynthEditor::OutputView::paint(juce::Graphics& g)
+void AmbientSynthEditor::LoudnessView::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
     g.setColour(ui::bg0.withAlpha(0.5f));
     g.fillRoundedRectangle(r, 4.0f);
-    const auto plot = r.reduced(4.0f, 3.0f);
-    g.setColour(ui::track.withAlpha(0.45f));
-    for (float hz : { 100.0f, 1000.0f, 10000.0f }) {
-        const float t = std::log(hz / 30.0f) / std::log(16000.0f / 30.0f);
-        g.drawVerticalLine(juce::roundToInt(plot.getX() + t * plot.getWidth()), plot.getY(), plot.getBottom());
+    const ambient::LoudnessReading ld = proc.engine().loudness();
+    const auto plot = r.reduced(6.0f, 3.0f);
+
+    // A bar for the short-term value, over the window an ambient master lives in: -30 to -6 LUFS,
+    // with the -18 to -24 band the literature asks for marked out. The number matters more than
+    // the bar, so the bar is thin and the type is not.
+    const float lo = -30.0f, hi = -6.0f;
+    auto xOf = [&](float lufs) { return plot.getX() + plot.getWidth() * 0.42f * juce::jlimit(0.0f, 1.0f, (lufs - lo) / (hi - lo)); };
+    const float y = plot.getCentreY();
+    g.setColour(ui::track.withAlpha(0.5f));
+    g.fillRoundedRectangle(plot.getX(), y - 3.0f, plot.getWidth() * 0.42f, 6.0f, 2.0f);
+    g.setColour(ui::accent.withAlpha(0.20f));
+    g.fillRoundedRectangle(xOf(-24.0f), y - 3.0f, xOf(-18.0f) - xOf(-24.0f), 6.0f, 2.0f);
+    if (ld.shortTerm > -119.0f) {
+        g.setColour(ld.shortTerm > -14.0f ? juce::Colour(0xffe0a060) : ui::live);
+        g.fillRoundedRectangle(plot.getX(), y - 3.0f, juce::jmax(2.0f, xOf(ld.shortTerm) - plot.getX()), 6.0f, 2.0f);
     }
-    const float bw = plot.getWidth() / kBins;
-    for (int b = 0; b < kBins; ++b) {
-        const float t = juce::jlimit(0.0f, 1.0f, (bins[b] + 72.0f) / 72.0f);
-        if (t <= 0.001f) continue;
-        const float h = t * plot.getHeight();
-        g.setColour(ui::accent.withAlpha(0.25f + 0.55f * t));
-        g.fillRect(plot.getX() + b * bw, plot.getBottom() - h, juce::jmax(1.0f, bw - 0.8f), h);
+    if (ld.integrated > -119.0f) {   // the integrated value as a mark on the same scale
+        g.setColour(ui::text.withAlpha(0.8f));
+        g.drawVerticalLine(juce::roundToInt(xOf(ld.integrated)), y - 6.0f, y + 6.0f);
     }
-    g.setColour(peakDb > -0.5f ? juce::Colour(0xffe06060) : ui::dim);
+
     g.setFont(ui::body(9.5f));
-    g.drawText(juce::String(peakDb, 1) + " dB peak", r.reduced(6.0f, 2.0f), juce::Justification::topRight, false);
+    auto num = [](float v) { return v > -119.0f ? juce::String(v, 1) : juce::String("--"); };
+    const juce::String text = "I " + num(ld.integrated) + "   S " + num(ld.shortTerm)
+                            + "   LRA " + juce::String(ld.range, 1)
+                            + "   TP " + num(ld.truePeak)
+                            + "   crest " + juce::String(ld.crest, 1);
+    // Red when the true peak is over the -1 dBTP a lossy codec needs as headroom, amber when the
+    // crest factor has fallen under the 14 dB that says the dynamics are still there.
+    const bool tpHot = ld.truePeak > -1.0f;
+    g.setColour(tpHot ? juce::Colour(0xffe06060)
+                      : (ld.crest > 0.0f && ld.crest < 14.0f ? juce::Colour(0xffe0a060) : ui::dim));
+    g.drawText(text, plot.withTrimmedLeft(plot.getWidth() * 0.44f), juce::Justification::centredLeft, false);
 }

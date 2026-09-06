@@ -417,6 +417,8 @@ void Engine::renderChunk(float* L, float* R, int n)
             }
         }
         const float lpc = 1.0f - std::exp(-kTwoPi * roomHighcut_ / static_cast<float>(sr_));
+        const float rhpc = roomLowcut_ <= 21.0f ? 0.0f
+                         : 1.0f - std::exp(-kTwoPi * (roomLowcut_ / 1.5538f) / static_cast<float>(sr_));
         const float levelC = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));
         // An energy-normalised impulse returns the far sends at their own power, which is far
         // louder than the FDN's output at Far Level 1; 0.35 puts Room Level 1 in the same league
@@ -426,7 +428,14 @@ void Engine::renderChunk(float* L, float* R, int n)
             roomLevelCur_ += (roomLevel_ - roomLevelCur_) * levelC;
             roomLpL_ += lpc * (ol[i] - roomLpL_);
             roomLpR_ += lpc * (orr[i] - roomLpR_);
-            const float rL = roomLpL_ * roomLevelCur_ * roomGain, rR = roomLpR_ * roomLevelCur_ * roomGain;
+            float tL = roomLpL_, tR = roomLpR_;
+            if (rhpc > 0.0f) {   // the low end out of the room, 12 dB/oct
+                roomHpL1_ += rhpc * (tL - roomHpL1_);  const float aL = tL - roomHpL1_;
+                roomHpR1_ += rhpc * (tR - roomHpR1_);  const float aR = tR - roomHpR1_;
+                roomHpL2_ += rhpc * (aL - roomHpL2_);  tL = aL - roomHpL2_;
+                roomHpR2_ += rhpc * (aR - roomHpR2_);  tR = aR - roomHpR2_;
+            }
+            const float rL = tL * roomLevelCur_ * roomGain, rR = tR * roomLevelCur_ * roomGain;
             L[i] += rL;
             R[i] += rR;
             if (stems_ != nullptr) { stems_[6][stemPos_ + i] = rL; stems_[7][stemPos_ + i] = rR; }
@@ -555,15 +564,35 @@ void Engine::renderChunk(float* L, float* R, int n)
     // window over a clip that carries one, the shimmer's pitch shifter -- and an offset costs
     // headroom in the soft clipper without ever being heard. One filter at the end covers them all.
     const float dcR = 1.0f - kTwoPi * 4.0f / static_cast<float>(sr_);
+    // Subsonic: four cascaded one-pole high-passes, 24 dB/oct, on top of the 4 Hz DC blocker.
+    // Off at zero, and zero is the default -- this instrument's Foundation reaches lower than the
+    // frequency a mastering engineer cuts at, so the cut has to be the player's decision.
+    // Four one-poles reach -3 dB at 2.299 times their own corner, so the pole goes there and the
+    // knob keeps meaning the frequency the output is 3 dB down at.
+    const float sub = subsonicHz_;
+    const float subC = sub <= 0.5f ? 0.0f
+                     : 1.0f - std::exp(-kTwoPi * (sub / 2.299f) / static_cast<float>(sr_));
     for (int i = 0; i < n; ++i) {
         const float g = masterSmooth_.next(master);
-        const float yl = L[i] - dcXL_ + dcR * dcYL_; dcXL_ = L[i]; dcYL_ = yl;
-        const float yr = R[i] - dcXR_ + dcR * dcYR_; dcXR_ = R[i]; dcYR_ = yr;
+        float yl = L[i] - dcXL_ + dcR * dcYL_; dcXL_ = L[i]; dcYL_ = yl;
+        float yr = R[i] - dcXR_ + dcR * dcYR_; dcXR_ = R[i]; dcYR_ = yr;
+        if (subC > 0.0f) {
+            subL1_ += subC * (yl - subL1_); yl -= subL1_;
+            subR1_ += subC * (yr - subR1_); yr -= subR1_;
+            subL2_ += subC * (yl - subL2_); yl -= subL2_;
+            subR2_ += subC * (yr - subR2_); yr -= subR2_;
+            subL3_ += subC * (yl - subL3_); yl -= subL3_;
+            subR3_ += subC * (yr - subR3_); yr -= subR3_;
+            subL4_ += subC * (yl - subL4_); yl -= subL4_;
+            subR4_ += subC * (yr - subR4_); yr -= subR4_;
+        }
         L[i] = softClip(yl * g);
         R[i] = softClip(yr * g);
         outTap_[(outTapW_ + i) & (kOutTapLen - 1)] = 0.5f * (L[i] + R[i]);
     }
     outTapW_ = (outTapW_ + n) & (kOutTapLen - 1);
+    // The loudness meter sees exactly what a file would: after the master gain and the clipper.
+    loudness_.process(L, R, n);
 }
 
 } // namespace ambient

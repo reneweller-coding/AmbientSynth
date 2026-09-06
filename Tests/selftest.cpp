@@ -23,6 +23,7 @@
 #include "ambient/ZPlane.h"
 #include "ambient/Timeline.h"
 #include "ambient/Modulation.h"
+#include "ambient/Loudness.h"
 #include <thread>
 #include <chrono>
 #if defined(_WIN32)
@@ -1843,6 +1844,35 @@ void testModulation()
             const float plain = phaseAfter("lfo1>cutoff:0.9");
             const float moved = phaseAfter("lfo1>cutoff:0.9;lfo2>lfo1_rate:1.0");
             CHECK(std::fabs(moved - plain) > 0.02f, "a route on an LFO's rate actually moves it");
+        }
+        {   // Loudness, BS.1770-4. The number below is not a number this code produced: it comes
+            // from an independent run of the standard's own published 48 kHz coefficients over the
+            // same signal. A 997 Hz sine at -20 dBFS RMS in both channels reads -16.99 LUFS --
+            // three decibels above the level because two identical channels sum, and a little
+            // more because the K-weighting lifts the top. Getting that constant wrong is the
+            // easiest way to ship a meter that is consistently, invisibly off.
+            LoudnessMeter m;
+            m.prepare(48000.0);
+            const int n = 512;
+            std::vector<float> l(n), r(n);
+            const double amp = std::pow(10.0, -20.0 / 20.0) * std::sqrt(2.0);
+            double ph = 0.0;
+            for (int b = 0; b < 10 * 48000 / n; ++b) {
+                for (int i = 0; i < n; ++i) {
+                    l[static_cast<size_t>(i)] = r[static_cast<size_t>(i)] = static_cast<float>(amp * std::sin(ph));
+                    ph += 2.0 * 3.14159265358979323846 * 997.0 / 48000.0;
+                }
+                m.process(l.data(), r.data(), n);
+            }
+            const LoudnessReading rd = m.read();
+            CHECK(std::fabs(rd.integrated - (-16.99f)) < 0.1f, "integrated loudness matches BS.1770");
+            CHECK(std::fabs(rd.shortTerm - (-16.99f)) < 0.1f, "short-term loudness matches BS.1770");
+            // A sine's true peak is its amplitude, and the inter-sample estimate must find it even
+            // though 997 Hz at 48 kHz never lands on the crest.
+            CHECK(std::fabs(rd.truePeak - static_cast<float>(20.0 * std::log10(amp))) < 0.15f,
+                  "true peak finds the crest between the samples");
+            m.reset();
+            CHECK(m.read().integrated < -100.0f, "reset clears the meter");
         }
         ModEnv l;
         CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");

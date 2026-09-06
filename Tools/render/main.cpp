@@ -173,7 +173,7 @@ int main(int argc, char** argv)
     std::string out = "ambient.wav";
     double seconds = 60.0;
     int sr = 48000, block = 256;
-    bool stats = false, dump = false, useMap = false, measure = false;
+    bool stats = false, dump = false, useMap = false, measure = false, loudness = false;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
@@ -195,6 +195,8 @@ int main(int argc, char** argv)
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
         else if (a == "--measure") measure = true;   // print descriptors instead of writing a file
+        else if (a == "--loudness") loudness = true; // and a second line to BS.1770 (its own line so
+                                                     // nothing that parses the measure line has to change)
         else if (a == "--dump") dump = true;
         else if (a == "--map") {   // render at a map position: x y [radius]
             mapX = std::atof(next().c_str()); mapY = std::atof(next().c_str());
@@ -479,6 +481,13 @@ int main(int argc, char** argv)
     const double rmsL = std::sqrt(sumSq[0] / std::max<long>(total, 1)), rmsR = std::sqrt(sumSq[1] / std::max<long>(total, 1));
     std::printf("rendered %.1f s @ %d Hz: rms %.1f / %.1f dBFS, peak %.3f, non-finite %ld, voices at end %d\n",
                 seconds, sr, 20.0 * std::log10(rmsL + 1e-20), 20.0 * std::log10(rmsR + 1e-20), peak, nans, engine.activeVoices());
+    if (loudness) {
+        // The engine's own meter, which has seen every sample of the render rather than a window
+        // of it. Its own line, so nothing that parses the measure line has to learn a new field.
+        const LoudnessReading ld = engine.loudness();
+        std::printf("loudness: lufs_i=%.2f lufs_s=%.2f lufs_m=%.2f lra=%.2f truepeak=%.2f crest=%.2f seconds=%.1f\n",
+                    ld.integrated, ld.shortTerm, ld.momentary, ld.range, ld.truePeak, ld.crest, ld.seconds);
+    }
     if (measure) {   // descriptors straight from the buffer: no temporary file at all
         std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);
         for (size_t k = 0; k + 1 < wav.size(); k += 2) { ml[k / 2] = wav[k]; mr[k / 2] = wav[k + 1]; }

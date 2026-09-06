@@ -152,6 +152,20 @@ enum class ParamId : int {
     // Clock (Clock.h): where the tempo comes from, the internal tempo, and whether the internal
     // clock runs; performance state -- the tempo belongs to the session, not to a preset
     ClockSource, Tempo, ClockRun,
+    // Appended, never inserted: a parameter's position in this enum is its automation slot in
+    // the host, and moving one would move somebody's automation lane with it.
+    //
+    // The other end of the filter funnel on the three reverb returns. A tail with its low mids
+    // still in it sits in front of the music instead of behind it.
+    FarLowcut, NearLowcut, RoomLowcut,
+    // A steep high-pass on the finished output for the energy below hearing: it does nothing for
+    // the music and everything for the amplifier. Off by default, because the Foundation reaches
+    // lower than the frequency a mastering engineer would cut at.
+    Subsonic,
+    // Vector: a point in a square whose corners are the three source slots and the three of them
+    // together, after the Prophet VS and the Wavestation. Amount 0 leaves every slot's level
+    // exactly as it is set.
+    VecAmount, VecX, VecY, VecWander, VecRate,
     Count
 };
 
@@ -198,7 +212,7 @@ enum class ParamSection : int {
     Master, Source1, Strands, Source2, Source3, Strike, Foundation, Air, Envelope, Filter, ZPlane,
     Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
     Patina, Cosmos, Cloud, ClusterBrain, Brain2, Autoplay, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
-    Macros, Map, Route, Unknown
+    Macros, Map, Route, Vector, Unknown
 };
 ParamSection sectionOf(const char* sectionName);
 inline ParamSection sectionOf(ParamId id) { return sectionOf(paramDesc(id).section); }

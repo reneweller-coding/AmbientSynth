@@ -485,6 +485,17 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::ClockSource, "clock_source", "Source", "Clock", kClockSourceNames, kNumClockSources, 0),
     F(ParamId::Tempo,       "tempo",        "Tempo",  "Clock", 20.f, 300.f, 90.f, 0.6f, "bpm"),
     B(ParamId::ClockRun,    "clock_run",    "Run",    "Clock", true),
+
+    // ---- appended later; see the note in Params.h on why they are at the end
+    F(ParamId::FarLowcut,   "far_lowcut",   "Low Cut", "Far Reverb",  20.f, 800.f, 20.f, 0.35f, "Hz"),
+    F(ParamId::NearLowcut,  "near_lowcut",  "Low Cut", "Near Reverb", 20.f, 800.f, 20.f, 0.35f, "Hz"),
+    F(ParamId::RoomLowcut,  "room_lowcut",  "Low Cut", "Room",        20.f, 800.f, 20.f, 0.35f, "Hz"),
+    F(ParamId::Subsonic,    "subsonic",     "Subsonic", "Master",      0.f,  40.f,  0.f, 1.f,   "Hz"),
+    F(ParamId::VecAmount,   "vec_amount",   "Amount",  "Vector", 0.f, 1.f, 0.f,   1.f, ""),
+    F(ParamId::VecX,        "vec_x",        "X",       "Vector", 0.f, 1.f, 0.5f,  1.f, ""),
+    F(ParamId::VecY,        "vec_y",        "Y",       "Vector", 0.f, 1.f, 0.5f,  1.f, ""),
+    F(ParamId::VecWander,   "vec_wander",   "Wander",  "Vector", 0.f, 1.f, 0.f,   1.f, ""),
+    F(ParamId::VecRate,     "vec_rate",     "Rate",    "Vector", 0.002f, 0.5f, 0.02f, 0.35f, "Hz"),
 }};
 } // namespace
 
@@ -514,6 +525,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
 struct SectionName { const char* name; ParamSection section; };
 const SectionName kSections[] = {
     { "Master", ParamSection::Master }, { "Source 1", ParamSection::Source1 }, { "Strands", ParamSection::Strands },
+    { "Vector", ParamSection::Vector },
     { "Source 2", ParamSection::Source2 }, { "Source 3", ParamSection::Source3 }, { "Strike", ParamSection::Strike },
     { "Foundation", ParamSection::Foundation }, { "Air", ParamSection::Air }, { "Envelope", ParamSection::Envelope },
     { "Filter", ParamSection::Filter }, { "Z-Plane", ParamSection::ZPlane }, { "Expression", ParamSection::Expression },

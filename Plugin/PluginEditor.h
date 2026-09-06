@@ -451,20 +451,35 @@ private:
         bool  silent = true;
     };
     std::unique_ptr<CosmosView> cosmosView_;
-    // The output's own spectrum in the header: what is actually leaving the instrument, which is
-    // the one picture a mixing eye keeps coming back to.
-    struct OutputView : juce::Component, juce::Timer {
-        explicit OutputView(AmbientSynthProcessor& p);
+    // What the header used to carry was a small spectrum, at 1024 points and 96 bands. The strip
+    // along the bottom of the page now does that properly, so this space says the thing a piece
+    // of ambient actually has to be judged by: its loudness and, more to the point, how much of
+    // its dynamic range is still there. A drone mastered to -9 LUFS has had the movement squeezed
+    // out of its reverb tails and cannot get it back.
+    struct LoudnessView : juce::Component, juce::Timer {
+        explicit LoudnessView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(10); }
         void paint(juce::Graphics&) override;
-        void timerCallback() override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        void mouseDown(const juce::MouseEvent&) override;   // click to start measuring again
         AmbientSynthProcessor& proc;
-        static constexpr int kN = 1024, kBins = 96;
-        std::vector<float> re, im, window;
-        std::unique_ptr<ambient::Fft> fft;
-        float bins[kBins] = {};
-        float peakDb = -90.0f;
     };
-    std::unique_ptr<OutputView> outputView_;
+    std::unique_ptr<LoudnessView> outputView_;
+    // The Vector's square, with the point in it: three corners are the source slots, the fourth
+    // is all three together. Drag the point; it is the one control here whose value is a place.
+    struct VectorView : juce::Component, juce::Timer {
+        explicit VectorView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(20); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        void mouseDown(const juce::MouseEvent& e) override { drag(e); }
+        void mouseDrag(const juce::MouseEvent& e) override { drag(e); }
+        void drag(const juce::MouseEvent&);
+        juce::Rectangle<float> square() const;
+        AmbientSynthProcessor& proc;
+        static constexpr int kTrail = 240;      // where the wander has been, at 20 Hz: twelve seconds
+        float tx[kTrail] = {}, ty[kTrail] = {};
+        int   head = 0, filled = 0;
+    };
+    std::unique_ptr<VectorView> vectorView_;
     // The wide strip along the bottom of the left column: the same signal as the header's little
     // meter, but with room to say something. A 16384-sample window is 2.9 Hz wide at 48 kHz, so
     // the partials of a low drone are separate lines rather than a hump, and the filter's own

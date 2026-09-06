@@ -109,7 +109,7 @@ Start the standalone: the Cluster Brain is on by default and begins a piece
 within a few seconds. Presets come in four independent layers that combine
 freely, and loading one never touches the others:
 
-* the **Sound** box in the header — 191 built-in presets (voices, space,
+* the **Sound** box in the header — 196 built-in presets (voices, space,
   delays, reverbs, brain, tuning), plus everything the packs add. The only
   one on the header, because it is the only one about the whole instrument;
 * **Preset** in the **Cosmos** section — 257 in sixteen families;
@@ -249,6 +249,38 @@ again offline, so a good evening can be reproduced and rendered in higher
 quality than it was played. `Tools/preset_check.py` is the automatic sound
 test: every preset rendered and flagged for level, clipping, clicks, DC or
 silence.
+
+**Loudness.** In the header, where the small spectrum used to be (the strip
+below does that better now): integrated and short-term loudness to ITU-R
+BS.1770-4, the loudness range, the true peak between the samples and the crest
+factor, with the −18 to −24 LUFS window ambient masters live in marked on the
+bar. Click it to start measuring again. It is in the engine rather than in the
+interface, because the integrated figure is a number about the whole piece and
+a meter that only sees what the interface asked for has holes in it. The
+K-weighting is derived from the standard's analogue prototypes and reproduces
+the published 48 kHz coefficients to sixteen digits, so it is right at every
+sample rate; `ambient_render --loudness` prints the same numbers for a render.
+The point is not to get louder. A brickwall limiter takes the finest amplitude
+movement out of a reverb tail and leaves it grainy and flat, and the sense of
+an enormous room comes from the distance between the quietest texture and the
+loudest swell.
+
+**Vector.** A page beside the three source slots: a point in a square whose
+corners are Source 1, Source 2, Source 3 and the three of them together, after
+the Prophet VS and the Wavestation. *Amount* at 0 does nothing at all, and the
+centre of the square is neutral by construction — every factor is exactly 1 —
+so it can be turned up on a patch you like and changes nothing until you move.
+*Wander* lets the point drift on its own, on two curves whose rates share no
+simple ratio.
+
+**The filter funnel.** Each of the three reverb returns has a *Low Cut* beside
+its high cut (12 dB/oct, off at 20 Hz). Dense tails pile up between 200 and
+450 Hz, which is exactly where a background stops sitting behind the music and
+starts covering it. Measured on the far return alone: at 800 Hz it takes 27.8 dB
+out below 150 Hz and 1.4 dB off the top. And *Subsonic* in the Master section is
+a 24 dB/oct high-pass for the energy under hearing, off by default — this
+instrument's Foundation reaches to about 16 Hz, lower than a mastering engineer
+would cut, so where to cut has to be the player's decision.
 
 **Output spectrum.** Along the bottom of the left column, as wide as the page:
 what is actually coming out, with the filter's own response laid over it on the

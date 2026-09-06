@@ -56,7 +56,11 @@ public:
     void set(float size, float decaySeconds, float damping, float preDelayMs, bool freeze, float mix);
     // asymmetry 0..1: right-hand lines lengthened and the right output delayed by up to 10 ms
     // highcutHz: one-pole low-pass on the wet output (20000 = off)
-    void setSpace(float asymmetry, float highcutHz);
+    // lowcutHz:  two one-pole high-passes on the wet output, 12 dB/oct (20 = off). The other half
+    //            of the filter funnel a mixing engineer puts on a reverb return: without it the
+    //            tail piles up in the low mids, where it turns the whole picture to mud rather
+    //            than sitting behind it.
+    void setSpace(float asymmetry, float highcutHz, float lowcutHz = 20.0f);
     void process(float* L, float* R, int n);
 private:
     static constexpr int kLines = 8;
@@ -76,6 +80,8 @@ private:
     float  outDelayTarget_ = 0.0f, outDelayCur_ = 0.0f;
     float  damp_ = 0.4f, mix_ = 0.45f, decay_ = 12.0f, size_ = 1.6f, asym_ = 0.0f;
     float  hcCoef_ = 1.0f, hcL_ = 0.0f, hcR_ = 0.0f;
+    float  lcCoef_ = 0.0f;                                        // 0 = off
+    float  lcL1_ = 0.0f, lcR1_ = 0.0f, lcL2_ = 0.0f, lcR2_ = 0.0f;
     bool   freeze_ = false;
 };
 

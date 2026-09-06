@@ -94,6 +94,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     shimmerR_.prepare(sr_);
     shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
+    loudness_.prepare(sr_);
     smBlur_.setTime(0.02f, sr_);
     smBody_.setTime(0.02f, sr_);
     unmask_.prepare(sr_);
@@ -108,6 +109,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     blur_.prepare(sr_, 0x5EED5EEDull);
     auxRng_.seed(0xA5A5A5A5ull);
     tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
+    vecDriftX_.init(auxRng_); vecDriftY_.init(auxRng_);
     dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
     lastRootPc_ = -1;
     readParams();

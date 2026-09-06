@@ -377,6 +377,44 @@ void Engine::readParams()
             s.noise         = static_cast<NoiseKind>(clampv(static_cast<int>(std::lround(at(15))), 0, kNumNoiseKinds - 1));
             s.noiseQ        = at(16);
         }
+        // ---- the Vector
+        //
+        // A point in a square, after the Prophet VS and the Wavestation: the corners are Source 1,
+        // Source 2, Source 3, and the three of them together, and the point's bilinear weights
+        // become the slots' levels. Written as a factor on the levels each slot already has, so
+        // the slot knobs stay what they were -- a trim under the vector rather than a thing the
+        // vector overwrites.
+        //
+        // The weights are scaled by three, which makes the CENTRE of the square neutral: at
+        // (0.5, 0.5) each factor is exactly 1 and turning Amount up changes nothing at all. It
+        // also keeps the three factors summing to three wherever the point is, so travelling to a
+        // corner moves the timbre without moving the level.
+        {
+            const float amount = g(ParamId::VecAmount);
+            if (amount > 0.0005f) {
+                const float wander = g(ParamId::VecWander);
+                float vx = g(ParamId::VecX), vy = g(ParamId::VecY);
+                if (wander > 0.0005f) {
+                    // Two drifts whose rates share no simple ratio, so the point never traces the
+                    // same path twice -- the same reason the LFOs sit on a golden ladder.
+                    const float rate = g(ParamId::VecRate);
+                    vx += 0.5f * wander * vecDriftX_.update(lastBlockSeconds_, rate, auxRng_);
+                    vy += 0.5f * wander * vecDriftY_.update(lastBlockSeconds_, rate * 1.6180339887f, auxRng_);
+                }
+                vx = clampv(vx, 0.0f, 1.0f);
+                vy = clampv(vy, 0.0f, 1.0f);
+                const float w00 = (1.0f - vx) * (1.0f - vy);   // Source 1
+                const float w10 = vx * (1.0f - vy);            // Source 2
+                const float w01 = (1.0f - vx) * vy;            // Source 3
+                const float w11 = vx * vy;                     // all three
+                const float f[kSlots] = { w00 + w11 / 3.0f, w10 + w11 / 3.0f, w01 + w11 / 3.0f };
+                for (int k = 0; k < kSlots; ++k) {
+                    const float factor = 1.0f + amount * (3.0f * f[k] - 1.0f);
+                    vp_.slot[k].level = clampv(vp_.slot[k].level * factor, 0.0f, 1.0f);
+                }
+                vp_.level = vp_.slot[0].level;
+            }
+        }
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
         const int a = textureActive_.load(std::memory_order_acquire);
         textureInUse_.store(a, std::memory_order_release);
@@ -519,7 +557,7 @@ void Engine::readParams()
     delay2ToFar_ = g(ParamId::Delay2ToFar);
     cloud_.set(syncedHz(ParamId::CloudSync, g(ParamId::CloudDensity)), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
     cloudSend_ = g(ParamId::CloudSend);
-    nearReverb_.setSpace(0.3f, 20000.0f);
+    nearReverb_.setSpace(0.3f, 20000.0f, g(ParamId::NearLowcut));
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
     unmask_.set(g(ParamId::FarUnmask));
     bodyLevel_ = g(ParamId::BodyLevel);
@@ -528,7 +566,7 @@ void Engine::readParams()
               static_cast<float>(frequencyOf(brain_.root())) * bodyPitch_ * vp_.pitchMul,
               g(ParamId::BodyDecay), g(ParamId::BodyTone), g(ParamId::BodySpread));
     patina_.set(g(ParamId::PatinaAmount), g(ParamId::PatinaWow), g(ParamId::PatinaHiss), g(ParamId::PatinaAge));
-    farReverb_.setSpace(g(ParamId::FarAsym), g(ParamId::FarHighcut));
+    farReverb_.setSpace(g(ParamId::FarAsym), g(ParamId::FarHighcut), g(ParamId::FarLowcut));
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
@@ -542,6 +580,8 @@ void Engine::readParams()
     roomSource_   = static_cast<int>(std::lround(g(ParamId::RoomSource)));
     roomPreDelay_ = static_cast<int>(g(ParamId::RoomPreDelay) * 0.001f * static_cast<float>(sr_));
     roomHighcut_  = g(ParamId::RoomHighcut);
+    roomLowcut_   = g(ParamId::RoomLowcut);
+    subsonicHz_   = g(ParamId::Subsonic);
     roomMorph_    = hasImpulseB_ ? g(ParamId::RoomMorph) : 0.0f;
     fbBus_   = g(ParamId::FeedbackBus);
     fbFm_    = g(ParamId::FeedbackFm);

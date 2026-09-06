@@ -1148,6 +1148,35 @@ airless, the same envelope moves it from 3.9 % to 11.1 %. A demonstration has to
 put the thing being demonstrated in front of the microphone, which is the same
 sentence as three of the traps in this file.
 
+### Loudness, and why an ambient synth measures it
+
+The literature on this music is unanimous that loudness is the enemy: a
+brickwall limiter takes the finest amplitude movement out of a reverb tail and
+leaves it grainy and flat, and the impression of an enormous room comes from
+the distance between the quietest texture and the loudest swell rather than
+from the average level. Targets quoted for the genre are -18 to -24 LUFS
+integrated, a crest factor above 14 dB and a true peak at -1 dBTP, against
+-9 LUFS and 6 to 9 dB for commercial pop.
+
+So the instrument measures itself, to ITU-R BS.1770-4: integrated (both gates),
+short-term, momentary, loudness range, true peak between the samples, and the
+crest factor. `Core/src/Loudness.cpp`, framework-free like the rest of the core,
+fed from the engine after the master stage -- the integrated figure is a number
+about the whole piece, and a meter that only sees what the interface happened to
+ask for has holes in it.
+
+Two things were worth getting right rather than approximately right. The
+K-weighting is **not** the RBJ cookbook: given the standard's own f0, Q and gain,
+the cookbook's shelf comes out about two per cent away from the coefficients
+BS.1770 prints for 48 kHz -- close enough to look correct and wrong enough to be
+wrong. The formulation used here reproduces the published numbers to sixteen
+digits and is derived from the analogue prototype, so it holds at 44.1 and 96 kHz
+too. And the whole meter was checked against an independent implementation of
+the published coefficients over the same sixty-second render: -23.62 against
+-23.62 integrated, -21.62 against -21.62 short-term. The self test pins a
+constant that came from that reference, not from this code: a 997 Hz sine at
+-20 dBFS RMS in both channels reads -16.99 LUFS.
+
 ### The manual
 
 The help page inside the instrument is the manual, and it exists as a PDF as

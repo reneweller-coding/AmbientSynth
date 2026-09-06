@@ -52,6 +52,19 @@ PRESETS = os.path.join(ROOT, "Core", "src", "Presets.cpp")
 # routes, which decouples each preset from itself and couples the whole bank to each other.
 PHI = 1.6180339887
 
+# A comment between two of a preset's string literals breaks any pattern that expects the run of
+# literals to be unbroken -- and it does not break it loudly, it simply stops finding that preset.
+# Two of the built-in presets carry one, and this file's parsers reported 194 of 196 for a while
+# without a word. Comments that begin a line are removed before matching; a "//" inside a literal
+# is left alone, because none of them start a line.
+def strip_line_comments(text):
+    out = []
+    for line in text.split(chr(10)):
+        stripped = line.lstrip()
+        out.append("" if stripped.startswith("//") else line)
+    return chr(10).join(out)
+
+
 # Route targets, by what the preset already sounds like. Three are drawn from the pool without
 # repeats, so two presets rarely land on the same set.
 TARGETS_DARK = ["far_size", "depth", "z_x", "sub_level", "far_damp", "pan_drift", "breath",
@@ -114,7 +127,7 @@ def measure(name, seconds, settings, extra=None):
 def parse_presets():
     """[(name, settings, span)] over Presets.cpp, span being where the settings literal sits."""
     with open(PRESETS, encoding="utf-8") as f:
-        text = f.read()
+        text = strip_line_comments(f.read())
     start = text.index("const Preset kPresets[]")
     end = text.index("int numCosmosPresets")
     out = []

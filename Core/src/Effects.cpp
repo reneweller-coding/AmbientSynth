@@ -349,15 +349,23 @@ void Reverb::prepare(double sampleRate)
     preCur_ = 0.0f;
     outDelayCur_ = 0.0f;
     hcL_ = hcR_ = 0.0f;
+    lcL1_ = lcR1_ = lcL2_ = lcR2_ = 0.0f;
     setSpace(asym_, 20000.0f);
     set(size_, decay_, damp_, 40.0f, false, mix_);
 }
 
-void Reverb::setSpace(float asymmetry, float highcutHz)
+void Reverb::setSpace(float asymmetry, float highcutHz, float lowcutHz)
 {
     asym_ = clampv(asymmetry, 0.0f, 1.0f);
     const float fc = clampv(highcutHz, 200.0f, 20000.0f);
     hcCoef_ = (fc >= 19000.0f) ? 1.0f : (1.0f - std::exp(-kTwoPi * fc / static_cast<float>(sr_)));
+    // The knob says where the tail is 3 dB down, so the pole does not sit there: two cascaded
+    // one-poles are 6 dB down at their own corner, and the pair reaches -3 dB at 1.554 times it.
+    // Without this division a "400 Hz" low cut would take 6 dB out at 400 Hz, and the number on
+    // the panel would be a number about the filter rather than about the sound.
+    const float lf = clampv(lowcutHz, 20.0f, 1000.0f);
+    lcCoef_ = (lf <= 21.0f) ? 0.0f
+            : (1.0f - std::exp(-kTwoPi * (lf / 1.5538f) / static_cast<float>(sr_)));
     outDelayTarget_ = asym_ * 0.010f * static_cast<float>(sr_);
     set(size_, decay_, damp_, preTarget_ * 1000.0f / static_cast<float>(sr_), freeze_, mix_);
 }
@@ -427,8 +435,19 @@ void Reverb::process(float* L, float* R, int n)
         // Tail darkening.
         hcL_ += hcCoef_ * (wetL - hcL_);
         hcR_ += hcCoef_ * (wetR - hcR_);
-        L[i] = L[i] * (1.0f - mix) + hcL_ * mix;
-        R[i] = R[i] * (1.0f - mix) + hcR_ * mix;
+        // The other end of the funnel. Two one-pole high-passes, 12 dB/oct: what each low-pass
+        // does not take is what passes. The tail's own value goes into `tailL/R` rather than back
+        // into hcL_/hcR_ -- those are the low-pass's state, and writing the filtered result into
+        // them would feed the darkening filter its own output every sample.
+        float tailL = hcL_, tailR = hcR_;
+        if (lcCoef_ > 0.0f) {
+            lcL1_ += lcCoef_ * (tailL - lcL1_);   const float aL = tailL - lcL1_;
+            lcR1_ += lcCoef_ * (tailR - lcR1_);   const float aR = tailR - lcR1_;
+            lcL2_ += lcCoef_ * (aL - lcL2_);      tailL = aL - lcL2_;
+            lcR2_ += lcCoef_ * (aR - lcR2_);      tailR = aR - lcR2_;
+        }
+        L[i] = L[i] * (1.0f - mix) + tailL * mix;
+        R[i] = R[i] * (1.0f - mix) + tailR * mix;
         ++w_;
     }
 }

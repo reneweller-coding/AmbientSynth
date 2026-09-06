@@ -32,7 +32,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
@@ -47,7 +47,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "ANALYSIS",   kVoice,     { {} }, {}, 0, {}, 96, true },
     };
     tabRows_ = {
-        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" } } },
+        // The Vector belongs with the sources it mixes, so it is a page of the same row.
+        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE", "VECTOR" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" }, { "Vector" } } },
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
@@ -152,7 +153,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         recallButton_->onClick = [this] { proc_.setSessionRecall(recallButton_->getToggleState()); };
         addAndMakeVisible(*recallButton_);
     }
-    outputView_ = std::make_unique<OutputView>(proc_);
+    outputView_ = std::make_unique<LoudnessView>(proc_);
     addAndMakeVisible(*outputView_);
     tooltips_ = std::make_unique<juce::TooltipWindow>(nullptr, 600);
     setWantsKeyboardFocus(true);
@@ -216,6 +217,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     stageView_ = std::make_unique<StageView>(proc_);
     cosmosView_ = std::make_unique<CosmosView>(proc_);
     envView_ = std::make_unique<EnvView>(proc_);
+    vectorView_ = std::make_unique<VectorView>(proc_);
     spectrumView_ = std::make_unique<SpectrumView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
@@ -224,10 +226,11 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(brainView3_.get()),
                                 static_cast<juce::Component*>(stageView_.get()), static_cast<juce::Component*>(cosmosView_.get()),
                                 static_cast<juce::Component*>(envView_.get()),
-                                static_cast<juce::Component*>(spectrumView_.get()) })
+                                static_cast<juce::Component*>(spectrumView_.get()),
+                                static_cast<juce::Component*>(vectorView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr };
+        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr, vectorView_.get() };
         tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get(), nullptr };
     }
     if (groups_.size() > 4) {
@@ -1197,7 +1200,7 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
     struct Spec { std::vector<juce::String> sections; int liveKind; };   // liveKind: 0 none, 1 source, 2 filter, 3 stage, 4 cosmos, 5 brain, 6 env
     static const Spec kSpecs[] = {
         { {}, 0 },                                          // overview: the diagram
-        { { "Source 1", "Strands", "Source 3" }, 1 },       // sources
+        { { "Source 1", "Strands", "Source 3", "Vector" }, 1 },   // sources
         { { "Filter", "Z-Plane" }, 2 },                     // filters
         { { "Space", "Foundation", "Air" }, 3 },            // space
         { { "Delay", "Far Reverb", "Feedback" }, 0 },       // effects

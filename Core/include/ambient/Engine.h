@@ -18,6 +18,7 @@
 #include "Clock.h"
 #include "ClusterBrain.h"
 #include "Presets.h"
+#include "Loudness.h"
 #include <atomic>
 #include <vector>
 #include <cstdint>
@@ -163,6 +164,10 @@ public:
     const Lfo& lfo(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)]; }
     // Each modulation envelope has its own clock, because Sustain Loop stops one of them where
     // the others keep running. Index-safe like the rest of these display accessors.
+    // Loudness of what is leaving the instrument, to BS.1770. Any thread; the numbers are
+    // written once a block and read as a snapshot.
+    LoudnessReading loudness() const { return loudness_.read(); }
+    void resetLoudness() { loudness_.reset(); }
     float envTime(int i = 0) const { return static_cast<float>(envTime_[i < 0 ? 0 : (i >= kNumModEnvs ? kNumModEnvs - 1 : i)]); }
     // How much the matrix is currently adding to a parameter, in that parameter's own units.
     float modAmount(ParamId id) const { return modOut_[static_cast<int>(id)]; }
@@ -278,6 +283,14 @@ private:
     int          routeSeen_ = 0;
     bool         routeWasActive_ = false;
     float        roomLevel_ = 0.0f, roomLevelCur_ = 0.0f, roomHighcut_ = 5000.0f;
+    float        roomLowcut_ = 20.0f;
+    float        roomHpL1_ = 0.0f, roomHpR1_ = 0.0f, roomHpL2_ = 0.0f, roomHpR2_ = 0.0f;
+    // Subsonic: two cascaded one-pole high-passes on the finished output, 24 dB/oct with the
+    // master DC blocker in front of them. Zero hertz means the whole thing is skipped.
+    LoudnessMeter loudness_;
+    float        subsonicHz_ = 0.0f;
+    float        subL1_ = 0.0f, subR1_ = 0.0f, subL2_ = 0.0f, subR2_ = 0.0f;
+    float        subL3_ = 0.0f, subR3_ = 0.0f, subL4_ = 0.0f, subR4_ = 0.0f;
     int          roomSource_ = 0, roomPreDelay_ = 0;
     long         roomTailLeft_ = 0;
     std::vector<float> roomInL_, roomInR_, roomOutL_, roomOutR_, roomDelayL_, roomDelayR_;
@@ -298,6 +311,7 @@ private:
     Rng           auxRng_;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;
+    Drifter       vecDriftX_, vecDriftY_;   // the Vector's point wandering on its own
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;
     float         cosmosShimmer_ = 0.0f, shimmerLpL_ = 0.0f, shimmerLpR_ = 0.0f, shimmerEnv_ = 0.0f;
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;

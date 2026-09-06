@@ -51,7 +51,7 @@ The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 ## Installing (what other people get)
 
 ```powershell
-powershell -File Deployuild_release.ps1
+powershell -File Deploy\build_release.ps1
 ```
 
 Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<version>-Setup.exe`**

@@ -561,9 +561,9 @@ void Engine::renderChunk(float* L, float* R, int n)
         const float yr = R[i] - dcXR_ + dcR * dcYR_; dcXR_ = R[i]; dcYR_ = yr;
         L[i] = softClip(yl * g);
         R[i] = softClip(yr * g);
-        outTap_[(outTapW_ + i) & 4095] = 0.5f * (L[i] + R[i]);
+        outTap_[(outTapW_ + i) & (kOutTapLen - 1)] = 0.5f * (L[i] + R[i]);
     }
-    outTapW_ = (outTapW_ + n) & 4095;
+    outTapW_ = (outTapW_ + n) & (kOutTapLen - 1);
 }
 
 } // namespace ambient

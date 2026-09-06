@@ -37,7 +37,14 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
         { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1 },
+        // Stretchy as well, and for the same reason from the other side: in Compact the left
+        // column is the taller one, and then it is the note roll that grows into the gap.
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1, {}, 0, true },
+        // Last in the left column, and the only group with no controls in it: the right column is
+        // taller than the left, and the difference used to be an empty rectangle the width of the
+        // page. It now holds the output's spectrum, and because the row stretches, the hole cannot
+        // come back when a tab changes the height of a row above it.
+        { "ANALYSIS",   kVoice,     { {} }, {}, 0, {}, 96, true },
     };
     tabRows_ = {
         { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" } } },
@@ -209,13 +216,15 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     stageView_ = std::make_unique<StageView>(proc_);
     cosmosView_ = std::make_unique<CosmosView>(proc_);
     envView_ = std::make_unique<EnvView>(proc_);
+    spectrumView_ = std::make_unique<SpectrumView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
                                 static_cast<juce::Component*>(source1View_.get()), static_cast<juce::Component*>(brainView_.get()),
                                 static_cast<juce::Component*>(brainView2_.get()),
                                 static_cast<juce::Component*>(brainView3_.get()),
                                 static_cast<juce::Component*>(stageView_.get()), static_cast<juce::Component*>(cosmosView_.get()),
-                                static_cast<juce::Component*>(envView_.get()) })
+                                static_cast<juce::Component*>(envView_.get()),
+                                static_cast<juce::Component*>(spectrumView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
         tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr };
@@ -225,6 +234,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
         groups_[4].displays = { cosmosView_.get() };                    // COSMOS
     }
+    if (groups_.size() > 6) groups_[6].displays = { spectrumView_.get() };   // ANALYSIS: the strip
     if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
@@ -712,6 +722,11 @@ void AmbientSynthEditor::layoutBody()
     colX[0] = kPad;
     for (size_t ci = 1; ci < colX.size(); ++ci) colX[ci] = colX[ci - 1] + colWidth[ci - 1] + kPad;
     const juce::Font tabFont = ui::title(10.5f);
+    // The stretchy row of each column, filled in as it is placed and grown at the end of the pass.
+    // One per column rather than one in total: which column comes out shorter depends on the tabs
+    // and on Compact, and the hole belongs to whichever one it is.
+    struct Stretch { juce::Component* disp = nullptr; Group* group = nullptr; };
+    std::vector<Stretch> stretch(static_cast<size_t>(nCols));
     for (size_t gi = 0; gi < groups_.size(); ++gi) {
         auto& g = groups_[gi];
         const size_t col = static_cast<size_t>(g.column);
@@ -740,7 +755,7 @@ void AmbientSynthEditor::layoutBody()
                 if (static_cast<size_t>(t->active) < t->displays.size()) disp = t->displays[static_cast<size_t>(t->active)];
                 y += kTabH;
             } else {
-                rowH = pageHeight(names);
+                rowH = std::max(pageHeight(names), g.minRowH);
                 if (ri < g.displays.size()) disp = g.displays[ri];
             }
             int x = x0 + kPad;
@@ -756,6 +771,7 @@ void AmbientSynthEditor::layoutBody()
                 const int right = x0 + colWidth[col] - kPad;
                 if (right - x >= 120 && rowH > 0) { disp->setBounds(x, y, right - x, rowH); disp->setVisible(true); }
                 else disp->setVisible(false);
+                if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
             }
             y += rowH + kPad;
         }
@@ -765,6 +781,16 @@ void AmbientSynthEditor::layoutBody()
     bodyW_ = colX.back() + colWidth.back() + kPad;
     bodyH_ = 0;
     for (int yy : colY) bodyH_ = std::max(bodyH_, yy);
+    // The stretch. A stretchy group is the last one in its column, so growing its row only reaches
+    // downwards and nothing else has to move: the columns end level, whatever the tabs are set to.
+    for (size_t ci = 0; ci < stretch.size(); ++ci) {
+        if (stretch[ci].disp == nullptr || stretch[ci].group == nullptr) continue;
+        const int deficit = bodyH_ - colY[ci];
+        if (deficit <= 0) continue;
+        stretch[ci].disp->setBounds(stretch[ci].disp->getBounds().withHeight(stretch[ci].disp->getHeight() + deficit));
+        stretch[ci].group->bounds = stretch[ci].group->bounds.withHeight(stretch[ci].group->bounds.getHeight() + deficit);
+        colY[ci] += deficit;
+    }
 }
 
 AmbientSynthEditor::TabRow* AmbientSynthEditor::tabRowFor(int group, int row)

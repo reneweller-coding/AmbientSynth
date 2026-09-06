@@ -24,6 +24,10 @@
 
 namespace ambient {
 
+// How much of the finished output the engine keeps for the displays to look at. A power of two:
+// the ring is indexed with a mask.
+constexpr int kOutTapLen = 16384;
+
 class Engine {
 public:
     static constexpr int kMaxVoices = 16;
@@ -299,7 +303,13 @@ private:
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
     float         cosTap_[4096] = {};   // ring of the cosmos return for the display (torn reads cost a pixel)
     int           cosTapW_ = 0;
-    float         outTap_[4096] = {};   // the same for the finished output
+    // The same for the finished output, but four times as long. A spectrum of a drone is only
+    // worth drawing if it can tell one partial from the next, and 4096 samples cannot: measured
+    // on a 40 Hz tone with its octave, the trough between the two peaks is 14 dB down at 4096 and
+    // 58 dB down at 16384 -- one hump against two lines. A low just fifth (60 and 90 Hz) behaves
+    // the same way. The signal is stationary for seconds at a time, so the long window costs
+    // nothing but 64 kB.
+    float         outTap_[kOutTapLen] = {};
     int           outTapW_ = 0;
     // Feedback loop: the previous chunk's output mix, low-passed, saturated and throttled,
     // kept in a ring so any chunk length reads back exactly the samples just written.

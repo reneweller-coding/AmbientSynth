@@ -250,6 +250,18 @@ quality than it was played. `Tools/preset_check.py` is the automatic sound
 test: every preset rendered and flagged for level, clipping, clicks, DC or
 silence.
 
+**Output spectrum.** Along the bottom of the left column, as wide as the page:
+what is actually coming out, with the filter's own response laid over it on the
+same decibel scale. The window is 16384 samples — 2.9 Hz at 48 kHz — which is
+what it takes to show a low drone's partials as separate lines instead of one
+hump (measured: the trough between a 40 Hz tone and its octave is 14 dB down at
+4096 samples and 58 dB down at 16384). So a fifth sitting exactly on the third
+partial is visible, and so is it coming apart as *Purity Drift* loosens the
+tuning. The bars are the moment, the faint line above them is the loudest each
+band has been in the last few seconds, the ticks along the bottom are the
+fundamentals of the notes sounding now; point at it to read a frequency, its
+nearest note and that band's level.
+
 **Are the presets any good?** `preset_check.py` asks whether a preset is
 broken. `Tools/rate_presets.py` asks the harder question, in four ways that
 can be measured instead of argued about: ALIVE (do the descriptors move

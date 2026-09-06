@@ -137,6 +137,11 @@ private:
         juce::Rectangle<int> bounds;
         int column = 0;
         std::vector<juce::Component*> displays;        // per row: a display that fills the leftover width, or null
+        // A row with no sections in it gets its height from here instead of from them; and if the
+        // group is marked stretchy, that row also takes whatever height the taller column has
+        // left over, so the two columns end level and the page has no hole in it at any size.
+        int  minRowH = 0;
+        bool stretch = false;
     };
 
     // A row of a group whose sections take turns: one page open, the others a tab away. This is
@@ -460,6 +465,31 @@ private:
         float peakDb = -90.0f;
     };
     std::unique_ptr<OutputView> outputView_;
+    // The wide strip along the bottom of the left column: the same signal as the header's little
+    // meter, but with room to say something. A 16384-sample window is 2.9 Hz wide at 48 kHz, so
+    // the partials of a low drone are separate lines rather than a hump, and the filter's own
+    // response is drawn over them -- what the filter is doing to what is actually there.
+    struct SpectrumView : juce::Component, juce::Timer {
+        explicit SpectrumView(AmbientSynthProcessor& p);
+        void paint(juce::Graphics&) override;
+        void timerCallback() override;
+        void mouseMove(const juce::MouseEvent&) override;
+        void mouseExit(const juce::MouseEvent&) override;
+        AmbientSynthProcessor& proc;
+        static constexpr int kN = ambient::kOutTapLen;   // FFT length: the whole tap
+        static constexpr int kBands = 480;               // one band per two or three pixels
+        static constexpr float kLoHz = 20.0f, kHiHz = 16000.0f;
+        // The axis runs a little above zero so the filter, drawn on the same decibels, has
+        // somewhere to put a resonance: a flat response is the 0 dB line, not the ceiling.
+        static constexpr float kFloorDb = -84.0f, kTopDb = 6.0f;
+        static constexpr int kLabelGutter = 26;   // room at the left for the decibel numbers
+        std::vector<float> re, im, window;
+        std::unique_ptr<ambient::Fft> fft;
+        std::vector<float> band, hold;                   // live bands, and a slowly falling trace
+        float peakDb = -96.0f;
+        int   hoverX = -1;                               // read the frequency under the pointer
+    };
+    std::unique_ptr<SpectrumView> spectrumView_;
     // The amplitude envelope as a curve, with the loudest voice's level on it.
     struct EnvView : juce::Component, juce::Timer {
         explicit EnvView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }

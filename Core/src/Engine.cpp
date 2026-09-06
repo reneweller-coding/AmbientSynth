@@ -375,9 +375,9 @@ int Engine::cosmosTap(float* out, int n) const
 
 int Engine::outputTap(float* out, int n) const
 {
-    n = clampv(n, 0, 4096);
+    n = clampv(n, 0, kOutTapLen);
     const int w = outTapW_;
-    for (int i = 0; i < n; ++i) out[i] = outTap_[(w - n + i) & 4095];
+    for (int i = 0; i < n; ++i) out[i] = outTap_[(w - n + i) & (kOutTapLen - 1)];
     return n;
 }
 

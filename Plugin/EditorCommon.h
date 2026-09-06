@@ -37,6 +37,90 @@ inline float rawParam(AmbientSynthProcessor& proc, const char* key)
     return v != nullptr ? v->load() : 0.0f;
 }
 
+// The filter's response, captured once and then asked at any frequency. Two displays draw it --
+// the response curve in the Filter row, and the spectrum strip underneath the panel, where it is
+// laid over what is actually coming out. A second copy of this arithmetic would be a second copy
+// to keep in step with the voice, so there is one.
+struct FilterCurve {
+    void capture(AmbientSynthProcessor& proc, float sampleRate)
+    {
+        sr = sampleRate;
+        cutoff = rawParam(proc, "cutoff");
+        res    = rawParam(proc, "resonance");
+        model  = juce::jlimit(0, ambient::kNumFilterModels - 1, static_cast<int>(std::lround(rawParam(proc, "filter_model"))));
+        zMode  = static_cast<int>(std::lround(rawParam(proc, "z_mode")));
+        zShape = juce::jlimit(0, ambient::kZShapes - 1, static_cast<int>(std::lround(rawParam(proc, "z_shape"))));
+        zMix   = rawParam(proc, "z_mix");
+        fOn    = rawParam(proc, "filter_on") >= 0.5f && zMode != 2;
+        zOn    = zMode != 0;
+        parallel = std::lround(rawParam(proc, "z_route")) == 1;
+        isModal  = zMode == 3;
+        zUsed = 0;
+        zNorm = 1.0f;
+        if (zOn) {
+            // The frame the engine would build at this point, read the same way it reads it: a
+            // cascade of biquads in Series and Replace, a parallel bank of resonators in Modal.
+            const ambient::ZFrame frame = ambient::zInterpolate(zShape, rawParam(proc, "z_x"),
+                                                                rawParam(proc, "z_y"), rawParam(proc, "z_z"));
+            if (isModal) {
+                modal.prepare(sr);
+                modal.set(frame, rawParam(proc, "z_decay"), rawParam(proc, "z_damp"));
+                zUsed = modal.used();
+            } else {
+                zNorm = ambient::zBuildCascade(frame, biquad, sr);
+                zUsed = frame.used;
+            }
+        }
+    }
+
+    // Linear magnitude at a frequency, the two branches combined as the voice combines them.
+    float magnitude(float hz) const
+    {
+        const float hs = fOn ? ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr) : 1.0f;
+        float hzm = 1.0f;
+        if (zUsed > 0) {
+            if (isModal) hzm = modal.magnitudeAt(hz);        // the modes add, they do not multiply
+            else {
+                hzm = zNorm;
+                const float w = juce::MathConstants<float>::twoPi * hz / sr;
+                for (int s = 0; s < zUsed; ++s) hzm *= biquad[s].magnitudeAt(w);
+            }
+        }
+        if (fOn && zOn) return parallel ? (1.0f - zMix) * hs + zMix * hzm : hs * ((1.0f - zMix) + zMix * hzm);
+        if (zOn) return (1.0f - zMix) + zMix * hzm;
+        return hs;
+    }
+
+    float branchFilter(float hz) const
+    {
+        return fOn ? ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr) : 1.0f;
+    }
+
+    float branchZ(float hz) const
+    {
+        if (zUsed <= 0) return 1.0f;
+        if (isModal) return modal.magnitudeAt(hz);
+        float m = zNorm;
+        const float w = juce::MathConstants<float>::twoPi * hz / sr;
+        for (int s = 0; s < zUsed; ++s) m *= biquad[s].magnitudeAt(w);
+        return m;
+    }
+
+    juce::String legend() const
+    {
+        juce::String s = fOn ? juce::String(ambient::kFilterModelNames[model]) + "   " + juce::String(cutoff, 0) + " Hz"
+                             : juce::String("filter off");
+        if (zOn) s += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (!fOn ? "  (alone)" : parallel ? "  (parallel)" : "  (series)");
+        return s;
+    }
+
+    ambient::ZBiquad biquad[ambient::kZSections];
+    ambient::ZModal  modal;
+    float sr = 48000.0f, cutoff = 1000.0f, res = 0.0f, zMix = 0.0f, zNorm = 1.0f;
+    int   model = 0, zMode = 0, zShape = 0, zUsed = 0;
+    bool  fOn = false, zOn = false, parallel = false, isModal = false;
+};
+
 inline void displayFrame(juce::Graphics& g, juce::Rectangle<int> r, const juce::String& title, juce::Colour c)
 {
     g.setColour(ui::bg0.withAlpha(0.55f));

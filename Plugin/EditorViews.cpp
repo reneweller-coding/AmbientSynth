@@ -5,6 +5,7 @@ using namespace ambient;
 // The displays that live inside the grid, each drawn from the numbers the engine is using.
 
 
+
 void AmbientSynthEditor::BrainView::timerCallback()
 {
     if (!isShowing()) return;
@@ -223,60 +224,27 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
     drawAxes(g, plot);
 
     const float sr = static_cast<float>(juce::jmax(8000.0, proc.getSampleRate() > 0 ? proc.getSampleRate() : 48000.0));
-    const float cutoff = rawParam(proc, "cutoff"), res = rawParam(proc, "resonance");
-    const int model = juce::jlimit(0, ambient::kNumFilterModels - 1, static_cast<int>(std::lround(rawParam(proc, "filter_model"))));
-    const int zMode = static_cast<int>(std::lround(rawParam(proc, "z_mode")));
-    const int zShape = juce::jlimit(0, ambient::kZShapes - 1, static_cast<int>(std::lround(rawParam(proc, "z_shape"))));
-    const float zMix = rawParam(proc, "z_mix");
-    const bool fOn = rawParam(proc, "filter_on") >= 0.5f && zMode != 2;
-    const bool zOn = zMode != 0;
-    const bool parallel = std::lround(rawParam(proc, "z_route")) == 1;
-
-    // The z-plane, from the frame the engine would build at this point -- and in the same form:
-    // a cascade of biquads in Series and Replace, a parallel bank of resonators in Modal. Drawing
-    // the cascade's response for a modal bank would be a picture of a different filter.
-    ambient::ZBiquad zb[ambient::kZSections];
-    ambient::ZModal zModal;
-    float zNorm = 1.0f; int zUsed = 0;
-    const bool zIsModal = zMode == 3;
-    if (zMode != 0) {
-        const ambient::ZFrame frame = ambient::zInterpolate(zShape, rawParam(proc, "z_x"),
-                                                            rawParam(proc, "z_y"), rawParam(proc, "z_z"));
-        if (zIsModal) {
-            zModal.prepare(sr);
-            zModal.set(frame, rawParam(proc, "z_decay"), rawParam(proc, "z_damp"));
-            zUsed = zModal.used();
-        } else {
-            zNorm = ambient::zBuildCascade(frame, zb, sr);
-            zUsed = frame.used;
-        }
-    }
+    FilterCurve fc;
+    fc.capture(proc, sr);
 
     juce::Path svf, zp, both;
     const int steps = juce::jmax(64, static_cast<int>(plot.getWidth()));
     for (int i = 0; i <= steps; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(steps);
         const float hz = 20.0f * std::pow(1000.0f, t);
-        const float w = juce::MathConstants<float>::twoPi * hz / sr;
-        // the chosen model's own response, from the same maths the voice uses
-        const float hs = fOn ? ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr) : 1.0f;
-        float hz_ = 1.0f;
-        if (zUsed > 0) {
-            if (zIsModal) hz_ = zModal.magnitudeAt(hz);          // the modes add, they do not multiply
-            else { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
-        }
-        // Magnitudes combine as the voice combines the signals; the parallel sum ignores the phase
-        // between the two branches, which is the one thing this picture cannot show.
-        float combined = hs;
-        if (fOn && zOn) combined = parallel ? (1.0f - zMix) * hs + zMix * hz_ : hs * ((1.0f - zMix) + zMix * hz_);
-        else if (zOn) combined = (1.0f - zMix) + zMix * hz_;
+        // Each branch on its own, and the two combined the way the voice combines the signals.
+        // The parallel sum ignores the phase between them, which is the one thing this picture
+        // cannot show.
+        const float hs = fc.branchFilter(hz);
+        const float hz_ = fc.branchZ(hz);
+        const float combined = fc.magnitude(hz);
         const float x = plot.getX() + t * plot.getWidth();
         auto db = [](float m) { return 20.0f * std::log10(juce::jmax(m, 1.0e-6f)); };
         if (i == 0) { svf.startNewSubPath(x, yForDb(plot, db(hs))); zp.startNewSubPath(x, yForDb(plot, db(hz_))); both.startNewSubPath(x, yForDb(plot, db(combined))); }
         else        { svf.lineTo(x, yForDb(plot, db(hs)));           zp.lineTo(x, yForDb(plot, db(hz_)));           both.lineTo(x, yForDb(plot, db(combined))); }
     }
-    if (fOn) { g.setColour(ui::voiceCol.withAlpha(0.55f)); g.strokePath(svf, juce::PathStrokeType(1.2f)); }
-    if (zUsed > 0)  { g.setColour(ui::accent.withAlpha(0.55f));   g.strokePath(zp,  juce::PathStrokeType(1.2f)); }
+    if (fc.fOn) { g.setColour(ui::voiceCol.withAlpha(0.55f)); g.strokePath(svf, juce::PathStrokeType(1.2f)); }
+    if (fc.zUsed > 0)  { g.setColour(ui::accent.withAlpha(0.55f));   g.strokePath(zp,  juce::PathStrokeType(1.2f)); }
     g.setColour(ui::text.withAlpha(0.25f));
     g.strokePath(both, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     g.setColour(ui::text);
@@ -284,9 +252,7 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
 
     g.setColour(ui::dim);
     g.setFont(ui::body(10.0f));
-    juce::String legend = fOn ? juce::String(ambient::kFilterModelNames[model]) + "   " + juce::String(cutoff, 0) + " Hz" : juce::String("filter off");
-    if (zOn) legend += "   z: " + juce::String(ambient::kZShapeNames[zShape]) + (!fOn ? "  (alone)" : parallel ? "  (parallel)" : "  (series)");
-    g.drawText(legend, r.reduced(9, 5), juce::Justification::topRight, false);
+    g.drawText(fc.legend(), r.reduced(9, 5), juce::Justification::topRight, false);
 }
 
 void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)

@@ -53,6 +53,20 @@ before pushing anything to a headset.
 python Tools/library/check_textures.py --repair
 ```
 
+The field recordings, for the Stretch and Texture types: five hundred places -- rain on twelve
+kinds of roof, caves, harbours in fog, power stations through a wall -- from Stable Audio Open,
+made seamless afterwards (the last 1.5 s faded into the first and the overlap trimmed, the
+seam measured, the file marked `_loop`, which is what the Stretch type reads to skip its own
+crossfade). Short on purpose: at forty times slower than life, 24 seconds is a quarter of an
+hour. They land in `Library/Textures` with the `field_recordings_` prefix the preset
+generator uses to find a style's own clips.
+
+```
+python Tools/library/make_field_recordings.py --jobs
+python Tools/library/make_field_recordings.py --run --max-minutes 180
+python Tools/library/make_field_recordings.py --finish
+```
+
 Then the packs, which reference the files by name:
 
 ```

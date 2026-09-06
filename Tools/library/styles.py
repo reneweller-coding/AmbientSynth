@@ -774,4 +774,32 @@ STYLES = [
       tables=["Odd breathing", "Tilt walk", "Glass thinning"],
       granular={"spread": (0.005, 0.09), "grains": 1.3},
       impulses=['tuned', 'room_cathedral', 'modal'], noise=['Pink', 'Brown', 'Grey']),
+
+    # ------------------------------------------------------------------ the field recordings
+    #
+    # Places rather than instruments: the five hundred seamless clips from
+    # make_field_recordings.py, read by the Stretch type as weather that never repeats, with the
+    # additive bank underneath as the tonal centre a field recording does not have. Up to four
+    # sources, so a preset can be four landscapes in the Vector's four corners.
+    S("Field Recordings", "Chris Watson",
+      {"scale": ["JI 7-limit", "JI Minor", "Slendro (JI)", "12-TET"],
+       "brain_density": ("int", 2, 5), "brain_rate": ("log", 30.0, 120.0),
+       "brain_hold_min": ("log", 60.0, 200.0), "brain_hold_max": ("log", 200.0, 600.0),
+       "attack": ("log", 12.0, 45.0), "release": ("log", 25.0, 90.0),
+       "osc_level": (0.2, 0.5), "partials": ("int", 4, 12), "tilt": (1.4, 2.4),
+       "brightness": (0.25, 0.55), "cutoff": ("log", 400.0, 3000.0),
+       "depth": (0.6, 0.95), "far_decay": ("log", 15.0, 60.0), "far_lowcut": ("log", 120.0, 400.0),
+       # Quieter sources than the other styles (a stretched recording has no attack to carry it),
+       # so the gain sits higher; measure_packs trims the rest to the common window.
+       "air": (0.0, 0.08), "sub_level": (0.1, 0.35), "master_gain": (-8.0, -3.0)},
+      {"stretch": 1.0, "src2": 0.95, "src3": 0.7, "src4": 0.45, "texture": 0.0, "usertable": 0.05,
+       "zplane": 0.3, "sub": 0.5, "cosmos": 0.15, "room": 0.5, "cloud": 0.1, "coherence": 0.1},
+      words=(["Rain", "Harbour", "Cave", "Moor", "Ice", "Distant", "Night", "Wind", "Forest", "Roof", "Shore", "Fog"],
+             COMMON_SECOND + ["Weather", "Country", "Hour", "Field"]),
+      prompts=["steady rain on a tin roof, far thunder",
+               "a harbour in fog at night",
+               "wind over a high moor"],
+      tables=["Tilt walk", "Odd breathing"],
+      granular={"spread": (0.02, 0.2), "grains": 1.0},
+      impulses=['room_cathedral', 'room_hall', 'room_chamber'], noise=['Pink', 'Brown', 'Grey']),
 ]

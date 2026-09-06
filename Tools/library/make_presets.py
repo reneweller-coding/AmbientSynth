@@ -357,6 +357,10 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
     mod = apply_shade(p, style["modules"], shade)
     on = lambda k: rng.random() < mod.get(k, 0.0)
     texture_file = wavetable_file = ""
+    # One clip per slot where the slots differ (the Stretch type draws its own per slot); the
+    # pack's texture field then carries them ';'-separated, one per slot, empty for a slot
+    # without one. A preset whose slots share one clip keeps the single-path form.
+    slot_textures = {}
 
     # Foundation ------------------------------------------------------------------------
     if not on("sub"):
@@ -386,7 +390,12 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         pre = f"src{n}_"
         want_tex = on("texture") and textures
         want_tab = on("usertable") and wavetables
-        if want_tex and (not want_tab or rng.random() < 0.5):
+        # Stretch: the style's clips read as a continuum. A style asks for it with a "stretch"
+        # module weight; the field-recording style asks for it in every slot it fills.
+        want_stretch = on("stretch") and textures
+        if want_stretch:
+            kind = "Stretch"
+        elif want_tex and (not want_tab or rng.random() < 0.5):
             kind = "Texture"
         elif want_tab:
             kind = "Wavetable"
@@ -433,6 +442,27 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
             p[pre + "shimmer"] = u(rng, 0.2, 0.6)
             p[pre + "shimmer_rate"] = logu(rng, 0.03, 0.4)
             p[pre + "drift"] = logu(rng, 1.0, 8.0)
+        elif kind == "Stretch":
+            # The clip as a continuum. The window (Grain) sits where Paulstretch is smooth, the
+            # factor is log-spread from "slowed" to "geological", and each Stretch slot draws its
+            # own clip so four slots are four places. Free unless the clip carries a pitch, and
+            # even then mostly Free: a field recording pitched to the note is a choice, not a rule.
+            p[pre + "grain"] = logu(rng, 150.0, 340.0)
+            p[pre + "stretch"] = logu(rng, 6.0, 300.0)
+            p[pre + "xfade"] = u(rng, 0.05, 0.25)
+            p[pre + "pos"] = u(rng, 0.0, 1.0)
+            p[pre + "pos_drift"] = u(rng, 0.1, 0.6)
+            # Higher than a Texture slot: a stretched recording has no attacks to carry it, and at
+            # the Texture slot's range a four-slot field preset measured -47 dBFS.
+            p[pre + "level"] = u(rng, 0.3, 0.7)
+            if rng.random() < 0.5:
+                p[pre + "drift"] = logu(rng, 0.5, 4.0)
+            own = textures[rng.randrange(len(textures))]
+            slot_textures[n] = own
+            if not texture_file:
+                texture_file = own
+            pitched = bool(PITCHED.search(own))
+            p[pre + "follow"] = "Note" if (pitched and rng.random() < 0.35) else "Free"
         else:                                            # Texture
             grain_ms = logu(rng, 60.0, 800.0)
             density = logu(rng, 3.0, 40.0)
@@ -451,6 +481,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
             p[pre + "level"] = u(rng, 0.12, 0.42)
             if not texture_file and textures:
                 texture_file = textures[rng.randrange(len(textures))]
+            slot_textures[n] = texture_file
             # Only a clip with a detected pitch (TextureGen puts the note in the name) can be
             # transposed to the played note; the rest are played free, as a bed.
             pitched = bool(texture_file) and bool(PITCHED.search(texture_file))
@@ -460,6 +491,8 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         fill_slot(2)
     if on("src3"):
         fill_slot(3)
+    if on("src4"):
+        fill_slot(4)
     apply_shade_granular(p, shade)
 
     # Z-plane morphing filter -------------------------------------------------------------
@@ -610,6 +643,8 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
     if "brain_hold_min" in p and "brain_hold_max" in p and p["brain_hold_max"] < p["brain_hold_min"] * 1.5:
         p["brain_hold_max"] = p["brain_hold_min"] * 2.0
     matrix, envs = modulation_for(p, style, rng, shade[0])
+    if len(set(slot_textures.values())) > 1:
+        texture_file = ";".join(slot_textures.get(k, "") for k in range(1, 5))
     return p, texture_file, wavetable_file, impulse_file, matrix, envs
 
 
@@ -859,7 +894,9 @@ def main():
                                                         SHADES[k % len(SHADES)])
             rows.append({"name": name_for(st, rng, used_names), "params": p, "shade": SHADES[k % len(SHADES)][0],
                          "settings": settings_string(p),
-                         "texture": f"../Textures/{tex}" if tex else "",
+                         # one path, or up to four ';'-separated (one per slot): each non-empty
+                         # part gets the folder, an empty part stays empty and means "no clip"
+                         "texture": ";".join(f"../Textures/{part}" if part else "" for part in tex.split(";")) if tex else "",
                          "wavetable": f"../Wavetables/{tab}" if tab else "",
                          "impulse": f"../Impulses/{imp}" if imp else "",
                          "mod": matrix, "envs": envs,

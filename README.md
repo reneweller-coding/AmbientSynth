@@ -29,6 +29,7 @@ Licence: AGPL-3.0 (see `LICENSE`).
 | `Tests/` | `ambient_selftest`: tuning, envelope, engine, brain, delay, mid/side, presets, space, determinism. | Core |
 | `Quest/` | Native Meta Quest app: OpenXR + hand tracking → gesture layer → engine, Oboe audio, GLES scene, OSC bridge; Gradle-free APK build. Compiles and packages, not yet run on a headset. | NDK, OpenXR loader, Oboe (fetched by script) |
 | `Deploy/` | The installer: `build_release.ps1` (a self-contained build, staged, checked and zipped) and `AmbientSynth.iss` for Inno Setup. | Inno Setup 6+ |
+| `Tools/make_manual.py` | Turns the in-app help into `docs/manual/AmbientSynth-Manual.pdf`: the app writes its own pictures, this makes the book. | Edge or Chrome |
 | `docs/concept.md` | Sound-design and architecture notes, roadmap to the Quest. | |
 
 ## Build (Windows, Visual Studio 2026)
@@ -120,6 +121,25 @@ The three section banks sit in the sections they belong to, beside the
 controls they move. Loading a *sound* preset clears the three names: a sound
 preset brings its own filter and its own pluck with it, and a box still
 naming the filter that has just been overwritten would be a lie.
+
+**The manual.** *Help* (or F1) opens it inside the instrument, with pictures of
+each section taken from the panel itself. The same thing exists as a **PDF** of
+about fifty pages: the installer puts it next to the executable, and it is
+attached to the release, so it can be read before installing anything. It is
+generated rather than kept in the repository (it is a megabyte and a half that
+changes with every build):
+
+```powershell
+$env:AMBIENT_PRESET = "Three Voices, One Key"   # a patch with everything in use
+$env:AMBIENT_MANUAL = "docs\manual"             # the app plays a chord, waits, exports, quits
+build\Plugin\AmbientSynth_artefacts\Release\Standalone\AmbientSynth.exe
+python Tools\make_manual.py                     # -> AmbientSynth-Manual.html and .pdf
+```
+
+`Deploy\build_release.ps1` does all of that on its own. The manual is not
+written twice: the text is the help text, and the pictures are snapshots the
+running instrument takes of its own panel, which is why they cannot drift out
+of date the way a drawing would.
 
 In a DAW the full presets are the plugin's programs (every layer at once).
 Each of the three section banks is generated and then measured: every one is

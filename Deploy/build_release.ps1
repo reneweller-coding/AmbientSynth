@@ -16,8 +16,10 @@
 param(
     [string]$Version = "",
     [switch]$SkipBuild,       # reuse whatever is in build-release already
-    [switch]$NoSetup          # stage and zip, but do not call the Inno compiler
+    [switch]$NoSetup,         # stage and zip, but do not call the Inno compiler
+    [switch]$SkipManual       # reuse the manual already in docs/manual
 )
+$python = "Tools\TextureGen\.venv\Scripts\python.exe"
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
@@ -71,12 +73,35 @@ if ($dumpbin) {
     Write-Warning "dumpbin not found -- the runtime check was skipped"
 }
 
+# ---------------------------------------------------------------- the manual
+# Made from a running instrument: its pictures are snapshots of the real panel, so they cannot go
+# out of date the way a drawing would. AMBIENT_PRESET picks a patch with all three sources and the
+# effects in use, or the Sources chapter would be illustrated with a greyed-out section.
+$manualDir = Join-Path $root "docs\manual"
+if (-not $SkipManual) {
+    # Patiently: a browser that has just finished printing can still hold the PDF for a moment,
+    # and losing a whole release build to that would be silly.
+    for ($i = 0; $i -lt 10 -and (Test-Path $manualDir); $i++) {
+        Remove-Item $manualDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $manualDir) { Start-Sleep -Milliseconds 700 }
+    }
+    if (Test-Path $manualDir) { throw "cannot clear $manualDir -- something still has a file open" }
+    $env:AMBIENT_PRESET = "Three Voices, One Key"
+    $env:AMBIENT_MANUAL = $manualDir
+    $mp = Start-Process $exe -PassThru
+    if (-not $mp.WaitForExit(90000)) { $mp.Kill() ; throw "the manual export did not finish" }
+    Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET
+    & $python (Join-Path $root "Tools\make_manual.py")
+}
+$manualPdf = Join-Path $manualDir "AmbientSynth-Manual.pdf"
+
 # ---------------------------------------------------------------- stage
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage, $out | Out-Null
 Copy-Item $exe $stage
 Copy-Item $vst (Join-Path $stage "AmbientSynth.vst3") -Recurse
 Copy-Item (Join-Path $root "docs\logo.ico") $stage
+if (Test-Path $manualPdf) { Copy-Item $manualPdf $stage } else { Write-Warning "no manual PDF to ship" }
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")
 New-Item -ItemType Directory -Force -Path (Join-Path $stage "Packs") | Out-Null
 Copy-Item (Join-Path $root "Library\Packs\*.ambientpack") (Join-Path $stage "Packs")
@@ -95,6 +120,7 @@ WHAT IS HERE
   AmbientSynth.exe        the standalone instrument. Nothing else needs to be installed.
   AmbientSynth.vst3       the plug-in. Copy the whole folder to
                           C:\Program Files\Common Files\VST3\ and rescan in your DAW.
+  AmbientSynth-Manual.pdf the manual, the same one the Help page shows.
   Packs\                  $packCount preset packs. Copy them to
                           C:\ProgramData\AmbientSynth\Packs (for everyone on the machine) or
                           Documents\AmbientSynth\Packs (just for you). The instrument reads both.

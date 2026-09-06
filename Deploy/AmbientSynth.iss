@@ -107,6 +107,8 @@ Name: "desktopicon"; Description: "{cm:TaskDesktop}"; GroupDescription: "{cm:Add
 Source: "{#Stage}\AmbientSynth.exe"; DestDir: "{app}"; Components: standalone; Flags: ignoreversion
 Source: "{#Stage}\LICENSE.txt";      DestDir: "{app}"; Components: standalone; Flags: ignoreversion
 Source: "{#Stage}\README.txt";       DestDir: "{app}"; Components: standalone; Flags: ignoreversion isreadme
+; The manual, so it is on the machine rather than only on a web page somewhere.
+Source: "{#Stage}\AmbientSynth-Manual.pdf"; DestDir: "{app}"; Components: standalone;     Flags: ignoreversion skipifsourcedoesntexist
 ; The VST3 is a bundle: a folder that the host reads as one plug-in.
 Source: "{#Stage}\AmbientSynth.vst3\*"; DestDir: "{autocf}\VST3\AmbientSynth.vst3"; \
     Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -126,6 +128,7 @@ Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{code:LibDir}\Packs"; \
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\AmbientSynth.exe"; Components: standalone
+Name: "{group}\Manual"; Filename: "{app}\AmbientSynth-Manual.pdf"; Components: standalone;     Check: FileExists(ExpandConstant('{app}\AmbientSynth-Manual.pdf'))
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\AmbientSynth.exe"; Tasks: desktopicon
 

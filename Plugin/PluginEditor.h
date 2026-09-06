@@ -103,6 +103,10 @@ private:
     juce::Image snapshotSection(const juce::String& name);
     juce::Image snapshotStrip();
     juce::Image snapshotBrowse();
+    // Writes the manual out as pictures and text for Tools/make_manual.py to turn into a PDF.
+    // It has to happen here, in a running editor, because the pictures ARE the panel: snapshots
+    // of the real sections with their real values, not drawings kept somewhere in step with it.
+    void exportManual(const juce::File& dir);
     std::unique_ptr<HelpView> help_;
     std::unique_ptr<juce::TextButton> helpButton_;
     std::unique_ptr<juce::TooltipWindow> tooltips_;

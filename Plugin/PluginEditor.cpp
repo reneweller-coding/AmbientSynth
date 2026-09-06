@@ -271,6 +271,19 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
             if (r >= 0 && r < static_cast<int>(tabRows_.size()) && pg >= 0 && pg < static_cast<int>(tabRows_[static_cast<size_t>(r)].names.size()))
                 tabRows_[static_cast<size_t>(r)].active = pg;
         }
+        // AMBIENT_MANUAL=<folder>: write the manual out and quit. A chord is played first and
+        // then twelve seconds pass, because the pictures are of the running instrument and its
+        // displays -- the spectrum, the stage, the note roll -- have nothing in them until it is
+        // actually sounding. Waiting alone was not enough: with a slow conductor the first draft
+        // illustrated the Sources chapter with a display that said "nothing sounding".
+        const juce::String man = juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL", "");
+        if (man.isNotEmpty()) {
+            for (int n : { 45, 52, 57, 64, 69 }) proc_.engine().noteOn(n, 0.7f);
+            juce::Timer::callAfterDelay(12000, [this, man] {
+                exportManual(juce::File(man));
+                juce::JUCEApplicationBase::quit();
+            });
+        }
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
         for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
         rebuildLayout();
@@ -1069,6 +1082,76 @@ void AmbientSynthEditor::HelpView::resized()
         col.removeFromTop(10);
     }
     if (live) live->setBounds(col.removeFromTop(juce::jmin(260, col.getHeight())));
+}
+
+// ---------------------------------------------------------------- the manual, as files
+//
+// The help page is the manual, and its pictures are snapshots of the panel itself -- the real
+// sections with their real values, taken as the page is opened. That is what makes them right
+// and what makes them impossible to produce from a script: they only exist while an editor is
+// running. So the export runs in one, writes every topic's pictures and text into a folder, and
+// Tools/make_manual.py turns that folder into an HTML manual and a PDF.
+void AmbientSynthEditor::exportManual(const juce::File& dir)
+{
+    dir.createDirectory();
+    if (help_ == nullptr) return;
+    setPage(3);                                   // the help page, so its views are laid out
+    help_->setBounds(0, kHeaderH, designW_, designH_ - kHeaderH);
+
+    juce::String json = "{\n  \"topics\": [\n";
+    const int last = ambient::numHelpTopics();    // the generated "All parameters" topic comes after
+    for (int row = 0; row <= last; ++row) {
+        help_->topics.selectRow(row);
+        help_->showTopic(row);
+        help_->resized();
+        juce::StringArray files;
+        // The section pictures, straight out of the panel.
+        for (size_t i = 0; i < help_->pics.size(); ++i) {
+            const juce::File f = dir.getChildFile("topic-" + juce::String(row).paddedLeft('0', 2) + "-" + juce::String(static_cast<int>(i)) + ".png");
+            juce::PNGImageFormat png;
+            std::unique_ptr<juce::FileOutputStream> out(f.createOutputStream());
+            if (out != nullptr && png.writeImageToStream(help_->pics[i], *out)) files.add(f.getFileName());
+        }
+        // The live display of the unit, and on the first topic the signal flow.
+        // Built by concatenation, not by formatted(): JUCE's formatted is wide-character, so a
+        // %s handed a const char* writes the bytes as UTF-16 and the file comes out called
+        // "topic-00-汦睧.png". It did, once.
+        auto shot = [&](juce::Component& c, const juce::String& suffix) {
+            if (c.getWidth() <= 0 || c.getHeight() <= 0) return;
+            const juce::Image img = c.createComponentSnapshot(c.getLocalBounds(), true, 2.0f);
+            const juce::File f = dir.getChildFile("topic-" + juce::String(row).paddedLeft('0', 2) + "-" + suffix + ".png");
+            juce::PNGImageFormat png;
+            std::unique_ptr<juce::FileOutputStream> out(f.createOutputStream());
+            if (out != nullptr && png.writeImageToStream(img, *out)) files.add(f.getFileName());
+        };
+        if (row == 0) shot(help_->flow, "flow");
+        if (help_->live != nullptr) shot(*help_->live, "live");
+
+        const juce::String title = row < last ? juce::String(ambient::helpTopicTitle(row)) : "All parameters";
+        const juce::String body  = row < last ? juce::String(juce::CharPointer_UTF8(ambient::helpTopicText(row)))
+                                              : help_->parameters;
+        json << "    { \"title\": " << juce::JSON::toString(juce::var(title))
+             << ", \"text\": " << juce::JSON::toString(juce::var(body))
+             << ", \"images\": [";
+        for (int i = 0; i < files.size(); ++i)
+            json << (i ? ", " : "") << juce::JSON::toString(juce::var(files[i]));
+        json << "] }" << (row < last ? ",\n" : "\n");
+    }
+    json << "  ],\n  \"version\": " << juce::JSON::toString(juce::var(juce::String(JucePlugin_VersionString)))
+         << ",\n  \"shapes\": " << ambient::kZShapes
+         << ",\n  \"presets\": " << numPresets()
+         << ",\n  \"cosmos\": " << numCosmosPresets()
+         << ",\n  \"zpresets\": " << numZPresets()
+         << ",\n  \"strike\": " << numStrikePresets() << "\n}\n";
+    dir.getChildFile("manual.json").replaceWithText(json);
+
+    // One picture of the whole panel, for the cover: the instrument as it actually looks.
+    setPage(0);
+    resized();
+    const juce::Image full = createComponentSnapshot(getLocalBounds(), true, 1.0f);
+    juce::PNGImageFormat png;
+    std::unique_ptr<juce::FileOutputStream> out(dir.getChildFile("panel.png").createOutputStream());
+    if (out != nullptr) png.writeImageToStream(full, *out);
 }
 
 void AmbientSynthEditor::HelpView::showTopic(int row)

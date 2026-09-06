@@ -916,6 +916,40 @@ on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
 changes the render between 90 and 180 bpm; every preset (all Free) is
 unchanged.
 
+### The manual
+
+The help page inside the instrument is the manual, and it exists as a PDF as
+well, so that somebody can read it before installing anything. It is not
+written twice. `AMBIENT_MANUAL=<folder>` makes the standalone export its own
+help -- every topic's text, and its pictures -- and `Tools/make_manual.py`
+turns that folder into an HTML book and prints it.
+
+The pictures are the point. They are snapshots of the panel itself, taken from
+a running instrument as each help topic is opened: the real sections with their
+real values, and the live displays with something actually in them. A drawing
+of a section goes stale the day the section changes and nobody notices for a
+year; these cannot, because they are made again every time the manual is.
+
+Three things had to be learned to make that work, and all three are the kind
+that produce a plausible-looking wrong answer rather than an error:
+
+* The export waits five seconds before taking its pictures. The displays of a
+  running instrument -- its spectrum, its stage, its note roll -- are empty
+  until it has been playing for a while, and a manual illustrated with empty
+  boxes is worse than one with no pictures at all.
+* It runs with a preset in which all three sources and the effects are in use.
+  The pictures are of the panel as it stands, so the first draft illustrated
+  its Sources chapter with a section greyed out because Source 3 was off.
+* `juce::String::formatted` is wide-character, so `%s` handed a `const char*`
+  writes the bytes as UTF-16. The first run produced a file called
+  `topic-00-汦睧.png`.
+
+And a fourth, in the printing: Edge's old `--headless` flag exits with status
+zero and writes nothing at all on version 152. `--headless=new` prints in a
+second. The tool tries the new flag first and falls back, so an older browser
+still works, and if there is no browser at all the HTML is still written --
+the manual is not held hostage by one.
+
 ### The three section layers
 
 A layer is a preset bank that touches one section and nothing else, so it

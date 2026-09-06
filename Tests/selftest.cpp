@@ -303,7 +303,7 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(builtinPresetCount() == 191, "exactly 191 built-in presets");
+    CHECK(builtinPresetCount() == 196, "exactly 196 built-in presets");
     CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
@@ -1793,6 +1793,34 @@ void testModulation()
         CHECK(s.sustain() == 2, "sustain point read");
         CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, true) - 0.5f) < 1e-4f, "held at the sustain point");
         CHECK(std::fabs(s.at(20.0f, EnvMode::SustainLoop, false)) < 1e-4f, "released, it runs to the end");
+        {   // Sustain Loop, driven by the engine rather than by hand: the value must not jump
+            // when the last voice lets go. It used to, and by a lot -- the shape held at the
+            // sustain point while the note was down, and the release then found the clock long
+            // past the end of the shape and snapped to its final value. The clock is now put on
+            // the sustain point at that moment, so the tail plays from where the hold ended.
+            Engine e;
+            e.prepare(48000.0, 256);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Env1Mode, static_cast<float>(EnvMode::SustainLoop));
+            e.setParam(ParamId::Env1Time, 1.0f);
+            e.setParam(ParamId::Env1Depth, 1.0f);
+            CHECK(e.setEnvShape(0, "0:0/1:1/2:0.5/8:0!s2"), "engine takes a sustain-point shape");
+            e.noteOn(60, 1.0f);
+            std::vector<float> l(256), r(256);
+            auto run = [&](double seconds) {
+                for (int i = 0; i < static_cast<int>(seconds * 48000.0 / 256.0); ++i)
+                    e.process(l.data(), r.data(), 256);
+            };
+            run(5.0);
+            const float held = e.modSource(static_cast<int>(ModSource::Env1));
+            CHECK(std::fabs(held - 0.5f) < 0.02f, "held at the sustain point while the note is down");
+            e.noteOff(60);
+            e.process(l.data(), r.data(), 256);
+            const float justAfter = e.modSource(static_cast<int>(ModSource::Env1));
+            CHECK(std::fabs(justAfter - held) < 0.02f, "release does not jump away from the sustain value");
+            run(7.0);
+            CHECK(e.modSource(static_cast<int>(ModSource::Env1)) < 0.1f, "and then it runs out");
+        }
         ModEnv l;
         CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");
         CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");

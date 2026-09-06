@@ -414,7 +414,7 @@ void Engine::startNote(int note, float velocity, int owner, float distance)
     // silence, not on every note of a cluster, or a slow shape would never get anywhere.
     bool anySounding = false;
     for (const auto& v : voices_) if (v.isActive()) { anySounding = true; break; }
-    if (!anySounding) envTime_ = 0.0;
+    if (!anySounding) for (double& t : envTime_) t = 0.0;
     randomPerNote_ = rng_.bipolar();
     Voice* v = allocate(note, owner);
     v->order = ++order_;

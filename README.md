@@ -458,7 +458,14 @@ Sections of the GUI (all parameters are automatable in a DAW):
   breakpoints, a curve on every segment, an optional sustain point and an
   optional loop — edited on the curve itself: drag a point, double-click to add
   or remove one, right-click for the sustain point, the loop, the curvature and
-  ten shapes to start from, ADSR first among them.
+  ten shapes to start from, ADSR first among them. Five presets exist to show
+  them, because measured across all 6191 nothing did: *Long Arc* (twelve points
+  over nine minutes, once), *Held Breath* (a sustain point: it rises while a key
+  is down and runs out when you let go), *Six Hands* (all six envelopes at once,
+  their times on a golden ladder so they never line up), *Sixteen Points* (the
+  full ceiling, looping) and *Dwelling Curve* (the same four points twice, curved
+  to dwell at the start of each segment and at the end — the one thing an ADSR
+  cannot say).
 * **Autoplay** — an optional second way for the conductor to work. *Free*
   (default) is the Cluster Brain as it always was: notes start and stop on
   their own timers. *Chords* keeps the cluster full and exchanges one voice at

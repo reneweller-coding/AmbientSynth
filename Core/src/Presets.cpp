@@ -1634,6 +1634,98 @@ const Preset kPresets[] = {
       "src2_drift=2.2",
       nullptr, nullptr, nullptr,
       "lfo1>z_x:0.127;lfo2>near_decay:0.180;lfo3>sub_level:0.114;lfo4>cosmos_smear:-0.136;beat>resonance:0.115" },
+
+    // ---------------------------------------------------------------- the modulation envelopes
+    //
+    // Five presets that exist to show the envelope editor, because nothing else did: measured
+    // over all 6191 presets, the library used envelopes 1 and 2, at most six of the sixteen
+    // breakpoints, and never a sustain point -- and not one of the built-in presets carried a
+    // shape at all. Someone clicking through the Sound box would never have seen the feature.
+    //
+    // A shape is "time:value:curve" per point, separated by '/'; "!s<i>" marks the sustain point
+    // and "!l<a>-<b>" the loop; the six shapes of a preset are separated by '~'. Times are in
+    // units of that envelope's Time parameter, so the same shape can span ten seconds or ten
+    // minutes.
+    { "Long Arc",
+      "brain_density=5;brain_rate=40;brain_hold_min=70;brain_hold_max=260;brain_low=33;brain_high=68;"
+      "partials=18;tilt=1.35;brightness=0.5;odd_even=-0.25;attack=14;release=40;cutoff=1400;"
+      "depth=0.85;far_size=2.6;far_decay=40;far_highcut=3200;air=0.18;arc=0.35;arc_period=120;"
+      "sub_level=0.3;near_mix=0.2;master_gain=-11;"
+      "env1_mode=One Shot;env1_time=45;env1_depth=1",
+      nullptr, nullptr, nullptr,
+      "env1>brightness:0.34;env1>far_size:0.28;env1>cutoff:0.26;env1>air:0.16",
+      // Twelve points across nine minutes: an arc with a shape, not a shape that repeats. It
+      // runs once when a note arrives into silence and then stays where it ends.
+      "0:0:0.4/1:0.35:0/2.2:0.15:0.3/3.5:0.62:-0.2/4.6:0.4:0/5.8:0.85:-0.35/7:0.55:0.2/"
+      "8.2:0.95:-0.4/9.1:0.6:0/10:0.72:0.25/11:0.28:0.4/12:0:0" },
+
+    { "Held Breath",
+      "brain_on=off;keys_depth=1;partials=14;tilt=1.2;brightness=0.55;odd_even=-0.18;"
+      "attack=2.5;decay=6;sustain=0.85;release=12;cutoff=2200;resonance=0.25;"
+      "depth=0.7;far_size=2.2;far_decay=26;far_highcut=4200;air=0.22;near_mix=0.25;master_gain=-10;"
+      "env1_mode=Sustain Loop;env1_time=6;env1_depth=1",
+      nullptr, nullptr, nullptr,
+      "env1>brightness:0.30;env1>far_size:0.22;env1>air:0.18",
+      // The sustain point is index 2. While a key is down the shape rises, settles there and
+      // waits; when the last key lets go the clock is put back on that point and the tail plays
+      // from it, so the release starts from the value the hold ended on rather than jumping.
+      "0:0:0.35/0.9:0.95:-0.25/2.2:0.6:0/8:0.45:0.2/11:0:0!s2" },
+
+    { "Six Hands",
+      "brain_density=6;brain_rate=45;brain_hold_min=60;brain_hold_max=240;brain_low=31;brain_high=71;"
+      "partials=20;tilt=1.5;brightness=0.5;odd_even=-0.28;inharmonic=0.08;attack=16;release=45;"
+      "cutoff=1800;depth=0.8;far_size=2.2;far_decay=45;far_highcut=3600;air=0.2;detune=5;strands=3;"
+      "near_mix=0.22;pan_drift=0.4;sub_level=0.25;master_gain=-8;"
+      // Six times on a golden ladder, so the six shapes never come back into step with each other.
+      "env1_mode=Loop;env1_time=9;env1_depth=0.9;"
+      "env2_mode=Loop;env2_time=14.6;env2_depth=0.85;"
+      "env3_mode=Loop;env3_time=23.6;env3_depth=0.8;"
+      "env4_mode=Loop;env4_time=38.2;env4_depth=0.75;"
+      "env5_mode=Loop;env5_time=61.8;env5_depth=0.7;"
+      "env6_mode=One Shot;env6_time=100;env6_depth=0.65",
+      nullptr, nullptr, nullptr,
+      "env1>cutoff:0.24;env2>far_size:0.20;env3>depth:0.16;env4>detune:0.22;env5>near_mix:0.18;"
+      "env6>brightness:0.26",
+      "0:0:0.3/1:0.8:-0.3/2.4:-0.4:0.2/4:0:0!l0-2~"
+      "0:0:-0.2/1.4:0.7:0.3/3:-0.55:-0.2/4.5:0:0!l0-2~"
+      "0:0:0.5/1.1:-0.65:0/2.6:0.75:-0.4/4.2:0:0!l0-2~"
+      "0:0:0/1.6:0.6:0.4/3.2:-0.35:-0.3/5:0:0!l0-2~"
+      "0:0:-0.4/2:0.85:0.2/4.4:-0.5:0/6:0:0!l0-2~"
+      "0:-0.6:0.3/2:0.2:0/4.5:0.8:-0.35/7:0.35:0.2/9:0:0" },
+
+    { "Sixteen Points",
+      // Sparse and long-held on purpose: with the conductor changing notes every few seconds the
+      // filter's movement disappears under the notes, measured -- the timbre has to be the thing
+      // that changes. Air is nearly off for the same reason: a broadband noise band sits on top
+      // of the spectrum and pins it, and with it at 0.24 sweeping the cutoff from 400 Hz to
+      // 4 kHz moved the centroid by 8 %, which is nothing.
+      "brain_density=3;brain_rate=55;brain_hold_min=90;brain_hold_max=300;brain_low=38;brain_high=72;"
+      "partials=24;tilt=1;brightness=0.62;odd_even=-0.3;inharmonic=0.05;attack=10;release=30;"
+      "cutoff=1000;resonance=0.45;depth=0.7;far_size=1.6;far_decay=26;far_highcut=6000;air=0.05;"
+      "near_mix=0.18;width=1.1;master_gain=-8;"
+      "env1_mode=Loop;env1_time=14;env1_depth=1",
+      nullptr, nullptr, nullptr,
+      "env1>cutoff:0.50;env1>brightness:0.26;env1>resonance:0.18",
+      // All sixteen breakpoints, which is the ceiling, looping over the first fifteen: three and
+      // a half minutes of filter movement that never lands on the same place twice inside a
+      // listening. Bipolar, so the sweep goes both ways from where the cutoff sits.
+      "0:0:0.2/1:0.6:-0.3/2:-0.35:0.4/3:0.8:0/4:-0.5:-0.2/5:0.9:0.3/6:0.15:0/7:-0.75:-0.4/"
+      "8:0.55:0.2/9:-0.25:0/10:0.85:-0.3/11:-0.45:0.4/12:0.65:0/13:-0.6:-0.2/14:0.4:0.3/"
+      "15:0:0!l0-14" },
+
+    { "Dwelling Curve",
+      "brain_density=4;brain_rate=35;brain_hold_min=60;brain_hold_max=200;partials=16;tilt=1.4;"
+      "brightness=0.45;odd_even=-0.22;attack=12;release=35;cutoff=1200;depth=0.8;far_size=2.5;"
+      "far_decay=38;far_highcut=3000;air=0.16;sub_level=0.28;near_mix=0.2;master_gain=-11;"
+      "env1_mode=Loop;env1_time=26;env1_depth=0.9;"
+      "env2_mode=Loop;env2_time=26;env2_depth=0.9",
+      nullptr, nullptr, nullptr,
+      "env1>cutoff:0.30;env2>far_size:0.26",
+      // The same four points twice, once curved to dwell at the start of each segment and once
+      // at the end. Same period, same breakpoints, and they pull apart audibly: that is what the
+      // curve on a segment does, and it is the one thing an ADSR cannot say.
+      "0:0:0.9/1:1:0.9/3:-0.7:0.9/5:0:0!l0-3~"
+      "0:0:-0.9/1:1:-0.9/3:-0.7:-0.9/5:0:0!l0-3" },
 };
 }
 

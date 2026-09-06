@@ -301,21 +301,44 @@ def modulation_for(p, style, rng, shade_name):
             row += ":none:u"
         rows.append(row)
 
-    # One or two envelopes, slow and usually looping: a shape generator, not an attack.
+    # Envelopes: slow shape generators, not attacks.
+    #
+    # This used to be "one or two, three to six points, never a sustain point", and measured over
+    # the finished library that is exactly what came out: envelopes 1 and 2 only, at most six of
+    # the sixteen breakpoints, and Sustain Loop -- one of the three modes -- used by none of six
+    # thousand presets. The ceiling was the generator's, not the instrument's. The ranges below
+    # are the instrument's own: up to six envelopes, up to sixteen points, and a sustain point on
+    # the ones that are worth holding.
+    #
+    # The times sit on a golden ladder from the first envelope's, so a preset with five of them
+    # running has five periods that never come back into step.
     envs = ["", "", "", "", "", ""]
-    for e in range(rng.randint(0, 2)):
+    n_env = rng.choices([0, 1, 2, 3, 4, 5, 6], weights=[18, 26, 24, 14, 9, 6, 3])[0]
+    base_time = math.exp(u(rng, math.log(2.0), math.log(20.0)))
+    for e in range(n_env):
         pts, t = [], 0.0
-        n_pts = rng.randint(3, 6)
+        # Mostly short shapes, because a shape you can follow is worth more than a long one you
+        # cannot; but a fifth of them go long, and those are the ones that use the whole editor.
+        n_pts = rng.randint(3, 7) if rng.random() < 0.8 else rng.randint(8, 16)
         for k in range(n_pts):
             v = 0.0 if k in (0, n_pts - 1) else round(u(rng, -1.0, 1.0), 3)
             pts.append(f"{t:.3g}:{v:g}:{round(u(rng, -0.6, 0.6), 2):g}")
             t += u(rng, 0.6, 3.0)
         text = "/".join(pts)
-        if rng.random() < 0.6 and n_pts >= 4:
+        mode = "One Shot"
+        if rng.random() < 0.55 and n_pts >= 4:
             text += f"!l0-{n_pts - 2}"          # loop everything but the tail
+            mode = "Loop"
+        elif rng.random() < 0.35 and n_pts >= 5:
+            # Sustain Loop: rise, wait on the sustain point for as long as anything is sounding,
+            # then play the tail from there. The point is picked in the middle of the shape so
+            # there is something to rise through and something left to run out.
+            text += f"!s{rng.randint(1, n_pts - 3)}"
+            mode = "Sustain Loop"
         envs[e] = text
-        p[f"env{e+1}_time"] = round(math.exp(u(rng, math.log(2.0), math.log(20.0))), 3)
-        p[f"env{e+1}_mode"] = "Loop" if "!l" in text else "One Shot"
+        # Golden ladder, so a preset's envelopes never line up with each other.
+        p[f"env{e+1}_time"] = round(base_time * PHI ** e, 3)
+        p[f"env{e+1}_mode"] = mode
         p[f"env{e+1}_depth"] = round(u(rng, 0.5, 1.0), 3)
         if pool:
             target, lo, hi = pool[rng.randrange(len(pool))]

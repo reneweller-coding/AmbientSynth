@@ -173,10 +173,11 @@ void Engine::stepModulation(float dt)
         modSrc_[static_cast<int>(ModSource::Lfo1) + i] = lfo_[i].step(dt, sp, table);
     }
 
-    envTime_ += dt;
+    const bool wasHeld = envHeld_;
     envHeld_ = false;
     for (const auto& v : voices_) if (v.isActive() && !v.isReleasing()) { envHeld_ = true; break; }
     for (int i = 0; i < kNumModEnvs; ++i) {
+        envTime_[i] += dt;
         const int base = static_cast<int>(ParamId::Env1Mode) + i * 4;
         ModEnvSpec& sp = envSpec_[i];
         sp.mode      = static_cast<EnvMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumEnvModes - 1));
@@ -185,7 +186,18 @@ void Engine::stepModulation(float dt)
         if (syncOn(sync))   // synced: the whole shape spans one division
             sp.timeScale = static_cast<float>(std::max(0.01, syncSeconds(sync, bpm_) / std::max(static_cast<double>(envShape_[i].length()), 1e-3)));
         sp.depth     = getParam(static_cast<ParamId>(base + 2));
-        const float t = static_cast<float>(envTime_) / sp.timeScale;
+        // Sustain Loop, at the moment the last voice lets go: put the clock exactly on the
+        // sustain point, so the tail plays from where the held part ended instead of from
+        // wherever the clock had got to. Without this the value jumps on release -- the shape
+        // holds at the sustain point while held, and then the release finds t already past the
+        // end of the shape and snaps to its final value. Only this mode is touched, and no
+        // preset used it, so nothing that exists sounds different.
+        if (wasHeld && !envHeld_ && sp.mode == EnvMode::SustainLoop) {
+            const int s = envShape_[i].sustain();
+            if (s >= 0 && s < envShape_[i].count())
+                envTime_[i] = static_cast<double>(envShape_[i].point(s).time) * sp.timeScale;
+        }
+        const float t = static_cast<float>(envTime_[i]) / sp.timeScale;
         modSrc_[static_cast<int>(ModSource::Env1) + i] = envShape_[i].at(t, sp.mode, envHeld_) * sp.depth;
     }
 

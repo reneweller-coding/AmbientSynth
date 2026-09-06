@@ -369,7 +369,7 @@ void AmbientSynthEditor::ModView::paintEnv(juce::Graphics& g, int i)
         g.drawText("drag a point   -   double-click to add or remove   -   right-click for shapes",
                    r.reduced(7, 3), juce::Justification::bottomRight, false);
     }
-    const float t = proc.engine().envTime() / scale;
+    const float t = proc.engine().envTime(i) / scale;
     if (lit && t <= len * 1.02f) {
         // The playhead. Its value already has Depth in it, so it is placed without applying it
         // again -- envToXY would, which is why this one keeps its own arithmetic.

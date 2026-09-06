@@ -1106,6 +1106,48 @@ away from where they were drawn, harder to explain than a crash. The drawing
 and the mouse now ask one function for that geometry, which is the only way two
 of them can never disagree.
 
+**And then nobody used it.** Counted across all 6191 presets afterwards: 3986
+carried an envelope shape, every one of them routed, every one curved rather
+than linear, and 45 % looping -- so the feature was being used, in the library.
+But the ceiling was nowhere near: envelopes 1 and 2 only, at most six of the
+sixteen breakpoints, and *Sustain Loop*, one of the three modes, used by none of
+six thousand. And not one of the built-in presets carried a shape at all, so
+somebody clicking through the Sound box would never have met the thing.
+
+Both of those were the generator's ceiling rather than the instrument's
+(`Tools/library/make_presets.py` drew "nought to two envelopes, three to six
+points" and never a sustain point), and both are lifted: up to six envelopes on
+a golden ladder of times, up to sixteen points, and a sustain point on a third
+of the shapes that are long enough to have something to rise through and
+something left to run out. Five built-in presets show the range -- *Long Arc*,
+*Held Breath*, *Six Hands*, *Sixteen Points*, *Dwelling Curve*.
+
+Building *Held Breath* found that the sustain point did not actually work.
+The clock the envelopes run on is a phrase clock, restarted when a note arrives
+into silence; while a note was held the shape correctly waited at the sustain
+point, but at the moment the last voice let go the release found that clock far
+past the end of the shape and **snapped** to its final value. Not a glide, a
+jump -- the one thing this instrument is not allowed to do. Each envelope now
+has its own clock, and on that transition the clock of a Sustain Loop envelope
+is put exactly on the sustain point, so the tail plays from the value the hold
+ended on. Nothing that existed changed: no preset used the mode, and the 37-
+preset sound oracle reports 39 identical, 0 different. The self test drives the
+engine through hold and release and fails if the value moves by more than 0.02
+across the release -- which it did, before the fix, by half the shape.
+
+The wider lesson repeats one from the presets round. *Sixteen Points* was built
+first with the envelope pointed at a formant filter over a bright thin drone,
+and measured, its envelope did nothing at all: the centroid moved 3.0 % with the
+envelope on and 3.1 % with it off. Two reasons, both invisible from the settings.
+The *Air* band, at 0.24, is broadband noise sitting on top of the spectrum and
+pins it -- with it in, sweeping the cutoff from 400 Hz to 4 kHz moved the
+centroid by 8 %. And the conductor changing notes every few seconds moves the
+centroid far more than any filter does, so the thing being demonstrated was
+buried under the thing that was not. Rebuilt sparse, long-held and nearly
+airless, the same envelope moves it from 3.9 % to 11.1 %. A demonstration has to
+put the thing being demonstrated in front of the microphone, which is the same
+sentence as three of the traps in this file.
+
 ### The manual
 
 The help page inside the instrument is the manual, and it exists as a PDF as

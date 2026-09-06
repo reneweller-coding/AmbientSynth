@@ -157,7 +157,9 @@ public:
     float beatRate() const { return beatHz_; }
     float lfoPhase(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)].phase(); }
     const Lfo& lfo(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)]; }
-    float envTime() const { return static_cast<float>(envTime_); }
+    // Each modulation envelope has its own clock, because Sustain Loop stops one of them where
+    // the others keep running. Index-safe like the rest of these display accessors.
+    float envTime(int i = 0) const { return static_cast<float>(envTime_[i < 0 ? 0 : (i >= kNumModEnvs ? kNumModEnvs - 1 : i)]); }
     // How much the matrix is currently adding to a parameter, in that parameter's own units.
     float modAmount(ParamId id) const { return modOut_[static_cast<int>(id)]; }
     // Partial amplitudes of the loudest sounding voice, for the oscillator display. Returns how
@@ -250,7 +252,7 @@ private:
     int          modSeen_ = 0;
     float        modSrc_[kNumModSources] = {};
     float        modOut_[kNumParams] = {};
-    double       envTime_ = 0.0;
+    double       envTime_[kNumModEnvs] = {};
     bool         envHeld_ = false;
     float        randomPerNote_ = 0.0f;
     void         stepModulation(float dt);

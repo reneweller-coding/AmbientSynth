@@ -93,6 +93,13 @@ struct EnvPoint {
     float curve = 0.0f;   // -1 (fast then slow) .. 0 (linear) .. 1 (slow then fast)
 };
 
+// Shapes to start an envelope from, in the text form below. They live here rather than in the
+// editor so that the self test can check that every one of them parses -- a shape string with a
+// typo in it does not fail loudly, it simply does nothing when the menu item is picked.
+constexpr int kNumEnvShapePresets = 10;
+extern const char* const kEnvShapePresetNames[kNumEnvShapePresets];
+extern const char* const kEnvShapePresetTexts[kNumEnvShapePresets];
+
 enum class EnvMode : int { OneShot, Loop, SustainLoop, Count };
 constexpr int kNumEnvModes = static_cast<int>(EnvMode::Count);
 extern const char* const kEnvModeNames[kNumEnvModes];

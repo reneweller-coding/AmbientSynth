@@ -13,6 +13,25 @@ const char* const kLfoShapeNames[kNumLfoShapes] = {
 const char* const kLfoModeNames[kNumLfoModes] = { "Global", "Per Voice", "Retrigger" };
 const char* const kEnvModeNames[kNumEnvModes] = { "One Shot", "Loop", "Sustain Loop" };
 
+// Written over about four time units, which the Time knob scales; at Time = 1 that is four
+// seconds. ADSR is first because it is what anybody looks for first.
+const char* const kEnvShapePresetNames[kNumEnvShapePresets] = {
+    "ADSR", "AD (percussive)", "AR (swell)", "Ramp up", "Ramp down",
+    "Pulse", "Slow swell", "Two peaks", "Stepped", "Bipolar sweep",
+};
+const char* const kEnvShapePresetTexts[kNumEnvShapePresets] = {
+    "0:0/0.4:1:-0.3/1.4:0.6/4:0:-0.3!s2",
+    "0:0/0.15:1/2:0:-0.6",
+    "0:0/1.5:1:0.2/4:0:-0.2!s1",
+    "0:0/4:1",
+    "0:1/4:0",
+    "0:0/0.05:1/1:1/1.05:0!s2",
+    "0:0/2.5:1:0.4/4:0.85/8:0:-0.4!s2",
+    "0:0/0.6:1:-0.2/1.6:0.25/2.4:0.9:-0.2/4:0:-0.3",
+    "0:0/0.8:0.35/0.81:0.35/1.8:0.7/1.81:0.7/2.8:1/4:0",
+    "0:-1/2:1:0.3/4:-1:0.3",
+};
+
 namespace {
 
 inline float wrap01(float x) { return x - std::floor(x); }

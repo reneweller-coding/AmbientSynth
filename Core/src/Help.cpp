@@ -287,6 +287,7 @@ const HelpEntry kHelp[] = {
     { "lfoN_sync", "One cycle per note value at the current tempo; the phase follows the beat position, so it stays on the grid wherever the transport jumps." },
 
     // ---- envelopes (shared)
+    { "envN_shape", "The curve itself is edited on it: drag a breakpoint to move it in time and level, double-click the line to add one or a point to remove it, right-click for the sustain point, the loop, the curvature of a segment, and ten shapes to start from -- ADSR among them. Up to sixteen points, each with its own curve, which is a good deal more than an ADSR when you want it and exactly an ADSR when you do not. The first point stays at the start; use the matrix or a delay if you want it to begin late." },
     { "envN_mode", "One Shot plays the shape once per note. Loop repeats it between its loop points. Sustain Loop loops while the note is held, then finishes." },
     { "envN_time", "Stretches the whole shape: 0.05 is twenty times faster, 20 twenty times slower. Ignored while Sync is set." },
     { "envN_depth", "Scales the envelope's output before the matrix." },
@@ -458,7 +459,9 @@ R"(The strip along the bottom holds every modulation source as a card: LFO 1-8, 
 
 LFO  Eight free LFOs with Shape (Sine, Triangle, Ramp Up/Down, soft Square, Random, Steps, or Table -- a frame of the user wavetable as a shape, so any drawn curve is an LFO), Rate from one cycle in twenty minutes to 20 Hz or a note value (Sync), Phase, Depth, and Mode: Global (one phase for the instrument, every voice breathes together), Voice (each voice its own copy), Retrigger (each voice restarts from Phase). The editors show the shape with a running dot.
 
-ENVELOPES  Six multi-segment envelopes: up to sixteen breakpoints with a curve per segment, an optional sustain point, an optional loop, edited as text "t:v:c/t:v:c/... !s2 !l1-3" and drawn. Mode One Shot / Loop / Sustain Loop, Time stretches the shape or Sync spans it over one note value, Depth scales it.
+ENVELOPES  Six multi-segment envelopes: up to sixteen breakpoints, a curve on every segment, an optional sustain point and an optional loop. Edit the curve on the curve: drag a breakpoint to move it in time and level, double-click the line to add a point or a point to remove it, right-click for the sustain point, the loop, the curvature of a segment, and ten shapes to start from -- ADSR, AD, AR, ramps, a pulse, a slow swell, two peaks, stepped, bipolar. The sustain point wears a ring, the loop points a vertical line. Mode One Shot / Loop / Sustain Loop, Time stretches the shape or Sync spans it over one note value, Depth scales it. (The text form "t:v:c/t:v:c/...!s2!l1-3" is still what a preset stores.)
+
+The voice's own AMP ENVELOPE is a plain ADSR -- Attack, Decay, Sustain, Release -- on the AMP ENV tab, with times in seconds up to a minute for the attack and two for the release. These six are for everything else.
 
 MATRIX  Up to 32 routes "source > target : depth [: via] [: u]". Depth is a fraction of the target's range (-1..1); via scales the depth by a second source (a macro, typically); u treats a bipolar source as 0..1. One source may drive as many targets as it likes.
 

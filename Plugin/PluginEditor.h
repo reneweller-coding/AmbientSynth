@@ -339,12 +339,27 @@ private:
         int hoverCard = -1;
         int dragCard = -1;               // the card being dragged onto a knob
         juce::Point<int> dragPos;
+        // Editing an envelope's shape: which one, and which of its breakpoints is under the mouse.
+        int dragEnv = -1, dragPoint = -1, hoverEnv = -1, hoverPoint = -1;
 
         void setTab(int t);
         void paintLane(juce::Graphics&);
         void paintCard(juce::Graphics&, const Card&, bool hot);
         void paintLfo(juce::Graphics&, int i);
         void paintEnv(juce::Graphics&, int i);
+        void mouseDoubleClick(const juce::MouseEvent&) override;
+        // The envelope editor. The shapes were always there in the engine -- sixteen breakpoints,
+        // a curve on every segment, a sustain point and a loop -- but nothing could reach them
+        // except a preset, so in the panel they were pictures of something you could not touch.
+        // One row's geometry, asked for by both the drawing and the mouse so they cannot drift.
+        struct EnvGeom { float x0 = 0, w = 1, cy = 0, h = 1, len = 1, depth = 1; };
+        EnvGeom envGeom(int env) const;
+        int  envAt(juce::Point<int> pos, int* pointOut = nullptr) const;   // -1 if not on a curve
+        juce::Point<float> envToXY(int env, float time, float value) const;
+        void envFromXY(int env, juce::Point<int> pos, float& time, float& value) const;
+        ambient::ModEnv envCopy(int env) const;
+        void envCommit(int env, const ambient::ModEnv&, const juce::String& what);
+        void envShapeMenu(int env, int point);
         ambient::LfoSpec specOf(int i) const;
         // Where a drag ended: the parameter under the mouse, or none.
         int paramUnder(juce::Point<int> screenPos) const;

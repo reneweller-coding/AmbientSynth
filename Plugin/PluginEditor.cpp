@@ -284,6 +284,13 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                 juce::JUCEApplicationBase::quit();
             });
         }
+        // AMBIENT_MOD=lfo|env|matrix: which tab of the modulation strip to open. Only a dev aid,
+        // and the only way to photograph the envelope editor.
+        {
+            const juce::String md = juce::SystemStats::getEnvironmentVariable("AMBIENT_MOD", "");
+            if (mod_ != nullptr && md.isNotEmpty())
+                mod_->setTab(md == "matrix" ? 2 : (md == "env" ? 1 : 0));
+        }
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
         for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
         rebuildLayout();

@@ -916,6 +916,39 @@ on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
 changes the render between 90 and 180 bpm; every preset (all Free) is
 unchanged.
 
+### Envelopes, and a control that was only a picture
+
+The voice's amplitude envelope has always been a plain ADSR -- Attack, Decay,
+Sustain, Release, with times up to a minute for the attack and two for the
+release, which is what a drone wants. The six modulation envelopes have always
+been more than that: up to sixteen breakpoints, a curve on every segment, an
+optional sustain point and an optional loop.
+
+What they did not have was any way to reach them. The four knobs under each
+curve set the mode, the time scale, the depth and the sync; the *shape* could
+only arrive from a preset or from the text form. So the curve on the panel was
+a drawing of something the user could not touch, and the honest impression it
+gave was that the instrument could not manage an ADSR -- which it could, twice
+over, in two places nobody could get at.
+
+The curves are edited on the curves now: drag a breakpoint, double-click the
+line to add one or a point to remove it, right-click for the sustain point, the
+loop, the curvature of a segment, and ten shapes to start from with ADSR at the
+top of the list. The shapes live in the core rather than in the editor so that
+the self test can check that each of them parses, starts at zero, keeps its
+times in order and survives being written and read back -- a shape string with
+a typo in it does not fail loudly, it simply does nothing when the menu item is
+picked, and the only symptom is somebody clicking ADSR and watching nothing
+happen.
+
+One thing worth remembering from building it. The first version of the hit test
+had its own copy of the row's geometry -- 8 and 16 and 0.34 against the
+drawing's 5 and 10 and 0.36 -- and left the Depth knob out of the vertical
+entirely. It compiled, it ran, and it would have grabbed points several pixels
+away from where they were drawn, harder to explain than a crash. The drawing
+and the mouse now ask one function for that geometry, which is the only way two
+of them can never disagree.
+
 ### The manual
 
 The help page inside the instrument is the manual, and it exists as a PDF as

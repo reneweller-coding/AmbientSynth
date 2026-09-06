@@ -10,6 +10,7 @@ param(
     [int]$Wait = 6,
     [string]$Page = "",
     [string]$Tab = "",      # "<row>,<page>[;...]": open a tabbed row on one of its later pages
+    [string]$Mod = "",      # lfo | env | matrix: which tab of the modulation strip
     [switch]$Fresh          # forget the standalone's saved window size, so it opens at its own fit
 )
 $ErrorActionPreference = "Stop"
@@ -23,7 +24,7 @@ if ($Page -eq "browse") { $env:AMBIENT_BROWSE = "1" }
 elseif ($Page -eq "browse-map") { $env:AMBIENT_BROWSE = "map" }
 else { Remove-Item env:AMBIENT_BROWSE -ErrorAction SilentlyContinue }
 if ($Tab) { $env:AMBIENT_TAB = $Tab } else { Remove-Item env:AMBIENT_TAB -ErrorAction SilentlyContinue }
-if ($Page -eq "mod") { $env:AMBIENT_MOD = "1" } else { Remove-Item env:AMBIENT_MOD -ErrorAction SilentlyContinue }
+if ($Mod) { $env:AMBIENT_MOD = $Mod } else { Remove-Item env:AMBIENT_MOD -ErrorAction SilentlyContinue }
 
 if ($Fresh) {
     $settings = Join-Path $env:APPDATA "AmbientSynth\AmbientSynth.settings"

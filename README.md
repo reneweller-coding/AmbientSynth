@@ -406,6 +406,13 @@ Sections of the GUI (all parameters are automatable in a DAW):
   own in four families. *Fires* decides whether it answers the keys only or
   the conductor as well; the latter turns it from something you play into
   something the piece does on its own.
+* **Envelopes** — the voice has a plain **ADSR** (Attack, Decay, Sustain,
+  Release; up to a minute of attack and two of release, which is what a drone
+  wants). On top of that, six **modulation envelopes** with up to sixteen
+  breakpoints, a curve on every segment, an optional sustain point and an
+  optional loop — edited on the curve itself: drag a point, double-click to add
+  or remove one, right-click for the sustain point, the loop, the curvature and
+  ten shapes to start from, ADSR first among them.
 * **Autoplay** — an optional second way for the conductor to work. *Free*
   (default) is the Cluster Brain as it always was: notes start and stop on
   their own timers. *Chords* keeps the cluster full and exchanges one voice at

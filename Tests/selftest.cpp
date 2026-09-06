@@ -2268,6 +2268,38 @@ void testExpressionBodyPatina()
 // wrong at some point in a filter bank somewhere: the sections must be stable, the cascade must
 // come out at a sane level, and moving the point must actually change the sound. A shape whose
 // corners are all the same is not a filter you can morph, it is a filter with three dead knobs.
+// The ten shapes the envelope menu offers. A shape string with a typo in it does not fail
+// loudly: parse returns false, the menu item does nothing, and the only symptom is a user
+// clicking ADSR and watching the curve not change.
+void testEnvShapePresets()
+{
+    int bad = 0;
+    for (int i = 0; i < kNumEnvShapePresets; ++i) {
+        ModEnv e;
+        if (!e.parse(kEnvShapePresetTexts[i])) {
+            std::printf("  shape %d (%s) does not parse: %s\n", i, kEnvShapePresetNames[i], kEnvShapePresetTexts[i]);
+            ++bad; continue;
+        }
+        if (e.count() < 2 || e.length() <= 0.0f) { std::printf("  shape %s is not an envelope\n", kEnvShapePresetNames[i]); ++bad; continue; }
+        if (e.point(0).time != 0.0f) { std::printf("  shape %s does not start at zero\n", kEnvShapePresetNames[i]); ++bad; }
+        for (int k = 1; k < e.count(); ++k)
+            if (e.point(k).time < e.point(k - 1).time) { std::printf("  shape %s goes backwards\n", kEnvShapePresetNames[i]); ++bad; break; }
+        if (e.sustain() >= e.count()) { std::printf("  shape %s sustains on a point it does not have\n", kEnvShapePresetNames[i]); ++bad; }
+        // And the text form has to survive a round trip, because that is how it reaches a preset.
+        char buf[512];
+        ModEnv back;
+        if (e.write(buf, sizeof(buf)) <= 0 || !back.parse(buf) || back.count() != e.count() || back.sustain() != e.sustain()) {
+            std::printf("  shape %s does not survive being written and read again\n", kEnvShapePresetNames[i]);
+            ++bad;
+        }
+    }
+    CHECK(bad == 0, "every envelope shape on the menu parses, starts at zero and round trips");
+    // ADSR is the one everybody looks for first: four points, and the third of them sustains.
+    ModEnv adsr;
+    CHECK(adsr.parse(kEnvShapePresetTexts[0]) && adsr.count() == 4 && adsr.sustain() == 2,
+          "the ADSR shape is an attack, a decay, a sustain point and a release");
+}
+
 void testZPlaneBank()
 {
     const float sr = 48000.0f;
@@ -2483,6 +2515,7 @@ int main()
     testStems();
     testSampleRates();
     testExpressionBodyPatina();
+    testEnvShapePresets();
     testZPlaneBank();
     testFilterModels();
     if (failures == 0) std::printf("selftest: all checks passed\n");

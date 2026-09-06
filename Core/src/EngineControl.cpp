@@ -152,13 +152,38 @@ void Engine::stepModulation(float dt)
         modSeen_ = mv;
     }
 
+    // A modulator's own settings, with the matrix's last word on them.
+    //
+    // These specs are read at the top of this function, before the matrix is summed at the bottom
+    // of it, so a route pointed at an LFO's rate, an LFO's depth or an envelope's time used to
+    // parse, sit in the matrix and do nothing whatsoever -- measured, the render hash did not
+    // move by a bit. Eighty parameters behaved that way, and among them is the one figure the
+    // ambient literature keeps coming back to: a filter sweep on a 13-second LFO whose rate is
+    // itself moved by a 19-second one, so the pair only repeats after 13 x 19 = 247 seconds.
+    //
+    // It reads the PREVIOUS block's modOut_ (it is cleared further down, after these lines), and
+    // that is not a compromise, it is what a feedback path in a modulation matrix is: one control
+    // block of delay -- under a millisecond and a half -- which is the only way lfo2 can move
+    // lfo1's rate without the two needing each other's answer before either has one.
+    //
+    // Only the continuous settings are taken from it. A choice -- a shape, a mode, a table, a
+    // sync division -- would have to jump from one value to the next, and nothing in this
+    // instrument is allowed to jump.
+    auto modulated = [this](ParamId id) {
+        const float m = modOut_[static_cast<int>(id)];
+        const float v = effectiveParam(id);
+        if (m == 0.0f) return v;
+        const ParamDesc& d = paramDesc(id);
+        return clampv(v + m, d.min, d.max);
+    };
+
     for (int i = 0; i < kNumLfos; ++i) {
         const int base = static_cast<int>(ParamId::Lfo1Shape) + i * 7;
         LfoSpec& sp = lfoSpec_[i];
         sp.shape  = static_cast<LfoShape>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumLfoShapes - 1));
-        sp.rateHz = getParam(static_cast<ParamId>(base + 1));
-        sp.phase  = getParam(static_cast<ParamId>(base + 2));
-        sp.depth  = getParam(static_cast<ParamId>(base + 3));
+        sp.rateHz = modulated(static_cast<ParamId>(base + 1));
+        sp.phase  = modulated(static_cast<ParamId>(base + 2));
+        sp.depth  = modulated(static_cast<ParamId>(base + 3));
         sp.mode   = static_cast<LfoMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 4)))), 0, kNumLfoModes - 1));
         sp.table  = static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 5))));
         const int sync = clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 6)))), 0, kNumSyncDivs - 1);
@@ -181,11 +206,11 @@ void Engine::stepModulation(float dt)
         const int base = static_cast<int>(ParamId::Env1Mode) + i * 4;
         ModEnvSpec& sp = envSpec_[i];
         sp.mode      = static_cast<EnvMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumEnvModes - 1));
-        sp.timeScale = std::max(0.01f, getParam(static_cast<ParamId>(base + 1)));
+        sp.timeScale = std::max(0.01f, modulated(static_cast<ParamId>(base + 1)));
         const int sync = clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 3)))), 0, kNumSyncDivs - 1);
         if (syncOn(sync))   // synced: the whole shape spans one division
             sp.timeScale = static_cast<float>(std::max(0.01, syncSeconds(sync, bpm_) / std::max(static_cast<double>(envShape_[i].length()), 1e-3)));
-        sp.depth     = getParam(static_cast<ParamId>(base + 2));
+        sp.depth     = modulated(static_cast<ParamId>(base + 2));
         // Sustain Loop, at the moment the last voice lets go: put the clock exactly on the
         // sustain point, so the tail plays from where the held part ended instead of from
         // wherever the clock had got to. Without this the value jumps on release -- the shape

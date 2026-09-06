@@ -1821,6 +1821,29 @@ void testModulation()
             run(7.0);
             CHECK(e.modSource(static_cast<int>(ModSource::Env1)) < 0.1f, "and then it runs out");
         }
+        {   // A modulator's own settings are a modulation target like any other. They were not:
+            // the specs are read before the matrix is summed, so "lfo2 > lfo1_rate" parsed, sat
+            // in the matrix and did nothing at all -- eighty parameters behaved that way, and one
+            // of them is the LFO-modulating-an-LFO figure that ambient patching is built on.
+            // Two engines, the same seed, the same everything except that route.
+            auto phaseAfter = [](const char* matrix) {
+                Engine e;
+                e.prepare(48000.0, 256);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Lfo1Rate, 0.2f);
+                e.setParam(ParamId::Lfo1Depth, 1.0f);
+                e.setParam(ParamId::Lfo2Rate, 0.05f);
+                e.setParam(ParamId::Lfo2Depth, 1.0f);
+                e.setModMatrixText(matrix);
+                e.noteOn(60, 1.0f);
+                std::vector<float> l(256), r(256);
+                for (int i = 0; i < 8 * 48000 / 256; ++i) e.process(l.data(), r.data(), 256);
+                return e.lfoPhase(0);
+            };
+            const float plain = phaseAfter("lfo1>cutoff:0.9");
+            const float moved = phaseAfter("lfo1>cutoff:0.9;lfo2>lfo1_rate:1.0");
+            CHECK(std::fabs(moved - plain) > 0.02f, "a route on an LFO's rate actually moves it");
+        }
         ModEnv l;
         CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");
         CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");

@@ -375,7 +375,22 @@ void AmbientSynthProcessor::loadPresetFiles(int index)
     const juce::String tex(juce::CharPointer_UTF8(presetFilePath(index, 0)));
     const juce::String tab(juce::CharPointer_UTF8(presetFilePath(index, 1)));
     const juce::String imp(juce::CharPointer_UTF8(presetFilePath(index, 2)));
-    if (tex.isNotEmpty() && juce::File(tex).existsAsFile()) loadTextureFile(juce::File(tex));
+    // The texture field is one path (every slot gets it, as always) or up to four separated by
+    // ';', one per slot, an empty one meaning that slot has none. The per-slot form is explicit
+    // about every slot, so a slot it leaves empty is cleared rather than left holding whatever
+    // the previous preset put there.
+    if (tex.isNotEmpty()) {
+        if (!tex.containsChar(';')) {
+            if (juce::File(tex).existsAsFile()) loadTextureFile(juce::File(tex));
+        } else {
+            const juce::StringArray parts = juce::StringArray::fromTokens(tex, ";", "");
+            for (int k = 0; k < ambient::kSlots; ++k) {
+                const juce::String p = k < parts.size() ? parts[k].trim() : juce::String();
+                if (p.isNotEmpty() && juce::File(p).existsAsFile()) loadTextureFile(k, juce::File(p));
+                else { engine_.clearTexture(k); textureFile_[k] = juce::File(); }
+            }
+        }
+    }
     if (tab.isNotEmpty() && juce::File(tab).existsAsFile()) loadWavetableFile(juce::File(tab));
     if (imp.isNotEmpty() && juce::File(imp).existsAsFile()) loadImpulseFile(juce::File(imp));
 }
@@ -496,13 +511,24 @@ bool AmbientSynthProcessor::readMono(const juce::File& file, std::vector<float>&
     return true;
 }
 
+bool AmbientSynthProcessor::loadTextureFile(int slot, const juce::File& file)
+{
+    if (slot < 0 || slot >= ambient::kSlots) return false;
+    std::vector<float> mono; double rate = 0.0;
+    if (!readMono(file, mono, rate)) return false;
+    const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
+    engine_.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
+    textureFile_[slot] = file;
+    return true;
+}
+
 bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
 {
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
-    const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
+    const double base = baseHzFromName(file.getFileName().toRawUTF8());
     engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256);
-    textureFile_ = file;
+    for (auto& f : textureFile_) f = file;
     return true;
 }
 
@@ -634,7 +660,11 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     }
     if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
     if (routeText_.isNotEmpty()) state.setProperty("route", routeText_, nullptr);
-    if (textureFile_.existsAsFile())   state.setProperty("textureFile", textureFile_.getFullPathName(), nullptr);
+    // One property per slot. An older state carries a single "textureFile", which is read below
+    // as "the same clip in every slot" -- the only thing it could have meant at the time.
+    for (int k = 0; k < ambient::kSlots; ++k)
+        if (textureFile_[k].existsAsFile())
+            state.setProperty("textureFile" + juce::String(k + 1), textureFile_[k].getFullPathName(), nullptr);
     if (wavetableFile_.existsAsFile()) state.setProperty("wavetableFile", wavetableFile_.getFullPathName(), nullptr);
     if (impulseFile_.existsAsFile())   state.setProperty("impulseFile", impulseFile_.getFullPathName(), nullptr);
     if (impulseBFile_.existsAsFile())  state.setProperty("impulseBFile", impulseBFile_.getFullPathName(), nullptr);
@@ -691,6 +721,8 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeChild(tree.getChildWithName("morphA"), nullptr);
             tree.removeChild(tree.getChildWithName("morphB"), nullptr);
             const juce::String texPath = tree.getProperty("textureFile").toString();
+            juce::String texPaths[ambient::kSlots];
+            for (int k = 0; k < ambient::kSlots; ++k) texPaths[k] = tree.getProperty("textureFile" + juce::String(k + 1)).toString();
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
             const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
@@ -726,6 +758,7 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             if (route.isNotEmpty()) setRouteText(route);
             tree.removeProperty("route", nullptr);
             tree.removeProperty("textureFile", nullptr);
+            for (int k = 0; k < ambient::kSlots; ++k) tree.removeProperty("textureFile" + juce::String(k + 1), nullptr);
             tree.removeProperty("wavetableFile", nullptr);
             tree.removeProperty("impulseFile", nullptr);
             tree.removeProperty("favourites", nullptr);
@@ -734,6 +767,8 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
             if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));
+            for (int k = 0; k < ambient::kSlots; ++k)
+                if (texPaths[k].isNotEmpty() && juce::File(texPaths[k]).existsAsFile()) loadTextureFile(k, juce::File(texPaths[k]));
             if (tabPath.isNotEmpty() && juce::File(tabPath).existsAsFile()) loadWavetableFile(juce::File(tabPath));
             if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile()) loadImpulseFile(juce::File(irPath));
             if (irBPath.isNotEmpty() && juce::File(irBPath).existsAsFile()) loadImpulseFile(juce::File(irBPath), true);

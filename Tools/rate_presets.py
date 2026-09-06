@@ -110,7 +110,7 @@ def sections_of(settings):
     keys = set(re.findall(r"([a-z0-9_]+)=", settings))
     fams = set()
     for k in keys:
-        for prefix, fam in (("src1", "source"), ("src2", "source2"), ("src3", "source3"),
+        for prefix, fam in (("src1", "source"), ("src2", "source2"), ("src3", "source3"), ("src4", "source4"),
                             ("osc_", "source"), ("z_", "zplane"), ("dly2", "delay2"),
                             ("dly_", "delay"), ("far_", "far"), ("cosmos_", "cosmos"),
                             ("cloud_", "cloud"), ("body_", "body"), ("patina", "patina"),

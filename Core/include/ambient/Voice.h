@@ -64,12 +64,12 @@ struct VoiceParams {
     double rootHz = 130.81;     // the brain's root, for the portamento's consonance gravity
     // Coherence offsets (from the engine's Kuramoto bank), added on top of the parameters
     float cohBrightness = 0.0f, cohPan = 0.0f, cohZ = 0.0f;
-    // The three source slots (slot[0] = Source 1: Additive means the strand bank above, any other
+    // The four source slots (slot[0] = Source 1: Additive means the strand bank above, any other
     // type mutes the bank and renders in the slot) and the data they may need; pointers stay
-    // valid for the block.
+    // valid for the block. Each slot has its own clip.
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
-    const Texture*   texture = nullptr;
+    const Texture*   texture[kSlots] = {};
 };
 
 class Voice {

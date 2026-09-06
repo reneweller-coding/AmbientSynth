@@ -309,7 +309,7 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText("ratio " + juce::String(ratio, 2) + "   index " + juce::String(idx, 2), r.reduced(9, 5), juce::Justification::topRight, false);
     } else if (type == 3) {   // texture: the clip's envelope, and the window the grains are drawn from
-        const ambient::Texture* tex = proc.engine().displayTexture();
+        const ambient::Texture* tex = proc.engine().displayTexture(slot - 1);
         if (tex == nullptr || tex->empty()) {
             g.setColour(ui::faint); g.setFont(ui::body(11.0f));
             g.drawText("no clip loaded -- Texture... below, or a pack preset", plot, juce::Justification::centred, false);
@@ -473,7 +473,7 @@ void AmbientSynthEditor::VectorView::paint(juce::Graphics& g)
     g.drawText("SRC 1", sq.getX() + 3.0f, sq.getBottom() - 12.0f, 44.0f, 11.0f, juce::Justification::left, false);
     g.drawText("SRC 2", sq.getRight() - 47.0f, sq.getBottom() - 12.0f, 44.0f, 11.0f, juce::Justification::right, false);
     g.drawText("SRC 3", sq.getX() + 3.0f, sq.getY() + 2.0f, 44.0f, 11.0f, juce::Justification::left, false);
-    g.drawText("ALL", sq.getRight() - 47.0f, sq.getY() + 2.0f, 44.0f, 11.0f, juce::Justification::right, false);
+    g.drawText("SRC 4", sq.getRight() - 47.0f, sq.getY() + 2.0f, 44.0f, 11.0f, juce::Justification::right, false);
 
     // Where the wander has actually been. The point on the panel is where the knobs are; the trail
     // is where the engine's own drift has taken it, which is the part a knob cannot show.
@@ -492,13 +492,11 @@ void AmbientSynthEditor::VectorView::paint(juce::Graphics& g)
         g.strokePath(trail, juce::PathStrokeType(1.0f));
     }
 
-    // The three slot weights, as a bar in each corner: what the point is actually doing.
-    const float w00 = (1.0f - vx) * (1.0f - vy), w10 = vx * (1.0f - vy);
-    const float w01 = (1.0f - vx) * vy, w11 = vx * vy;
-    const float f[3] = { w00 + w11 / 3.0f, w10 + w11 / 3.0f, w01 + w11 / 3.0f };
-    const juce::Point<float> corner[3] = { toXY(0.0f, 0.0f), toXY(1.0f, 0.0f), toXY(0.0f, 1.0f) };
-    for (int k = 0; k < 3; ++k) {
-        const float t = juce::jlimit(0.0f, 1.0f, 3.0f * f[k] / 3.0f);
+    // The four slot weights, as a bubble in each corner: what the point is actually doing.
+    const float f[4] = { (1.0f - vx) * (1.0f - vy), vx * (1.0f - vy), (1.0f - vx) * vy, vx * vy };
+    const juce::Point<float> corner[4] = { toXY(0.0f, 0.0f), toXY(1.0f, 0.0f), toXY(0.0f, 1.0f), toXY(1.0f, 1.0f) };
+    for (int k = 0; k < 4; ++k) {
+        const float t = juce::jlimit(0.0f, 1.0f, f[k]);
         g.setColour(ui::accent.withAlpha(0.15f + 0.5f * t));
         g.fillEllipse(corner[k].x - 4.0f - 10.0f * t, corner[k].y - 4.0f - 10.0f * t,
                       8.0f + 20.0f * t, 8.0f + 20.0f * t);
@@ -515,25 +513,25 @@ void AmbientSynthEditor::VectorView::paint(juce::Graphics& g)
     const float barX = sq.getRight() + 18.0f;
     const float barW = r.getRight() - 14.0f - barX;
     if (barW > 90.0f) {
-        static const char* const kNames[3] = { "SOURCE 1", "SOURCE 2", "SOURCE 3" };
+        static const char* const kNames[4] = { "SOURCE 1", "SOURCE 2", "SOURCE 3", "SOURCE 4" };
         const float rowH = 20.0f;
-        float by = sq.getCentreY() - 1.5f * rowH;
+        float by = sq.getCentreY() - 2.0f * rowH;
         g.setFont(ui::body(9.5f));
-        for (int k = 0; k < 3; ++k, by += rowH) {
+        for (int k = 0; k < 4; ++k, by += rowH) {
             g.setColour(ui::dim);
             g.drawText(kNames[k], barX, by, 58.0f, 12.0f, juce::Justification::left, false);
             const float x0 = barX + 62.0f, w = barW - 62.0f - 34.0f;
             g.setColour(ui::track.withAlpha(0.5f));
             g.fillRoundedRectangle(x0, by + 2.0f, w, 8.0f, 3.0f);
             // The factor the engine applies, which is what the level is multiplied by.
-            const float factor = live ? 1.0f + amount * (3.0f * f[k] - 1.0f) : 1.0f;
-            g.setColour(ui::accent.withAlpha(0.35f + 0.5f * juce::jlimit(0.0f, 1.0f, factor / 3.0f)));
-            g.fillRoundedRectangle(x0, by + 2.0f, juce::jmax(2.0f, w * juce::jlimit(0.0f, 1.0f, factor / 3.0f)), 8.0f, 3.0f);
+            const float factor = live ? 1.0f + amount * (4.0f * f[k] - 1.0f) : 1.0f;
+            g.setColour(ui::accent.withAlpha(0.35f + 0.5f * juce::jlimit(0.0f, 1.0f, factor / 4.0f)));
+            g.fillRoundedRectangle(x0, by + 2.0f, juce::jmax(2.0f, w * juce::jlimit(0.0f, 1.0f, factor / 4.0f)), 8.0f, 3.0f);
             g.setColour(ui::text.withAlpha(0.75f));
             g.drawText(juce::String(factor, 2) + "x", x0 + w + 4.0f, by, 30.0f, 12.0f, juce::Justification::left, false);
         }
         g.setColour(ui::faint);
-        g.drawText("the factor on each slot's own level", barX, sq.getCentreY() + 1.9f * rowH, barW, 12.0f,
+        g.drawText("the factor on each slot's own level", barX, sq.getCentreY() + 2.4f * rowH, barW, 12.0f,
                    juce::Justification::left, false);
     }
 

@@ -289,19 +289,26 @@ bool Engine::loadUserWavetable(const float* mono, int n, int frameLen)
     return true;
 }
 
-void Engine::setTexture(const float* mono, int n, double sampleRate, double baseHz)
+void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz)
 {
-    const int active = textureActive_.load(std::memory_order_acquire);
+    if (slot < 0 || slot >= kSlots) return;
+    const int active = textureActive_[slot].load(std::memory_order_acquire);
     const int target = active < 0 ? 0 : 1 - active;
     // Wait until the audio thread no longer holds the target buffer (it publishes the index it
     // used last); bounded, so a host without a running audio thread cannot hang us.
-    for (int spin = 0; spin < 200000 && textureInUse_.load(std::memory_order_acquire) == target; ++spin) { }
-    Texture& t = textures_[target];
+    for (int spin = 0; spin < 200000 && textureInUse_[slot].load(std::memory_order_acquire) == target; ++spin) { }
+    Texture& t = textures_[slot][target];
     t.mono.assign(mono, mono + std::max(n, 0));
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.measure();
-    textureActive_.store(target, std::memory_order_release);
+    textureActive_[slot].store(target, std::memory_order_release);
+}
+
+void Engine::clearTexture(int slot)
+{
+    if (slot < 0 || slot >= kSlots) return;
+    textureActive_[slot].store(-1, std::memory_order_release);
 }
 
 double Engine::frequencyOf(int note) const
@@ -351,8 +358,9 @@ int Engine::displaySlotPartials(int slot, float* out, int maxCount) const
 int Engine::displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount) const
 {
     const Voice* v = loudestVoice();
-    const int a = textureActive_.load(std::memory_order_relaxed);
-    const int len = a >= 0 ? static_cast<int>(textures_[a].mono.size()) : 0;
+    const int k = slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot);
+    const int a = textureActive_[k].load(std::memory_order_relaxed);
+    const int len = a >= 0 ? static_cast<int>(textures_[k][a].mono.size()) : 0;
     return (v != nullptr && len > 0) ? v->displayGrains(slot, out, maxCount, len) : 0;
 }
 

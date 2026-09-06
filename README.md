@@ -158,12 +158,15 @@ state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.
 
-**Three sources.** Every voice has three equal source slots. Each is one of
+**Four sources.** Every voice has four equal source slots. Each is one of
 Additive (a 32-partial bank shaped by tilt, brightness, odd/even, inharmonic
 stretch and shimmer -- in Source 1 the classic strand bank with unison,
 detune and stacks), Wavetable (a table of spectra), FM, Texture (granular,
-up to 64 grains) or Noise (ten colours); so three additive banks, three
-granular players or any mix are a matter of three choices. **Nine filter
+up to 64 grains) or Noise (ten colours); so four additive banks, four
+granular players or any mix are a matter of four choices. Each slot has its
+own clip, so four Texture slots can play four different recordings; a pack
+preset names them as up to four paths separated by `;`, and a preset that
+names one file still puts it in every slot, as it always did. **Nine filter
 models** sit behind the same knobs: LP 6/12/24, HP, BP, notch, peak, a
 saturating ladder and a tuned comb, with Drive ahead of them; the filter and
 the z-plane each switch on and off and run in series or in parallel. **Clock.**
@@ -265,9 +268,8 @@ movement out of a reverb tail and leaves it grainy and flat, and the sense of
 an enormous room comes from the distance between the quietest texture and the
 loudest swell.
 
-**Vector.** A page beside the three source slots: a point in a square whose
-corners are Source 1, Source 2, Source 3 and the three of them together, after
-the Prophet VS and the Wavestation. *Amount* at 0 does nothing at all, and the
+**Vector.** A page beside the source slots: a point in a square whose four
+corners are the four sources, after the Prophet VS and the Wavestation. *Amount* at 0 does nothing at all, and the
 centre of the square is neutral by construction — every factor is exactly 1 —
 so it can be turned up on a patch you like and changes nothing until you move.
 *Wander* lets the point drift on its own, on two curves whose rates share no

@@ -43,6 +43,9 @@ public:
     bool loadScalaText(const juce::String& text, const juce::String& displayName);
     // Source-slot data: a texture sample (any format JUCE reads; assumed recorded at C4 for
     // Pitch = Note) and a user wavetable (2048-sample frames). Paths are kept in the state.
+    // One clip per source slot; the slotless form loads the file into all four, which is what a
+    // preset that names a single file means and what the instrument always did.
+    bool loadTextureFile(int slot, const juce::File& file);
     bool loadTextureFile(const juce::File& file);
     bool loadWavetableFile(const juce::File& file);
     bool loadImpulseFile(const juce::File& file, bool second = false);   // convolution room, mono or stereo
@@ -55,7 +58,11 @@ public:
     bool levelMatch() const { return levelMatch_; }
     void setCompactLayout(bool on) { compact_ = on; }
     bool compactLayout() const { return compact_; }
-    juce::String textureName() const  { return textureFile_.existsAsFile() ? textureFile_.getFileNameWithoutExtension() : juce::String(); }
+    juce::String textureName(int slot = 0) const
+    {
+        const int k = juce::jlimit(0, ambient::kSlots - 1, slot);
+        return textureFile_[k].existsAsFile() ? textureFile_[k].getFileNameWithoutExtension() : juce::String();
+    }
     juce::String wavetableName() const { return wavetableFile_.existsAsFile() ? wavetableFile_.getFileNameWithoutExtension() : juce::String(); }
     // User presets as files (full state including a loaded Scala scale).
     bool savePresetFile(const juce::File& file);
@@ -136,7 +143,7 @@ private:
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
-    juce::File textureFile_, wavetableFile_, impulseFile_, impulseBFile_;
+    juce::File textureFile_[ambient::kSlots], wavetableFile_, impulseFile_, impulseBFile_;
     bool       levelMatch_ = false, compact_ = false;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;

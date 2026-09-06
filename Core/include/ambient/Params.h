@@ -166,6 +166,12 @@ enum class ParamId : int {
     // together, after the Prophet VS and the Wavestation. Amount 0 leaves every slot's level
     // exactly as it is set.
     VecAmount, VecX, VecY, VecWander, VecRate,
+    // Source 4: the same slot as 2 and 3, laid out identically, so the Vector's four corners are
+    // four sources rather than three and the three together. Appended for the same reason as
+    // everything above it.
+    Src4Type, Src4Level, Src4Octave, Src4Ratio, Src4Pan, Src4Table, Src4Position, Src4PosDrift,
+    Src4FmRatio, Src4FmIndex, Src4Grain, Src4Density, Src4DensitySync, Src4Follow, Src4Grains, Src4Spread, Src4Noise, Src4NoiseQ,
+    Src4Partials, Src4Tilt, Src4Bright, Src4OddEven, Src4Inharm, Src4Shimmer, Src4ShimmerRate, Src4Drift,
     Count
 };
 
@@ -199,7 +205,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // consecutive (Source 1's level and spectrum are the classic Oscillator parameters). The table
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
-constexpr int kSourceSlots = 3;    // the self test checks this against kSlots in Sources.h
+constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
 constexpr int kSlotFields  = 26;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
@@ -209,7 +215,7 @@ const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for 
 // mistyped section name is an Unknown the self test catches instead of a predicate that silently
 // answers no forever.
 enum class ParamSection : int {
-    Master, Source1, Strands, Source2, Source3, Strike, Foundation, Air, Envelope, Filter, ZPlane,
+    Master, Source1, Strands, Source2, Source3, Source4, Strike, Foundation, Air, Envelope, Filter, ZPlane,
     Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
     Patina, Cosmos, Cloud, ClusterBrain, Brain2, Autoplay, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
     Macros, Map, Route, Vector, Unknown

@@ -379,15 +379,14 @@ void Engine::readParams()
         }
         // ---- the Vector
         //
-        // A point in a square, after the Prophet VS and the Wavestation: the corners are Source 1,
-        // Source 2, Source 3, and the three of them together, and the point's bilinear weights
-        // become the slots' levels. Written as a factor on the levels each slot already has, so
-        // the slot knobs stay what they were -- a trim under the vector rather than a thing the
-        // vector overwrites.
+        // A point in a square, after the Prophet VS and the Wavestation: the four corners are the
+        // four source slots, and the point's bilinear weights become their levels. Written as a
+        // factor on the levels each slot already has, so the slot knobs stay what they were -- a
+        // trim under the vector rather than a thing the vector overwrites.
         //
-        // The weights are scaled by three, which makes the CENTRE of the square neutral: at
+        // The weights are scaled by four, which makes the CENTRE of the square neutral: at
         // (0.5, 0.5) each factor is exactly 1 and turning Amount up changes nothing at all. It
-        // also keeps the three factors summing to three wherever the point is, so travelling to a
+        // also keeps the four factors summing to four wherever the point is, so travelling to a
         // corner moves the timbre without moving the level.
         {
             const float amount = g(ParamId::VecAmount);
@@ -403,22 +402,23 @@ void Engine::readParams()
                 }
                 vx = clampv(vx, 0.0f, 1.0f);
                 vy = clampv(vy, 0.0f, 1.0f);
-                const float w00 = (1.0f - vx) * (1.0f - vy);   // Source 1
-                const float w10 = vx * (1.0f - vy);            // Source 2
-                const float w01 = (1.0f - vx) * vy;            // Source 3
-                const float w11 = vx * vy;                     // all three
-                const float f[kSlots] = { w00 + w11 / 3.0f, w10 + w11 / 3.0f, w01 + w11 / 3.0f };
+                const float f[kSlots] = { (1.0f - vx) * (1.0f - vy),   // Source 1, bottom left
+                                          vx * (1.0f - vy),            // Source 2, bottom right
+                                          (1.0f - vx) * vy,            // Source 3, top left
+                                          vx * vy };                   // Source 4, top right
                 for (int k = 0; k < kSlots; ++k) {
-                    const float factor = 1.0f + amount * (3.0f * f[k] - 1.0f);
+                    const float factor = 1.0f + amount * (4.0f * f[k] - 1.0f);
                     vp_.slot[k].level = clampv(vp_.slot[k].level * factor, 0.0f, 1.0f);
                 }
                 vp_.level = vp_.slot[0].level;
             }
         }
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
-        const int a = textureActive_.load(std::memory_order_acquire);
-        textureInUse_.store(a, std::memory_order_release);
-        vp_.texture = (a >= 0 && !textures_[a].empty()) ? &textures_[a] : nullptr;
+        for (int k = 0; k < kSlots; ++k) {
+            const int a = textureActive_[k].load(std::memory_order_acquire);
+            textureInUse_[k].store(a, std::memory_order_release);
+            vp_.texture[k] = (a >= 0 && !textures_[k][a].empty()) ? &textures_[k][a] : nullptr;
+        }
     }
     masterGain_     = g(ParamId::MasterGain);   // through g(), so the matrix can reach it
     subLevel_       = g(ParamId::SubLevel);

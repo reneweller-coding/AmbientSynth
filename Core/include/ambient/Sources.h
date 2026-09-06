@@ -23,7 +23,7 @@
 
 namespace ambient {
 
-constexpr int kSlots         = 3;
+constexpr int kSlots         = 4;
 constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
 constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use

@@ -42,8 +42,27 @@ void rebuildViews()
                                       e.mod.empty() ? nullptr : e.mod.c_str(),
                                       e.envs.empty() ? nullptr : e.envs.c_str() });
             const std::filesystem::path dir(pk.dir);
-            auto resolve = [&dir](const std::string& rel) {
+            auto resolveOne = [&dir](const std::string& rel) {
                 return rel.empty() ? std::string() : (dir / rel).lexically_normal().string();
+            };
+            // The texture field may name up to four files separated by ';', one per source slot.
+            // Each is resolved against the pack's folder and the separators are kept, so the host
+            // can split the result the same way.
+            auto resolve = [&resolveOne](const std::string& field) {
+                if (field.find(';') == std::string::npos) return resolveOne(field);
+                std::string out;
+                size_t start = 0;
+                while (true) {
+                    const size_t semi = field.find(';', start);
+                    std::string part = field.substr(start, semi == std::string::npos ? std::string::npos : semi - start);
+                    while (!part.empty() && (part.front() == ' ' || part.front() == '\t')) part.erase(part.begin());
+                    while (!part.empty() && (part.back() == ' ' || part.back() == '\t')) part.pop_back();
+                    out += resolveOne(part);
+                    if (semi == std::string::npos) break;
+                    out += ';';
+                    start = semi + 1;
+                }
+                return out;
             };
             paths().push_back(resolve(e.texture));
             paths().push_back(resolve(e.wavetable));

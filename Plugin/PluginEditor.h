@@ -29,11 +29,12 @@ public:
 private:
     void timerCallback() override;
     void chooseScalaFile();
-    void chooseSourceFile(bool wavetable);
+    void chooseSourceFile(bool wavetable, int slot = -1);   // slot < 0: the clip goes into every slot
     void chooseImpulseFile(bool second = false);
     void updateSourceCells();   // greys the cells a slot's type does not use, names the loaded files
     int  cellForParam(ambient::ParamId id) const;
-    int  tableCell_ = -1, textureCell_ = -1, impulseCell_ = -1, impulseBCell_ = -1;
+    int  tableCell_ = -1, impulseCell_ = -1, impulseBCell_ = -1;
+    int  textureCell_[ambient::kSlots] = { -1, -1, -1, -1 };   // a Texture... button in every source section
     void buildCells();
     void colourCellsByGroup();
     int  addExtraCell(const juce::String& section, std::unique_ptr<juce::Component> comp, const juce::String& label, int units);
@@ -514,7 +515,7 @@ private:
     };
     std::unique_ptr<EnvView> envView_;
     std::unique_ptr<FilterView> filterView_;
-    std::unique_ptr<SourceView> source1View_, source2View_, source3View_;
+    std::unique_ptr<SourceView> source1View_, source2View_, source3View_, source4View_;
     std::unique_ptr<juce::TextButton> browseButton_;
     void setPage(int page);   // 0 edit, 1 perform, 2 browse
     void showMappingEditor();

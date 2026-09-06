@@ -61,7 +61,12 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     }
     ksOn_ = false; ksLen_ = 0;
     std::memset(apX_, 0, sizeof(apX_)); std::memset(apY_, 0, sizeof(apY_));
-    for (int k = 1; k < kSlots; ++k) slots_[k].prepare(sr_, rng_.fork());
+    // Slots 2 and 3 fork the voice's stream, as they always did. Slot 4 came later and seeds from
+    // a side stream instead: one more fork here would advance the voice's stream by a draw and
+    // move every random decision after it, and the oracle would report all 39 presets changed --
+    // which is exactly what it did before this line was split.
+    for (int k = 1; k < 3; ++k) slots_[k].prepare(sr_, rng_.fork());
+    for (int k = 3; k < kSlots; ++k) slots_[k].prepare(sr_, seed ^ (0xC2B2AE3D27D4EB4Full + static_cast<uint64_t>(k)));
     filt_.prepare(sr_);
     airL_.reset();  airR_.reset();
     std::memset(itdBufL_, 0, sizeof(itdBufL_));
@@ -488,7 +493,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
-            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), sp, table, p.texture, p.driftRate * rateMul_);
+            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), sp, table, p.texture[k], p.driftRate * rateMul_);
         }
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();

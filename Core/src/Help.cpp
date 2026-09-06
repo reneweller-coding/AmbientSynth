@@ -14,7 +14,7 @@ struct HelpEntry { const char* key; const char* text; };
 const HelpEntry kHelp[] = {
     { "master_gain", "Output level after the mid/side stage and before the soft clipper. There is no compressor anywhere in this instrument: what you hear is the dynamics of the drone." },
 
-    // ---- sources (shared by the three slots)
+    // ---- sources (shared by the four slots)
     { "srcN_type", "What this slot is. Additive: a bank of partials shaped by tilt, brightness, odd/even and shimmer (in Source 1 the strand bank with unison, detune and stacks). Wavetable: a table of spectra, morphed by Position. FM: a two-operator pair. Texture: a granular player over a loaded clip. Noise: ten colours. Off: silent." },
     { "osc_level", "Level of Source 1 (the strand bank when Additive, otherwise the slot). Levels of the three sources mix before the filter." },
     { "srcN_level", "Level of this source. All three sources are normalised so the same Level means about the same loudness, whatever the type." },
@@ -158,9 +158,9 @@ const HelpEntry kHelp[] = {
     { "near_lowcut", "The same for the near room: the small reverb's own low end, taken out so the foreground keeps its body." },
     { "room_lowcut", "The same for the convolution room. Real impulse responses of large spaces carry a lot of low-mid energy, which is what makes them sound real and what makes them muddy in a mix." },
     { "subsonic", "A steep high-pass (24 dB/oct) on the finished output, off at 0. Below about 20 Hz there is nothing to hear, but there is plenty to move: it takes headroom, it drives amplifiers and speaker cones for nothing, and it makes mastering processors distort early. Off by default and adjustable rather than fixed, because the Foundation two octaves under a low root reaches about 16 Hz -- a mastering engineer's 20 Hz cut would take this instrument's deepest tone with it. Set it under the lowest note you actually want." },
-    { "vec_amount", "How much of the Vector: at 0 each source slot plays at the level it is set to and nothing here does anything. Turned up, the levels are taken over by a point in a square (X, Y) whose corners are Source 1, Source 2, Source 3 and the three of them together -- the Prophet VS and Wavestation idea, where the timbre is a place rather than a setting." },
+    { "vec_amount", "How much of the Vector: at 0 each source slot plays at the level it is set to and nothing here does anything. Turned up, the levels are taken over by a point in a square (X, Y) whose corners are the four source slots -- the Prophet VS and Wavestation idea, where the timbre is a place rather than a setting." },
     { "vec_x", "Left to right in the square: Source 1 at the left edge, Source 2 at the right." },
-    { "vec_y", "Bottom to top: Source 3 at the top left, all three together at the top right." },
+    { "vec_y", "Bottom to top: Source 3 at the top left, Source 4 at the top right." },
     { "vec_wander", "The point drifts on its own by this much, on two slow curves that share no ratio, so it never traces the same path twice." },
     { "vec_rate", "How fast it drifts. Drone rates: a whole cycle takes minutes at the low end." },
     { "far_freeze", "Holds the far reverb's tail forever: an instant infinite pad of whatever was in it." },
@@ -395,7 +395,7 @@ THE PAGE
 Everything is on one page and nothing scrolls; drag the window corner to zoom. Rows whose sections are of a kind page through tabs: SOURCE 1 / STRANDS / SOURCE 2 / SOURCE 3, FILTER / Z-PLANE / AMP ENV, the effect pairs, BRAIN / TUNING / COHERENCE / CLOCK, MORPH / MACROS. The room a row's knobs leave is a live display drawn from the engine's own numbers. The strip along the bottom holds the modulators. Point at any control and this header line tells you what it does.)" },
 
     { "Sources",
-R"(Every voice has three equal source slots; their levels mix before the filter. Each slot has a Type:
+R"(Every voice has four equal source slots; their levels mix before the filter. Each slot has its own clip for the Texture type, so four slots can play four different recordings. Each slot has a Type:
 
 ADDITIVE  A bank of up to 32 partials. Partial h has amplitude h^-Tilt, the Brightness window fades the upper ones out, Odd/Even weights the two families, Inharmonic stretches the series like a stiff string, and Shimmer lets every partial drift in level on its own slow curve -- the breathing. Partials above Nyquist are not generated, so nothing aliases. In Source 1, Additive is the STRAND BANK: up to six copies of the bank, detuned (Detune, Drift) or placed on pure ratios (Stack: octaves, fifths, a just major or minor, seventh, harmonics, subharmonics -- one key becomes a just chord), fanned out in stereo (Spread), with Bloom opening the brightness over Bloom Time and Rate Wander slowly varying every movement rate. In Source 2 and 3, Additive is a single bank with its own Partials, Tilt, Bright, Odd/Even, Inharmonic and Shimmer.
 
@@ -409,7 +409,7 @@ NOISE  Ten colours: White, Pink, Brown, Blue, Violet, Grey, Band (a resonant ban
 
 Every slot also has Octave, a just Ratio to the note (3/2 a fifth up, 7/4 a harmonic seventh -- ratios, so the scale stays pure) and Pan. In Source 1 these move the strand bank as well.
 
-THE VECTOR is the three slots read as a place rather than as three levels, after the Prophet VS and the Korg Wavestation: a point in a square whose corners are Source 1, Source 2, Source 3 and the three of them together. Amount is how much of it there is, and at 0 nothing here does anything -- each slot plays at the level it is set to. Drag the point, or turn X and Y. The centre of the square is neutral by construction: at (0.5, 0.5) every factor is exactly 1, so turning Amount up on a patch you like changes nothing until you move. Wander lets the point drift on its own, on two curves whose rates share no simple ratio, so it never traces the same path twice; Rate is how fast. The bars beside the square say what the point is doing to each slot.)" },
+THE VECTOR is the four slots read as a place rather than as four levels, after the Prophet VS and the Korg Wavestation: a point in a square whose corners are the four sources. Amount is how much of it there is, and at 0 nothing here does anything -- each slot plays at the level it is set to. Drag the point, or turn X and Y. The centre of the square is neutral by construction: at (0.5, 0.5) every factor is exactly 1, so turning Amount up on a patch you like changes nothing until you move. Wander lets the point drift on its own, on two curves whose rates share no simple ratio, so it never traces the same path twice; Rate is how fast. The bars beside the square say what the point is doing to each slot.)" },
 
     { "Filters and Z-plane",
 R"(Two filters, each with its own switch, in series or in parallel.

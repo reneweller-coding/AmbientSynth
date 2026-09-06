@@ -49,15 +49,16 @@ def referenced():
                 if not t or t.startswith("#"):
                     continue
                 for field in t.split("|"):
-                    field = field.strip()
-                    if not field.lower().endswith(".wav"):
-                        continue
-                    src = os.path.normpath(os.path.join(PACKS, field))
-                    kind = os.path.basename(os.path.dirname(src))
-                    if kind not in KINDS:
-                        print("  ignored (not a library folder): %s" % field)
-                        continue
-                    want[(kind, os.path.basename(src))] = src
+                    # a texture field may carry up to four clips, one per slot, separated by ';'
+                    for field in (x.strip() for x in field.split(";")):
+                        if not field.lower().endswith(".wav"):
+                            continue
+                        src = os.path.normpath(os.path.join(PACKS, field))
+                        kind = os.path.basename(os.path.dirname(src))
+                        if kind not in KINDS:
+                            print("  ignored (not a library folder): %s" % field)
+                            continue
+                        want[(kind, os.path.basename(src))] = src
     return want
 
 

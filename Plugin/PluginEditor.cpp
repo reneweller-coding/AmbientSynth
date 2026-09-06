@@ -32,7 +32,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Strike", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4", "Strike", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
@@ -48,7 +48,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     };
     tabRows_ = {
         // The Vector belongs with the sources it mixes, so it is a page of the same row.
-        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "STRIKE", "VECTOR" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Strike" }, { "Vector" } } },
+        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "SOURCE 4", "STRIKE", "VECTOR" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Strike" }, { "Vector" } } },
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
@@ -211,6 +211,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     source1View_ = std::make_unique<SourceView>(proc_, 1);
     source2View_ = std::make_unique<SourceView>(proc_, 2);
     source3View_ = std::make_unique<SourceView>(proc_, 3);
+    source4View_ = std::make_unique<SourceView>(proc_, 4);
     brainView_ = std::make_unique<BrainView>(proc_);
     brainView2_ = std::make_unique<BrainView>(proc_);
     brainView3_ = std::make_unique<BrainView>(proc_);
@@ -221,6 +222,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     spectrumView_ = std::make_unique<SpectrumView>(proc_);
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
+                                static_cast<juce::Component*>(source4View_.get()),
                                 static_cast<juce::Component*>(source1View_.get()), static_cast<juce::Component*>(brainView_.get()),
                                 static_cast<juce::Component*>(brainView2_.get()),
                                 static_cast<juce::Component*>(brainView3_.get()),
@@ -230,7 +232,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(vectorView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), nullptr, vectorView_.get() };
+        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), source4View_.get(), nullptr, vectorView_.get() };
         tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get(), nullptr };
     }
     if (groups_.size() > 4) {
@@ -332,7 +334,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
             if (s.name == "Space") s.maxUnits = 8;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
-            if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3") s.maxUnits = 12;
+            if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3" || s.name == "Source 4") s.maxUnits = 12;
             s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
@@ -417,9 +419,13 @@ void AmbientSynthEditor::buildCells()
     auto table = std::make_unique<juce::TextButton>("Wavetable...");
     table->onClick = [this] { chooseSourceFile(true); };
     tableCell_ = addExtraCell("Source 2", std::move(table), "User table", 2);
-    auto texture = std::make_unique<juce::TextButton>("Texture...");
-    texture->onClick = [this] { chooseSourceFile(false); };
-    textureCell_ = addExtraCell("Source 3", std::move(texture), "Texture file", 2);
+    // A clip loader in every source section, each for its own slot: four slots typed Texture
+    // can play four different recordings, which is what the Vector's four corners are for.
+    for (int k = 0; k < ambient::kSlots; ++k) {
+        auto texture = std::make_unique<juce::TextButton>("Texture...");
+        texture->onClick = [this, k] { chooseSourceFile(false, k); };
+        textureCell_[k] = addExtraCell("Source " + juce::String(k + 1), std::move(texture), "Texture file", 2);
+    }
     // Autoplay's trigger as a button of its own: the parameter is a switch a host can automate,
     // but by hand you want one press, not a switch you have to put back.
     auto step = std::make_unique<juce::TextButton>("Step now");
@@ -1462,7 +1468,7 @@ void AmbientSynthEditor::updateSourceCells()
         }
     }
     nameCell(tableCell_, "User table", proc_.wavetableName());
-    nameCell(textureCell_, "Texture file", proc_.textureName());
+    for (int k = 0; k < ambient::kSlots; ++k) nameCell(textureCell_[k], "Texture file", proc_.textureName(k));
     nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());
     nameCell(impulseBCell_, "no second room", proc_.impulseBName());
 }
@@ -1502,15 +1508,18 @@ void AmbientSynthEditor::showMappingEditor()
     mapOpen_ = true;
 }
 
-void AmbientSynthEditor::chooseSourceFile(bool wavetable)
+void AmbientSynthEditor::chooseSourceFile(bool wavetable, int slot)
 {
-    chooser_ = std::make_unique<juce::FileChooser>(wavetable ? "Load a wavetable (2048-sample frames)" : "Load a texture sample",
-                                                   juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+    const juce::String what = wavetable ? juce::String("Load a wavetable (2048-sample frames)")
+                            : slot >= 0 ? "Load a clip for Source " + juce::String(slot + 1)
+                                        : juce::String("Load a texture sample");
+    chooser_ = std::make_unique<juce::FileChooser>(what, juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
     chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, wavetable](const juce::FileChooser& fc) {
+        [this, wavetable, slot](const juce::FileChooser& fc) {
             const auto file = fc.getResult();
             if (!file.existsAsFile()) return;
-            const bool ok = wavetable ? proc_.loadWavetableFile(file) : proc_.loadTextureFile(file);
+            const bool ok = wavetable ? proc_.loadWavetableFile(file)
+                          : slot >= 0 ? proc_.loadTextureFile(slot, file) : proc_.loadTextureFile(file);
             if (!ok)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, wavetable ? "Wavetable" : "Texture",
                     wavetable ? "Could not read this file as a wavetable (it needs at least one 2048-sample frame)." : "Could not read this audio file.");

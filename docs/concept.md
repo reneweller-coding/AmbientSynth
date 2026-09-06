@@ -434,13 +434,27 @@ preset (23× → 21× realtime).
   slows down, so a stretch of five minutes never resembles the previous
   five.
 
-### Three sources
+### Four sources
 
-Every voice has three equal source slots. Source 1's *Type* defaults to
+Every voice has four equal source slots (three until the Vector arrived; the
+fourth exists so the square's four corners are four sources rather than three
+and the three together). Source 1's *Type* defaults to
 **Additive**, which is the strand bank described above (unison, detune,
 stacks, bloom -- the classic Oscillator; its Octave, Ratio and Pan move the
 whole bank); set to anything else the bank falls silent and the slot renders
-in its place, so a voice can be three granular players or three FM pairs.
+in its place, so a voice can be four granular players or four FM pairs.
+
+Each slot has its own clip. The engine used to hold one texture for the whole
+instrument, which meant two Texture slots always played the same recording;
+now `setTexture(slot, ...)` fills one of four double-buffered clips, the
+slotless call fills all four (what a preset naming a single file always
+meant), and a pack preset's texture field may carry up to four paths
+separated by `;`, an empty one meaning that slot has none. Adding the fourth
+slot had one trap worth writing down: the slots fork the voice's random
+stream in order, and a fourth fork advanced that stream by one draw and moved
+every random decision after it -- the oracle reported all 39 presets changed.
+Slot 4 seeds from a side stream instead, and the oracle is back to 39
+identical.
 Additive in Source 2 or 3 is a single 32-partial bank inside the slot with
 the same spectrum formula (partials, tilt, brightness window, odd/even,
 inharmonic stretch, per-partial shimmer) -- one strand, the cost of a

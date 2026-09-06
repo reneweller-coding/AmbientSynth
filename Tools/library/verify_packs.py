@@ -183,9 +183,15 @@ def main():
                             problems.append(f"{where}: envelope value {v} outside -1..1")
             for which, field in (("texture", 3), ("wavetable", 4), ("impulse", 5)):
                 if len(f) > field and f[field].strip():
-                    ref = os.path.normpath(os.path.join(a.packs, f[field].strip()))
-                    if not os.path.isfile(ref):
-                        problems.append(f"{where}: {which} not found: {f[field].strip()}")
+                    # The texture field may name up to four clips separated by ';', one per source
+                    # slot (an empty one means that slot has none); the others name one file.
+                    for one in f[field].split(";"):
+                        one = one.strip()
+                        if not one:
+                            continue
+                        ref = os.path.normpath(os.path.join(a.packs, one))
+                        if not os.path.isfile(ref):
+                            problems.append(f"{where}: {which} not found: {one}")
     for name, n in names.items():
         if n > 1:
             problems.append(f"duplicate preset name '{name}' ({n} times)")

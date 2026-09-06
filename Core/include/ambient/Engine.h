@@ -76,8 +76,16 @@ public:
     // audio thread has left the buffer it is about to overwrite, then swaps.
     void setUserWavetable(const Wavetable& t);
     bool loadUserWavetable(const float* mono, int n, int frameLen = 2048);   // analyses frames, then sets
-    void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256);
-    bool hasTexture() const { return textureActive_.load(std::memory_order_relaxed) >= 0; }
+    // One clip per source slot, so four slots typed Texture (or Stretch) can play four different
+    // recordings -- which is what makes the Vector's four corners four landscapes. The slotless
+    // form loads the same clip into every slot: what the instrument always did, and what a preset
+    // that names one file still means.
+    void setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz = 261.6256);
+    void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256)
+    { for (int k = 0; k < kSlots; ++k) setTexture(k, mono, n, sampleRate, baseHz); }
+    void clearTexture(int slot);
+    bool hasTexture(int slot = 0) const
+    { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }
     // Convolution room: a stereo (R may be null) impulse response, message thread.
     void  setImpulse(const float* L, const float* R, int n, double sampleRate) { room_.setImpulse(L, R, n, sampleRate); userImpulse_ = true; }
     // The room's second impulse: Room Morph crossfades between the two. Both convolutions only
@@ -92,8 +100,12 @@ public:
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
     // For the displays (message thread, no synchronisation -- a torn read costs a pixel).
     const Wavetable* userWavetable() const { return userTable_.frames > 0 ? &userTable_ : nullptr; }
-    const Texture*   displayTexture() const
-    { const int a = textureActive_.load(std::memory_order_relaxed); return a >= 0 ? &textures_[a] : nullptr; }
+    const Texture*   displayTexture(int slot = 0) const
+    {
+        const int k = slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot);
+        const int a = textureActive_[k].load(std::memory_order_relaxed);
+        return a >= 0 ? &textures_[k][a] : nullptr;
+    }
 
     // Morph: two full parameter snapshots (A = 0, B = 1). While MorphActive is on the
     // engine plays lerp(A, B, position); the position glides toward MorphPos at
@@ -356,9 +368,10 @@ private:
     std::atomic<bool> tableBusy_{ false };
     int               tableSeen_ = 0;
     std::atomic<int>  userTableFrames_{ 0 };
-    // Texture: two buffers, the audio thread reads the active one and publishes which.
-    Texture           textures_[2];
-    std::atomic<int>  textureActive_{ -1 }, textureInUse_{ -1 };
+    // Texture: two buffers per slot, the audio thread reads the active one and publishes which.
+    Texture           textures_[kSlots][2];
+    std::atomic<int>  textureActive_[kSlots] = { -1, -1, -1, -1 };
+    std::atomic<int>  textureInUse_[kSlots]  = { -1, -1, -1, -1 };
     const FixedScale* scale_ = nullptr;
     int               rootNote_ = 62;
     double            refPitch_ = 440.0;

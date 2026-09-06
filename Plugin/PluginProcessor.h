@@ -64,6 +64,11 @@ public:
     // Independent layers: the sound chain (everything but Cosmos) and the Cosmos chain.
     void applySoundPreset(int index);
     void applyCosmosPreset(int index);
+    // The two newer layers. Like Cosmos: each resets its own section and touches nothing else.
+    void applyZPreset(int index);
+    void applyStrikePreset(int index);
+    int  zPresetIndex() const { return zIndex_; }
+    int  strikePresetIndex() const { return strikeIndex_; }
     // Session recall (standalone). JUCE writes the whole state into its settings file when the
     // window is closed and reads it back on the next start -- but only then, so a crash, a kill
     // or a power cut loses the evening. The timer here writes it whenever it has actually
@@ -144,7 +149,7 @@ private:
     double setClock_ = 0.0;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
-    int soundIndex_ = 0, cosmosIndex_ = 0;
+    int soundIndex_ = 0, cosmosIndex_ = 0, zIndex_ = 0, strikeIndex_ = 0;
     // The names, not the indices: a pack added or removed between two sessions renumbers every
     // preset behind it, and an index would then name a different sound.
     juce::String soundName_, cosmosName_;

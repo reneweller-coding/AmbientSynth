@@ -1185,7 +1185,18 @@ void testCloudAndLayers()
         e.setParam(ParamId::Attack, 33.0f);
         CHECK(e.applyCosmosPreset(3), "cosmos preset applies");
         CHECK(e.getParam(ParamId::Attack) == 33.0f, "cosmos preset leaves the sound layer alone");
-        CHECK(e.getParam(ParamId::CosmosSend) == 1.0f, "cosmos preset sets its own parameters");
+        // Every preset in the bank has to do something. Checked against the whole bank rather
+        // than against one entry, because the bank is generated and its order will change again.
+        int cosmosDoesNothing = 0;
+        for (int p = 1; p < numCosmosPresets(); ++p) {
+            Engine c;
+            c.applyCosmosPreset(p);
+            bool moved = false;
+            for (const ParamDesc& d : paramTable())
+                if (isCosmosParam(d.id) && std::fabs(c.getParam(d.id) - d.def) > 1e-6f) moved = true;
+            if (!moved) { ++cosmosDoesNothing; std::printf("  cosmos preset %d (%s) changes nothing\n", p, cosmosPreset(p).name); }
+        }
+        CHECK(cosmosDoesNothing == 0, "every cosmos preset sets its own parameters");
         e.applyCosmosPreset(0);
         CHECK(e.getParam(ParamId::CosmosSend) == 0.0f && e.getParam(ParamId::CosmosShimmer) == 0.0f, "Cosmos Off resets the layer");
     }
@@ -1323,8 +1334,11 @@ void testOscAndGestures()
     CHECK(std::fabs(gl.input(GestureInput::HandDistance) - (0.4f - 0.1f) / 0.7f) < 1e-5f, "hand distance from both hands");
     m.address = "/ambient/note"; m.numArgs = 2; m.types[0] = 'i'; m.types[1] = 'i'; m.floats[0] = 64.0f; m.floats[1] = 0.0f;
     CHECK(dispatchOsc(m, sink, gl) && sink.lastEvent.type == ControlEvent::Type::NoteOff && sink.lastEvent.a == 64, "note off event");
+    int alienChoir = -1;
+    for (int i = 0; i < numCosmosPresets(); ++i) if (std::strcmp(cosmosPreset(i).name, "Alien Choir") == 0) alienChoir = i;
+    CHECK(alienChoir > 0, "the cosmos bank still has an Alien Choir to look up");
     m.address = "/ambient/cosmos"; m.numArgs = 1; m.types[0] = 's'; m.strings[0] = "Alien Choir";
-    CHECK(dispatchOsc(m, sink, gl) && sink.lastEvent.type == ControlEvent::Type::CosmosPreset && sink.lastEvent.a == 9, "cosmos preset by name");
+    CHECK(dispatchOsc(m, sink, gl) && sink.lastEvent.type == ControlEvent::Type::CosmosPreset && sink.lastEvent.a == alienChoir, "cosmos preset by name");
     m.address = "/ambient/nonsense";
     CHECK(!dispatchOsc(m, sink, gl), "unknown address rejected");
 
@@ -2249,6 +2263,53 @@ void testExpressionBodyPatina()
 
 // Every filter model must do what its own magnitude curve promises: the display is drawn from
 // that function, so a model whose audio path disagrees with it would lie to the eye.
+// The Z-plane bank: 155 shapes, and no ear is going to check them one at a time. Three things
+// have to be true of every one of them at every corner of its cube, and all three have been
+// wrong at some point in a filter bank somewhere: the sections must be stable, the cascade must
+// come out at a sane level, and moving the point must actually change the sound. A shape whose
+// corners are all the same is not a filter you can morph, it is a filter with three dead knobs.
+void testZPlaneBank()
+{
+    const float sr = 48000.0f;
+    int unstable = 0, silent = 0, loud = 0, dead = 0, deadZ = 0, noFamily = 0;
+    for (int shape = 0; shape < kZShapes; ++shape) {
+        if (kZShapeCategory[shape] >= kZCategories) ++noFamily;
+        auto respond = [&](float x, float y, float z, double* out) {
+            const ZFrame f = zInterpolate(shape, x, y, z);
+            ZBiquad ch[kZSections];
+            const float norm = zBuildCascade(f, ch, sr);
+            if (!std::isfinite(norm) || norm <= 0.0f) { ++silent; return false; }
+            for (int i = 0; i < f.used; ++i) {
+                // Stability of a two-pole section: |a2| < 1 and |a1| < 1 + a2.
+                if (!(std::fabs(ch[i].a2) < 0.99999f && std::fabs(ch[i].a1) < 1.0f + ch[i].a2)) { ++unstable; return false; }
+            }
+            for (int k = 0; k < 8; ++k) {                      // 40 Hz .. 10 kHz, log spaced
+                const float hz = 40.0f * std::pow(250.0f, k / 7.0f);
+                const float w = 2.0f * 3.14159265f * hz / sr;
+                float mag = norm;
+                for (int i = 0; i < f.used; ++i) mag *= ch[i].magnitudeAt(w);
+                if (!std::isfinite(mag)) { ++silent; return false; }
+                if (mag > 40.0f) ++loud;                       // +32 dB anywhere is a mistake, not a filter
+                out[k] = 20.0 * std::log10(std::max(static_cast<double>(mag), 1e-9));
+            }
+            return true;
+        };
+        double a[8], b[8], c[8];
+        if (!respond(0.0f, 0.0f, 0.0f, a) || !respond(1.0f, 1.0f, 0.0f, b) || !respond(0.5f, 0.5f, 1.0f, c)) continue;
+        double dxy = 0.0, dz = 0.0;
+        for (int k = 0; k < 8; ++k) { dxy = std::max(dxy, std::fabs(a[k] - b[k])); dz = std::max(dz, std::fabs(a[k] - c[k])); }
+        if (dxy < 1.0) { ++dead; std::printf("  shape %d (%s) barely moves across X/Y: %.2f dB\n", shape, kZShapeNames[shape], dxy); }
+        if (dz < 0.5) { ++deadZ; std::printf("  shape %d (%s) barely moves along Transform: %.2f dB\n", shape, kZShapeNames[shape], dz); }
+    }
+    std::printf("  z-plane bank: %d shapes in %d families, all stable, all alive\n", kZShapes, kZCategories);
+    CHECK(noFamily == 0, "every shape belongs to a family");
+    CHECK(unstable == 0, "every section of every shape is stable at every corner");
+    CHECK(silent == 0, "every shape builds a finite cascade");
+    CHECK(loud == 0, "no shape peaks more than 32 dB above unity after normalisation");
+    CHECK(dead == 0, "every shape's sound actually changes across X and Y");
+    CHECK(deadZ == 0, "every shape's sound actually changes along Transform");
+}
+
 void testFilterModels()
 {
     const float sr = 48000.0f;
@@ -2422,6 +2483,7 @@ int main()
     testStems();
     testSampleRates();
     testExpressionBodyPatina();
+    testZPlaneBank();
     testFilterModels();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);

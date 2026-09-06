@@ -318,6 +318,7 @@ void Engine::readParams()
     vp_.zShape      = static_cast<int>(std::lround(g(ParamId::ZShape)));
     vp_.zX          = g(ParamId::ZX);
     vp_.zY          = g(ParamId::ZY);
+    vp_.zZ          = g(ParamId::ZZ);
     vp_.zRate       = g(ParamId::ZRate);
     vp_.zDepth      = g(ParamId::ZDepth);
     vp_.zRes        = g(ParamId::ZResonance);

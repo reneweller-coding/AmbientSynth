@@ -436,6 +436,20 @@ void AmbientSynthProcessor::applyCosmosPreset(int index)
     applyScoped(cosmosPreset(index), PresetScope::Cosmos);
 }
 
+void AmbientSynthProcessor::applyZPreset(int index)
+{
+    if (index < 0 || index >= numZPresets()) return;
+    zIndex_ = index;
+    applyScoped(zPreset(index), PresetScope::ZPlane);
+}
+
+void AmbientSynthProcessor::applyStrikePreset(int index)
+{
+    if (index < 0 || index >= numStrikePresets()) return;
+    strikeIndex_ = index;
+    applyScoped(strikePreset(index), PresetScope::Strike);
+}
+
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()
 {
     return new AmbientSynthEditor(*this);

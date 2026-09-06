@@ -59,6 +59,11 @@ private:
     void     doRedo();
     void     swapAB();
     std::unique_ptr<juce::TextButton> undoButton_, redoButton_, abButton_, compactButton_, recallButton_;
+    // The two section layers that live inside their own sections rather than in the header:
+    // 156 filters and 41 plucks are lists you go looking for, not things you keep on the toolbar.
+    // Not owned: the cell owns the component, the editor only needs to read the selection back.
+    juce::ComboBox* zPresetBox_ = nullptr;
+    juce::ComboBox* strikePresetBox_ = nullptr;
     // Compact: the widest rows wrap into two, so the page is narrower and taller. Everything is
     // still on one page; only the shape changes. Kept in the plugin state.
     bool compact_ = false;

@@ -653,55 +653,37 @@ const Preset kPresets[] = {
 }
 
 namespace {
-// Cosmos-only bank: loadable on top of any sound preset.
-const Preset kCosmosPresets[] = {
-    { "Cosmos Off", "" },
-    { "Gentle Shift",     "cosmos_send=0.6;cosmos_shift=6;cosmos_shift_drift=1;cosmos_return=0.6;cosmos_to_far=0.4" },
-    { "Slow Beating",     "cosmos_send=0.8;cosmos_shift=40;cosmos_shift_drift=0.5;cosmos_return=0.7;cosmos_to_far=0.5" },
-    { "Metallic Shift",   "cosmos_send=1;cosmos_shift=150;cosmos_shift_drift=0.3;cosmos_return=0.6;cosmos_to_far=0.6" },
-    { "Downward Shift",   "cosmos_send=1;cosmos_shift=-120;cosmos_shift_drift=0.6;cosmos_return=0.7;cosmos_to_far=0.5" },
-    { "Root Resonator",   "cosmos_send=1;cosmos_res=0.7;cosmos_res_pitch=1;cosmos_res_fb=0.93;cosmos_return=0.7" },
-    { "Fifth Resonator",  "cosmos_send=1;cosmos_res=0.6;cosmos_res_pitch=1.5;cosmos_res_fb=0.92;cosmos_return=0.7" },
-    { "High Resonator",   "cosmos_send=1;cosmos_res=0.5;cosmos_res_pitch=6;cosmos_res_fb=0.9;cosmos_return=0.6;cosmos_to_far=0.6" },
-    { "Hull",             "cosmos_send=1;cosmos_res=0.9;cosmos_res_pitch=0.5;cosmos_res_fb=0.96;cosmos_return=0.8" },
-    { "Alien Choir",      "cosmos_send=0.8;cosmos_vowel=1;cosmos_vowel_rate=0.02;cosmos_shift=3;cosmos_return=0.8;cosmos_to_far=0.6" },
-    { "Fast Vowels",      "cosmos_send=0.9;cosmos_vowel=0.9;cosmos_vowel_rate=0.3;cosmos_return=0.9" },
-    { "Deep Throat",      "cosmos_send=0.7;cosmos_vowel=0.7;cosmos_vowel_rate=0.01;cosmos_shift=-10;cosmos_return=0.7" },
-    { "Nebula Drift",     "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5" },
-    { "Frozen Nebula",    "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.98;cosmos_return=0.8;cosmos_to_far=0.6" },
-    { "Soft Smear",       "cosmos_send=0.7;cosmos_nebula=0.6;cosmos_smear=0.6;cosmos_return=0.6;cosmos_to_far=0.5" },
-    { "Shimmer +12",      "cosmos_shimmer=0.7;cosmos_shimmer_pitch=+12" },
-    { "Shimmer +7",       "cosmos_shimmer=0.6;cosmos_shimmer_pitch=+7" },
-    { "Shimmer +19",      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=+19" },
-    { "Shimmer -12",      "cosmos_shimmer=0.5;cosmos_shimmer_pitch=-12" },
-    { "Shimmer +24",      "cosmos_shimmer=0.6;cosmos_shimmer_pitch=+24" },
-    { "Forbidden Planet", "cosmos_send=1;cosmos_shift=120;cosmos_shift_drift=1;cosmos_res=0.6;cosmos_res_pitch=1.5;cosmos_res_fb=0.9;"
-                          "cosmos_return=0.7;cosmos_to_far=0.5" },
-    { "Event Horizon",    "cosmos_send=1;cosmos_shift=-40;cosmos_shift_drift=0.5;cosmos_nebula=0.8;cosmos_smear=0.9;cosmos_shimmer=0.5;"
-                          "cosmos_shimmer_pitch=-12;cosmos_return=0.5;cosmos_to_far=1" },
-    { "Telepathy",        "cosmos_send=0.9;cosmos_vowel=0.9;cosmos_vowel_rate=0.2;cosmos_shift=8;cosmos_shift_drift=1;cosmos_nebula=0.4;"
-                          "cosmos_smear=0.5;cosmos_return=0.8" },
-    { "Warp Core",        "cosmos_send=1;cosmos_shift=-200;cosmos_shift_drift=0.3;cosmos_res=0.7;cosmos_res_pitch=0.25;cosmos_res_fb=0.96;"
-                          "cosmos_return=0.8;cosmos_to_far=0.4" },
-    { "Comet Tail",       "cosmos_send=1;cosmos_shimmer=0.9;cosmos_shimmer_pitch=+24;cosmos_nebula=0.6;cosmos_smear=0.8;cosmos_return=0.4;"
-                          "cosmos_to_far=1" },
-    { "Xenomorph Hive",   "cosmos_send=1;cosmos_vowel=0.8;cosmos_vowel_rate=0.5;cosmos_shift=-80;cosmos_shift_drift=1;cosmos_res=0.5;"
-                          "cosmos_res_pitch=0.5;cosmos_res_fb=0.9;cosmos_return=0.8;cosmos_to_far=0.5" },
-    { "Quasar",           "cosmos_send=1;cosmos_shift=280;cosmos_shift_drift=1;cosmos_shimmer=0.7;cosmos_shimmer_pitch=+19;cosmos_return=0.5;"
-                          "cosmos_to_far=0.8" },
-    { "Dark Matter",      "cosmos_send=1;cosmos_shift=-300;cosmos_nebula=0.9;cosmos_smear=0.9;cosmos_return=0.7;cosmos_to_far=0.7" },
-    { "Plasma Sea",       "cosmos_send=1;cosmos_nebula=0.7;cosmos_smear=0.6;cosmos_shift=12;cosmos_shift_drift=1;cosmos_res=0.3;"
-                          "cosmos_res_pitch=5;cosmos_res_fb=0.8;cosmos_return=0.8;cosmos_to_far=0.6" },
-    { "Void Whisper",     "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.95;cosmos_return=0.5;cosmos_to_far=0.9" },
-    { "Lost Transmission","cosmos_send=1;cosmos_shift=150;cosmos_shift_drift=1;cosmos_vowel=0.5;cosmos_vowel_rate=0.4;cosmos_nebula=0.3;"
-                          "cosmos_return=0.9;cosmos_to_far=0.2" },
-    { "Full Cosmos",      "cosmos_send=1;cosmos_shift=25;cosmos_shift_drift=1;cosmos_res=0.4;cosmos_res_pitch=2;cosmos_res_fb=0.9;"
-                          "cosmos_vowel=0.4;cosmos_vowel_rate=0.05;cosmos_nebula=0.5;cosmos_smear=0.7;cosmos_shimmer=0.5;"
-                          "cosmos_shimmer_pitch=+12;cosmos_return=0.7;cosmos_to_far=0.7" },
-};
+#include "CosmosPresets.inc"
+#include "ZPlanePresets.inc"
+#include "StrikePresets.inc"
 }
 
+// The three section layers. Index 0 of each is the "off" entry, and every accessor clamps, so a
+// stale index from an older session can never read past the end of a bank that has changed size.
 int numCosmosPresets() { return static_cast<int>(sizeof(kCosmosPresets) / sizeof(kCosmosPresets[0])); }
+int cosmosPresetCategory(int i) { return (i >= 0 && i < numCosmosPresets()) ? kCosmosPresetCategory[i] : 255; }
+int numCosmosPresetFamilies() { return static_cast<int>(sizeof(kCosmosPresetsFamilyNames) / sizeof(kCosmosPresetsFamilyNames[0])); }
+const char* cosmosPresetFamily(int f) { return (f >= 0 && f < numCosmosPresetFamilies()) ? kCosmosPresetsFamilyNames[f] : ""; }
+
+int numZPresets() { return static_cast<int>(sizeof(kZPresets) / sizeof(kZPresets[0])); }
+const Preset& zPreset(int index)
+{
+    const int n = numZPresets();
+    if (index < 0 || index >= n) index = 0;
+    return kZPresets[index];
+}
+int zPresetCategory(int i) { return (i >= 0 && i < numZPresets()) ? kZPresetCategory[i] : 255; }
+
+int numStrikePresets() { return static_cast<int>(sizeof(kStrikePresets) / sizeof(kStrikePresets[0])); }
+const Preset& strikePreset(int index)
+{
+    const int n = numStrikePresets();
+    if (index < 0 || index >= n) index = 0;
+    return kStrikePresets[index];
+}
+int strikePresetCategory(int i) { return (i >= 0 && i < numStrikePresets()) ? kStrikePresetCategory[i] : 255; }
+int numStrikePresetFamilies() { return static_cast<int>(sizeof(kStrikePresetsFamilyNames) / sizeof(kStrikePresetsFamilyNames[0])); }
+const char* strikePresetFamily(int f) { return (f >= 0 && f < numStrikePresetFamilies()) ? kStrikePresetsFamilyNames[f] : ""; }
 const Preset& cosmosPreset(int index)
 {
     const int n = numCosmosPresets();

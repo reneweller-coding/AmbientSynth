@@ -147,6 +147,18 @@ bool Engine::applyCosmosPreset(int index)
     return ambient::applyPreset(cosmosPreset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Cosmos);
 }
 
+bool Engine::applyZPreset(int index)
+{
+    if (index < 0 || index >= numZPresets()) return false;
+    return ambient::applyPreset(zPreset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::ZPlane);
+}
+
+bool Engine::applyStrikePreset(int index)
+{
+    if (index < 0 || index >= numStrikePresets()) return false;
+    return ambient::applyPreset(strikePreset(index), [this](ParamId id, float v) { setParam(id, v); }, PresetScope::Strike);
+}
+
 // ---------------------------------------------------------------- morph
 
 void Engine::setMorphSlot(int slot, const float* values)

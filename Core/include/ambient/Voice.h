@@ -51,7 +51,7 @@ struct VoiceParams {
     bool  filterParallel = false;   // both filters on: z-plane after the filter (false) or beside it (true)
     // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
     int   zMode = 0, zShape = 0;
-    float zX = 0.5f, zY = 0.5f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
+    float zX = 0.5f, zY = 0.5f, zZ = 0.0f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
     float panDrift = 0.4f, itd = 0.6f;
     // Rich's foreground/background carving inside the voice (see concept.md):
     float presence = 0.0f;      // dB bell at 2-5 kHz, full on the near plane, gone on the far plane

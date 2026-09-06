@@ -241,7 +241,13 @@ void Nebula::prepare(double, uint64_t seed)
 void Nebula::set(float smear)
 {
     const float s = clampv(smear, 0.0f, 1.0f);
-    alpha_ = (1.0f - s) * (1.0f - s);
+    // The floor matters. Without it, Smear = 1 gives alpha = 0 exactly, the magnitude smoother
+    // never updates, every bin stays at the zero it started from, and the Nebula falls silent --
+    // so the top of the knob was not "the smoothest setting" but "off", with nothing to say so.
+    // At 2e-4 and this hop rate the time constant is minutes, which is what the top of a smear
+    // control should be. Found by rendering the preset bank: one preset out of 257 sat exactly
+    // on that corner and measured as the carrier, untouched.
+    alpha_ = std::max((1.0f - s) * (1.0f - s), 2.0e-4f);
 }
 
 void Nebula::frame(Channel& c)

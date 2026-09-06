@@ -341,20 +341,52 @@ filter back in starts it from rest.
 
 ### Z-plane filter
 
-After the idea Dave Rossum built into the E-mu Morpheus: four filter
-frames sit on the corners of a square, and a point (X, Y) inside it is a
-filter whose poles *and zeros* are interpolated between the corners — move
-the point and the whole resonant structure glides, always through stable
+After the idea Dave Rossum built into the E-mu Morpheus: filter frames sit
+on the corners of a **cube**, and a point (X, Y, Transform) inside it is a
+filter whose poles *and zeros* are interpolated between them — move the
+point and the whole resonant structure glides, always through stable
 filters. The patent (US 5,170,369) expired long ago and the manuals
 describe what the filters do, but the coefficient tables in the original
 firmware are proprietary data; this bank is our own, built in the same
-architecture. `Core/include/ambient/ZPlane.h`:
+architecture, with its numbers from published acoustics.
+
+**155 shapes in twelve families** (voice, sweeps, combs and phasers,
+strings and bodies, bars and bells, membranes, tubes and pipes, rooms,
+series and exotic, extremes, instruments, EQ and speakers) — the original
+shipped 197 cubes, and this is the same order of thing. They are generated
+by `Tools/make_zplane_bank.py` rather than typed, because almost every one
+of them is a set of frequency *ratios* — the mode series of a bar, a
+membrane, a pipe, a bell — times a base frequency, and ninety-six shapes
+times eight corners times six frequencies is an invitation to type 2.756
+as 2.576 and never find out. The ratios are written down once, with a note
+saying where each comes from (Fletcher & Rossing for the bars and bells,
+the sung-vowel formant tables for the voices, `c/2L` for the room modes),
+and a machine does the multiplication.
+
+The first sixteen shapes are the original hand-written bank, carried over
+frequency for frequency and frozen: the library's 5000 presets name their
+shape as text (`z_shape=Glass`), so those names and their order can never
+change. New shapes are appended, never inserted.
+
+**The third axis** is what makes it a cube rather than a square, and the
+original's name for its filters says so. Writing eight corners for every
+shape would be twice the data for a face that is usually the same idea
+again, so each shape instead names a *rule* for how its far face differs —
+sharper, damped, peaks turned into notches, an octave up, the partials
+fanned out. Transform's default is 0, which is exactly the square that was
+there before the axis existed, so every preset ever saved sounds as it did.
+
+`Core/include/ambient/ZPlane.h`:
 
 * A frame is up to **six cascaded two-pole/two-zero sections** — a 12-pole
-  filter, the order the Morpheus used. Interpolation is bilinear in log
+  filter, the order the Morpheus used. Interpolation is trilinear in log
   centre frequency and log bandwidth on the *pole and zero parameters*,
-  never on coefficients, so every point inside the square is stable by
-  construction.
+  never on coefficients, so every point inside the cube is stable by
+  construction. The self test checks that claim rather than repeating it:
+  all 155 shapes at three corners each, every section tested for stability,
+  every cascade for a finite and sane level, and every shape for whether
+  moving the point actually changes the sound — a shape whose corners agree
+  is not a filter you can morph, it is a filter with three dead knobs.
 * Sections come in two flavours, and the difference matters: a **bell**
   (zero on the pole, wider) boosts its frequency and leaves the rest at
   unity, so six of them in series shape a spectrum; a **resonator** (no
@@ -883,6 +915,56 @@ rate, the arc period, and each source slot's grain density. Measured: a delay
 on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
 changes the render between 90 and 180 bpm; every preset (all Free) is
 unchanged.
+
+### The three section layers
+
+A layer is a preset bank that touches one section and nothing else, so it
+lands on top of whatever sound is loaded. There are three, and all three are
+generated and then *measured*:
+
+* **Cosmos** — 257 presets in sixteen families (shift, beating, resonators,
+  deep, vowels, nebula, shimmer, metallic, glass, drift, wide, ghost, choir,
+  machine, bloom, edge). Each family is a designed grid: two parameters over
+  four values each, chosen so every step is audible.
+* **Z-plane** — one preset per filter shape, 156 with the off entry, grouped
+  by the same twelve families as the shapes. A bank of 155 filters with no
+  way in is a bank nobody uses.
+* **Strike** — 41 presets for the Karplus-Strong pluck in four families
+  (strings, wood, metal, and *conducted*, where the pluck fires from the
+  conductor as well as from the keys, which turns it from something you play
+  into something the piece does on its own).
+
+`Tools/check_layer_presets.py` renders and measures every one of them, and
+the three banks each needed their own way of being measured before the
+measurement meant anything:
+
+* The **Strike** bank first measured 30 presets as identical to the carrier,
+  because the pluck fires on note-on and the offline render plays no keys.
+  With notes added, 34 measured as identical to *each other*, because
+  `--measure` analyses the second half of the render and a pluck of a few
+  hundred milliseconds is long gone by then. Measured with the drone
+  silenced and the conductor firing plucks throughout, all 41 are distinct.
+* The **Z-plane** bank measured four extreme shapes as identical, because a
+  filter can only be heard where the source has energy and a dark drone has
+  none at 9 kHz — and because the sub, the body and the effects do not pass
+  through the voice filter at all, so even at full wet they keep the drone
+  in the measurement. On bare white noise, all 156 are distinct.
+* The **Cosmos** bank came out with one dead preset out of 257, and that one
+  was a real bug rather than a bad preset. *Smear* sets the Nebula's
+  magnitude smoothing as `alpha = (1 - smear)^2`, which at Smear = 1 is
+  exactly zero: the smoother then never updates, every bin stays at the zero
+  it started from, and the Nebula falls silent. The top of that knob was not
+  "the smoothest setting", it was "off", with nothing anywhere to say so.
+  The default is 0.7 and no preset had ever sat on the end stop, so it had
+  been there unnoticed since the section was written; a generated grid put
+  one preset exactly on the corner and the render found it in a minute.
+  `alpha` now has a floor of 2e-4, which at this hop rate is a time constant
+  of minutes — which is what the top of a smear control should be.
+
+The pattern is the same one the autoplay work ran into. A measurement that
+does not put the thing being measured in front of the microphone will
+happily report that everything is fine, or that everything is identical, and
+both answers are worthless.
 
 ## Presets
 

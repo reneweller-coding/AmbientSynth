@@ -43,7 +43,8 @@ enum class ParamId : int {
     // Z-plane filter: four frames on a square, the point (X, Y) interpolates their poles and wanders
     // Route: with both filters on, the z-plane follows the voice filter (Series) or both hear the
     // dry signal and Mix balances them (Parallel); Replace is the z-plane alone
-    ZMode, ZRoute, ZShape, ZX, ZY, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
+    // ZZ is the cube's third axis (Transform); 0 is the filter as it was before it existed
+    ZMode, ZRoute, ZShape, ZX, ZY, ZZ, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,
     // presence bell for the near plane, slow breathing of every voice's distance
     Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, ArcSync, Presence, Breath, BreathRate,

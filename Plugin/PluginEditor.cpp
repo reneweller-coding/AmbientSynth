@@ -162,7 +162,13 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*soundBox_);
     cosmosBox_ = std::make_unique<juce::ComboBox>();
     cosmosBox_->setTextWhenNothingSelected("Cosmos preset");
-    for (int i = 0; i < numCosmosPresets(); ++i) cosmosBox_->addItem(cosmosPreset(i).name, i + 1);
+    for (int fam = 0; fam < numCosmosPresetFamilies(); ++fam) {
+        cosmosBox_->addSectionHeading(cosmosPresetFamily(fam));
+        for (int i = 0; i < numCosmosPresets(); ++i)
+            if (cosmosPresetCategory(i) == fam) cosmosBox_->addItem(cosmosPreset(i).name, i + 1);
+    }
+    cosmosBox_->addSectionHeading("Off");
+    cosmosBox_->addItem(cosmosPreset(0).name, 1);
     cosmosBox_->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
     cosmosBox_->onChange = [this] {
         const int idx = cosmosBox_->getSelectedId() - 1;
@@ -358,7 +364,19 @@ void AmbientSynthEditor::buildCells()
         }
         case ParamKind::Choice: {
             auto cb = std::make_unique<juce::ComboBox>();
-            for (int i = 0; i < d.numChoices; ++i) cb->addItem(d.choices[i], i + 1);
+            if (d.id == ParamId::ZShape) {
+                // A hundred and fifty-five filters in one flat list is a list nobody reads. The
+                // item IDs stay the parameter's own numbering -- which is historical and frozen,
+                // because the library names its shapes by text -- while the order they are shown
+                // in is by family, so the display and the value are free of each other.
+                for (int cat = 0; cat < ambient::kZCategories; ++cat) {
+                    cb->addSectionHeading(ambient::kZCategoryNames[cat]);
+                    for (int i = 0; i < d.numChoices; ++i)
+                        if (ambient::kZShapeCategory[i] == cat) cb->addItem(d.choices[i], i + 1);
+                }
+            } else {
+                for (int i = 0; i < d.numChoices; ++i) cb->addItem(d.choices[i], i + 1);
+            }
             content_.addAndMakeVisible(*cb);
             c.combo = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc_.apvts, d.key, *cb);
             c.comp = std::move(cb);
@@ -390,6 +408,45 @@ void AmbientSynthEditor::buildCells()
     step->setTooltip("Exchange one voice of the cluster now, whatever the interval says");
     step->onClick = [this] { proc_.engine().autoplayStep(); };
     addExtraCell("Autoplay", std::move(step), "by hand", 2);
+    // The Z-plane and Strike banks. Each is a layer like the Cosmos one -- it resets its own
+    // section and nothing else -- and each sits inside the section it belongs to, grouped by
+    // family, because a flat list of a hundred and fifty-six filters is a list nobody reads.
+    {
+        auto zb = std::make_unique<juce::ComboBox>();
+        zb->setTextWhenNothingSelected("Filter preset");
+        for (int cat = 0; cat < ambient::kZCategories; ++cat) {
+            zb->addSectionHeading(ambient::kZCategoryNames[cat]);
+            for (int i = 0; i < numZPresets(); ++i)
+                if (zPresetCategory(i) == cat) zb->addItem(zPreset(i).name, i + 1);
+        }
+        zb->addSectionHeading("Off");
+        zb->addItem(zPreset(0).name, 1);
+        zb->setTooltip("One preset per filter shape: the shape, where its point sits in the cube, how sharp and how much of it you hear. Touches nothing outside the Z-Plane section.");
+        zb->onChange = [this] {
+            const int idx = zPresetBox_->getSelectedId() - 1;
+            if (idx >= 0) { pushUndo("filter preset"); proc_.applyZPreset(idx); }
+        };
+        zPresetBox_ = zb.get();
+        addExtraCell("Z-Plane", std::move(zb), "Preset", 3);
+    }
+    {
+        auto sb = std::make_unique<juce::ComboBox>();
+        sb->setTextWhenNothingSelected("Strike preset");
+        for (int fam = 0; fam < numStrikePresetFamilies(); ++fam) {
+            sb->addSectionHeading(strikePresetFamily(fam));
+            for (int i = 0; i < numStrikePresets(); ++i)
+                if (strikePresetCategory(i) == fam) sb->addItem(strikePreset(i).name, i + 1);
+        }
+        sb->addSectionHeading("Off");
+        sb->addItem(strikePreset(0).name, 1);
+        sb->setTooltip("The Karplus-Strong pluck on its own: what is struck, how long it rings, how dull, and whether the conductor fires it too. Touches nothing outside the Strike section.");
+        sb->onChange = [this] {
+            const int idx = strikePresetBox_->getSelectedId() - 1;
+            if (idx >= 0) { pushUndo("strike preset"); proc_.applyStrikePreset(idx); }
+        };
+        strikePresetBox_ = sb.get();
+        addExtraCell("Strike", std::move(sb), "Preset", 3);
+    }
     auto impulse = std::make_unique<juce::TextButton>("Impulse A...");
     impulse->onClick = [this] { chooseImpulseFile(false); };
     impulseCell_ = addExtraCell("Room", std::move(impulse), "Dark Hall (built in)", 2);

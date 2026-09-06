@@ -383,7 +383,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     if (zModeCur_ != 0) {
         const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
         const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ + p.slideZ * slide_, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
-        const ZFrame f = zInterpolate(p.zShape, x, y);
+        const ZFrame f = zInterpolate(p.zShape, x, y, p.zZ);
         const float track = std::pow(static_cast<float>(freq_) / 261.6256f, p.zKeyTrack);
         const float bwScale = std::pow(2.0f, 2.0f * (0.5f - p.zRes));   // resonance 1 -> quarter bandwidth, 0 -> double
         const float sr = static_cast<float>(sr_);

@@ -24,7 +24,9 @@ struct Preset {
     const char* envs = nullptr;
 };
 
-enum class PresetScope { Full, Sound, Cosmos };
+// A preset can be the whole instrument or one section of it. The section scopes are layers: a
+// bank that lands on top of whatever sound is loaded, resetting only its own section first.
+enum class PresetScope { Full, Sound, Cosmos, ZPlane, Strike };
 
 // The preset list is the 168 built-in presets followed by every loaded pack, so everything that
 // walks presets by index (DAW programs, the map, routes, the browser) sees packs automatically.
@@ -32,10 +34,27 @@ int numPresets();
 const Preset& preset(int index);
 int builtinPresetCount();                 // the compiled-in presets (the first ones)
 const Preset& builtinPreset(int index);
+// The three section layers. Each has its own bank, its own families for the list, and touches
+// nothing outside its section.
 int numCosmosPresets();                   // Cosmos-only bank
 const Preset& cosmosPreset(int index);
+int cosmosPresetCategory(int index);      // 255 for the Off entry, which belongs to no family
+int numCosmosPresetFamilies();
+const char* cosmosPresetFamily(int family);
+
+int numZPresets();                        // Z-plane-only bank: one preset per filter shape
+const Preset& zPreset(int index);
+int zPresetCategory(int index);           // the shape's family (see ZPlane.h), 255 for Off
+
+int numStrikePresets();                   // Strike-only bank (the Karplus-Strong pluck)
+const Preset& strikePreset(int index);
+int strikePresetCategory(int index);
+int numStrikePresetFamilies();
+const char* strikePresetFamily(int family);
 
 inline bool isCosmosParam(ParamId id) { return sectionOf(id) == ParamSection::Cosmos; }
+inline bool isZPlaneParam(ParamId id) { return sectionOf(id) == ParamSection::ZPlane; }
+inline bool isStrikeParam(ParamId id) { return sectionOf(id) == ParamSection::Strike; }
 inline bool isMorphParam(ParamId id)  { return sectionOf(id) == ParamSection::Morph; }
 inline bool isMacroParam(ParamId id)  { return sectionOf(id) == ParamSection::Macros; }
 inline bool isMapParam(ParamId id)    { return sectionOf(id) == ParamSection::Map; }
@@ -46,7 +65,14 @@ inline bool isPerformanceParam(ParamId id) { return isMorphParam(id) || isMacroP
 inline bool inScope(ParamId id, PresetScope scope)
 {
     if (isPerformanceParam(id)) return false;
-    return scope == PresetScope::Full || (scope == PresetScope::Cosmos) == isCosmosParam(id);
+    switch (scope) {
+        case PresetScope::Cosmos: return isCosmosParam(id);
+        case PresetScope::ZPlane: return isZPlaneParam(id);
+        case PresetScope::Strike: return isStrikeParam(id);
+        case PresetScope::Sound:  return !isCosmosParam(id);   // everything a sound preset owns
+        case PresetScope::Full:   break;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------- preset packs

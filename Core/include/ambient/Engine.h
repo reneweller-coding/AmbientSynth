@@ -37,6 +37,8 @@ public:
     bool  applyPreset(int index);       // any thread; sets every parameter (full preset)
     bool  applySoundPreset(int index);  // sound layer only: everything except the Cosmos section
     bool  applyCosmosPreset(int index); // Cosmos layer only, from the Cosmos preset bank
+    bool  applyZPreset(int index);      // Z-plane layer only: the filter and where its point sits
+    bool  applyStrikePreset(int index); // Strike layer only: the Karplus-Strong pluck
 
     // MIDI, audio thread only.
     void noteOn(int note, float velocity);

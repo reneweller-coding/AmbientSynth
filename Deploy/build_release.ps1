@@ -93,9 +93,12 @@ if (-not $SkipManual) {
     # the same one every time.
     $clip = Get-ChildItem (Join-Path $root "Library\Textures") -Filter "field_recordings_*_loop.wav" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
     if ($clip) { $env:AMBIENT_MANUAL_CLIP = $clip.FullName }
+    # And the library: the browser and the map are photographed too, and without the packs they
+    # show the 196 built-in presets of an instrument that ships with 6400.
+    $env:AMBIENT_PACKS = Join-Path $root "Library\Packs"
     $mp = Start-Process $exe -PassThru
     if (-not $mp.WaitForExit(90000)) { $mp.Kill() ; throw "the manual export did not finish" }
-    Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET, env:AMBIENT_MANUAL_CLIP -ErrorAction SilentlyContinue
+    Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET, env:AMBIENT_MANUAL_CLIP, env:AMBIENT_PACKS -ErrorAction SilentlyContinue
     & $python (Join-Path $root "Tools\make_manual.py")
 }
 $manualPdf = Join-Path $manualDir "AmbientSynth-Manual.pdf"

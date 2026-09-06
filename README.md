@@ -2,21 +2,73 @@
 
 # AmbientSynth
 
-A drone-ambient software synthesizer for slowly evolving polyphonic sound
-clusters, in the spirit of Robert Rich's sleep concerts: just-intonation
-tunings, additive partial banks that breathe, envelopes measured in minutes,
-a generative "Cluster Brain" that conducts the piece on its own, and a spatial
-model that treats depth as a physical landscape: dry, bright foreground voices
-against a dark, wide, infinite background.
+A drone-ambient synthesizer for slowly evolving polyphonic clusters, in the
+spirit of Robert Rich's sleep concerts: just-intonation tunings, additive
+partial banks that breathe, envelopes measured in minutes, a generative
+**Cluster Brain** that conducts the piece on its own, and a spatial model that
+treats depth as a landscape -- dry, bright voices in the foreground against a
+dark, wide, infinite background.
 
-Runs as a **VST3 plugin** and as a **standalone application** (Windows now;
-the DSP core is framework-free so it can move to Android/Quest later).
-
-Licence: AGPL-3.0 (see `LICENSE`).
+**VST3 plugin and standalone application** for Windows (x64). The DSP core is
+framework-free C++20; a native Meta Quest app (OpenXR, hand tracking) builds
+against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 <br clear="left" />
 
-![AmbientSynth standalone](docs/screenshot.png)
+![AmbientSynth -- the main page](docs/screenshot.png)
+
+## Download
+
+**[AmbientSynth-1.0.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-1.0.0-Setup.exe)**
+(13 MB) -- installs the standalone, the VST3, the preset library and, with your
+consent, downloads the 6 GB sample library. Nothing else has to be installed:
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-1.0.0-portable.zip)**
+(14 MB) for anyone who would rather not run an installer, and the
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-Manual.pdf)**
+(PDF, 97 pages) -- every tab of the panel as a picture, with what it does and
+what its knobs mean. Everything is on the
+[releases page](https://github.com/reneweller-coding/AmbientSynth/releases).
+
+Requirements: Windows 10 or 11, a 64-bit processor with AVX2 (every x86-64
+since 2013), a VST3 host if you want the plugin.
+
+## What is in it
+
+* **Four equal source slots** per voice -- additive bank, wavetable (a table of
+  spectra), two-operator FM, granular texture, a Paulstretch-style spectral
+  stretch that turns a field recording into weather, ten noise colours -- and
+  a **Vector** that reads the four as the corners of one square.
+* **Two filters**: ten models with a wavefolder, and a **Z-plane** morphing
+  filter after the E-mu Morpheus with 155 shapes in twelve families, a cube
+  rather than a square, and a modal mode that turns it into a struck body.
+* **A spatial model** in which every note has a distance: brightness, level,
+  dryness and presence all follow from that one number, with a true interaural
+  time difference, a breathing distance, Doppler, and externalisation for
+  headphones. Three reverb tiers -- near room, far reverb, convolution room --
+  with the background narrowed as it goes back.
+* **The Cosmos**: a parallel path of frequency shifter, tuned resonators, a
+  vowel filter, a spectral nebula and a self-regulating shimmer loop.
+* **A conductor** that plays all night: the Cluster Brain chooses notes from
+  the scale, places them on the planes and holds them for minutes; an autoplay
+  that exchanges one voice at a time; a second conductor for the background;
+  twelve just and historical tunings and Scala files; purity drift and the
+  **BEAT** source, the instrument listening to how far out of tune it is.
+* **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
+  macros, four coupled Kuramoto oscillators, aftertouch, wheel and slide, all
+  through one matrix onto any knob -- including the modulators' own.
+* **6400 presets in 32 packs**, each written in the spirit of an artist of
+  the genre, every one rendered, measured and gain-matched; 1700 samples, 608
+  wavetables and 240 impulse responses (forty of them struck objects cut from
+  the field recordings, for convolving a pad with a piece of the world). A
+  browser that filters by measured character, a **preset map** whose empty
+  space between presets is playable, and routes that walk it by themselves.
+* **No compressor anywhere.** A BS.1770 loudness meter instead, and a mono
+  guard: everything here is built to widen, and it is measured to survive a
+  mono sum.
+* Continuous by construction: every movement in the instrument is a rate or
+  an amplitude, never a step. A click is a bug.
+
+![The preset map](docs/map.png)
 
 ## Layout
 
@@ -56,7 +108,7 @@ powershell -File Deploy\build_release.ps1
 ```
 
 Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<version>-Setup.exe`**
-(9 MB) and a portable **`.zip`** (10 MB) for anyone who would rather not run an installer.
+(13 MB) and a portable **`.zip`** (14 MB) for anyone who would rather not run an installer.
 
 Nothing has to be installed first. The runtime is linked in
 (`-DAMBIENT_STATIC_RUNTIME=ON`), so there is no Visual C++ redistributable to chase — the script
@@ -70,17 +122,17 @@ The setup installs, each with its own checkbox:
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
 * the **preset library** (32 packs, 6400 presets) into `ProgramData\AmbientSynth\Packs`,
-* the **sample library** — 1584 samples, wavetables and impulse responses, 4.9 GB (467 of
-  them seamless field recordings for the Stretch type), downloaded from the release and checked
-  against its hash — into the same folder,
+* the **sample library** — 1848 samples, wavetables and impulse responses, 6.1 GB in six
+  archives (467 of them seamless field recordings for the Stretch type, 40 struck objects for the
+  convolution room), downloaded from the release and checked against its hash — into the same
+  folder,
 
 all four on by default.
 
-**While the repository is private the download returns 404**, and the setup says so and installs
-everything else. The URL is already the one it will be; nothing has to change when the repository
-is made public. Until then the archives can be unpacked by hand into
-`ProgramData\AmbientSynth` (or `LocalAppData\AmbientSynth` for a per-user install), beside the
-`Packs` folder.
+If the download is declined or fails, the setup says so and installs everything else; the
+archives can then be unpacked by hand into `ProgramData\AmbientSynth` (or
+`LocalAppData\AmbientSynth` for a per-user install), beside the `Packs` folder. A preset whose
+sample is missing still loads and leaves that slot empty.
 
 The sample library is built by `Tools/make_content_pack.py`, which takes only what the packs
 actually name (the library folder holds more) and converts the 32-bit float samples to 24-bit,

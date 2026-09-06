@@ -99,7 +99,13 @@ def render(name, packs, seconds):
             try:
                 d[k] = float(v)
             except ValueError:
-                return None
+                # Not every field on the line is a number. `hash=` was added to the measure
+                # output after this tool was written, and treating an unparseable field as a
+                # broken render made the whole run report "nothing rendered" -- except for the
+                # seven presets in six thousand whose hash happened to read as a float. The
+                # keys this tool needs are checked below; anything else on the line is not
+                # its business.
+                continue
     if not {"rms", "centroid", "flatness", "flux", "bass", "width", "voices"} <= set(d):
         return None
     d["rms_db"] = d.pop("rms")

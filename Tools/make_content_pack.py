@@ -164,6 +164,8 @@ def main():
     ap.add_argument("--max-part-mb", type=int, default=1800,
                     help="largest archive to write; GitHub refuses a release asset over 2 GB")
     ap.add_argument("--check-only", action="store_true")
+    ap.add_argument("--add-new", action="store_true",
+                    help="pack only the files the existing manifest does not have, as a new part")
     ap.add_argument("--emit-only", action="store_true",
                     help="regenerate the installer's include from an existing manifest, no rebuild")
     a = ap.parse_args()
@@ -174,6 +176,25 @@ def main():
         return
 
     want = referenced()
+    if a.add_new:
+        # Adding presets to the library adds a handful of samples to what it needs. Repacking
+        # three gigabytes to ship forty megabytes of them would be silly: this writes the
+        # difference as one more part and appends it to the manifest, so the installer downloads
+        # what it already downloaded plus the new one.
+        import zipfile as zf
+        with open(os.path.join(OUT, "content-manifest.json"), encoding="utf-8") as f:
+            man = json.load(f)
+        have = set()
+        for p in man["parts"]:
+            with zf.ZipFile(os.path.join(OUT, p["name"])) as z:
+                for n in z.namelist():
+                    have.add(tuple(n.split("/")))
+        new = {k: v for k, v in want.items() if k not in have}
+        print("%d files already packed, %d new" % (len(have), len(new)))
+        if not new:
+            write_installer_include(man)
+            return
+        want = new
     kinds = {k: 0 for k in KINDS}
     total = 0
     for (kind, _), src in want.items():
@@ -212,6 +233,10 @@ def main():
     # gets to 85 %, level 9 also gets to 85 % and takes no longer -- so 6, and the last 15 % of
     # three gigabytes is worth the inflating at the other end.
     limit = a.max_part_mb * 1024 * 1024
+    first_part = 1
+    if a.add_new:
+        with open(os.path.join(OUT, "content-manifest.json"), encoding="utf-8") as f:
+            first_part = len(json.load(f)["parts"]) + 1
     parts, part, size = [], [], 0
     for kind, name, path in staged:
         n = os.path.getsize(path)
@@ -224,7 +249,10 @@ def main():
         parts.append(part)
 
     manifest = {"version": a.version, "parts": []}
-    for idx, part in enumerate(parts, 1):
+    if a.add_new:
+        with open(os.path.join(OUT, "content-manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+    for idx, part in enumerate(parts, first_part):
         zip_name = "AmbientSynth-content-%s-part%d.zip" % (a.version, idx)
         zip_path = os.path.join(OUT, zip_name)
         print("writing %s (%d files)" % (zip_name, len(part)), flush=True)

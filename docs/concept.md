@@ -364,7 +364,7 @@ the sung-vowel formant tables for the voices, `c/2L` for the room modes),
 and a machine does the multiplication.
 
 The first sixteen shapes are the original hand-written bank, carried over
-frequency for frequency and frozen: the library's 5000 presets name their
+frequency for frequency and frozen: the library's 6000 presets name their
 shape as text (`z_shape=Glass`), so those names and their order can never
 change. New shapes are appended, never inserted.
 
@@ -1226,11 +1226,12 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 5000 presets in 25 packs, with 1200
-texture clips and 608 wavetables (see `Library/README.md` and
-`Tools/library/`). Its descriptors are estimated from the settings rather than
-measured -- five thousand measurements means five thousand renders -- which is
-the one place where the map's numbers are a prediction and not a measurement.
+`Library/` holds a generated library of 6000 presets in 30 packs, with 1200
+texture clips, 608 wavetables and 200 impulse responses (see
+`Library/README.md` and `Tools/library/`). Its descriptors and map positions
+are measured, not estimated: `Tools/library/measure_packs.py` renders all six
+thousand and writes the result back into the pack files, and corrects each
+preset's master gain to the loudness it actually came out at.
 
 Two layers, loadable independently and combinable (`PresetScope`):
 *Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
@@ -1389,6 +1390,40 @@ whose DC gain exceeds one locks onto a DC operating point (Feedback Hiss
 sat at +0.11), so the loop now blocks everything below 10 Hz before the
 saturation. The measurement caught what listening had not.
 
+**Quality, as opposed to soundness.** `Tools/rate_presets.py` scores every
+preset on four axes that can be measured: ALIVE (how far the descriptors
+travel between an early window of a render and the whole of it), MOVING
+(spectral flux), REACH (how many of the instrument's twelve families the
+settings touch) and APART (distance to the nearest other preset in
+descriptor space, on a bucketed grid so six thousand presets are a few
+hundred thousand distances rather than eighteen million). It exists because
+"make the presets better" needs something to aim at, and the first thing it
+found was that the built-in bank reached a median of three families out of
+twelve: most of those presets predate the modulation matrix, the second and
+third source slots, the z-plane's 155 shapes and the BEAT source.
+
+`Tools/enrich_presets.py` (built-ins) and `Tools/enrich_packs.py` (the
+library) fill those gaps, and both work under the same two rules. Every rule
+fires into an *empty slot only*, so a preset that already has a matrix, or a
+z-plane, or three sources, keeps exactly what it had. And every preset is
+rendered before and after: if the change moved its level by more than 1.5 dB,
+its centroid by a quarter, or its bass or width by 0.12, the change is thrown
+away and the preset is put back as it was. 190 of 191 built-ins kept (Init is
+left blank deliberately), 5637 of 5969 library presets kept. REACH on the
+built-ins went from 0.25 to 0.42; nothing else moved.
+
+Two things this measured that are worth keeping. The first is that the
+enrichment must vary per preset: the first version gave all 191 the same
+four LFO rates and the same four routes, which is the opposite of what APART
+asks for -- the ladder is now anchored on each preset's own base period
+between 34 s and 78 s, and the routes are drawn from a character-appropriate
+pool without repeats, giving 190 distinct matrices. The second is that
+deeper modulation does not make a drone more alive. Measured over three
+minutes, the timescale these LFOs actually run at, forcing every added LFO
+to full depth moves the median ALIVE from 0.425 to 0.429 and costs up to
+3.7 dB of level. A drone's ALIVE is made of its own slow architecture -- the
+arc, the bloom, the conductor -- not of a modulator going round.
+
 ## Morph (the performance control)
 
 Two full parameter snapshots live in the engine (`slotA_`, `slotB_`, atomics
@@ -1473,8 +1508,8 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 5000 presets in
-  the packs name 1214 samples, wavetables and impulse responses that are far
+* **The sample library** (`Tools/make_content_pack.py`). The 6000 presets in
+  the packs name 1284 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced
   travels: the library folder holds more than the packs use, and shipping the

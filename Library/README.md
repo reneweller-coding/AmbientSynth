@@ -1,6 +1,6 @@
 # The AmbientSynth preset library
 
-Five thousand presets in twenty-five packs, with the samples and wavetables they play.
+Six thousand presets in thirty packs, with the samples and wavetables they play.
 
 The packs are text and live in the repository. The audio does not: 1200 texture clips are
 about 8 GB and 608 wavetables about 80 MB, so both are generated locally and are ignored by
@@ -9,7 +9,7 @@ names -- which is why a pack can name a sample that has not been rendered yet.
 
 ```
 Library/
-  Packs/*.ambientpack     25 files, 200 presets each   (in git)
+  Packs/*.ambientpack     30 files, 200 presets each   (in git)
   Textures/*.wav          1200 granular source clips   (generated)
   Wavetables/*.wav        608 wavetables               (generated)
   Impulses/*.wav          200 impulse responses        (generated)
@@ -62,15 +62,15 @@ python Tools/library/make_presets.py --per-style 200
 Finally the measurement pass. `make_presets.py` estimates each preset's descriptors from its
 settings, because it has to name files before they exist. This replaces that estimate with the
 real thing and corrects every preset's master gain to the measured loudness, which is what
-keeps a library of thousands from having a few dozen presets that jump out. About twenty
-minutes for five thousand renders.
+keeps a library of thousands from having a few dozen presets that jump out. About half an
+hour for six thousand renders.
 
 ```
 python Tools/library/measure_packs.py --jobs 6
 python Tools/library/verify_packs.py          # again: the pass rewrites every line
 ```
 
-Verify **after** measuring as well as before. The measurement pass rewrites all five thousand
+Verify **after** measuring as well as before. The measurement pass rewrites all six thousand
 lines, and the first version of it read five fields and wrote five -- silently dropping the
 impulse, the matrix and the envelope shapes from the whole library. It now names the fields once
 and reports how many presets still carry each of them.
@@ -123,6 +123,18 @@ synth's own parameters, chosen by ear.
 | Strings at Rest | Stars of the Lid | consonant bowed swells |
 | Tape Saturation | Tim Hecker | bright, distorted, damaged |
 
+Five more were written later, for the parts of the instrument the twenty-five above predate --
+the modal resonator bank, three source slots of the same kind, the conductor exchanging one
+voice at a time, the 155 filter shapes, and a matrix fed by the instrument's own tuning:
+
+| Pack | In the spirit of | Character |
+| --- | --- | --- |
+| Struck Bodies | Bernhard Guenter | the z-plane read as a resonator, struck and left to ring |
+| Three Alike | Eliane Radigue | three source slots of the same kind, beating against each other |
+| Turning Harmony | Pauline Oliveros | autoplay in Chords: one voice exchanged at a time |
+| Filter Cubes | Alva Noto | the filter cube's third axis, cold and precise |
+| Own Tuning | Catherine Christer Hennix | purity drift, difference tones, BEAT as a modulator |
+
 ## Modulation in the library
 
 Every preset carries a matrix -- about four and a half rows on average -- and most carry one or
@@ -144,7 +156,7 @@ Every pack line carries a map position, six descriptors (brightness, motion, wid
 weight, density) and tag bits, so the browser filters and the Absynth-style point map work on
 the library the same way they work on the built-in presets.
 
-Both halves of the library are measured, not described. `Tools/preset_map.py` renders the 148
+Both halves of the library are measured, not described. `Tools/preset_map.py` renders the 191
 built-in presets; `Tools/library/measure_packs.py` renders the generated ones and writes the
 result back into the pack files. `make_presets.py` alone would only estimate the descriptors
 from the settings, which is enough to lay a map out but is a prediction -- so a library that has
@@ -155,7 +167,7 @@ not been through the measurement pass says so in its own header line.
 `Tools/library/verify_packs.py` is the cheap pass: it parses every line and fails on an unknown
 parameter, a choice name the synth does not know, a value outside its range, a duplicate preset
 name, a named sample that is not there, or two presets on the same spot of the map. A second
-for five thousand presets.
+for six thousand presets.
 
 ```
 python Tools/library/verify_packs.py

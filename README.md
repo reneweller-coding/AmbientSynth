@@ -69,8 +69,8 @@ The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (25 packs, 5000 presets) into `ProgramData\AmbientSynth\Packs`,
-* the **sample library** — 1214 samples, wavetables and impulse responses, 3.1 GB, downloaded
+* the **preset library** (30 packs, 6000 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **sample library** — 1284 samples, wavetables and impulse responses, 3.3 GB, downloaded
   from the release and checked against its hash — into the same folder,
 
 all four on by default.
@@ -152,8 +152,8 @@ and a wavetable of their own. They appear everywhere the built-in presets do
 -- programs, browser, map, routes -- each pack as its own family. Drop
 `*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
 `AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
-library of 5000 presets in 25 packs with the 1200 samples and 608 wavetables
-they play. *Save…* / *Load…* store the whole
+library of 6000 presets in 30 packs with the 1284 samples, wavetables and
+impulse responses they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
 the brain's root.
@@ -249,6 +249,37 @@ again offline, so a good evening can be reproduced and rendered in higher
 quality than it was played. `Tools/preset_check.py` is the automatic sound
 test: every preset rendered and flagged for level, clipping, clicks, DC or
 silence.
+
+**Are the presets any good?** `preset_check.py` asks whether a preset is
+broken. `Tools/rate_presets.py` asks the harder question, in four ways that
+can be measured instead of argued about: ALIVE (do the descriptors move
+between the first part of a render and the whole of it), MOVING (spectral
+flux), REACH (how many of the instrument's twelve families the preset
+actually touches) and APART (distance to its nearest neighbour in descriptor
+space, so a bank of near-duplicates scores badly even when each one is fine).
+
+It found the built-in presets reaching a median of three families out of
+twelve, because most of them were written before the modulation matrix, the
+three source slots, the z-plane's 155 shapes and the BEAT source existed.
+`Tools/enrich_presets.py` gave them those parts -- four LFOs on a golden
+ladder anchored on the preset's own base period, a matrix of four slow
+routes drawn from a pool that suits its character, a z-plane where there was
+none, a quiet second source -- and then proved it had not changed what they
+sound like: every preset rendered before and after, and any whose level moved
+more than 1.5 dB, centroid more than a quarter, or bass or width more than
+0.12 was put back exactly as it was. 190 of 191 were kept (*Init* is left
+blank on purpose), and REACH went from 0.25 to 0.42 with every other column
+unmoved. `Tools/enrich_packs.py` does the same for the library, where the
+gaps were different ones: the BEAT source, the filter's third axis, the
+delay's duck, and LFO rates snapped onto a golden ladder so no two of a
+preset's modulators come back into step. 5637 of 5969 kept.
+
+What it did *not* do is worth saying too. Deeper modulation does not make a
+preset more alive: measured over three minutes -- the timescale these LFOs
+actually run at -- turning every added LFO to full depth moves the median
+ALIVE from 0.425 to 0.429 and costs up to 3.7 dB of level. What a drone's
+ALIVE score is made of is its own slow architecture, the arc, the bloom and
+the conductor, not a modulator going round.
 
 **Hold, macros, recording.** *Hold* (Tuning) latches keys: a note stays
 until its key is pressed again, and switching Hold off releases everything.

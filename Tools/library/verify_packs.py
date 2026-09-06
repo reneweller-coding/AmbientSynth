@@ -21,9 +21,22 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_render.exe")
 
 BOOLS = {"on", "off", "true", "false", "yes", "no"}
+def _sources():
+    """Every modulation source, read from the core rather than copied. The hand-written set here
+    did not know about BEAT the day BEAT was added, and reported six hundred perfectly good
+    presets as naming an unknown source."""
+    import re as _re
+    path = os.path.join(ROOT, "Core", "src", "Modulation.cpp")
+    text = open(path, encoding="utf-8").read()
+    body = text[text.index("kSourceNames[kNumModSources] = {"):]
+    return set(_re.findall(r'"([^"]+)"', body[:body.index("};")]))
+
+
+SOURCES_FROM_CORE = _sources()
 SOURCES = ({"none", "amp", "note", "velocity", "distance", "random"}
            | {f"lfo{i}" for i in range(1, 9)} | {f"env{i}" for i in range(1, 7)}
-           | {f"macro_{c}" for c in "abcdefgh"} | {f"kura{i}" for i in range(1, 5)})
+           | {f"macro_{c}" for c in "abcdefgh"} | {f"kura{i}" for i in range(1, 5)}
+           | SOURCES_FROM_CORE)
 PERFORMANCE = ("morph", "macro_", "map_", "route_", "inertia")
 
 

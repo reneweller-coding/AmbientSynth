@@ -41,9 +41,27 @@ FILTER_MODELS = ["LP 6", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "
 STRIKE_TYPES = ["String", "String", "Wood", "Metal"]
 TABLES = ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"]
 SLOT_RATIOS = ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"]
-Z_SHAPES = ["Vowel Morph", "Choir", "Nasal", "Low Sweep", "High Sweep", "Band Sweep", "Phaser",
-            "Comb", "Flanger", "Notch Cluster", "Strings", "Metal Bars", "Wood", "Glass",
-            "Peaks", "Infinite"]
+def _z_shapes():
+    """Every shape the filter bank has, read from the bank itself. This used to be a hand-written
+    list of the original sixteen, which meant the whole five-thousand-preset library reached for
+    sixteen filters while the instrument had a hundred and fifty-five. Reading the generated
+    header means the list can never fall behind again."""
+    inc = os.path.join(ROOT, "Core", "src", "ZPlaneBank.inc")
+    text = open(inc, encoding="utf-8").read()
+    body = text[text.index("kZShapeNames[kZShapes] = {"):]
+    body = body[:body.index("};")]
+    return re.findall(r'"([^"]+)"', body)
+
+
+Z_SHAPES = _z_shapes()
+# The families whose shapes are ringing objects rather than filter curves: these are the ones
+# worth putting into Modal mode (see Core/include/ambient/ZPlane.h).
+Z_MODAL_SHAPES = [s for s in Z_SHAPES if s in (
+    "Marimba", "Vibraphone", "Glockenspiel", "Tubular Bell", "Church Bell", "Gong", "Tam Tam",
+    "Steel Plate", "Handpan", "Kalimba", "Timpani", "Frame Drum", "Tabla", "Violin Body",
+    "Cello Body", "Guitar Box", "Harp Body", "Piano Board", "Sympathetic", "Open Pipe",
+    "Closed Pipe", "Clarinet", "Flute", "Bottle", "Organ Pipe", "Small Room", "Cave",
+    "Concrete Pipe", "Plate Reverb", "Tunnel", "Metal Bars", "Glass", "Strings", "Wood")]
 SHIMMER_PITCH = ["+12", "+7", "+5", "+19", "-12", "+24"]
 TAGS = ["Dark", "Bright", "Calm", "Moving", "Tonal", "Noisy", "Wide", "Bass", "Dense", "Sparse",
         "Keys", "Generative", "Cosmos", "Feedback", "Sources", "JustIntonation", "Sub", "Stack", "Air"]
@@ -244,13 +262,29 @@ def modulation_for(p, style, rng, shade_name):
 
     rng.shuffle(pool)
     rows, used_lfo = [], []
+    # The periods sit on a golden ladder: the first is drawn, the rest are it times phi to the
+    # power of how many have gone before. Rates in a simple ratio come back into step and the
+    # drone falls into a pattern a listener can hear coming; powers of phi never do.
+    base_period = math.exp(u(rng, math.log(8.0), math.log(900.0))) / rate_mul
+    PHI = 1.6180339887
     for i in range(min(n_routes, len(pool), 8)):
         target, lo, hi = pool[i]
         lfo = i % 8 + 1
+        # Now and then the source is not an LFO at all: BEAT is the chord listening to how far
+        # out of tune it is, and the coherence ring is four oscillators that pull on each other.
+        # Both make the modulation come from the instrument rather than from a clock.
+        other = None
+        if rng.random() < 0.12:
+            other = "beat"
+        elif rng.random() < 0.10:
+            other = "kura%d" % (rng.randrange(4) + 1)
+        if other is not None:
+            depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
+            rows.append(f"{other}>{target}:{depth:.3f}")
+            continue
         if lfo not in used_lfo:
             used_lfo.append(lfo)
-            # Period from eight seconds to forty minutes; the slow end is where a drone lives.
-            period = math.exp(u(rng, math.log(8.0), math.log(2400.0))) / rate_mul
+            period = base_period * (PHI ** len(used_lfo))
             p[f"lfo{lfo}_rate"] = 1.0 / period
             p[f"lfo{lfo}_shape"] = LFO_SHAPES[rng.randrange(len(LFO_SHAPES))]
             p[f"lfo{lfo}_phase"] = round(u(rng, 0.0, 1.0), 3)
@@ -407,8 +441,18 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
 
     # Z-plane morphing filter -------------------------------------------------------------
     if on("zplane"):
-        p["z_mode"] = "Replace" if rng.random() < 0.45 else "Series"
-        p["z_shape"] = Z_SHAPES[rng.randrange(len(Z_SHAPES))]
+        # One in five z-planes is Modal: the same shape read as a bank of resonators that rings
+        # rather than a cascade that shapes. Only the shapes that are physical objects -- a
+        # resonator bank on a phaser is a curiosity, on a bell it is the point.
+        if rng.random() < 0.2 and Z_MODAL_SHAPES:
+            p["z_mode"] = "Modal"
+            p["z_shape"] = Z_MODAL_SHAPES[rng.randrange(len(Z_MODAL_SHAPES))]
+            p["z_decay"] = logu(rng, 0.4, 18.0)
+            p["z_damp"] = u(rng, 0.3, 0.95)
+        else:
+            p["z_mode"] = "Replace" if rng.random() < 0.45 else "Series"
+            p["z_shape"] = Z_SHAPES[rng.randrange(len(Z_SHAPES))]
+        p["z_z"] = u(rng, 0.0, 0.7)      # the cube's third axis
         p["z_x"] = u(rng, 0.1, 0.9)
         p["z_y"] = u(rng, 0.1, 0.9)
         p["z_rate"] = logu(rng, 0.006, 0.25)
@@ -416,6 +460,11 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         p["z_res"] = u(rng, 0.25, 0.85)
         p["z_keytrack"] = u(rng, 0.0, 0.6) if rng.random() < 0.4 else 0.0
         p["z_mix"] = u(rng, 0.4, 1.0) if p["z_mode"] == "Replace" else u(rng, 0.3, 0.9)
+
+    # The delay ducks its own loop on transients, so a fresh attack does not have to fight the
+    # brightness of the last one's tail.
+    if p.get("dly_mix", 0.0) and rng.random() < 0.35:
+        p["dly_duck"] = u(rng, 0.25, 0.8)
 
     # Cosmos ------------------------------------------------------------------------------
     if on("cosmos"):
@@ -747,6 +796,7 @@ def main():
     global PARAMS
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--per-style", type=int, default=200)
+    ap.add_argument("--styles", default="", help="comma-separated style names; default is all of them")
     ap.add_argument("--seed", type=int, default=23)
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "Library", "Packs"))
     ap.add_argument("--textures", default=os.path.join(ROOT, "Library", "Textures"))
@@ -760,11 +810,22 @@ def main():
     if rejects:
         print(f"{len(rejects)} clips skipped (see {os.path.join(a.textures, 'rejected.txt')})")
     packs = []
+    taken = set()          # map cells already used, across the whole library
     # Names stay unique across the whole synth, so "--preset <name>" and the browser search
     # always mean one preset -- the built-in ones included.
+    # Pointed at the library, so the names already in it count as taken. Without this the render
+    # tool only reports the built-ins, and a new pack happily reuses a name an existing pack has
+    # -- which it did: forty-eight collisions with the older packs, all of them plausible pairs
+    # like "Iron Reach" that two different word pools can both produce.
+    env = dict(os.environ, AMBIENT_PACKS=a.out_dir)
     used_names = {n.strip() for n in subprocess.run([RENDER, "--list-presets"], capture_output=True,
-                                                    text=True, encoding="utf-8").stdout.splitlines() if n.strip()}
+                                                    text=True, encoding="utf-8", env=env).stdout.splitlines() if n.strip()}
+    wanted = [w.strip().lower() for w in a.styles.split(",") if w.strip()]
     for si, st in enumerate(STYLES):
+        # The seed is keyed on the style's index, not on how many are being written, so asking
+        # for one pack gives exactly the pack that a full run would have given.
+        if wanted and st["name"].lower() not in wanted:
+            continue
         rng = random.Random(a.seed * 104729 + si)
         textures = texture_pool(a.textures, st["name"], rejects)
         tables = wavetable_pool(a.wavetables, st)
@@ -804,7 +865,18 @@ def main():
             f.write(f"pack {st['name']}\n")
             for r in rows:
                 d = r["desc"]
-                meta = " ".join(f"{v:.3f}" for v in (r["xy"][0], r["xy"][1], d[0], d[1], d[2], d[3], d[4], d[5]))
+                # Two presets on the same spot of the map are two dots the browser draws on top of
+                # each other, and one of them can never be clicked. Nudged apart on a deterministic
+                # spiral, so the same seed still gives the same library.
+                x, y = r["xy"][0], r["xy"][1]
+                step = 0
+                while (round(x, 3), round(y, 3)) in taken and step < 64:
+                    step += 1
+                    ang = 2.39996 * step                     # the golden angle: no two land alike
+                    x = min(1.0, max(0.0, r["xy"][0] + 0.004 * step * math.cos(ang)))
+                    y = min(1.0, max(0.0, r["xy"][1] + 0.004 * step * math.sin(ang)))
+                taken.add((round(x, 3), round(y, 3)))
+                meta = " ".join(f"{v:.3f}" for v in (x, y, d[0], d[1], d[2], d[3], d[4], d[5]))
                 f.write(f"{r['name']}|{r['settings']}|{meta} {r['tags']}|{r['texture']}|"
                         f"{r['wavetable']}|{r['impulse']}|{r['mod']}|{r['envs']}\n")
         total += len(rows)

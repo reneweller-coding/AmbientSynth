@@ -38,9 +38,9 @@ constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may
 
 // Additive sat last so the indices the presets store for the other types stayed what they were;
 // Stretch came after it and is appended for the same reason.
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch, Bow };
+enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral };
 
-constexpr int kNumSourceTypes = 8;
+constexpr int kNumSourceTypes = 9;
 // The longest spectral window the Stretch type analyses: 16384 samples, a third of a second at
 // 48 kHz. Paulstretch's own default is a quarter of a second, which is where the smooth results
 // start; longer windows are smoother still but cost memory in every slot of every voice.
@@ -82,6 +82,32 @@ double baseHzFromName(const char* fileName);
 // extension, any case): the Stretch type then wraps without a crossfade.
 bool loopFromName(const char* fileName);
 
+// What a recording is made of, band by band and frame by frame.
+//
+// A granular source cuts a clip into pieces and plays the pieces; a Paulstretch smears its
+// spectrum. Neither can hold a recording still at one pitch and read it at another speed, because
+// both still play samples. This does not play samples at all: the clip is measured once, into
+// thirty-two bands on the ear's own frequency scale, and what is stored per frame is how loud each
+// band is, where in the band its strongest partial sits, and how tonal it is -- how far above the
+// local noise floor its content stands. Playback then builds the sound again from an oscillator
+// and a band of noise per band, so pitch and speed are two separate numbers rather than one.
+//
+// This is the deterministic-plus-stochastic decomposition of Serra and Smith (1990), taken band by
+// band instead of partial by partial. Doing it per band means no fundamental has to be found: a
+// bell is nearly all oscillator, rain is nearly all noise, a voice is both, and none of the three
+// needs a pitch tracker that could be wrong about it.
+struct SpectralModel {
+    static constexpr int kBands = kTablePartials;   // 32, the same width as the phasor bank
+    int   frames = 0;
+    float hop = 0.0f;                 // seconds between frames
+    float centre[kBands] = {};        // band centre in Hz, and
+    float bandQ[kBands] = {};         // centre / width, the Q the noise band is filtered at
+    std::vector<float> amp;           // frames * kBands, linear
+    std::vector<float> freq;          // frames * kBands, Hz
+    std::vector<float> tone;          // frames * kBands, 0 = noise, 1 = a partial
+    bool empty() const { return frames < 2; }
+};
+
 struct Texture {
     std::vector<float> mono;
     double sampleRate = 48000.0;
@@ -91,7 +117,11 @@ struct Texture {
     float  gain = 1.0f;
     bool   seamless = false;    // the end runs into the start: no crossfade needed at the seam
     bool empty() const { return mono.size() < 64; }
-    void measure();             // sets gain from mono
+    // The band model, measured once when the clip is loaded (on the loader thread, never in
+    // render()). A clip too short to analyse simply has none, and a Spectral slot on it is silent.
+    SpectralModel spectral;
+    void measure();             // sets gain from mono, and builds the spectral model
+    void analyse();             // the model alone
 };
 
 struct SlotParams {
@@ -118,6 +148,9 @@ struct SlotParams {
     float drift = 0.0f;          // cents of slow, independent pitch drift (the asymmetric detune)
     // Bow: how hard the bow presses and how fast it travels. The string is the slot's pitch.
     float bowForce = 0.4f, bowSpeed = 0.3f;
+    // Spectral: how fast the model is read (1 = the speed it was recorded at, 0 = held still),
+    // and which half of it is favoured (-1 = the partials only, +1 = the noise only).
+    float specRate = 1.0f, specBreath = 0.0f;
     // Stretch: the factor, and the crossfade at the loop seam as a fraction of the clip (ignored
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
@@ -153,6 +186,7 @@ private:
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
     void renderStretch(float* out, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderBow(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderSpectral(float* out, int n, double transpose, const SlotParams& p, const Texture* tex, float dt);
     void stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N);
     static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
 
@@ -195,10 +229,20 @@ private:
     // analysis reads in the clip. Allocated in prepare(), never in render().
     // Bow: one period of string, its loop filter's state, and whether it has been started.
     static constexpr int kBowMax = 4096;   // 12 Hz at 48 kHz
-    float bowNut_[kBowMax] = {}, bowBridge_[kBowMax] = {};
+    // In vectors, not in the object: two arrays of this size per slot is thirty-two kilobytes,
+    // and four slots in each of many voices put an Engine built on the stack straight through it.
+    std::vector<float> bowNut_, bowBridge_;
     int   bowW_ = 0;
     float bowLp_ = 0.0f;
     bool  bowReady_ = false;
+
+    // Spectral: the two amplitude ramps per band (the partial and its noise), the state of the
+    // band's noise filter, and how far the read head has travelled from Position, in frames.
+    float specA_[kTablePartials] = {}, specAStep_[kTablePartials] = {};
+    float specN_[kTablePartials] = {}, specNStep_[kTablePartials] = {};
+    float specBp_[kTablePartials] = {}, specLp_[kTablePartials] = {};
+    float specF_[kTablePartials] = {}, specQ_[kTablePartials] = {};
+    double specAdvance_ = 0.0;
 
     struct StretchState {
         std::vector<float> out, re, im, win;

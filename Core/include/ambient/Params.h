@@ -190,6 +190,7 @@ enum class ParamId : int {
     // The Bow type's two: how hard the bow presses and how fast it travels. Fields 28 and 29
     // of every slot.
     Src1BowForce, Src1BowSpeed, Src2BowForce, Src2BowSpeed, Src3BowForce, Src3BowSpeed, Src4BowForce, Src4BowSpeed,
+    Src1SpecRate, Src1SpecBreath, Src2SpecRate, Src2SpecBreath, Src3SpecRate, Src3SpecBreath, Src4SpecRate, Src4SpecBreath,
     Count
 };
 
@@ -224,7 +225,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 30;
+constexpr int kSlotFields  = 32;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in

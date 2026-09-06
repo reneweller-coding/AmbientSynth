@@ -1849,17 +1849,17 @@ void AmbientSynthEditor::updateSourceCells()
     // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
-    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7 };
+    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        for (int off = 1; off <= 29; ++off) {
+        for (int off = 1; off <= 31; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
-            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch || type == Bow; break;   // position, or where the bow sits
+            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral; break;   // position, or where the bow sits
             case 7:  on = type != Off;  break;                                   // pos drift moves all of them
             case 8:
             case 9:  on = type == Fm; break;
@@ -1867,10 +1867,10 @@ void AmbientSynthEditor::updateSourceCells()
             case 13:
             case 14: on = type == Texture; break;                                // grains, spread
             case 11: on = type == Texture || type == Noise; break;               // density: grains or crackle
-            case 12: on = type == Texture || type == Noise || type == Stretch; break;   // pitch follow
+            case 12: on = type == Texture || type == Noise || type == Stretch || type == Spectral; break;   // pitch follow
             case 15:
             case 16: on = type == Noise; break;
-            case 19: on = type == Additive || type == Bow; break;                 // bright: the bank's window, or the string's loop filter
+            case 19: on = type == Additive || type == Bow || type == Spectral; break;   // bright: the bank's window, the string's loop filter, or the model's tilt
             case 17: case 18: case 20: case 21: case 22: case 23: on = type == Additive; break;
             case 24: on = type == Texture || type == Noise; break;                // density sync
             case 25: on = type != Off && type != Noise; break;                    // pitch drift
@@ -1878,6 +1878,8 @@ void AmbientSynthEditor::updateSourceCells()
             case 27: on = type == Stretch; break;                                 // stretch, loop fade
             case 28:
             case 29: on = type == Bow; break;                                     // bow force, bow speed
+            case 30:
+            case 31: on = type == Spectral; break;                                // spectral rate, breath
             default: break;
             }
             const int ci = cellForParam(ids[off]);

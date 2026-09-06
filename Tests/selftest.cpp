@@ -3518,6 +3518,146 @@ void testResearchBatch()
         CHECK(!quiet.active(), "at level 0 the room is not computed at all");
     }
 
+    // ---- the spectral model -----------------------------------------------------------------
+    {
+        // A clip with a tonal half and a noisy half, so the analysis has both to find: two seconds
+        // of a 300 Hz tone with its fifth, then two seconds of high-passed noise.
+        const int clipLen = 4 * sr;
+        std::vector<float> clip(static_cast<size_t>(clipLen), 0.0f);
+        {
+            Rng rng; rng.seed(0x5EED4321u);
+            float hp = 0.0f;
+            for (int i = 0; i < clipLen; ++i) {
+                const float t = static_cast<float>(i) / static_cast<float>(sr);
+                if (i < clipLen / 2)
+                    clip[static_cast<size_t>(i)] = 0.35f * std::sin(6.2831853f * 300.0f * t) + 0.2f * std::sin(6.2831853f * 450.0f * t);
+                else {
+                    const float w = rng.bipolar();
+                    hp += 0.35f * (w - hp);
+                    clip[static_cast<size_t>(i)] = 0.4f * (w - hp);
+                }
+            }
+        }
+        {   // The model itself: measured on the clip, before any engine touches it.
+            Texture tex;
+            tex.mono = clip;
+            tex.sampleRate = sr;
+            tex.measure();
+            CHECK(!tex.spectral.empty(), "a clip long enough is measured into a band model");
+            const SpectralModel& m = tex.spectral;
+            // The tonal half must read as tonal and the noisy half as noise, in the bands that
+            // carry the energy. This is the one claim the whole type rests on.
+            auto meanTone = [&](int frame) {
+                double num = 0.0, den = 0.0;
+                for (int b = 0; b < SpectralModel::kBands; ++b) {
+                    const size_t i = static_cast<size_t>(frame) * SpectralModel::kBands + static_cast<size_t>(b);
+                    num += static_cast<double>(m.tone[i]) * m.amp[i];
+                    den += m.amp[i];
+                }
+                return den > 0.0 ? num / den : 0.0;
+            };
+            const double tonal = meanTone(m.frames / 4), noisy = meanTone(m.frames * 3 / 4);
+            std::printf("  [probe] model %d frames, hop %.1f ms, tone tonal %.2f noisy %.2f\n",
+                        m.frames, m.hop * 1000.0f, tonal, noisy);
+            CHECK(tonal > 0.5, "a tone reads as tonal");
+            CHECK(noisy < 0.3, "and noise reads as noise");
+            CHECK(tonal > noisy + 0.3, "with the two well apart");
+            // The band that holds the 300 Hz tone must say 300 Hz, not the centre of its band.
+            int best = 0; float peak = 0.0f;
+            for (int b = 0; b < SpectralModel::kBands; ++b) {
+                const size_t i = static_cast<size_t>(m.frames / 4) * SpectralModel::kBands + static_cast<size_t>(b);
+                if (m.amp[i] > peak) { peak = m.amp[i]; best = b; }
+            }
+            const float found = m.freq[static_cast<size_t>(m.frames / 4) * SpectralModel::kBands + static_cast<size_t>(best)];
+            std::printf("  [probe] loudest band %d centre %.0f Hz, partial found at %.1f Hz\n", best, m.centre[best], found);
+            CHECK(std::fabs(found - 300.0f) < 8.0f, "and the partial is placed inside its band, not at the band's centre");
+        }
+        {   // Played back: it must sound, at the level of every other type, and Rate and the note
+            // must be independent of each other.
+            auto render = [&](float rate, float breath, int note, std::vector<float>& cap) {
+                Engine e;
+                e.prepare(sr, 256);
+                for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+                e.setTexture(clip.data(), clipLen, sr, 300.0, false);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Src1Type, static_cast<float>(SourceType::Spectral));
+                e.setParam(ParamId::Src1Follow, 1.0f);
+                e.setParam(ParamId::Src1SpecRate, rate);
+                e.setParam(ParamId::Src1SpecBreath, breath);
+                e.setParam(ParamId::Src1Position, 0.1f);
+                e.setParam(ParamId::Src1PosDrift, 0.0f);
+                e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::FilterOn, 0.0f);
+                e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+                e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+                e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.5f);
+                e.reset();
+                e.noteOn(note, 0.9f);
+                std::vector<float> L(256), R(256);
+                for (int b = 0; b < 500; ++b) {
+                    e.process(L.data(), R.data(), 256);
+                    if (b >= 100) for (int i = 0; i < 256; ++i) cap.push_back(L[static_cast<size_t>(i)]);
+                }
+            };
+            auto rmsOf = [](const std::vector<float>& v) {
+                double s = 0.0;
+                for (float x : v) s += static_cast<double>(x) * x;
+                return std::sqrt(s / std::max<size_t>(1, v.size()));
+            };
+            // How rough the spectrum is: the mean absolute second difference against the signal's
+            // own size. A sum of partials is smooth between its peaks; noise is not.
+            auto flatness = [](const std::vector<float>& v) {
+                double num = 0.0, den = 0.0;
+                for (size_t i = 2; i < v.size(); ++i) {
+                    const double d = static_cast<double>(v[i]) - 2.0 * v[i - 1] + v[i - 2];
+                    num += d * d;
+                    den += static_cast<double>(v[i]) * v[i];
+                }
+                return den > 0.0 ? std::sqrt(num / den) : 0.0;
+            };
+            std::vector<float> normal, frozen, fast, tonal, breathy, low, high;
+            render(1.0f, 0.0f, 62, normal);      // D4, a fourth above the clip's own 300 Hz
+            render(0.0f, 0.0f, 62, frozen);
+            render(2.0f, 0.0f, 62, fast);
+            render(1.0f, -1.0f, 62, tonal);
+            render(1.0f, 1.0f, 62, breathy);
+            // Held still in the tonal half of the clip and with the noise turned off, so what is
+            // left is the partials alone and their pitch can be measured at all.
+            render(0.0f, -1.0f, 62, low);
+            render(0.0f, -1.0f, 74, high);       // an octave up
+            const double rms = rmsOf(normal);
+            std::printf("  [probe] spectral rms %.4f frozen %.4f | roughness tonal %.3f breathy %.3f\n",
+                        rms, rmsOf(frozen), flatness(tonal), flatness(breathy));
+            CHECK(rms > 0.005, "a spectral slot sounds");
+            CHECK(rmsOf(frozen) > 0.005, "and still sounds with the read head standing still");
+            CHECK(flatness(breathy) > flatness(tonal) * 1.5, "Breath at the noise end is rougher than at the partial end");
+            // Rate moves the read, so two rates cannot render the same block.
+            double diff = 0.0;
+            const size_t n = std::min(normal.size(), fast.size());
+            for (size_t i = 0; i < n; ++i) diff += std::fabs(static_cast<double>(normal[i]) - fast[i]);
+            CHECK(diff / static_cast<double>(n) > 1e-4, "and Rate moves it: two rates are two renders");
+            // The note transposes the model: an octave up has to halve the period. By
+            // autocorrelation, which counts periods rather than sign changes -- a sum of partials
+            // crosses zero more often than once a period, and counting crossings would say so.
+            auto period = [&](const std::vector<float>& v) {
+                double mean = 0.0;
+                for (float x : v) mean += x;
+                mean /= std::max<size_t>(1, v.size());
+                const int lo = static_cast<int>(sr / 4000), hi = std::min<int>(static_cast<int>(sr / 60), static_cast<int>(v.size()) / 2);
+                double best = 0.0; int bestLag = 1;
+                for (int lag = lo; lag < hi; ++lag) {
+                    double s = 0.0;
+                    for (size_t i = static_cast<size_t>(lag); i < v.size(); i += 3)
+                        s += (static_cast<double>(v[i]) - mean) * (static_cast<double>(v[i - static_cast<size_t>(lag)]) - mean);
+                    if (s > best) { best = s; bestLag = lag; }
+                }
+                return sr / static_cast<double>(bestLag);
+            };
+            const double h1 = period(low), h2 = period(high);
+            std::printf("  [probe] frozen partials: note 62 %.1f Hz, note 74 %.1f Hz (ratio %.2f)\n", h1, h2, h2 / std::max(1e-9, h1));
+            CHECK(std::fabs(h2 / std::max(1e-9, h1) - 2.0) < 0.15, "an octave up is an octave up");
+        }
+    }
+
     // ---- the bowed string -------------------------------------------------------------------
     {
         // It must sound, sustain, stay bounded, play the note it is asked for, and come out at

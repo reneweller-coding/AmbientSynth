@@ -387,6 +387,8 @@ void Engine::readParams()
             s.xfade         = at(27);
             s.bowForce      = at(28);
             s.bowSpeed      = at(29);
+            s.specRate      = at(30);
+            s.specBreath    = at(31);
         }
         // ---- the Vector
         //

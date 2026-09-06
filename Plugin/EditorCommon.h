@@ -158,6 +158,32 @@ inline void drawAxes(juce::Graphics& g, juce::Rectangle<float> plot)
                    juce::Justification::centred, false);
 }
 
+// The modulation matrix as a table of routes (EditorMatrix.cpp): one row per route, each a
+// source, a target, a depth, an optional via source and the unipolar flag. It hands the whole
+// matrix back to the engine as the text the old box used, so nothing else learns a new format.
+class RouteTable : public juce::Component {
+public:
+    RouteTable(AmbientSynthProcessor& p, std::function<void()> onChanged);
+    ~RouteTable() override;
+    void pull();                 // read the engine's matrix into the rows
+    int  count() const;
+    void resized() override;
+    struct Row;
+private:
+    friend struct Row;
+    void push();                 // the rows back to the engine
+    void changed();
+    void addRow();
+    void removeRow(int index);
+    AmbientSynthProcessor& proc;
+    std::function<void()> changedCallback;
+    std::vector<std::unique_ptr<Row>> rows;
+    juce::Component content;
+    juce::Viewport port;
+    juce::TextButton add, clear;
+    juce::Label headSource, headTarget, headDepth, headVia, headUni;   // one per column, placed like the rows
+};
+
 // The colour a modulation source is drawn in, everywhere it appears.
 juce::Colour sourceColour(ambient::ModSource s);
 // The colour a preset family is drawn in on the map and in the list.

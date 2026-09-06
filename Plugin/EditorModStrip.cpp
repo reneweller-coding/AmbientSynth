@@ -97,18 +97,17 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
     tabMatrix.onClick = [this] { setTab(2); };
     tabLfo.setToggleState(true, juce::dontSendNotification);
 
-    matrixText.setMultiLine(true, false);
-    matrixText.setReturnKeyStartsNewLine(true);
-    matrixText.setFont(ui::body(12.0f));
-    addChildComponent(matrixText);
-    applyMatrix.onClick = [this] { pushMatrix(); };
-    clearMatrix.onClick = [this] { matrixText.setText({}, false); pushMatrix(); };
-    addChildComponent(applyMatrix);
-    addChildComponent(clearMatrix);
+    // The matrix page is a table of routes now (EditorMatrix.cpp); the text box it replaces is
+    // still the format everything travels in, one level down.
+    table = std::make_unique<edt::RouteTable>(proc, [this] {
+        matrixInfo.setText(juce::String(proc.engine().modMatrix().count()) + " of 32 routes", juce::dontSendNotification);
+        owner.repaint();
+    });
+    addChildComponent(*table);
     matrixInfo.setFont(ui::body(11.5f));
     matrixInfo.setColour(juce::Label::textColourId, ui::dim);
     addChildComponent(matrixInfo);
-    hint.setText("source > target : depth [: via] [: u]   one per line -- or drag a card onto a knob",
+    hint.setText("one row per route: source, target, depth, an optional via source that scales it, and 0..1 -- or drag a card onto a knob",
                  juce::dontSendNotification);
     hint.setFont(ui::body(11.5f));
     hint.setColour(juce::Label::textColourId, ui::faint);
@@ -129,7 +128,7 @@ void AmbientSynthEditor::ModView::setTab(int t)
         for (auto& c : envs[static_cast<size_t>(i)].controls) c->setVisible(t == 1);
         for (auto& l : envs[static_cast<size_t>(i)].labels) l->setVisible(t == 1);
     }
-    juce::Component* const matrixParts[] = { &matrixText, &applyMatrix, &clearMatrix, &matrixInfo, &hint };
+    juce::Component* const matrixParts[] = { table.get(), &matrixInfo, &hint };
     for (juce::Component* c : matrixParts) c->setVisible(t == 2);
     if (t == 2) pullMatrix();
     tabLfo.setToggleState(t == 0, juce::dontSendNotification);
@@ -141,26 +140,12 @@ void AmbientSynthEditor::ModView::setTab(int t)
 
 void AmbientSynthEditor::ModView::pullMatrix()
 {
-    char buf[4096];
-    const int n = proc.engine().writeModMatrix(buf, sizeof(buf));
-    juce::String t(juce::CharPointer_UTF8(buf), static_cast<size_t>(juce::jmax(0, n)));
-    matrixText.setText(t.replace(";", "\n"), false);
+    if (table) table->pull();
     matrixInfo.setColour(juce::Label::textColourId, ui::dim);
     matrixInfo.setText(juce::String(proc.engine().modMatrix().count()) + " of 32 routes", juce::dontSendNotification);
 }
 
-void AmbientSynthEditor::ModView::pushMatrix()
-{
-    const juce::String t = matrixText.getText().replaceCharacters("\n", ";").removeCharacters(" ");
-    if (proc.engine().setModMatrixText(t.toRawUTF8())) {
-        matrixInfo.setColour(juce::Label::textColourId, ui::dim);
-        matrixInfo.setText(juce::String(proc.engine().modMatrix().count()) + " of 32 routes", juce::dontSendNotification);
-    } else {
-        matrixInfo.setColour(juce::Label::textColourId, juce::Colour(0xffd08a8a));
-        matrixInfo.setText("a line could not be read; the previous matrix is kept", juce::dontSendNotification);
-    }
-    owner.repaint();
-}
+AmbientSynthEditor::ModView::~ModView() = default;   // here, where RouteTable is a complete type
 
 bool AmbientSynthEditor::ModView::addRoute(ambient::ModSource src, ParamId target)
 {
@@ -748,11 +733,9 @@ void AmbientSynthEditor::ModView::resized()
                       juce::Rectangle<int>(content.getX() + (i % cols) * w, content.getY() + (i / cols) * h, w, h).reduced(4, 2));
     } else {
         auto m = content;
-        auto bottom = m.removeFromBottom(24);
-        hint.setBounds(m.removeFromBottom(16));
-        matrixText.setBounds(m);
-        applyMatrix.setBounds(bottom.removeFromLeft(70)); bottom.removeFromLeft(6);
-        clearMatrix.setBounds(bottom.removeFromLeft(70)); bottom.removeFromLeft(10);
+        auto bottom = m.removeFromBottom(18);
+        hint.setBounds(bottom.removeFromLeft(bottom.getWidth() * 2 / 3));
         matrixInfo.setBounds(bottom);
+        if (table) table->setBounds(m);
     }
 }

@@ -875,7 +875,14 @@ def main():
     # tool only reports the built-ins, and a new pack happily reuses a name an existing pack has
     # -- which it did: forty-eight collisions with the older packs, all of them plausible pairs
     # like "Iron Reach" that two different word pools can both produce.
-    env = dict(os.environ, AMBIENT_PACKS=a.out_dir)
+    # Names already taken: the packs in the output folder AND the library proper, when the output
+    # is a folder of its own. Writing a new pack into a side folder and checking names only
+    # against that folder produced 59 presets that collided with the library the moment the pack
+    # was moved in -- "Ice Descent" twice, once in Permafrost and once in Field Recordings.
+    library = os.path.join(ROOT, "Library", "Packs")
+    folders = a.out_dir if os.path.normcase(os.path.abspath(a.out_dir)) == os.path.normcase(os.path.abspath(library)) \
+              else a.out_dir + ";" + library
+    env = dict(os.environ, AMBIENT_PACKS=folders)
     used_names = {n.strip() for n in subprocess.run([RENDER, "--list-presets"], capture_output=True,
                                                     text=True, encoding="utf-8", env=env).stdout.splitlines() if n.strip()}
     wanted = [w.strip().lower() for w in a.styles.split(",") if w.strip()]

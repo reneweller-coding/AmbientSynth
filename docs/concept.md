@@ -489,6 +489,29 @@ shared across all slots of all voices, built once in `prepare()`, read-only
 after; the buffers are sized once for the longest window and never touched
 by an allocation in `render()`.
 
+**The field recordings.** Five hundred places for it, from the same
+text-to-audio worker that made the textures, pointed at environments instead
+of instruments: twelve categories of six prompt seeds each -- rain on a tin
+roof, a harbour in fog, pack ice, a power station through a wall -- crossed
+with weather, distance and hour (`Tools/library/make_field_recordings.py`).
+Stable Audio Open 1.0 only: 44.1 kHz stereo and the best of the three models
+at places; AudioLDM 2 is 16 kHz and has no air. Twenty-six seconds each,
+because at forty times slower than life that is a quarter of an hour and a
+minute per clip would be a gigabyte the package does not need.
+
+Every one of them is seamless by construction rather than by luck: the last
+1.5 s are faded into the first (equal power), the overlap is trimmed, the
+seam is *measured* -- the largest sample-to-sample step across the wrap
+against the largest inside the clip -- and the file is marked `_loop`, which
+is what the Stretch type reads to skip its own crossfade. The mark goes in
+front of a trailing pitch token, not after it, because the engine reads the
+clip's pitch from the last token of the name and a `_loop` after `_A3` would
+have hidden every tonal recording's pitch. They land in `Library/Textures`
+under the `field_recordings_` prefix, which is the slug the preset generator
+uses to find a style's own clips, and the *Field Recordings* pack is built
+from them with the Stretch type in every slot it fills, each slot drawing its
+own clip: a preset can be four landscapes in the Vector's four corners.
+
 Three measurements that had to be made rather than assumed: the type makes
 sound (a silent new source type is the easiest thing in the world to ship),
 a different stretch factor is a different render (the factor moves the read,
@@ -1233,6 +1256,46 @@ the published coefficients over the same sixty-second render: -23.62 against
 constant that came from that reference, not from this code: a 997 Hz sine at
 -20 dBFS RMS in both channels reads -16.99 LUFS.
 
+### Four things the panel got wrong, and what it says now
+
+Four observations from the same round, all right, and worth writing down as
+reasoning rather than as a changelog.
+
+*Strands had a tab of its own.* It is not a source: it is the strand bank of
+Source 1's additive type -- unison, detune, stack, bloom -- and it is greyed
+out the moment Source 1 is anything else. A tab suggested a fifth thing beside
+the four sources. The ten controls now sit under Source 1's own display, in the
+display's column, wrapped to its width (a page may name a section to place
+*under* its display, `TabRow::under`); Source 1 is narrower for it (nine cells
+instead of twelve), the additive-bank picture is half the height it was, and
+the row lost a tab that only ever meant "Source 1".
+
+*Strike sat among the sources.* It is a sound source, but not one of the four
+oscillators: it fires at note-on, independent of what the slots do, exactly
+the way the Cosmos is independent of them. It now shares the Cosmos group as a
+tab -- COSMOS | STRIKE -- and the sources row is the four sources and the
+Vector.
+
+*There was no button for the main page.* Perform, Browse and Help each had a
+toggle; the panel was where you landed by switching them off, a rule nobody
+should have to learn. **Main** is a button now, lit while the panel shows;
+Help sits last, where a manual belongs; and Calibrate and Gestures -- the two
+controls only a headset needs -- live under one **VR** button as a menu
+instead of taking two places on the toolbar of an instrument that mostly
+plays on a desk.
+
+*The Matrix tab was a text box.* One route per line, "lfo1>cutoff:0.4", and an
+Apply button: exact, scriptable, and the wrong thing to put in front of a
+musician, who opens a tab called Matrix expecting to see routes rather than
+their spelling. A grid of every source against every parameter is not the
+answer either -- thirty-odd sources by four hundred targets is a wall with a
+dozen live cells in it. It is a table now (`EditorMatrix.cpp`): one row per
+route, each a source, a target grouped by section, a depth you can drag, an
+optional via source that scales it, and whether the source is read as 0..1 --
+with "+ route" and a remove on every row. It hands the whole matrix back to
+the engine as the same text the box used, so the parser, the presets and the
+drag-a-card-onto-a-knob path see nothing new.
+
 ### The manual
 
 The help page inside the instrument is the manual, and it exists as a PDF as
@@ -1353,8 +1416,9 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 6000 presets in 30 packs, with 1200
-texture clips, 608 wavetables and 200 impulse responses (see
+`Library/` holds a generated library of 6200 presets in 31 packs, with 1700
+clips (1200 textures and 500 seamless field recordings), 608 wavetables and
+200 impulse responses (see
 `Library/README.md` and `Tools/library/`). Its descriptors and map positions
 are measured, not estimated: `Tools/library/measure_packs.py` renders all six
 thousand and writes the result back into the pack files, and corrects each
@@ -1635,8 +1699,8 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 6000 presets in
-  the packs name 1284 samples, wavetables and impulse responses that are far
+* **The sample library** (`Tools/make_content_pack.py`). The 6200 presets in
+  the packs name 1584 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced
   travels: the library folder holds more than the packs use, and shipping the

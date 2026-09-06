@@ -69,9 +69,10 @@ The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (30 packs, 6000 presets) into `ProgramData\AmbientSynth\Packs`,
-* the **sample library** — 1284 samples, wavetables and impulse responses, 3.3 GB, downloaded
-  from the release and checked against its hash — into the same folder,
+* the **preset library** (31 packs, 6200 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **sample library** — 1584 samples, wavetables and impulse responses, 4.9 GB (467 of
+  them seamless field recordings for the Stretch type), downloaded from the release and checked
+  against its hash — into the same folder,
 
 all four on by default.
 
@@ -152,7 +153,7 @@ and a wavetable of their own. They appear everywhere the built-in presets do
 -- programs, browser, map, routes -- each pack as its own family. Drop
 `*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
 `AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
-library of 6000 presets in 30 packs with the 1284 samples, wavetables and
+library of 6200 presets in 31 packs with the 1584 samples, wavetables and
 impulse responses they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes

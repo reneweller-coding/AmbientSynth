@@ -21,6 +21,7 @@ target_sources(AmbientSynth PRIVATE
     PluginEditor.cpp
     EditorViews.cpp
     EditorSpectrum.cpp
+    EditorMatrix.cpp
     EditorModStrip.cpp
     EditorBrowse.cpp
     AmbientLookAndFeel.cpp)

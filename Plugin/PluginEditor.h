@@ -11,6 +11,8 @@
 #include <map>
 #include <set>
 
+namespace edt { class RouteTable; }   // EditorCommon.h / EditorMatrix.cpp
+
 // The editor groups the sections the way the signal flows:
 //   VOICE (Oscillator, Air, Envelope, Filter, Space) -> FOREGROUND (Ensemble, Delay, Delay 2,
 //   Near Reverb) -> out; FOREGROUND -> COSMOS (parallel, returns) ; FOREGROUND -> BACKGROUND
@@ -153,6 +155,10 @@ private:
         std::vector<juce::String> names;                       // one label per page
         std::vector<std::vector<juce::String>> pages;          // section names per page
         std::vector<juce::Component*> displays;                // per page: display for the leftover width, or null
+        // Per page, optionally: a section that sits UNDER the display, in the display's column,
+        // wrapping to that column's width. Source 1's page keeps the strand bank's ten knobs there
+        // rather than on a tab of their own, over a half-height picture of the bank.
+        std::vector<juce::String> under;
         int active = 0;
         juce::Rectangle<int> bar;
         std::vector<juce::Rectangle<int>> tabs;
@@ -204,6 +210,9 @@ private:
     juce::Viewport viewport_;
     void paintContent(juce::Graphics&);
     std::unique_ptr<juce::TextButton> saveButton_, loadButton_, recButton_, calibButton_, mapButton_, performButton_;
+    // Main brings the panel back from any page; VR holds what only a headset needs (calibration,
+    // the gesture table) under one button instead of two on the toolbar.
+    std::unique_ptr<juce::TextButton> mainButton_, vrButton_;
     // Perform page: the eight macros as large knobs plus the morph, instead of the editor.
     struct PerformView : juce::Component {
         explicit PerformView(AmbientSynthProcessor& p);
@@ -373,11 +382,11 @@ private:
         AmbientSynthProcessor& proc;
         AmbientSynthEditor& owner;
         juce::TextButton tabLfo{ "LFO" }, tabEnv{ "ENVELOPES" }, tabMatrix{ "MATRIX" };
-        juce::TextEditor matrixText;
-        juce::TextButton applyMatrix{ "Apply" }, clearMatrix{ "Clear" };
+        // The matrix page: a table of routes (EditorMatrix.cpp), where a text box used to be.
+        std::unique_ptr<edt::RouteTable> table;
         juce::Label matrixInfo, hint;
         juce::Rectangle<int> lane, tabsArea, content;
-        void pushMatrix();
+        ~ModView() override;
         void pullMatrix();
         // Adds a route from a dragged source to a parameter, with a small default depth.
         bool addRoute(ambient::ModSource src, ambient::ParamId target);

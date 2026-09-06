@@ -32,11 +32,13 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4", "Strike", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
         { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Body", "Patina" } }, {}, 1 },
-        { "COSMOS",     kCosmos,    { { "Cosmos" } }, {}, 1 },
+        // Strike shares the Cosmos group as a tab: like the Cosmos it is a sound source that is
+        // not one of the four oscillators, and beside them it read as a fifth.
+        { "COSMOS",     kCosmos,    { { "Cosmos", "Strike" } }, {}, 1 },
         // Stretchy as well, and for the same reason from the other side: in Compact the left
         // column is the taller one, and then it is the note roll that grows into the gap.
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1, {}, 0, true },
@@ -48,13 +50,18 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     };
     tabRows_ = {
         // The Vector belongs with the sources it mixes, so it is a page of the same row.
-        { 0, 0, { "SOURCE 1", "STRANDS", "SOURCE 2", "SOURCE 3", "SOURCE 4", "STRIKE", "VECTOR" }, { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Strike" }, { "Vector" } } },
+        // Strands is not a page: it belongs to Source 1's additive bank alone and sits under that
+        // page's display (TabRow::under), so the row lost a tab that only ever meant "Source 1".
+        { 0, 0, { "SOURCE 1", "SOURCE 2", "SOURCE 3", "SOURCE 4", "VECTOR" }, { { "Source 1" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Vector" } } },
         { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
         { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Body", "Patina" } } },
         { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
+        // Appended, so the indices the code above uses for the other rows stay what they were.
+        { 4, 0, { "COSMOS", "STRIKE" }, { { "Cosmos" }, { "Strike" } } },
     };
+    tabRows_[0].under = { "Strands", "", "", "", "" };   // under Source 1's display only
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
     content_.onMouse = [this](const juce::MouseEvent& e) {
@@ -88,14 +95,32 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
             });
     };
     addAndMakeVisible(*recButton_);
+    // Main: the panel, from wherever you are. It is the one page that had no button of its own --
+    // you got back by switching the others off, which is a rule nobody should have to learn.
+    mainButton_ = std::make_unique<juce::TextButton>("Main");
+    mainButton_->setTooltip("The panel: every section on one page");
+    mainButton_->setClickingTogglesState(true);
+    mainButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
+    mainButton_->setToggleState(true, juce::dontSendNotification);
+    mainButton_->onClick = [this] { setPage(0); };
+    addAndMakeVisible(*mainButton_);
+    // The two headset controls under one button: on a desk they are the two you never press.
     calibButton_ = std::make_unique<juce::TextButton>("Calibrate");
-    calibButton_->setTooltip("Hands: together and apart, low and high, near and far, for 6 s");
     calibButton_->onClick = [this] { proc_.gestures().startCalibration(6.0f); };
-    addAndMakeVisible(*calibButton_);
     mapButton_ = std::make_unique<juce::TextButton>("Gestures...");
-    mapButton_->setTooltip("Edit the gesture/macro mapping table");
     mapButton_->onClick = [this] { showMappingEditor(); };
-    addAndMakeVisible(*mapButton_);
+    vrButton_ = std::make_unique<juce::TextButton>("VR");
+    vrButton_->setTooltip("Hand tracking: calibrate the hands, edit the gesture table");
+    vrButton_->onClick = [this] {
+        juce::PopupMenu m;
+        m.addItem(1, "Calibrate hands (6 s: together and apart, low and high, near and far)");
+        m.addItem(2, "Gestures... (the gesture / macro mapping table)");
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(vrButton_.get()), [this](int r) {
+            if (r == 1) proc_.gestures().startCalibration(6.0f);
+            else if (r == 2) showMappingEditor();
+        });
+    };
+    addAndMakeVisible(*vrButton_);
     performButton_ = std::make_unique<juce::TextButton>("Perform");
     performButton_->setTooltip("Only the eight macros and the morph, large: for playing a set");
     performButton_->setClickingTogglesState(true);
@@ -232,12 +257,15 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(vectorView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), source4View_.get(), nullptr, vectorView_.get() };
+        tabRows_[0].displays = { source1View_.get(), source2View_.get(), source3View_.get(), source4View_.get(), vectorView_.get() };
+        // The strand scope drew the bank's cycle on the Strands tab; that tab is gone and the
+        // additive-bank picture on Source 1's page shows the same partials. Kept for the manual.
+        if (scope_) scope_->setVisible(false);
         tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get(), nullptr };
     }
     if (groups_.size() > 4) {
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
-        groups_[4].displays = { cosmosView_.get() };                    // COSMOS
+        tabRows_.back().displays = { cosmosView_.get(), nullptr };      // COSMOS | STRIKE (the row appended last)
     }
     if (groups_.size() > 6) groups_[6].displays = { spectrumView_.get() };   // ANALYSIS: the strip
     if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
@@ -334,7 +362,10 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
             if (s.name == "Space") s.maxUnits = 8;                           // two rows each, side by side
             if (s.name == "Foundation") s.maxUnits = 5;
-            if (s.name == "Source 1" || s.name == "Source 2" || s.name == "Source 3" || s.name == "Source 4") s.maxUnits = 12;
+            // Source 1 is narrower than the others on purpose: its page shares the row with the
+            // strand bank under the display, and the display column needs the width for it.
+            if (s.name == "Source 1") s.maxUnits = 9;
+            else if (s.name == "Source 2" || s.name == "Source 3" || s.name == "Source 4") s.maxUnits = 12;
             s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
@@ -634,16 +665,18 @@ void AmbientSynthEditor::resized()
     if (saveButton_) saveButton_->setBounds(474, 8, 64, 24);
     if (loadButton_) loadButton_->setBounds(544, 8, 64, 24);
     if (recButton_) recButton_->setBounds(614, 8, 56, 24);
-    if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
-    if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
-    if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
-    if (browseButton_) browseButton_->setBounds(1128, 8, 66, 24);
-    if (helpButton_) helpButton_->setBounds(1200, 8, 56, 24);
-    if (undoButton_) undoButton_->setBounds(1262, 8, 50, 24);
-    if (redoButton_) redoButton_->setBounds(1316, 8, 50, 24);
-    if (abButton_) abButton_->setBounds(1370, 8, 52, 24);
-    if (compactButton_) compactButton_->setBounds(1426, 8, 70, 24);
-    if (recallButton_) recallButton_->setBounds(1500, 8, 62, 24);
+    // The pages first (Main, Perform, Browse), then what acts on the state, Help last where a
+    // manual belongs. Calibrate and Gestures live in the VR menu and take no room here.
+    if (mainButton_) mainButton_->setBounds(880, 8, 56, 24);
+    if (performButton_) performButton_->setBounds(942, 8, 70, 24);
+    if (browseButton_) browseButton_->setBounds(1018, 8, 66, 24);
+    if (vrButton_) vrButton_->setBounds(1090, 8, 44, 24);
+    if (undoButton_) undoButton_->setBounds(1140, 8, 50, 24);
+    if (redoButton_) redoButton_->setBounds(1194, 8, 50, 24);
+    if (abButton_) abButton_->setBounds(1248, 8, 52, 24);
+    if (compactButton_) compactButton_->setBounds(1304, 8, 70, 24);
+    if (recallButton_) recallButton_->setBounds(1378, 8, 62, 24);
+    if (helpButton_) helpButton_->setBounds(1446, 8, 56, 24);
 
     const int W = designW_, H = designH_;
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
@@ -745,6 +778,7 @@ void AmbientSynthEditor::layoutBody()
             TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
             const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : g.rows[ri];
             juce::Component* disp = nullptr;
+            Section* underSec = nullptr;      // a section placed under the display, if the page has one
             int rowH = 0;
             if (t != nullptr) {
                 for (auto& pg : t->pages) rowH = std::max(rowH, pageHeight(pg));
@@ -760,8 +794,20 @@ void AmbientSynthEditor::layoutBody()
                     if (static_cast<int>(pi) == t->active) continue;
                     for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
                     if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
+                    if (pi < t->under.size() && t->under[pi].isNotEmpty())
+                        if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
                 }
                 if (static_cast<size_t>(t->active) < t->displays.size()) disp = t->displays[static_cast<size_t>(t->active)];
+                // The page's under-section wraps to the display column's width, and the row is
+                // tall enough to keep a real picture above it.
+                if (static_cast<size_t>(t->active) < t->under.size() && t->under[static_cast<size_t>(t->active)].isNotEmpty()) {
+                    if (Section* u = findSection(t->under[static_cast<size_t>(t->active)])) {
+                        const int free = colWidth[col] - pageWidth(names) - kPad;
+                        u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
+                        underSec = u;
+                        rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
+                    }
+                }
                 y += kTabH;
             } else {
                 rowH = std::max(pageHeight(names), g.minRowH);
@@ -775,12 +821,25 @@ void AmbientSynthEditor::layoutBody()
                 layoutSection(*s, x, y);
                 x += s->bounds.getWidth() + kPad;
             }
-            // Whatever the row leaves free goes to its display -- that room used to stay empty.
+            // Whatever the row leaves free goes to its display -- that room used to stay empty --
+            // and where the page has an under-section, the display keeps the top of that column
+            // and the section takes the bottom, wrapped to the column's width.
             if (disp != nullptr) {
                 const int right = x0 + colWidth[col] - kPad;
-                if (right - x >= 120 && rowH > 0) { disp->setBounds(x, y, right - x, rowH); disp->setVisible(true); }
+                int dispH = rowH;
+                if (underSec != nullptr && right - x >= 120) {
+                    const int uh = sectionHeight(*underSec);
+                    if (rowH - uh - kPad >= 80) {
+                        dispH = rowH - uh - kPad;
+                        setSectionVisible(*underSec, true);
+                        layoutSection(*underSec, x, y + dispH + kPad);
+                    } else setSectionVisible(*underSec, false);
+                }
+                if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
                 else disp->setVisible(false);
                 if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
+            } else if (underSec != nullptr) {
+                setSectionVisible(*underSec, false);
             }
             y += rowH + kPad;
         }
@@ -842,6 +901,7 @@ void AmbientSynthEditor::setPage(int page)
     browse_->setVisible(page == 2);
     if (help_) help_->setVisible(page == 3);
     if (mod_) mod_->setVisible(page == 0);
+    if (mainButton_ && mainButton_->getToggleState() != (page == 0)) mainButton_->setToggleState(page == 0, juce::dontSendNotification);
     if (performButton_->getToggleState() != (page == 1)) performButton_->setToggleState(page == 1, juce::dontSendNotification);
     if (browseButton_->getToggleState() != (page == 2)) browseButton_->setToggleState(page == 2, juce::dontSendNotification);
     if (helpButton_ && helpButton_->getToggleState() != (page == 3)) helpButton_->setToggleState(page == 3, juce::dontSendNotification);

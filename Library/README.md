@@ -1,6 +1,6 @@
 # The AmbientSynth preset library
 
-Six thousand presets in thirty packs, with the samples and wavetables they play.
+Six thousand two hundred presets in thirty-one packs, with the samples and wavetables they play.
 
 The packs are text and live in the repository. The audio does not: 1200 texture clips are
 about 8 GB and 608 wavetables about 80 MB, so both are generated locally and are ignored by
@@ -9,8 +9,8 @@ names -- which is why a pack can name a sample that has not been rendered yet.
 
 ```
 Library/
-  Packs/*.ambientpack     30 files, 200 presets each   (in git)
-  Textures/*.wav          1200 granular source clips   (generated)
+  Packs/*.ambientpack     31 files, 200 presets each   (in git)
+  Textures/*.wav          1700 clips: 1200 textures and 500 field recordings   (generated)
   Wavetables/*.wav        608 wavetables               (generated)
   Impulses/*.wav          200 impulse responses        (generated)
 ```
@@ -148,6 +148,12 @@ voice at a time, the 155 filter shapes, and a matrix fed by the instrument's own
 | Turning Harmony | Pauline Oliveros | autoplay in Chords: one voice exchanged at a time |
 | Filter Cubes | Alva Noto | the filter cube's third axis, cold and precise |
 | Own Tuning | Catherine Christer Hennix | purity drift, difference tones, BEAT as a modulator |
+
+And one for the field recordings, written after the Stretch type and the fourth source slot:
+
+| Pack | In the spirit of | Character |
+| --- | --- | --- |
+| Field Recordings | Chris Watson | places, not instruments: seamless recordings read as a continuum by the Stretch type, up to four of them in the Vector's four corners, a quiet additive centre underneath |
 
 ## Modulation in the library
 

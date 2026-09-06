@@ -94,6 +94,7 @@ const HelpEntry kHelp[] = {
     { "filter_drift", "Depth of the cutoff's slow random wander, in octaves times two." },
     { "keytrack", "How much the cutoff follows the note: 1 keeps the same partials in the passband on every key." },
     { "filter_drive", "Soft saturation ahead of the filter, level-compensated: adds harmonics, not loudness." },
+    { "filter_fold", "A wavefolder after both filters. Drive flattens what will not fit; a folder turns it back on itself, and a wave mirrored at the fold grows a family of high partials that no saturation makes -- the metallic edge of an industrial record. The positive half folds a third sooner than the negative one, which is where the even harmonics and the body come from. Off at 0." },
 
     // ---- z-plane
     { "z_mode", "Off, or the z-plane filter in Series (it hears the voice filter, Mix is its dry/wet) or Replace (it is the only filter)." },
@@ -123,6 +124,8 @@ const HelpEntry kHelp[] = {
     { "breath_rate", "How fast the distances breathe. 0.03 Hz is half a minute per swing." },
     { "phase_width", "Two all-pass stages per ear whose corners drift in opposite directions: the phase between left and right changes slowly and the room seems to change size rather than the sound to move. Off at 0." },
     { "phase_rate", "How fast the phase field drifts. Keep it slow: the effect is space, not tremolo." },
+    { "haas", "The Haas trick, done to one band only. Delaying a whole channel by ten to thirty milliseconds widens it and destroys it in mono. Between about 1.2 and 4 kHz, where the ear takes its direction from level rather than from time, each side is given the other side's delayed band six decibels down: the edges open and the bass and the top stay exactly where they were. Off at 0." },
+    { "haas_time", "How far that band is delayed. Twelve to eighteen milliseconds is the studio figure: long enough to be a separate arrival, short enough that the ear fuses it with the original instead of hearing an echo." },
     { "externalise", "The two cues a headphone image needs to sit outside the head: the notch the pinna cuts into what arrives from the side, and the reflection off the shoulder a quarter of a millisecond later. Both follow each voice's own position. On speakers leave it off." },
     { "doppler", "As a voice breathes closer or further away its pitch bends a little, the way a moving source does. A few cents at most; the ear reads approach and retreat from it." },
 
@@ -130,6 +133,7 @@ const HelpEntry kHelp[] = {
     { "ens_mix", "Amount of the ensemble (a slow stereo chorus) on the near bus." },
     { "ens_depth", "Modulation depth of the ensemble's delay lines." },
     { "ens_rate", "Speed of the ensemble's modulation." },
+    { "ens_mode", "Chorus is the three modulated taps. Microshift is the studio's other way of widening: the two channels detuned a few cents in opposite directions and delayed by different amounts, with nothing moving. It survives a mono sum, which a deep chorus at 13 to 22 ms does not -- that is a comb filter waiting to be summed. In this mode Depth is the detune (up to 12 cents) and Rate a very slow wander of it, so the two sides never settle into a fixed phase." },
     { "ensemble_sync", "Ties the ensemble's rate to the tempo." },
 
     // ---- delays
@@ -179,6 +183,7 @@ const HelpEntry kHelp[] = {
     { "patina_age", "How much top end the machine has lost: from untouched down to about 4 kHz." },
     { "far_diffuse", "Modulated all-passes in front of the far reverb: the tail arrives instead of starting. At zero the reverb answers immediately, as it always has; turned up, the first reflections smear into a slow swell that takes a second to become a room." },
     { "far_rotate", "The whole background slowly turns: the far field's left and right rotate into each other on a minute-scale curve. Depth of the turn." },
+    { "far_width", "The width of the background alone, before it is added to the foreground. A mix in which everything is spread as far as it will go has no depth left -- it is a flat wall. Pulling the far plane in towards the centre while the foreground stays wide is the funnel that reads as distance: the ear is drawn into the middle of the horizon. 1 is the reverb as it made itself, 0 a mono background, and above 1 wider." },
     { "blur_mix", "A spectral smear on the near bus itself, ahead of the effects: every attack is wiped into texture, notes flow into each other. Mix of the blurred signal (latency 43 ms on the blurred part)." },
     { "blur_smear", "How much the blur smears: 0 follows the input closely, 1 is a spectral freeze that only lets new energy in slowly." },
 
@@ -377,24 +382,28 @@ SIGNAL FLOW
   Cluster Brain / MIDI keys
         each note gets a DISTANCE: 0 at the ear, 1 the infinite background
   Voice (x16)
-        Source 1 + Source 2 + Source 3   (additive bank, wavetable, FM, texture grains, noise)
+        Source 1 + Source 2 + Source 3 + Source 4   (four equal slots: additive bank,
+              wavetable, FM, texture grains, spectral stretch, noise)
+        the Vector reads the four as the corners of one square; Strike adds a struck body
         + Air (filtered noise on the note)
-        -> Filter (nine models) and/or Z-plane filter, in series or parallel
+        -> Filter (ten models, wavefolder) and/or Z-plane filter, in series or parallel
         -> Envelope, x (1 - distance/2)
         -> interaural time difference from the pan (the far ear hears later)
         -> NEAR bus by cos(distance), FAR bus by sin(distance)
-  NEAR:  Ensemble -> Delay -> Delay 2 -> (+ Near reverb)   the dry, bright foreground
+  NEAR:  Ensemble (chorus or microshift) -> Delay -> Delay 2 -> (+ Near reverb + Haas band)
          "to far" from both delays and the Cloud send go into the background
          Cosmos (send / return): shifter, resonator, vowel, nebula -- added, never replacing
-  FAR:   Far reverb (dark, wide, asymmetric, minutes long) + Room (convolution) + Shimmer loop
-  Mid/side (bass mono, side air, width) -> Master -> soft clip.   No compressor anywhere.
+  FAR:   Far reverb (dark, wide, asymmetric, minutes long, with its own width)
+         + Room (convolution) + Shimmer loop, unmasked band by band under the foreground
+  Body (twelve tuned modes) -> mid/side (bass mono, side air, width) -> + Foundation sub
+         -> Patina -> subsonic -> Master -> soft clip.   No compressor anywhere.
   Feedback: the finished mix can return into the near bus and/or bend every partial's phase.
 
 A voice's plane decides everything at once: how bright it is (2.5 octaves of cutoff per unit of distance), how loud (-6 dB), how dry (the far plane is heard only through the reverb), and how present (the presence bell lives on the near plane). The brain places 40 % of its notes close and 60 % deep; your keys sit at Keys Depth.
 
 THE PAGE
 
-Everything is on one page and nothing scrolls; drag the window corner to zoom. Rows whose sections are of a kind page through tabs: SOURCE 1 / STRANDS / SOURCE 2 / SOURCE 3, FILTER / Z-PLANE / AMP ENV, the effect pairs, BRAIN / TUNING / COHERENCE / CLOCK, MORPH / MACROS. The room a row's knobs leave is a live display drawn from the engine's own numbers. The strip along the bottom holds the modulators. Point at any control and this header line tells you what it does.)" },
+Everything is on one page and nothing scrolls; drag the window corner to zoom. Rows whose sections are of a kind page through tabs: SOURCE 1 / SOURCE 2 / SOURCE 3 / SOURCE 4 / VECTOR, FILTER / Z-PLANE / AMP ENV / EXPRESSION, the effect pairs, COSMOS / STRIKE, BRAIN / AUTOPLAY / BRAIN 2 / TUNING / COHERENCE / CLOCK, MORPH / MACROS. The strand bank has no tab of its own: it belongs to Source 1's additive type alone and sits under that page's display. The header carries the pages -- Main, Perform, Browse, VR (calibration and gestures) and Help at the end. The room a row's knobs leave is a live display drawn from the engine's own numbers. The strip along the bottom holds the modulators. Point at any control and this header line tells you what it does.)" },
 
     { "Sources",
 R"(Every voice has four equal source slots; their levels mix before the filter. Each slot has its own clip for the Texture type, so four slots can play four different recordings. Each slot has a Type:
@@ -418,7 +427,7 @@ THE VECTOR is the four slots read as a place rather than as four levels, after t
     { "Filters and Z-plane",
 R"(Two filters, each with its own switch, in series or in parallel.
 
-THE VOICE FILTER (Filter section) has nine models behind the same knobs:
+THE VOICE FILTER (Filter section) has ten models behind the same knobs:
   LP 6      one pole, warm and gentle
   LP 12     the state-variable low pass -- the default, the one the instrument always had
   LP 24     two stages, steep
@@ -428,9 +437,12 @@ THE VOICE FILTER (Filter section) has nine models behind the same knobs:
   Peak      a bell of up to +14 dB, narrower with Resonance
   Ladder    four one-poles with saturating feedback, self-oscillating near full Resonance
   Comb      a feedback comb tuned to Cutoff; Resonance deepens the dips -- on a cluster, a second resonating body
+  Formant  three tracked bands: the filter sings a vowel
+FOLD is a wavefolder after both filters. Drive flattens what will not fit through the filter; a folder turns it back on itself instead, and a wave mirrored at the fold grows a family of high partials that no saturation makes -- the metallic edge of an industrial record. Its positive half folds a third sooner than the negative one, so the even harmonics are there too. Off at 0.
+
 Cutoff is moved by Key Track (1 keeps the same partials in the passband on every key), Env Amount (the amplitude envelope, negative closes), Drift (a slow wander) and by the voice's distance (2.5 octaves darker on the far plane). Drive saturates ahead of the filter. On switches it out.
 
-THE Z-PLANE FILTER (after the E-mu Morpheus idea): four filter frames sit on the corners of a square and a point (X, Y) inside it is a filter interpolated from all four -- on the pole and zero parameters, so every point is stable. Sixteen Shapes in six families (vowel morphs, bell clusters, resonator banks, sweeps); the point wanders at Rate by Depth; Resonance narrows every section; Key Track moves the frame with the note. Mode: Off, Series or Replace (the z-plane alone). Route: with both filters on, Series puts the z-plane after the voice filter (Mix is its dry/wet), Parallel feeds both the dry sum and Mix balances them.
+THE Z-PLANE FILTER (after the E-mu Morpheus idea): four filter frames sit on the corners of a square and a point (X, Y) inside it is a filter interpolated from all four -- on the pole and zero parameters, so every point is stable. 155 Shapes in twelve families (vowel morphs, bell clusters, resonator banks, sweeps, and the acoustic ratio families generated for the bank); the point wanders at Rate by Depth; the third axis Z is the cube's own depth, so a shape is a volume rather than a square; Resonance narrows every section; Key Track moves the frame with the note. Mode: Off, Series or Replace (the z-plane alone). Route: with both filters on, Series puts the z-plane after the voice filter (Mix is its dry/wet), Parallel feeds both the dry sum and Mix balances them.
 
 The FILTER RESPONSE display draws the voice filter (in the voice colour), the z-plane (in the accent) and what a note actually meets after both, from the same maths the audio path uses.
 
@@ -448,13 +460,17 @@ AIR is filtered noise inside each voice, at a multiple (Color) of the note's fun
 FOUNDATION is a mono sub voice one or two octaves under the brain's root (or, with Source = Difference, on the combination tone of the two lowest voices -- the ghost bass of a just chord), gliding in the log domain over Glide seconds, with Binaural offsetting left and right by a few hertz and Tone adding a little harmonic content. It is injected after the mid/side stage so Bass Mono cannot thin it. Pad Low Cut takes the pads out of its register (12 dB/oct below the cut).)" },
 
     { "Effects: foreground and background",
-R"(The near bus (the dry plane) runs through ENSEMBLE (a slow stereo chorus: Mix, Depth, Rate or Sync), DELAY and DELAY 2 in series (independent left and right times or note values, Feedback, Cross for ping-pong, Damping in the loop, Mix onto the near bus and To Far into the background: echoes that recede), and the NEAR REVERB (a small room: Mix, Decay, Damping).
+R"(The near bus (the dry plane) runs through ENSEMBLE (Mix, Depth, Rate or Sync, and a Mode: Chorus is three modulated taps, Microshift detunes the two channels a few cents in opposite directions with nothing moving -- the studio's way of widening a drone that survives a mono sum, where a deep chorus at 13 to 22 ms is a comb filter waiting to be summed), DELAY and DELAY 2 in series (independent left and right times or note values, Feedback, Cross for ping-pong, Damping in the loop, Mix onto the near bus and To Far into the background: echoes that recede), and the NEAR REVERB (a small room: Mix, Decay, Damping, Low Cut).
 
-The far bus is the background: FAR REVERB is an eight-line feedback network, 100 % wet, dark and wide -- Size, Decay (tens of seconds), Damping, Pre-Delay, Asymmetry (the right half stretched and delayed so the two ears hear different reflections), Tail Cut, and Freeze for an instant infinite pad. CLOUD takes grains of the recent foreground (Send, Density or Sync, Size, Spray back in time), transposes them (Pitch) and drops them into the far reverb. ROOM is a convolution reverb from a loaded impulse response (Impulse... button, or the preset's own; 200 generated responses ship with the library) or the built-in dark hall, hearing the far sends or the near bus, with Pre-Delay and Tail Cut.
+The HAAS band (in Space) widens the foreground where the ear takes its direction from level rather than from time. Delaying a whole channel by ten to thirty milliseconds widens it and destroys it in mono; done to the band between about 1.2 and 4 kHz, and put into the side channel so that what is added on one side comes off the other, the edges open, the bass and the top stay where they were, and a mono sum is exactly the picture it was. Haas Time is how far that band is delayed. Off at 0.
+
+The far bus is the background: FAR REVERB is an eight-line feedback network, 100 % wet, dark and wide -- Size, Decay (tens of seconds), Damping, Pre-Delay, Asymmetry (the right half stretched and delayed so the two ears hear different reflections), Tail Cut, Low Cut, Freeze for an instant infinite pad, and WIDTH, which is the background's own stereo width before it is added to the foreground. That last one is the funnel: a mix in which everything is spread as far as it will go is a flat wall, and pulling the far plane in towards the centre while the foreground stays wide is what the ear reads as distance. 1 is the reverb as it made itself. CLOUD takes grains of the recent foreground (Send, Density or Sync, Size, Spray back in time), transposes them (Pitch) and drops them into the far reverb. ROOM is a convolution reverb from a loaded impulse response (Impulse... button, or the preset's own; 200 generated responses ship with the library) or the built-in dark hall, hearing the far sends or the near bus, with Pre-Delay and Tail Cut.
 
 FEEDBACK returns the finished mix: To Bus into the near bus before the filters and effects (throttled by the output level so it hisses and holds instead of running away), To Pitch as phase modulation of every partial (the sound bends itself), through Tone and Drive; Tape adds asymmetric saturation, wow and flutter and a level-dependent noise floor.
 
-MASTER: Bass Mono removes the side channel below a frequency (a mono low end under a wide picture), Side Air lifts the side at 3 kHz, Width scales the stereo image; then the master gain and a soft clipper. There is no compressor.)" },
+MASTER: Bass Mono removes the side channel below a frequency (a mono low end under a wide picture), Side Air lifts the side at 3 kHz, Width scales the stereo image, Subsonic is a steep high-pass on the finished output; then the master gain and a soft clipper. There is no compressor.
+
+The LOUDNESS METER under the master reads the finished output to BS.1770: I is the gated integrated value, S the short term, LRA the range, TP the true peak between samples, and crest the peak-to-RMS distance. The band on the bar is -24 to -16 LUFS, where a dark ambient master is asked to land, and the line at -14 is where the streaming services normalise: a master louder than that is turned down again and arrives flat rather than loud. Click the meter to start it again.)" },
 
     { "Cosmos",
 R"(Cosmos is a parallel path off the near bus -- Send in, Return to the near plane and To Far into the background -- that adds to the sound and never replaces it. In order:
@@ -478,7 +494,9 @@ COHERENCE: four slow Kuramoto oscillators coupled by Coherence (free at 0, in st
 CLOCK: where the tempo comes from -- Internal (Tempo, Run), Host (the DAW's play head) or MIDI (MIDI clock at the input). See the topic "Clock and sync".)" },
 
     { "Modulation: LFOs, envelopes, matrix",
-R"(The strip along the bottom holds every modulation source as a card: LFO 1-8, ENV 1-6, MACRO A-H, KURA 1-4, AMP (the voice's own envelope), NOTE, VELO, DIST (the voice's plane), RAND (a random value per note) and BEAT. Its tabs edit the sources:
+R"(THE SOURCES a route can be driven by: the eight LFOs, the six envelopes, the voice's own amplitude, the eight macros, the four Kuramoto oscillators of the Coherence ring, the note, its velocity and its distance, one random number per note, the Beat (the instrument listening to how far out of tune it currently is), and the hands: PRESSURE (channel or polyphonic aftertouch), WHEEL (CC 1) and SLIDE (CC 74). Those last three rest at zero, so give them the 0..1 flag and a patch at rest sounds exactly as it did until you move them. Aftertouch on the filter's resonance, the wavetable position and the reverb at once is one gesture with three routes.
+
+The strip along the bottom holds every modulation source as a card: LFO 1-8, ENV 1-6, MACRO A-H, KURA 1-4, AMP (the voice's own envelope), NOTE, VELO, DIST (the voice's plane), RAND (a random value per note) and BEAT. Its tabs edit the sources:
 
 LFO  Eight free LFOs with Shape (Sine, Triangle, Ramp Up/Down, soft Square, Random, Steps, or Table -- a frame of the user wavetable as a shape, so any drawn curve is an LFO), Rate from one cycle in twenty minutes to 20 Hz or a note value (Sync), Phase, Depth, and Mode: Global (one phase for the instrument, every voice breathes together), Voice (each voice its own copy), Retrigger (each voice restarts from Phase). The editors show the shape with a running dot.
 
@@ -502,9 +520,83 @@ PERFORM (header button) shows only the eight macros and the morph, large, for pl
 GESTURES: the same layer that will drive the Quest version listens to OSC (/ambient/hand/L|R, /head, /param, /gesture, /note, /preset, /morph, port 9000): hand height, distance, pinch. Calibrate learns your range (hands together and apart, low and high, near and far, for six seconds). The right pinch is the clutch: mappings act only while it is engaged.)" },
 
     { "Presets, packs, browser, map, routes, sets",
-R"(Presets come in two independent layers: the Sound box (voices, space, effects, brain, tuning -- 168 built in) and the Cosmos box (32 presets for the Cosmos section only). Loading one never touches the other; in a DAW the full presets are the programs. Save... / Load... store the whole state as an .ambientsynth file.
+R"(Presets come in two independent layers: the Sound box (voices, space, effects, brain, tuning -- 191 built in) and the Cosmos box (32 presets for the Cosmos section only), with the z-plane and the Strike layers beside them. Loading one never touches the other; in a DAW the full presets are the programs. Save... / Load... store the whole state as an .ambientsynth file.
 
-PACKS: plain text files (*.ambientpack, one preset per line) that may name a sample, a wavetable, an impulse response, a modulation matrix and envelope shapes of their own. Put them in Documents/AmbientSynth/Packs or point AMBIENT_PACKS at a folder (the installer's own folders are read too, and a pack found in two of them loads once); they appear everywhere the built-in presets do, each pack as a family. The library that ships alongside has 5000 presets in 25 packs, 1200 samples, 608 wavetables and 200 impulse responses.
+THE BUILT-IN PRESETS
+
+The 191 compiled-in presets are the instrument's own repertoire, written by hand over the rounds in which it grew, and every one of them was later given the parts of the instrument it predates -- a matrix, a z-plane, a third source -- and measured afterwards to be sure it still sounded like itself. They are grouped into families by what they are for:
+
+Originals: the first patches, one idea each, kept as they were. Sleep / night: long holds, just intonation, the sub and the binaural beat, made for the hours nobody is listening closely. Cathedral / glass: bright, inharmonic, minutes of reverb. Deep / sub / dark: the low register, almost no treble, the far plane. Breath / flute / voice: the Air section as an instrument, noise shaped into wind and vowels. Exotic scales: Slendro, Bohlen-Pierce, the otonality, the harmonic and subharmonic series. Shimmer / delay / motion: the effects as the subject, patches that never sit still. Cosmos / science fiction: the frequency shifter and the nebula, cold and wide. Playable keys: the brain off, made to be played from a keyboard. Long-form night arcs: patches built around the hour-scale Arc and the tide. Storm / cluster / texture: dense, noisy, granular. Sources: what the wavetable, the FM pair and the feedback do that a bank cannot.
+
+PACKS
+
+Plain text files (*.ambientpack, one preset per line) that may name a sample, a wavetable, an impulse response, a modulation matrix and envelope shapes of their own. Put them in Documents/AmbientSynth/Packs or point AMBIENT_PACKS at a folder (the installer's own folders are read too, and a pack found in two of them loads once); they appear everywhere the built-in presets do, each pack as a family. The library that ships alongside has 6400 presets in 32 packs, 1700 samples, 608 wavetables and 240 impulse responses.
+
+Every pack is one corner of the drone repertoire, written in the spirit of an artist who works there -- nothing is sampled from or affiliated with any of them; the packs are ranges over this synth's own parameters, chosen by ear, then rendered, measured and gain-matched. Two hundred presets each, half of them still, half astir. A pack is a family in the browser, and its name is the first thing to search for.
+
+SLEEP CONCERT (in the spirit of Robert Rich). The all-night concert: just intonation, a binaural sub a few hertz apart between the ears, holds measured in minutes, the brain placing most notes deep. Attacks of ten to thirty seconds, the Bloom opening the spectrum over a minute or two, the Arc leaning on the whole night. For a room, not for headphones' impatience.
+
+DEEP EARTH (Lustmord). Subterranean: the low register, almost no treble, the far reverb long and dark, the sub carrying most of the weight. Brightness under a third, tilt steep, the z-plane in its darker sweeps. Presets that are felt in the floor before they are heard.
+
+PERMAFROST (Thomas Koener). Filtered noise fields, nearly motionless: the noise colours through slow band-passes, brightness low, motion minimal, the far plane wide and cold. What changes, changes over minutes.
+
+FIELD ABSENCE (Francisco Lopez). Granular field recordings, quiet, atonal: the Texture type over clips of rooms and weather, small grains scattered wide, hardly any pitch, levels low enough that the room is the instrument.
+
+ALDEBARAN (Inade). Ritual metal: the Cosmos heavy in every preset -- the resonator on the root, the shifter drifting, the nebula smearing -- with the modal z-plane as struck metal underneath. Ceremonial, slow, with a pulse from the delays.
+
+RITUAL MACHINE (Deutsch Nepal). Saturated feedback loops: the feedback bus and its tape, the drive, the patina, long delays with high feedback that absorb into fog. Grime as a material.
+
+PLANETARY (Michael Stearns). The harmonic series as the subject: stacks on harmonics and subharmonics, wide spreads, shimmer, the far reverb enormous and bright. The widest presets in the library.
+
+TEMPLE OF AIR (Ooephoi). Pure and extremely slow: sine-like banks with few partials, minute-long attacks and releases, a high consonance, the Air section for breath. Nothing here happens quickly, and nothing has an edge.
+
+VAST CHORD (Mathias Grassow). Dense just-intoned chord walls: six-strand stacks on pure ratios, high brain density, purity high, the sub on the difference tone. A single key is a chord; the brain adds four more.
+
+DESERT EMBER (Steve Roach). Warm and organic: the ladder filter and its drive, slow pulses from delays on note values, the wavetable's organ and vocal tables, the Ensemble. The analogue end of the library.
+
+MODULAR NOCTURNE (Ian Boddy). Resonant filter movement and echoing sequences: the filter drift and envelope high, autoplay stepping in Chords, delays with cross-feed, the Cloud. Presets that move like a patch on a modular.
+
+MILLSTONE (Jonathan Coleclough). Acoustic and mechanical: the Strike on wood and metal, granular textures of machinery, the Body's modes, the Room on small designed spaces. The sound of things turning.
+
+SLOW CAROUSEL (Mimir). Warped loops under tape hiss: the Patina high, the feedback's tape, wow on everything, the Texture type reading clips slowly, the delays long. Old and slightly wrong on purpose.
+
+GLASS VITRINE (Mirror). Ghostly harmonium: the Glass and Organ tables, inharmonicity, spectral z-plane shapes, the nebula's smear. Thin, high and see-through.
+
+CHAMBER GREY (In Camera). Small dim rooms: the near reverb doing most of the work, the far plane quiet, short delays, close and dark. The intimate end of the spatial model.
+
+PAINTED FIELD (Andrew Chalk). Blurred warm washes: the Blur high, spectra frozen and let go, the Ensemble wide, brightness middling. Presets like a colour rather than a note.
+
+LOOP STUDIO (Colin Potter). Long tape delays and processed loops: two delays in series at seconds with feedback near the top, absorption, the tape in the loop. Every note keeps arriving for minutes.
+
+GHOST SIGNAL (Bass Communion). Granular, wide, processed strings: the Strings table and bowed additive banks through the Cloud and the shimmer, spread as far as the mono guard allows.
+
+SUSTAIN (Paul Bradley). One long tone, minimal change: one voice, one key, purity near one, drift near zero, the far reverb enormous. The stillest presets in the library, and a test of every reverb.
+
+HULL RUMBLE (SleepResearch_Facility). Machine hum, static and depth: brown and grey noise, the sub, the comb filter on the hull's pitch, the far plane deep. The engine room of a ship at night.
+
+CORRIDOR (Kammarheit). Dark reverberant rooms, sparse: few notes, long holds, the Room convolution on bunkers and caverns, the near plane almost empty. Space with very little in it.
+
+NORTHERN DARK (Gustaf Hildebrand). Cinematic: sub-bass, wide stereo, the far reverb with rotation, slow z-plane sweeps, a presence lift on what is close. Presets for a film that has not been made.
+
+VOID STATION (Tholen). Cold science fiction: the Cosmos shifter, the frequency-shifted feedback, slow z-plane sweeps through the phaser and comb families, digital noise. Nothing organic in it.
+
+STRINGS AT REST (Stars of the Lid). Consonant bowed swells: additive banks with a bowed spectrum, long attacks, a just major, the Ensemble as a string section, the near reverb as a hall's front rows.
+
+TAPE SATURATION (Tim Hecker). Bright, distorted, damaged: the feedback bus driven, the Patina's age high, the fold where there is one, the wavetable's Metal table. The loudest and most broken presets in the library.
+
+STRUCK BODIES (Bernhard Guenter). The z-plane read as a resonator bank, struck and left to ring: the Modal mode, the Strike as the exciter, decays measured in seconds, very quiet. Small sounds with all the space around them.
+
+THREE ALIKE (Eliane Radigue). Three source slots of the same kind beating against each other: identical types on ratios a few cents apart, the purity drift, the Beat source driving the filter. The slowest possible change.
+
+TURNING HARMONY (Pauline Oliveros). Autoplay in Chords: the brain exchanging one voice at a time from the scale, a tension that decides how far, holds long enough to hear each new chord settle. Deep listening as a mechanism.
+
+FILTER CUBES (Alva Noto). The filter cube's third axis: the z-plane's Z moved by the matrix, cold precise shapes, digital noise, short decays. The most exact presets in the library.
+
+OWN TUNING (Catherine Christer Hennix). Purity drift, difference tones and the Beat as a modulator: the sub on the difference of the two lowest voices, the tuning breathing in and out of just, the instrument listening to its own roughness.
+
+FIELD RECORDINGS (Chris Watson). Places, not instruments: five hundred seamless recordings -- rain on twelve kinds of roof, caves, harbours in fog, power stations through a wall -- read as a continuum by the Stretch type, up to four of them on the Vector's four corners, a quiet additive centre underneath.
+
+CRYO CHAMBER (Atrium Carceri). Written for the mixing desk the instrument grew last: the background narrowed as it goes back, the foreground opened by the Haas band, the Ensemble as a microshift, the wavefolder where a saturation used to be, and the convolution room loaded with a struck object rather than a hall -- concrete, chain, iron -- so the pad is played on a piece of the world.
 
 BROWSE (header button): Columns narrows the list by Family, Character (dark, bright, tonal, noisy, wide, bass), Motion (calm, moving, dense, sparse) and Features, with search, sort and favourites -- every preset was measured by rendering it, not tagged by hand. Map shows all presets as points clustered by what they sound like; click one to load it, or switch on Map blend and drag the cursor: the synth glides to the blend of the presets around it, so the space between two presets is playable. A ROUTE is a list of waypoints (presets or map positions with travel and hold times) the synth walks by itself: twelve route presets of 20-40 minutes, or your own from the cursor; Speed and Loop as you like.
 
@@ -545,7 +637,74 @@ TIPS
 - For a DAW session set Clock Source to Host and put LFO 1 on 4 bars: the slow breathing lands on the downbeats.)" },
 };
 
+// ---------------------------------------------------------------- the blocks, one by one
+//
+// What each tab of the panel IS, in a paragraph: the manual prints it under the tab's picture,
+// over the list of that tab's parameters. The parameter texts say what a knob does; these say
+// what the thing the knobs belong to is for, which is the question a reader has first.
+struct TabHelp { const char* name; const char* text; };
+const TabHelp kTabHelp[] = {
+    // ---- the source row
+    { "SOURCE 1", "The first of four equal source slots, and the one with a history: set to Additive it is the strand bank -- up to six copies of a partial bank, detuned or placed on pure ratios, fanned across the stereo field -- and the Strands section under its display belongs to it alone. Set to any other type it renders exactly like the other three. Every slot has a Type, a Level, an Octave, a just Ratio to the note and a Pan; the rest of its knobs light up according to the type." },
+    { "SOURCE 2", "The second slot. Where Source 1 carries the melody of a patch, the second is most often its body or its shadow: an octave down at a fraction of the level, a wavetable with a slow position drift under an additive bank, a noise floor. Its own Partials, Tilt, Brightness, Odd/Even, Inharmonic and Shimmer apply when it is Additive; Table and Position when it is a Wavetable; FM Ratio and Index for FM; Grain, Density, Pitch and Grains for the Texture and Stretch types; Noise colour and Q for the noise." },
+    { "SOURCE 3", "The third slot, with the same controls as the second. Three sources of the same kind a fifth and an octave apart are a chord out of one key; three of different kinds are an instrument. The Texture... button loads a clip into this slot alone, so it can play a recording the other slots do not." },
+    { "SOURCE 4", "The fourth slot, added with the Vector so the four corners of its square are four sources. Off by default -- a preset that did not know about it sounds as it did -- and otherwise identical to slots 2 and 3, with its own clip." },
+    { "VECTOR", "The four slots read as a place rather than as four levels, after the Prophet VS and the Korg Wavestation: a point in a square whose corners are the four sources. Amount is how much of the picture the point paints -- at 0 every slot plays at its own Level and nothing here does anything; the centre of the square is neutral by construction, so turning Amount up changes nothing until the point moves. X and Y place it, Wander lets it drift on two curves whose rates share no simple ratio, Rate is how fast. Route the point from an LFO, a macro or the wheel and one gesture moves through four landscapes." },
+    // ---- the voice's second row
+    { "FILTER", "The voice filter, one per voice, ten models behind one set of knobs: one- to four-pole low passes, a high pass, a band pass, a notch, a peak, the saturating ladder, a tuned comb and a formant. Cutoff follows the key (Key Track), the amplitude envelope (Env Amount), a slow wander (Drift) and the voice's distance -- a far voice is two and a half octaves darker per unit of depth. Drive saturates ahead of the filter; Fold is the wavefolder after it. The Air section beside it is the noise on the note: a band around a harmonic, or six resonators on the just harmonics." },
+    { "Z-PLANE", "The second filter, after the E-mu Morpheus: filter frames sit on the corners of a cube, and a point inside it is a filter interpolated from all of them, poles and zeros alike, so every point is stable. 155 shapes in twelve families. The point wanders (Rate, Depth) around X and Y; Z is the cube's third axis; Resonance narrows every section; Key Track moves the frame with the note. Mode puts it after the voice filter, in its place, or -- Modal -- turns the frame into a bank of ringing resonators struck by the voice. Route decides whether the two filters run in series or side by side." },
+    { "AMP ENV", "The amplitude envelope of every voice, in the time scale of this instrument: an attack of up to a minute, a release of two. There is no click anywhere in it by design -- a step in level is a bug here, not an effect. The six modulation envelopes on the strip along the bottom are separate and shaped by hand; this one is the four numbers everybody looks for first." },
+    { "EXPRESSION", "What a hand on the keyboard can do beyond playing the note: pressure (channel or polyphonic aftertouch) pulls the voice out of the background towards the ear and lifts its level; slide (CC 74) moves the z-plane point; the bend range is here too, and the MPE switch that gives every finger its own channel. All of it is smoothed inside the voice, so a controller sending steps never steps the sound. The same three -- pressure, wheel, slide -- are also sources in the modulation matrix, for anything these fixed routes do not cover." },
+    // ---- morph
+    { "MORPH", "Two complete snapshots of every parameter, A and B, and a position between them. While Morph is active the instrument plays the interpolation, gliding to the position at the Glide rate -- one continuous gesture, made for a hand in VR, that moves the whole instrument from one world to another without a jump anywhere." },
+    { "MACROS", "Eight knobs that mean nothing by themselves and anything through the matrix: route a macro at three targets and one hand turns three knobs at once, in the proportions you chose. They are what the OSC hands, the gestures and a controller's faders land on. Inertia is the slew every parameter passes through -- the analogue slowness that keeps even a torn-open knob from clicking." },
+    // ---- foreground
+    { "ENSEMBLE + DELAY", "The first two stations of the foreground bus. The Ensemble widens: as a Chorus, three modulated taps; as a Microshift, the two channels detuned a few cents against each other with nothing moving -- the version that survives a mono sum. The Delay is a stereo delay with independent left and right times (or note values, with Sync), feedback, cross-feed for ping-pong, damping and absorption in the loop, and two outputs: Mix onto the foreground, To Far into the background, so echoes recede. Duck pulls the loop's brightness down while the input is loud, so a fresh attack does not fight its own last echo." },
+    { "DELAY 2 + NEAR REVERB + BLUR", "The rest of the foreground. Delay 2 is a second stereo delay in series after the first, so echoes of echoes form chains that never fall on a grid. The Near Reverb is the small room around the dry voices -- Mix, Decay, Damping and a Low Cut -- what makes a foreground sound placed rather than pasted. Blur is a spectral smear on the near bus ahead of all of it: every attack is wiped into texture, notes flow into one another, and at full Smear the spectrum freezes and only lets new energy in slowly." },
+    // ---- background
+    { "CLOUD + FAR REVERB", "The background. The Cloud takes grains of the recent foreground -- Send how much, Density how many a second (or a note value), Size how long, Spray how far back in time it reaches -- transposes them by octaves and fifths and drops them into the far reverb, so the past of the music keeps arriving from behind. The Far Reverb is the infinite background itself: an eight-line feedback network, dark and wide, with a decay measured in tens of seconds, Pre-Delay, Asymmetry so the two ears hear different reflections, a high cut and a low cut on the tail, Freeze, Rotate (the whole field slowly turning), Unmask (it steps aside for the foreground band by band), Diffuse (the tail arrives instead of starting) and its own Width, the funnel that reads as distance." },
+    { "FEEDBACK + ROOM", "Two ways of making the instrument hear itself. Feedback returns the finished mix: To Bus into the near bus ahead of the filters and effects, throttled by the output level so it hisses and holds instead of running away; To Pitch as phase modulation of every partial, so the sound bends itself; through Tone, Drive and Tape, which adds the asymmetry, the wow and the noise floor of a machine. The Room is the convolution reverb, on the far plane in parallel: an impulse response loaded with the Impulse... button or named by the preset -- a hall, a plate, a tuned chord, a struck object -- with Pre-Delay, a high cut, a low cut, and Morph between two impulses." },
+    { "BODY + PATINA", "The last two stages before the master. The Body is not a reverb but an instrument: twelve tuned modes -- wood, plate, bell or string -- fed from the whole mix and returned into it, tuned to the brain's root at a chosen multiple, ringing for as long as Decay says. The Patina is the master's age: tape wow, the highs a worn machine has lost, a noise floor that lives under the music, a gentle saturation. Every one of them is a defect, and together they are most of what separates a recording from a render." },
+    // ---- the conductor
+    { "BRAIN", "The conductor: chooses notes from the scale, places them on the planes between the ear and the background, holds them for minutes and lets them go, and can play a whole night by itself. Density is how many it keeps sounding, Rate how often it changes its mind, the Hold range how long a note lives, Register where it plays, Consonance how simple the ratios to the root have to be (1 is only fifths and octaves, 0 is clusters), Wander how far the root drifts. Off, only your keys play. Its display is the stage: every sounding voice as a dot at its distance." },
+    { "AUTOPLAY", "The brain's other mode: instead of holding a cluster it exchanges one voice at a time, in Free steps or in Chords drawn from the scale, at a Rate or on the clock, with a Tension that decides how far each step may go and a Step button to make it move now. The way a patient improviser plays a chord instrument: nothing ever changes all at once." },
+    { "BRAIN 2", "A second conductor for the background alone. With it on, the far plane gets its own slow life -- its own hold range, its own Depth -- independent of the foreground's, so the two planes stop moving in step and the picture gains a second layer of time." },
+    { "TUNING", "What a note means. Scale chooses the tuning -- twelve just and historical scales and a Scala file of your own -- Root its centre, Ref Pitch its A. Purity is how close the instrument sits to the pure ratios, Purity Drift how far it lets them slip and at what rate, so a chord breathes in and out of tune; Tide leans the whole pitch over minutes; Portamento glides between notes, slowing near consonant ratios by Gravity. Hold latches the keys." },
+    { "COHERENCE", "Four slow oscillators coupled after the Kuramoto model of fireflies falling into step. At Coherence 0 they run free on their own periods; turned up they lock into one pulse and move brightness, depth, pan and the z-plane point together. The four are also sources in the matrix, so anything can be pulled into that shared breath. Sympathy is a different kind of coherence: the voices hear each other, a little of the whole foreground fed back into every voice through its own filter." },
+    { "CLOCK", "Where the tempo comes from -- the internal Tempo and Run, the host, or MIDI clock -- and the beat every Sync choice in the instrument is measured against. Nothing here has to be used: the instrument's own rates are in seconds and minutes, and a synced LFO is a choice, not the default." },
+    // ---- cosmos and strike
+    { "COSMOS", "A parallel path, send and return, added and never replacing: a frequency shifter (Shift, with a Drift so the shift never sits still), tuned comb resonators that follow the brain's root (Res, Res Pitch), a vowel filter morphing through a-e-i-o-u (Vowel, Vowel Rate), a Nebula that smears the spectrum with random phases until at full Smear it freezes, and a Shimmer loop around the far reverb, self-regulating so it blooms and holds. Return puts the result into the foreground, To Far into the background. Thirty-two presets of its own live in the header." },
+    { "STRIKE", "A struck layer on top of the voice: a Karplus-Strong string, a wooden or a metal body, excited at note-on and left to ring. Level, Type, Decay and Damp; Who decides whether only the keys strike or the brain's notes as well. It is the attack this instrument otherwise never has, and at a low level it is what makes a pad sound touched." },
+    // ---- sections without a tab of their own
+    { "STRANDS", "The strand bank of Source 1: up to six copies of the partial bank, detuned against each other (Detune) or placed on pure ratios (Stack: octaves, fifths, a just major or minor, sevenths, harmonics, subharmonics -- one key becomes a just chord), each drifting in pitch on its own curve (Drift, Drift Rate), fanned across the stereo field (Spread). Bloom opens the brightness over Bloom Time from a duller start; Rate Wander lets every slow rate in the voice vary by up to an octave on a hundred-second curve, so nothing repeats; Freeze holds the spectrum still." },
+    { "SPACE", "The spatial model, after Robert Rich: every note has a distance between the ear and the infinite background, and that one number decides its brightness, its level, how dry it is and how present. Depth is how deep the brain places its notes, Keys Depth the plane of the keys, Pan Drift the wandering of each voice's centre, Time Width the interaural time difference the far ear hears later. Arc is the hour-scale drift of the whole night. Presence is the 2-5 kHz lift on the near plane only; Breath lets every distance wander; Phase Width and its rate drift the phase between the ears so the room seems to change size; Doppler bends the pitch of a voice as it breathes closer; Externalise adds the pinna notch and the shoulder reflection headphones need to put the image outside the head. Haas and Haas Time are the band-limited widening of the foreground." },
+    { "FOUNDATION", "The sub: one dry sine or triangle on the brain's root, one or two octaves down, gliding between roots, mono, added after the mid/side stage so Bass Mono leaves it alone. Binaural runs the two ears a few hertz apart. Source can be the root itself or the Difference tone of the two lowest sounding voices -- the tone the ear makes by itself in just intonation. Pad Low Cut keeps the voices out of the sub's register." },
+    { "MASTER", "The end of the chain, in the header: Tilt, a see-saw of the whole spectrum around Pivot; Bass Mono, the side channel high-passed so the low end stays centred; Side Air, a lift on the sides at 3 kHz; Width; Subsonic, a steep high pass on the finished output; then the master gain and a soft clipper. No compressor anywhere. The loudness meter beside it reads the output to BS.1770." },
+    // ---- the strip
+    { "LFO", "Eight low-frequency oscillators, each with a shape (sine, triangle, ramps, square, a smoothed random, stepped random, or a wavetable), a rate in hertz or a note value, a phase, a depth and a mode: global, one per voice, or retriggered by each note. Their cards are dragged onto knobs; right-click a knob to see what drives it. The rates worth using here are drone rates -- one cycle in ten seconds to one in forty minutes -- and two rates that share no simple ratio never repeat their combination." },
+    { "ENV", "Six modulation envelopes, drawn by hand as points on a curve: any number of segments, a sustain point, and three modes -- one shot, loop, or a loop that holds at the sustain point until the key is released. Time scales the whole shape (or a note value spans it); Depth is how much. A shape that rises over four minutes and falls over eight is an envelope in this instrument's sense of the word." },
+    { "MATRIX", "Every route, one row each: a source, a target, a depth as a fraction of the target's own range, an optional second source that scales it (Via), and whether the source is read as 0..1 or -1..1. Sources are the LFOs, the envelopes, the voice's own amplitude, the macros, the Kuramoto ring, the note, its velocity and its distance, a random number per note, the Beat, and the hands -- aftertouch, wheel and slide. A modulator's own rate or depth can be a target as well: an LFO whose rate another LFO moves." },
+    // ---- the pages
+    { "PERFORM", "The page for playing rather than patching: the macros large, the morph, the map cursor, the note roll and the stage, and the set recorder -- Record set logs every knob, macro, route step and note with its time into a file, Play set replays it." },
+    { "BROWSE", "Every preset the instrument knows, built in and from the packs, in one list: narrowed by Family, Character, Motion and Features, searched, sorted, starred. Every descriptor was measured by rendering the preset, not tagged by hand. The Map shows the same presets as points clustered by what they sound like; click one, or switch on Map blend and drag the cursor to play the blend of the presets around it. A Route walks the map by itself." },
+    // ---- the source types, for the gallery
+    { "TYPE Additive", "A bank of up to 32 partials with lives of their own. Partial h has amplitude h to the power of minus Tilt; Brightness fades the upper ones out; Odd/Even weights the two families; Inharmonic stretches the series like a stiff string; Shimmer lets every partial drift in level on its own slow curve. Partials above Nyquist are never generated, so nothing aliases. In Source 1 this is the strand bank." },
+    { "TYPE Wavetable", "Not a table of samples but a table of spectra: 32 partial amplitudes per frame, up to 64 frames, and Position morphs between them while Pos Drift wanders it. Five tables are built in and User loads a WAV in the Serum/Vital layout. Alias-free like the bank, and every trick that works on partials -- presence, low cut, the feedback's phase modulation -- works here." },
+    { "TYPE FM", "A two-operator pair: the carrier at the slot's pitch, the modulator at FM Ratio, the index up to 8 and reduced automatically on high notes so the top of the keyboard does not turn to noise. Pos Drift wanders the index. Integer ratios are bells and electric pianos; a ratio a little off an integer is a bell that beats." },
+    { "TYPE Texture", "A granular player over a loaded clip: up to 64 grains (Grains) of Grain length, Density a second or per note value, starting around Position with Spread, pitched to the note (Pitch = Note; the clip's own pitch comes from its file name) or played as it is. The display shows the grains reading the clip. The Texture... button loads a clip into this slot; a pack preset names its own." },
+    { "TYPE Stretch", "The same clip read as a continuum instead of as grains -- a spectral time stretch after Paulstretch. A window (Grain) of the clip is transformed, its magnitudes kept, its phases drawn afresh and the result overlap-added, while the read position crawls through the recording at one Stretch-th of its speed. No grain rhythm, no transient left standing: a field recording becomes weather. Pitch is applied before the stretch, so a note played higher does not get shorter, and Loop Fade crossfades the loop's seam unless the clip's name says _loop." },
+    { "TYPE Noise", "Ten colours: White, Pink, Brown, Blue, Violet, Grey, a resonant Band at Position with Q from Noise Q that tracks the note, Wind (a wandering band), Crackle (sparse impulses at Density) and Digital (sample-and-hold at a rate from Position). The levels are matched, so changing the colour does not change the loudness." },
+};
+
+
 } // namespace
+
+const char* tabHelp(const char* name)
+{
+    if (name == nullptr) return "";
+    for (const TabHelp& t : kTabHelp) if (std::strcmp(t.name, name) == 0) return t.text;
+    return "";
+}
 
 const char* paramHelp(ParamId id)
 {

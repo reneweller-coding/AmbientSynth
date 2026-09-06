@@ -159,6 +159,11 @@ enum class ModSource : int {
     // further the tuning has drifted from it. Route it at anything and the sound breathes in
     // time with how far out of tune it currently is.
     Beat,
+    // What the hands are doing, as three ordinary sources. Pressure and Slide already reach the
+    // sound through fixed routes (Expression), but only there; a player who wants aftertouch on
+    // the filter's resonance, the wavetable position and the reverb at once needs them here. All
+    // three rest at 0, so route them with the 0..1 flag and a patch at rest sounds untouched.
+    Pressure, Wheel, Slide,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

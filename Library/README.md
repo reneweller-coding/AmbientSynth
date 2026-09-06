@@ -1,6 +1,6 @@
 # The AmbientSynth preset library
 
-Six thousand two hundred presets in thirty-one packs, with the samples and wavetables they play.
+Six thousand four hundred presets in thirty-two packs, with the samples and wavetables they play.
 
 The packs are text and live in the repository. The audio does not: 1200 texture clips are
 about 8 GB and 608 wavetables about 80 MB, so both are generated locally and are ignored by
@@ -9,10 +9,10 @@ names -- which is why a pack can name a sample that has not been rendered yet.
 
 ```
 Library/
-  Packs/*.ambientpack     31 files, 200 presets each   (in git)
+  Packs/*.ambientpack     32 files, 200 presets each   (in git)
   Textures/*.wav          1700 clips: 1200 textures and 500 field recordings   (generated)
   Wavetables/*.wav        608 wavetables               (generated)
-  Impulses/*.wav          200 impulse responses        (generated)
+  Impulses/*.wav          240 impulse responses        (generated)
 ```
 
 A pack line carries eight fields: name, settings, metadata, and then the three files a preset
@@ -29,9 +29,14 @@ Tools/TextureGen/.venv/Scripts/python Tools/library/make_impulses.py
 ```
 
 The impulses are not room simulations for their own sake -- a convolution reverb fed a drone is a
-resonator you can shape. Eight families: designed rooms, tuned partial banks that ring in key,
+resonator you can shape. Nine families: designed rooms, tuned partial banks that ring in key,
 inharmonic modal metal, reversed swells, combs and pipes, thinning scatter, octave-up shimmer,
-and spectral bands with different decay times.
+spectral bands with different decay times -- and forty struck objects, cut from the field
+recordings: the sharpest event in a recording of a foundry or a cistern, shaped into an impulse of
+a tenth to half a second. Convolved with a pad, that object's resonance lands on the synthetic
+wave; measured on the room stem, five to fourteen decibels different from a hall band by band.
+The struck family needs the field recordings to exist first, so run it (or run the script again)
+after `make_field_recordings.py`.
 
 Then the textures. This is the long one: three text-to-audio models, roughly four hours on an
 RTX 5090. It runs below normal priority, stops on its own after `--max-minutes`, and `--resume`
@@ -154,6 +159,31 @@ And one for the field recordings, written after the Stretch type and the fourth 
 | Pack | In the spirit of | Character |
 | --- | --- | --- |
 | Field Recordings | Chris Watson | places, not instruments: seamless recordings read as a continuum by the Stretch type, up to four of them in the Vector's four corners, a quiet additive centre underneath |
+
+And one for the mixing desk the instrument grew last:
+
+| Pack | In the spirit of | Character |
+| --- | --- | --- |
+| Cryo Chamber | Atrium Carceri | the background narrowed as it goes back, the foreground opened by the Haas band, the Ensemble as a microshift, the wavefolder, and the Room loaded with a struck object rather than a hall |
+
+## Fitting new features into old presets
+
+An instrument that gains a feature gains it for the presets written afterwards. `retrofit_presets.py`
+walks the library and gives each preset the new things that suit it, judged from its own settings:
+aftertouch, wheel and slide as matrix routes (neutral until moved, so nearly everywhere), the
+background's own width where there is a deep background, the Haas band where there is a foreground,
+the microshift only where the chorus was slow and quiet enough to have been a widener, the fold only
+where saturation was already asked for, and a quiet stretched field recording under presets in the
+packs that are about places. Deterministic on the preset's name; a second run changes nothing.
+`Tools/retrofit_builtins.py` does the same for the compiled-in presets, rendering each sound-changing
+addition first and keeping it only if the preset still sounds like itself. After either, run the
+measurement pass: the gains are wrong by a decibel or two because the sound has changed.
+
+```
+python Tools/library/retrofit_presets.py --write
+python Tools/library/measure_packs.py --jobs 6
+python Tools/library/verify_packs.py
+```
 
 ## Modulation in the library
 

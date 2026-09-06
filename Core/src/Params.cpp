@@ -32,6 +32,7 @@ const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
+const char* const kEnsModeNames[2] = { "Chorus", "Microshift" };
 const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
 const char* const kStrikeWhoNames[2] = { "Keys", "Keys + Brain" };
@@ -532,6 +533,12 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src3Xfade,   "src3_xfade",   "Loop Fade", "Source 3", 0.f, 1.f,    0.1f, 1.f,   ""),
     F(ParamId::Src4Stretch, "src4_stretch", "Stretch",   "Source 4", 1.f, 1000.f, 40.f, 0.25f, "x"),
     F(ParamId::Src4Xfade,   "src4_xfade",   "Loop Fade", "Source 4", 0.f, 1.f,    0.1f, 1.f,   ""),
+    // ---- the mixing desk's four, all neutral at their defaults
+    F(ParamId::FarWidth,   "far_width",   "Width",     "Far Reverb", 0.f, 1.5f,  1.f,  1.f,  ""),
+    C(ParamId::EnsMode,    "ens_mode",    "Mode",      "Ensemble",   kEnsModeNames, 2, 0),
+    F(ParamId::Haas,       "haas",        "Haas",      "Space",      0.f, 1.f,   0.f,  1.f,  ""),
+    F(ParamId::HaasTime,   "haas_time",   "Haas Time", "Space",      6.f, 28.f,  15.f, 1.f,  "ms"),
+    F(ParamId::FilterFold, "filter_fold", "Fold",      "Filter",     0.f, 1.f,   0.f,  1.f,  ""),
 }};
 } // namespace
 

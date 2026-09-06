@@ -56,6 +56,9 @@ public:
     void setPressure(int note, float v);
     void setSlide(int note, float v);
     void setBend(int note, float normalised);   // -1 .. 1, scaled by the Bend Range parameter
+    // The mod wheel (CC 1), 0..1. It belongs to the instrument rather than to a note, and reaches
+    // the sound only through the matrix -- there is no fixed route from it.
+    void setWheel(float v);
 
     // Renders `n` stereo samples (replaces L/R). Any n; larger than maxBlockSize is chunked.
     void process(float* L, float* R, int n);
@@ -250,6 +253,7 @@ private:
     std::vector<float> coupleBuf_;      // the previous block's foreground, for the sympathetic coupling
     float        sympathy_ = 0.0f;
     Unmask       unmask_;
+    HaasBand     haas_;
     Body         body_;
     Patina       patina_;
     float        bodyLevel_ = 0.0f, bodyPitch_ = 1.0f;
@@ -276,6 +280,9 @@ private:
     double       envTime_[kNumModEnvs] = {};
     bool         envHeld_ = false;
     float        randomPerNote_ = 0.0f;
+    // The wheel: where it was put, and where the modulation has got to. A controller sends 128
+    // steps and a step on a cutoff is audible, so what the matrix reads is the smoothed one.
+    float        wheelTarget_ = 0.0f, wheel_ = 0.0f;
     void         stepModulation(float dt);
     // clock: the three candidates and the one resolved for this block
     double       hostBpm_ = 0.0, hostBeat_ = 0.0;
@@ -319,7 +326,7 @@ private:
     float         blurMix_ = 0.0f;
     Smoother      smBlur_;
     Drifter       tideDrift_, rotDrift_;
-    float         tide_ = 0.0f, tidePeriod_ = 12.0f, farRotate_ = 0.0f;
+    float         tide_ = 0.0f, tidePeriod_ = 12.0f, farRotate_ = 0.0f, farWidth_ = 1.0f;
     Rng           auxRng_;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;
@@ -410,7 +417,7 @@ private:
     float    dcXL_ = 0.0f, dcXR_ = 0.0f, dcYL_ = 0.0f, dcYR_ = 0.0f;   // output DC blocker
     // Per-sample smoothing of the level-type parameters in the effect chain (20 ms), so
     // automation, gestures, morph and map blend never step a gain by a whole block.
-    Smoother smDelayMix_, smDelayToFar_, smDelay2Mix_, smDelay2ToFar_, smCloudSend_, smCosmosSend_, smCosmosReturn_, smCosmosToFar_, smFarLevel_;
+    Smoother smDelayMix_, smDelayToFar_, smDelay2Mix_, smDelay2ToFar_, smCloudSend_, smCosmosSend_, smCosmosReturn_, smCosmosToFar_, smFarLevel_, smFarWidth_;
 
     std::atomic<uint64_t> mask_[2]{ 0, 0 };
     const Voice* loudestVoice() const;

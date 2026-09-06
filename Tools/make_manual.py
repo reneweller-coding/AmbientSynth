@@ -70,9 +70,26 @@ pre { font: 8.2pt/1.35 Consolas, "DejaVu Sans Mono", monospace; background: #f3f
 .params dt .key { font-weight: 400; color: #6b7480; font-family: Consolas, monospace;
                   font-size: 9pt; }
 .params dd { margin: 0.4mm 0 0 0; color: #333a44; }
+.block { margin: 6mm 0 8mm 0; page-break-inside: auto; }
+.block h4 { font-size: 12.5pt; margin: 8mm 0 2mm 0; color: #16181d; letter-spacing: 0.3pt; page-break-after: avoid; }
+.block h5 { font-size: 9.5pt; margin: 4mm 0 1mm 0; color: #0c5c6b; letter-spacing: 0.6pt; page-break-after: avoid; }
+.block .params dt { margin-top: 1.8mm; font-size: 10pt; }
+.block .params dd { font-size: 9.6pt; }
+.cover img.header { width: 100%; border: 1px solid #cfd4dc; margin-top: 4mm; }
 footer { margin-top: 10mm; padding-top: 3mm; border-top: 1px solid #cfd4dc; color: #6b7480;
          font-size: 8.5pt; }
 """
+
+
+# Which of a slot's knobs each source type lights up (by the key without its slot prefix).
+TYPE_KEYS = {
+    "Additive":  ("partials", "tilt", "bright", "odd_even", "inharmonic", "shimmer", "shimmer_rate", "drift"),
+    "Wavetable": ("table", "pos", "pos_drift", "drift"),
+    "FM":        ("fm_ratio", "fm_index", "pos_drift", "drift"),
+    "Texture":   ("grain", "density", "density_sync", "follow", "grains", "spread", "pos", "pos_drift", "drift"),
+    "Stretch":   ("grain", "stretch", "xfade", "pos", "pos_drift", "follow", "drift"),
+    "Noise":     ("noise", "noise_q", "pos", "density", "density_sync", "follow"),
+}
 
 
 def paragraphs(text):
@@ -145,6 +162,16 @@ def main():
     with open(src, encoding="utf-8") as f:
         man = json.load(f)
     topics = man["topics"]
+    # A manual with a tab missing from it is not printed. The export counts, this refuses.
+    cov = os.path.join(a.dir, "coverage.txt")
+    if os.path.isfile(cov):
+        holes = [l.strip() for l in open(cov, encoding="utf-8") if l.strip() and not l.strip().endswith(": 1")]
+        if holes:
+            sys.exit("tabs not photographed exactly once: " + "; ".join(holes))
+    # Every parameter, by section, for the per-block lists. An older manual.json has no "params".
+    by_section = {}
+    for r in man.get("params") or []:
+        by_section.setdefault(r["section"], []).append(r)
 
     body = []
     logo = os.path.relpath(os.path.join(ROOT, "docs", "logo-256.png"), a.dir).replace("\\", "/")
@@ -154,6 +181,8 @@ def main():
     body.append('<p class="sub">Manual &middot; version %s</p>' % html.escape(man.get("version", "")))
     if os.path.isfile(os.path.join(a.dir, "panel.png")):
         body.append('<img class="panel" src="panel.png" alt="The instrument">')
+    if os.path.isfile(os.path.join(a.dir, "header.png")):
+        body.append('<img class="header" src="header.png" alt="The header">')
     body.append('<p class="facts">%s built-in presets and 6200 in the library &middot; '
                 '%s filter shapes &middot; %s Cosmos, %s filter and %s Strike presets</p>'
                 % (man.get("presets", "?"), man.get("shapes", "?"), man.get("cosmos", "?"),
@@ -170,14 +199,49 @@ def main():
         body.append('<div class="topic%s">' % (" params" if params else ""))
         body.append("<h2>%d. %s</h2>" % (i + 1, html.escape(t["title"])))
         body.append(parameter_reference(t["text"]) if params else paragraphs(t["text"]))
-        for img in t["images"]:
-            cap = "The panel, as it stands" if img.endswith(tuple("0123456789.png")) else ""
-            if img.endswith("flow.png"):
-                cap = "Signal flow"
-            elif img.endswith("live.png"):
-                cap = "The live display of this section"
+        for im in t["images"]:
+            # Newer exports carry a caption with every picture; the caption says what is in it.
+            img, cap = (im["file"], im.get("caption", "")) if isinstance(im, dict) else (im, "")
             body.append('<figure><img src="%s" alt="">%s</figure>'
-                        % (html.escape(img), ("<figcaption>%s</figcaption>" % cap) if cap else ""))
+                        % (html.escape(img), ("<figcaption>%s</figcaption>" % html.escape(cap)) if cap else ""))
+        # The tabs of this chapter, each captioned with the name it wears on its own bar. The help
+        # page inside the instrument does not show these -- its picture column has room for two or
+        # three -- but a reader of the manual has no instrument in front of them, so every tab of
+        # the panel is printed here.
+        tabs = t.get("tabs") or []
+        if tabs:
+            body.append('<h3>The blocks of this chapter, one by one</h3>')
+            for tab in tabs:
+                cap = tab.get("name") or tab.get("caption", "")
+                body.append('<div class="block">')
+                body.append('<h4>%s</h4>' % html.escape(cap))
+                body.append('<figure><img src="%s" alt=""><figcaption>%s</figcaption></figure>'
+                            % (html.escape(tab["file"]), html.escape(tab.get("caption") or cap)))
+                if tab.get("blurb"):
+                    body.append(paragraphs(tab["blurb"]))
+                # The parameters of the sections under this picture, each with its help text.
+                # Sources 2, 3 and 4 are the same twenty-six knobs three times over, so they are
+                # printed once, under Source 2; a type in the gallery lists only the knobs that
+                # type lights up; the rest of the slot is on the Source 2 page.
+                for sec in tab.get("sections") or []:
+                    rows = by_section.get(sec) or []
+                    if sec in ("Source 3", "Source 4"):
+                        body.append('<p><i>The same controls as Source 2, listed there.</i></p>')
+                        continue
+                    if cap.startswith("TYPE "):
+                        want = TYPE_KEYS.get(cap[5:], ())
+                        rows = [r for r in rows if r["key"].split("_", 1)[-1] in want]
+                        if not rows:
+                            continue
+                    if not rows:
+                        continue
+                    body.append('<div class="params"><h5>%s</h5><dl>' % html.escape(sec.upper() if not cap.startswith("TYPE ") else "WHAT THIS TYPE USES"))
+                    for r in rows:
+                        body.append('<dt>%s <span class="key">(%s, %s)</span></dt><dd>%s</dd>'
+                                    % (html.escape(r["name"]), html.escape(r["key"]), html.escape(r["range"]),
+                                       html.escape(r["help"])))
+                    body.append('</dl></div>')
+                body.append('</div>')
         body.append("</div>")
 
     body.append('<footer>AmbientSynth %s &middot; the pictures in this manual are snapshots of the '

@@ -302,7 +302,124 @@ def catalogue(rng):
                                  tone=rng.uniform(-0.5, 0.8))
         jobs.append(("spectral", f"spectral_{i:02d}", build))
 
+    # -- struck objects, cut from the field recordings (see above). Skipped silently when the
+    # recordings have not been generated: everything else in this library must still build.
+    files = field_files(os.path.join(ROOT, "Library", "Textures"))
+    if files:
+        picks = [files[(i * 37 + 11) % len(files)] for i in range(40)]
+        for i, f in enumerate(picks):
+            def build(rng=rng, f=f):
+                return make_struck(rng, f, rng.uniform(0.12, 0.45))
+            jobs.append(("struck", f"struck_{i:02d}", build))
+
     return jobs
+
+
+# ---------------------------------------------------------------- struck objects
+#
+# Convolutional cross-synthesis: the impulse is not a room at all but a fragment of a real
+# recording -- the moment a chain lands on concrete, a pipe is knocked, a door closes. Convolved
+# with a pad, the mathematics transfers the resonance of that object onto the synthetic waveform,
+# and the drone is suddenly being played on something that exists. This is the one trick in the
+# dark ambient literature that a synthesiser cannot fake with filters, because what it imprints
+# is a whole measured resonance, poles, zeros and all.
+#
+# The material is the field recordings the library already ships. Only the categories that have
+# events in them are used -- rain and wind are continuous, and a slice of them is a burst of
+# noise, not an object.
+
+STRUCK_CATEGORIES = ("industrial", "machines", "interior", "city", "cave", "forest", "water")
+
+
+def field_files(texture_dir):
+    """The field recordings that might have a strike in them, in a stable order."""
+    if not os.path.isdir(texture_dir):
+        return []
+    out = []
+    for f in sorted(os.listdir(texture_dir)):
+        if not f.startswith("field_recordings_") or not f.endswith(".wav"):
+            continue
+        rest = f[len("field_recordings_"):]
+        if rest.split("_", 1)[0] in STRUCK_CATEGORIES:
+            out.append(os.path.join(texture_dir, f))
+    return out
+
+
+def read_wav_mono(path):
+    """Enough of a WAV reader for our own files: 16/24/32-bit PCM or 32-bit float, any channels."""
+    with open(path, "rb") as f:
+        data = f.read()
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None, 0
+    pos, fmt, sr, bits, ch = 12, None, 0, 0, 1
+    samples = None
+    while pos + 8 <= len(data):
+        cid = data[pos:pos + 4]
+        size = int.from_bytes(data[pos + 4:pos + 8], "little")
+        body = data[pos + 8:pos + 8 + size]
+        if cid == b"fmt ":
+            fmt = int.from_bytes(body[0:2], "little")
+            ch = int.from_bytes(body[2:4], "little")
+            sr = int.from_bytes(body[4:8], "little")
+            bits = int.from_bytes(body[14:16], "little")
+        elif cid == b"data":
+            if fmt == 3 and bits == 32:
+                samples = np.frombuffer(body[: (len(body) // 4) * 4], dtype="<f4").astype(np.float64)
+            elif bits == 16:
+                samples = np.frombuffer(body[: (len(body) // 2) * 2], dtype="<i2").astype(np.float64) / 32768.0
+            elif bits == 24:
+                raw = np.frombuffer(body[: (len(body) // 3) * 3], dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+                v = (raw[:, 0] | (raw[:, 1] << 8) | (raw[:, 2] << 16))
+                v = np.where(v & 0x800000, v - 0x1000000, v)
+                samples = v.astype(np.float64) / 8388608.0
+            elif bits == 32:
+                samples = np.frombuffer(body[: (len(body) // 4) * 4], dtype="<i4").astype(np.float64) / 2147483648.0
+            break
+        pos += 8 + size + (size & 1)
+    if samples is None or samples.size == 0:
+        return None, 0
+    if ch > 1:
+        samples = samples[: (samples.size // ch) * ch].reshape(-1, ch).mean(axis=1)
+    return samples, sr
+
+
+def make_struck(rng, path, seconds):
+    """Cut the sharpest event out of a recording and shape it into an impulse."""
+    x, sr = read_wav_mono(path)
+    if x is None or sr <= 0 or x.size < sr // 2:
+        return None
+    # Where the recording most suddenly gets louder. An envelope in 5 ms hops, and the biggest
+    # rise in it over four hops: sharper than looking for the peak, which in a field recording is
+    # usually the middle of the loudest continuous passage rather than the start of anything.
+    hop = max(1, int(sr * 0.005))
+    frames = x[: (x.size // hop) * hop].reshape(-1, hop)
+    env = np.sqrt((frames ** 2).mean(axis=1)) + 1e-9
+    if env.size < 20:
+        return None
+    rise = np.log(env[4:]) - np.log(env[:-4])
+    k = int(np.argmax(rise))
+    onset = max(0, (k) * hop - int(sr * 0.004))
+    n = int(seconds * sr)
+    if onset + n > x.size:
+        onset = max(0, x.size - n)
+    seg = x[onset:onset + n].copy()
+    if seg.size < n // 2 or float(np.sqrt((seg ** 2).mean())) < 1e-5:
+        return None
+    # An impulse must decay, and a slice of the world does not: the tail is shaped by an
+    # exponential that reaches -60 dB at the end, which also removes the discontinuity there.
+    t = np.arange(seg.size) / sr
+    seg *= np.exp(-6.9078 * t / (seconds * 0.9))
+    seg -= seg.mean()
+    # Two channels from one: the right is the same event a couple of milliseconds later and
+    # slightly differently coloured, which is what a second microphone would have heard.
+    lag = int(sr * rng.uniform(0.0008, 0.0035))
+    right = np.concatenate([np.zeros(lag), seg[: seg.size - lag]])
+    ir = np.stack([seg, right * rng.uniform(0.8, 1.0)])
+    if sr != SR:   # resample by linear interpolation: these are short and broadband
+        m = int(round(ir.shape[1] * SR / sr))
+        src = np.linspace(0.0, ir.shape[1] - 1.0, m)
+        ir = np.stack([np.interp(src, np.arange(ir.shape[1]), ir[c]) for c in range(2)])
+    return normalise(fade_out(fade_in(ir, SR, 1.0), SR, 8.0))
 
 
 # ---------------------------------------------------------------- checks
@@ -350,9 +467,14 @@ def main():
         jobs = [j for j in jobs if a.only in j[0] or a.only in j[1]]
     print(f"{len(jobs)} impulses -> {a.out_dir}")
 
-    bad, families = 0, {}
+    bad, families, skipped = 0, {}, 0
     for family, name, build in jobs:
-        ir = finish(build(), SR)
+        raw = build()
+        if raw is None:          # a builder that found nothing usable in its source material
+            skipped += 1
+            print(f"  SKIP {name}: nothing to cut")
+            continue
+        ir = finish(raw, SR)
         ir = dc_block(ir, SR)
         ir = normalise(ir)
         problems = check(ir, SR, family)
@@ -364,7 +486,7 @@ def main():
              {"family": family, "seconds": ir.shape[1] / SR}, float32=a.float32)
         families[family] = families.get(family, 0) + 1
     total = sum(families.values())
-    print(f"{total} written" + (f", {bad} rejected" if bad else ""))
+    print(f"{total} written" + (f", {bad} rejected" if bad else "") + (f", {skipped} skipped" if skipped else ""))
     for f in sorted(families):
         print(f"  {f:9s} {families[f]}")
     return 1 if bad else 0

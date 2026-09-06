@@ -483,6 +483,11 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         const bool zOn = zModeCur_ != 0;
         const bool parallel = p.filterParallel;
         const bool air = airGain_ > 0.0f;
+        // The wavefolder: not a saturation but a mirror. Past its threshold the wave is turned
+        // back on itself, so a sine grows a whole family of upper partials instead of shoulders,
+        // which is the metallic, industrial edge the Drive knob could never reach. It sits after
+        // both filters, where the material it is folding already has a shape.
+        const float foldAmt = clampv(p.fold, 0.0f, 1.0f);
         const bool ghost = ghostGain_ > 0.0f;
         // Extra sources render block-wise into their own buffers, then join the strands
         // before the filter (they share filter, envelope, distance and ITD with the bank).
@@ -545,6 +550,10 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 outR = accR * zDry_ + zr * zNorm_ * zWet_;
             } else {
                 outL = accL; outR = accR;
+            }
+            if (foldAmt > 0.0f) {
+                outL = wavefold(outL, foldAmt);
+                outR = wavefold(outR, foldAmt);
             }
             if (air) {
                 float lp, bp, hp;

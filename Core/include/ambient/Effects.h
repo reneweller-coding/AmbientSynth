@@ -15,13 +15,26 @@ class Ensemble {
 public:
     void prepare(double sampleRate);
     void set(float mix, float depth, float rateHz) { mix_ = mix; depth_ = depth; rate_ = rateHz; }
+    // Chorus (0) is the three modulated taps this has always been. Microshift (1) is the other
+    // way a mix engineer widens a drone: the two channels are detuned by a few cents in opposite
+    // directions and delayed by different amounts, with nothing modulated. It survives a mono
+    // sum -- two channels a few cents apart are never at a fixed phase, so there is no comb to
+    // cancel into -- where a deep chorus at 13 to 22 ms is exactly a comb filter waiting to be
+    // summed. Depth becomes the detune in cents, Rate a very slow wander of it.
+    void setMode(int mode) { mode_ = mode; }
     void process(float* L, float* R, int n);
 private:
+    void processChorus(float* L, float* R, int n);
+    void processShift(float* L, float* R, int n);
     std::vector<float> bufL_, bufR_;
     int    mask_ = 0, w_ = 0;
     double sr_ = 48000.0;
     double ph_[3] = { 0.0, 0.33, 0.66 };
     float  mix_ = 0.4f, depth_ = 0.4f, rate_ = 0.2f;
+    int    mode_ = 0;
+    // Microshift state: the two shifters' window phases and the slow wander of the detune.
+    double shPh_[2] = { 0.0, 0.5 };
+    double wanderPh_ = 0.0;
 };
 
 class StereoDelay {
@@ -207,5 +220,62 @@ inline float ringRead(const float* buf, int mask, int w, float delay)
     const float b = buf[(w - di - 1) & mask];
     return a + f * (b - a);
 }
+
+// The frequency-selective Haas effect. Delaying a whole channel by ten to thirty milliseconds
+// widens it and destroys it in mono: the two channels comb, and the comb's first notch lands in
+// the bass. Done to one band only -- roughly 1.2 to 4 kHz, where the ear takes its direction from
+// level rather than from time -- and cross-fed, so each side hears the other's delayed band six
+// decibels down, the width appears at the edges and the low end and the top stay exactly where
+// they were. Off at amount 0, and then not computed.
+class HaasBand {
+public:
+    void prepare(double sampleRate)
+    {
+        sr_ = sampleRate;
+        int size = 1; while (size < static_cast<int>(0.05 * sr_) + 8) size <<= 1;
+        bufL_.assign(static_cast<size_t>(size), 0.0f);
+        mask_ = size - 1; w_ = 0;
+        smDelay_ = timeMs_ * static_cast<float>(sr_ / 1000.0) + 1.0f;
+        // Two poles at the ends of the band: a high-pass at 1.2 kHz and a low-pass at 4 kHz, which
+        // between them is the band the paper isolates.
+        hp_[0].setQ(1200.0f, 0.7f, static_cast<float>(sr_));
+        lp_[0].setQ(4000.0f, 0.7f, static_cast<float>(sr_));
+    }
+    void set(float amount, float timeMs) { amount_ = clampv(amount, 0.0f, 1.0f); timeMs_ = clampv(timeMs, 1.0f, 45.0f); }
+    void process(float* L, float* R, int n)
+    {
+        if (amount_ <= 0.0f && smAmount_ <= 1.0e-5f) { w_ = (w_ + n) & 0x3FFFFFFF; return; }
+        // The delay follows the knob at the same pace as the amount: read straight from the knob
+        // it would jump the read pointer, which is a click, not a change of width.
+        const float delayTarget = timeMs_ * static_cast<float>(sr_ / 1000.0) + 1.0f;
+        const float c = 1.0f - std::exp(-1.0f / (0.05f * static_cast<float>(sr_)));   // 50 ms
+        float* bl = bufL_.data();
+        for (int i = 0; i < n; ++i) {
+            smAmount_ += c * (amount_ - smAmount_);
+            smDelay_ += c * (delayTarget - smDelay_);
+            const float delay = smDelay_;
+            // The band of what is in the middle -- the part of the picture that has no width yet.
+            float lp, bp, hp;
+            const float mid = 0.5f * (L[i] + R[i]);
+            hp_[0].tick(mid, lp, bp, hp); float band = hp;
+            lp_[0].tick(band, lp, bp, hp); band = lp;
+            bl[w_ & mask_] = band;
+            // Into the side channel: added on the left, taken off on the right. That is what "hard
+            // to the opposite side" comes to once it is made symmetrical, and it is the only form
+            // of it that is exactly mono-safe -- summed to mono the two cancel to the sample, so
+            // the centre of the mix is the same picture it was before the widening.
+            const float d = smAmount_ * 0.5f * ringRead(bl, mask_, w_, delay);   // -6 dB at full amount
+            L[i] += d;
+            R[i] -= d;
+            ++w_;
+        }
+    }
+private:
+    std::vector<float> bufL_;                       // one band, one line: it goes to the sides
+    int    mask_ = 0, w_ = 0;
+    double sr_ = 48000.0;
+    Svf    hp_[1], lp_[1];
+    float  amount_ = 0.0f, smAmount_ = 0.0f, timeMs_ = 15.0f, smDelay_ = 0.0f;
+};
 
 } // namespace ambient

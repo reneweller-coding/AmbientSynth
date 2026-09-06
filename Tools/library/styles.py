@@ -109,6 +109,14 @@ MODULES_BASE = {
     "coherence": 0.15, "portamento": 0.10,
     # the Rich refinements: how often a preset of this style reaches for them
     "phase": 0.45, "blur": 0.15, "filtermodel": 0.35, "strike": 0.12, "absorb": 0.5, "tide": 0.3, "rotate": 0.35,
+    # The mixing desk. All four are off at their defaults, so a style that does not ask for them
+    # is the style it was: "narrow" pulls the background in towards the centre as it goes back,
+    # "haas" opens the foreground's own upper middle, "microshift" makes the Ensemble a static
+    # detune instead of a chorus, and "fold" is the wavefolder after the filters.
+    "narrow": 0.30, "haas": 0.22, "microshift": 0.25, "fold": 0.10,
+    # And the hands: aftertouch, the wheel and the slide as routes in the matrix. Cheap and
+    # neutral until they are moved, so most styles carry at least one.
+    "hands": 0.55,
 }
 
 # Word pools the preset names are built from: "<first> <second>".
@@ -802,4 +810,38 @@ STYLES = [
       tables=["Tilt walk", "Odd breathing"],
       granular={"spread": (0.02, 0.2), "grains": 1.0},
       impulses=['room_cathedral', 'room_hall', 'room_chamber'], noise=['Pink', 'Brown', 'Grey']),
+
+    # The thirty-second pack, written for the mixing desk this instrument grew: the background
+    # narrowed as it goes back, the foreground's own upper middle opened by the Haas band, the
+    # Ensemble as a static detune rather than a chorus, the wavefolder where a saturation used to
+    # be -- and the convolution room loaded with a struck object instead of a hall, so the pad is
+    # played on a piece of the world rather than in a room.
+    S("Cryo Chamber", "Atrium Carceri",
+      {"scale": ["JI Minor", "JI 7-limit", "Pythagorean", "12-TET"],
+       "brain_density": ("int", 3, 6), "brain_rate": ("log", 25.0, 110.0),
+       "brain_hold_min": ("log", 50.0, 180.0), "brain_hold_max": ("log", 180.0, 520.0),
+       "attack": ("log", 8.0, 35.0), "release": ("log", 20.0, 80.0),
+       "osc_level": (0.25, 0.6), "partials": ("int", 5, 16), "tilt": (1.3, 2.3),
+       "brightness": (0.2, 0.5), "cutoff": ("log", 300.0, 2600.0),
+       "depth": (0.55, 0.95), "keys_depth": (0.3, 0.8),
+       "far_decay": ("log", 12.0, 50.0), "far_lowcut": ("log", 140.0, 420.0),
+       "far_highcut": ("log", 2200.0, 9000.0), "near_mix": (0.1, 0.4),
+       "room_level": (0.25, 0.7), "room_lowcut": ("log", 90.0, 260.0),
+       "sub_level": (0.2, 0.5), "sub_tone": (0.0, 0.35), "bass_mono": ("log", 110.0, 190.0),
+       "air": (0.0, 0.12), "master_gain": (-9.0, -4.0), "subsonic": ("log", 18.0, 30.0)},
+      # Everything the desk has, and the field recordings underneath it.
+      {"narrow": 1.0, "haas": 0.8, "microshift": 0.75, "fold": 0.35, "hands": 0.9,
+       "stretch": 0.55, "src2": 0.9, "src3": 0.6, "src4": 0.3, "texture": 0.25,
+       "room": 0.95, "zplane": 0.4, "sub": 0.75, "cosmos": 0.25, "cloud": 0.15,
+       "strike": 0.25, "delay2": 0.35, "absorb": 0.6, "rotate": 0.5, "tide": 0.35},
+      words=(["Cryo", "Vault", "Ossuary", "Concrete", "Relic", "Sunken", "Iron", "Ash",
+              "Chamber", "Derelict", "Hangar", "Cistern", "Foundry", "Bell"],
+             COMMON_SECOND + ["Chamber", "Vault", "Hull", "Works", "Station"]),
+      prompts=["a flooded concrete cistern, distant machinery",
+               "an abandoned hangar in wind, iron settling",
+               "a bell struck once in a stone vault"],
+      tables=["Tilt walk", "Odd breathing"],
+      granular={"spread": (0.02, 0.25), "grains": 1.0},
+      impulses=['struck', 'room_bunker', 'room_cavern', 'modal'],
+      noise=['Brown', 'Pink', 'Grey']),
 ]

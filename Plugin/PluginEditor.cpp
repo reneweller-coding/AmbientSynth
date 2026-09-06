@@ -323,8 +323,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         if (man.isNotEmpty()) {
             for (int n : { 45, 52, 57, 64, 69 }) proc_.engine().noteOn(n, 0.7f);
             juce::Timer::callAfterDelay(12000, [this, man] {
-                exportManual(juce::File(man));
-                juce::JUCEApplicationBase::quit();
+                exportManual(juce::File(man), [] { juce::JUCEApplicationBase::quit(); });
             });
         }
         // AMBIENT_MOD=lfo|env|matrix: which tab of the modulation strip to open. Only a dev aid,
@@ -369,14 +368,14 @@ void AmbientSynthEditor::buildCells()
             s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
-            if (s.name == "Far Reverb") s.maxUnits = 11;                     // one row with Rotate, Unmask and Diffuse
+            if (s.name == "Far Reverb") s.maxUnits = 12;                     // one row with Rotate, Unmask, Diffuse and Width
             if (s.name == "Master") s.maxUnits = 5;
             if (s.name == "Body") s.maxUnits = 7;                            // one row
             if (s.name == "Room") s.maxUnits = 9;                            // one row with Morph and both impulses
             if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;
             if (s.name == "Autoplay") s.maxUnits = 12;   // the seven controls and the button in one row
             if (s.name == "Expression") s.maxUnits = 7;
-            if (s.name == "Filter") s.maxUnits = 9;                          // one row: On, Model, five knobs, Drive
+            if (s.name == "Filter") s.maxUnits = 10;                         // one row: On, Model, five knobs, Drive, Fold
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
             if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route
             if (s.name == "Z-Plane") s.maxUnits = 11;
@@ -1087,9 +1086,128 @@ juce::Image AmbientSynthEditor::snapshotSection(const juce::String& name)
         for (size_t pi = 0; pi < t.pages.size(); ++pi)
             for (auto& n : t.pages[pi]) if (n == name && static_cast<int>(pi) != t.active) { row = &t; was = t.active; t.active = static_cast<int>(pi); }
     if (row != nullptr) layoutBody();
-    juce::Image img = content_.createComponentSnapshot(sec->bounds.expanded(2), true, 1.0f);
+    // The Master section is painted in the header and its bounds are the editor's; every other
+    // section belongs to the scrolling content. Photographed from the wrong component, the
+    // Master came out as a strip of the panel's top-left corner.
+    juce::Image img = (name == "Master" ? static_cast<juce::Component&>(*this) : static_cast<juce::Component&>(content_))
+                          .createComponentSnapshot(sec->bounds.expanded(2), true, 1.0f);
     if (row != nullptr) { row->active = was; layoutBody(); }
     return img;
+}
+
+// One tab of the panel, as it looks when it is open: every section of the page, the tab bar over
+// it, the display beside it and -- on Source 1 -- the strand bank under that display. A picture
+// per section would have been easier and would have shown the manual's reader something that is
+// not on their screen; what they see is a tab.
+juce::Image AmbientSynthEditor::snapshotTab(int rowIndex, int page)
+{
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(tabRows_.size())) return {};
+    TabRow& t = tabRows_[static_cast<size_t>(rowIndex)];
+    if (page < 0 || page >= static_cast<int>(t.pages.size())) return {};
+    const int was = t.active;
+    t.active = page;
+    layoutBody();
+    juce::Rectangle<int> box = t.bar;                      // the tab bar itself belongs in the picture
+    auto add = [&](const juce::String& name) {
+        if (name.isEmpty()) return;
+        if (Section* s = findSection(name)) box = box.isEmpty() ? s->bounds : box.getUnion(s->bounds);
+    };
+    for (const auto& n : t.pages[static_cast<size_t>(page)]) add(n);
+    if (page < static_cast<int>(t.under.size())) add(t.under[static_cast<size_t>(page)]);
+    if (page < static_cast<int>(t.displays.size()) && t.displays[static_cast<size_t>(page)] != nullptr) {
+        juce::Component* d = t.displays[static_cast<size_t>(page)];
+        if (d->isVisible() && d->getWidth() > 0) box = box.getUnion(d->getBounds());
+    }
+    juce::Image img;
+    if (!box.isEmpty()) img = content_.createComponentSnapshot(box.expanded(4), true, 1.0f);
+    t.active = was;
+    layoutBody();
+    return img;
+}
+
+// A whole page of the instrument -- Perform, Browse, the modulation strip, the help page itself --
+// rather than one section of it. Pages are siblings of the panel and are shown one at a time, so
+// the one being photographed is made visible for the picture and put back afterwards.
+juce::Image AmbientSynthEditor::snapshotPage(juce::Component* page)
+{
+    if (page == nullptr || page->getWidth() <= 0 || page->getHeight() <= 0) return {};
+    const bool was = page->isVisible();
+    page->setVisible(true);
+    juce::Image img = page->createComponentSnapshot(page->getLocalBounds(), true, 1.0f);
+    page->setVisible(was);
+    return img;
+}
+
+juce::Image AmbientSynthEditor::snapshotPerform() { return snapshotPage(perform_.get()); }
+
+juce::Image AmbientSynthEditor::snapshotBrowseMap()
+{
+    if (!browse_) return {};
+    const bool vis = browse_->isVisible();
+    const int was = browse_->modeMap.getToggleState() ? 1 : 0;
+    browse_->setVisible(true);
+    browse_->setMode(1);
+    browse_->resized();
+    juce::Image img = browse_->createComponentSnapshot(browse_->getLocalBounds(), true, 1.0f);
+    browse_->setMode(was);
+    browse_->setVisible(vis);
+    return img;
+}
+
+juce::Image AmbientSynthEditor::snapshotHeader()
+{
+    // The master's corner of the header: the mid/side section, the loudness meter and the
+    // master knob. The whole header is four thousand pixels wide and unreadable on a page.
+    // The meter is hidden while the help page is up, which is when the manual is exported, so
+    // its bounds are read whether or not it is visible; without that the picture began in the
+    // middle of the meter.
+    juce::Rectangle<int> box;
+    if (Section* ms = findSection("Master")) box = ms->bounds;
+    if (outputView_ != nullptr && !outputView_->getBounds().isEmpty()) box = box.isEmpty() ? outputView_->getBounds() : box.getUnion(outputView_->getBounds());
+    if (!keys_.isEmpty()) box = box.isEmpty() ? keys_ : box.getUnion(keys_);   // the note roll over the meter
+    if (box.isEmpty()) return {};
+    box = box.expanded(8).withRight(getWidth()).withTop(0);
+    box.setBottom(juce::jmin(kHeaderH - 2, box.getBottom()));
+    return createComponentSnapshot(box, true, 1.0f);
+}
+
+juce::Image AmbientSynthEditor::snapshotStripTab(int tab, bool detail)
+{
+    if (!mod_) return {};
+    const int was = mod_->tab;
+    mod_->setTab(tab);
+    juce::Image img;
+    if (detail) {
+        // The strip is nearly three thousand pixels wide and shrinks to a ribbon on a page; the
+        // left third -- the cards and the first panel -- at twice the size is where it can be read.
+        const bool vis = mod_->isVisible();
+        mod_->setVisible(true);
+        img = mod_->createComponentSnapshot(mod_->getLocalBounds().withWidth(mod_->getWidth() * 24 / 70), true, 2.0f);
+        mod_->setVisible(vis);
+    } else img = snapshotStrip();
+    mod_->setTab(was);
+    return img;
+}
+
+juce::StringArray AmbientSynthEditor::tabSectionNames(int rowIndex, int page) const
+{
+    juce::StringArray out;
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(tabRows_.size())) return out;
+    const TabRow& t = tabRows_[static_cast<size_t>(rowIndex)];
+    if (page < 0 || page >= static_cast<int>(t.pages.size())) return out;
+    for (const auto& n : t.pages[static_cast<size_t>(page)]) out.add(n);
+    if (page < static_cast<int>(t.under.size()) && t.under[static_cast<size_t>(page)].isNotEmpty()) out.add(t.under[static_cast<size_t>(page)]);
+    return out;
+}
+
+// What a tab is called on its own bar, so the manual's caption is the word the reader will look
+// for on the screen.
+juce::String AmbientSynthEditor::tabName(int rowIndex, int page) const
+{
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(tabRows_.size())) return {};
+    const TabRow& t = tabRows_[static_cast<size_t>(rowIndex)];
+    if (page < 0 || page >= static_cast<int>(t.names.size())) return {};
+    return t.names[static_cast<size_t>(page)];
 }
 
 juce::Image AmbientSynthEditor::snapshotStrip()
@@ -1193,85 +1311,235 @@ void AmbientSynthEditor::HelpView::resized()
 // and what makes them impossible to produce from a script: they only exist while an editor is
 // running. So the export runs in one, writes every topic's pictures and text into a folder, and
 // Tools/make_manual.py turns that folder into an HTML manual and a PDF.
-void AmbientSynthEditor::exportManual(const juce::File& dir)
+//
+// It runs as a list of steps a third of a second apart rather than as one function, because
+// some of the pictures need the instrument to have MOVED between two of them: the gallery of
+// source types sets Source 2 to each type in turn, and its display and its greyed-out knobs
+// follow on the next timer tick, not in the same call.
+struct AmbientSynthEditor::ManualJob {
+    juce::File dir;
+    std::vector<std::function<void()>> steps;
+    size_t next = 0;
+    std::function<void()> done;
+    // What has been written so far, per topic: the pictures and the tabs with their captions,
+    // their blurbs and the sections whose parameters belong under them.
+    struct Tab { juce::String file, name, caption, blurb; juce::StringArray sections; };
+    struct Pic { juce::String file, caption; };
+    std::vector<std::vector<Pic>> images;
+    std::vector<std::vector<Tab>> tabs;
+    juce::String originalType;    // Source 2's type before the gallery, put back afterwards
+};
+
+void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void()> onDone)
 {
     dir.createDirectory();
-    if (help_ == nullptr) return;
+    if (help_ == nullptr) { if (onDone) onDone(); return; }
+    manual_ = std::make_unique<ManualJob>();
+    ManualJob& job = *manual_;
+    job.dir = dir;
+    job.done = std::move(onDone);
+    const int last = ambient::numHelpTopics();    // the generated "All parameters" topic comes after
+    job.images.resize(static_cast<size_t>(last + 1));
+    job.tabs.resize(static_cast<size_t>(last + 1));
+
+    auto writePng = [dir](const juce::Image& img, const juce::String& name) -> juce::String {
+        if (!img.isValid()) return {};
+        const juce::File f = dir.getChildFile(name);
+        juce::PNGImageFormat png;
+        std::unique_ptr<juce::FileOutputStream> out(f.createOutputStream());
+        return (out != nullptr && png.writeImageToStream(img, *out)) ? f.getFileName() : juce::String();
+    };
+    // Built by concatenation, not by formatted(): JUCE's formatted is wide-character, so a %s
+    // handed a const char* writes the bytes as UTF-16 and the file comes out called
+    // "topic-00-汦睧.png". It did, once.
+    auto stem = [](int row) { return "topic-" + juce::String(row).paddedLeft('0', 2); };
+
     setPage(3);                                   // the help page, so its views are laid out
     help_->setBounds(0, kHeaderH, designW_, designH_ - kHeaderH);
 
-    juce::String json = "{\n  \"topics\": [\n";
-    const int last = ambient::numHelpTopics();    // the generated "All parameters" topic comes after
+    // ---- one step per topic: its sections, its live display, its tabs
     for (int row = 0; row <= last; ++row) {
-        help_->topics.selectRow(row);
-        help_->showTopic(row);
-        help_->resized();
-        juce::StringArray files;
-        // The section pictures, straight out of the panel.
-        for (size_t i = 0; i < help_->pics.size(); ++i) {
-            const juce::File f = dir.getChildFile("topic-" + juce::String(row).paddedLeft('0', 2) + "-" + juce::String(static_cast<int>(i)) + ".png");
-            juce::PNGImageFormat png;
-            std::unique_ptr<juce::FileOutputStream> out(f.createOutputStream());
-            if (out != nullptr && png.writeImageToStream(help_->pics[i], *out)) files.add(f.getFileName());
-        }
-        // The live display of the unit, and on the first topic the signal flow.
-        // Built by concatenation, not by formatted(): JUCE's formatted is wide-character, so a
-        // %s handed a const char* writes the bytes as UTF-16 and the file comes out called
-        // "topic-00-汦睧.png". It did, once.
-        auto shot = [&](juce::Component& c, const juce::String& suffix) {
-            if (c.getWidth() <= 0 || c.getHeight() <= 0) return;
-            const juce::Image img = c.createComponentSnapshot(c.getLocalBounds(), true, 2.0f);
-            const juce::File f = dir.getChildFile("topic-" + juce::String(row).paddedLeft('0', 2) + "-" + suffix + ".png");
-            juce::PNGImageFormat png;
-            std::unique_ptr<juce::FileOutputStream> out(f.createOutputStream());
-            if (out != nullptr && png.writeImageToStream(img, *out)) files.add(f.getFileName());
-        };
-        if (row == 0) shot(help_->flow, "flow");
-        if (help_->live != nullptr) shot(*help_->live, "live");
-
-        const juce::String title = row < last ? juce::String(ambient::helpTopicTitle(row)) : "All parameters";
-        const juce::String body  = row < last ? juce::String(juce::CharPointer_UTF8(ambient::helpTopicText(row)))
-                                              : help_->parameters;
-        json << "    { \"title\": " << juce::JSON::toString(juce::var(title))
-             << ", \"text\": " << juce::JSON::toString(juce::var(body))
-             << ", \"images\": [";
-        for (int i = 0; i < files.size(); ++i)
-            json << (i ? ", " : "") << juce::JSON::toString(juce::var(files[i]));
-        json << "] }" << (row < last ? ",\n" : "\n");
+        job.steps.push_back([this, row, stem, writePng, &job] {
+            help_->topics.selectRow(row);
+            help_->showTopic(row);
+            help_->resized();
+            auto& files = job.images[static_cast<size_t>(row)];
+            // The section pictures the help page shows are the manual's only when the chapter
+            // has no tab pictures: where it has, every section is already in one of them.
+            for (size_t i = 0; help_->tabPics.empty() && i < help_->pics.size(); ++i) {
+                const juce::String f = writePng(help_->pics[i], stem(row) + "-" + juce::String(static_cast<int>(i)) + ".png");
+                if (f.isNotEmpty()) files.push_back({ f, i < static_cast<size_t>(help_->picCaptions.size()) ? help_->picCaptions[static_cast<int>(i)] : juce::String() });
+            }
+            auto shot = [&](juce::Component& c, const juce::String& suffix, const juce::String& caption, juce::Rectangle<int> area = {}) {
+                if (c.getWidth() <= 0 || c.getHeight() <= 0) return;
+                if (area.isEmpty()) area = c.getLocalBounds();
+                const juce::String f = writePng(c.createComponentSnapshot(area, true, 2.0f), stem(row) + "-" + suffix + ".png");
+                if (f.isNotEmpty()) files.push_back({ f, caption });
+            };
+            if (row == 0) shot(help_->flow, "flow", "The signal flow: every unit as a box in its group's colour, the buses as arrows -- the same picture the help page's first topic shows.", help_->flow.drawn());
+            if (help_->live != nullptr) shot(*help_->live, "live", help_->liveCaption);
+            for (size_t i = 0; i < help_->tabPics.size(); ++i) {
+                ManualJob::Tab t;
+                t.file = writePng(help_->tabPics[i], stem(row) + "-tab" + juce::String(static_cast<int>(i)) + ".png");
+                if (t.file.isEmpty()) continue;
+                t.name = i < static_cast<size_t>(help_->tabNames.size()) ? help_->tabNames[static_cast<int>(i)] : juce::String();
+                t.caption = i < static_cast<size_t>(help_->tabCaptions.size()) ? help_->tabCaptions[static_cast<int>(i)] : juce::String();
+                t.sections = i < help_->tabSections.size() ? help_->tabSections[i] : juce::StringArray();
+                t.blurb = juce::CharPointer_UTF8(ambient::tabHelp(t.name.toRawUTF8()));
+                job.tabs[static_cast<size_t>(row)].push_back(t);
+            }
+        });
     }
-    json << "  ],\n  \"version\": " << juce::JSON::toString(juce::var(juce::String(JucePlugin_VersionString)))
-         << ",\n  \"shapes\": " << ambient::kZShapes
-         << ",\n  \"presets\": " << numPresets()
-         << ",\n  \"cosmos\": " << numCosmosPresets()
-         << ",\n  \"zpresets\": " << numZPresets()
-         << ",\n  \"strike\": " << numStrikePresets() << "\n}\n";
-    dir.getChildFile("manual.json").replaceWithText(json);
 
-    // One picture of the whole panel, for the cover: the instrument as it actually looks.
-    setPage(0);
-    resized();
-    const juce::Image full = createComponentSnapshot(getLocalBounds(), true, 1.0f);
-    juce::PNGImageFormat png;
-    std::unique_ptr<juce::FileOutputStream> out(dir.getChildFile("panel.png").createOutputStream());
-    if (out != nullptr) png.writeImageToStream(full, *out);
+    // ---- the gallery of source types, on Source 2, one type per pair of steps. The clip for
+    // the Texture and Stretch types comes from AMBIENT_MANUAL_CLIP; without it those two show
+    // an empty display, which is at least honest.
+    {
+        const int sourcesRow = 1;
+        auto* typeParam = proc_.apvts.getParameter("src2_type");
+        const juce::String clip = juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL_CLIP", "");
+        job.steps.push_back([this, typeParam, &job] {
+            job.originalType = typeParam != nullptr ? juce::String(typeParam->getValue()) : juce::String();
+        });
+        for (const char* type : { "Additive", "Wavetable", "FM", "Texture", "Stretch", "Noise" }) {
+            const juce::String typeName(type);
+            int index = -1;
+            for (int i = 0; i < ambient::kNumSourceTypes; ++i) if (typeName == ambient::kSourceTypeNames[i]) index = i;
+            if (index < 0 || typeParam == nullptr) continue;
+            job.steps.push_back([this, typeParam, index, typeName, clip] {
+                if ((typeName == "Texture" || typeName == "Stretch") && clip.isNotEmpty())
+                    proc_.loadTextureFile(1, juce::File(clip));
+                typeParam->setValueNotifyingHost(typeParam->convertTo0to1(static_cast<float>(index)));
+                if (auto* lvl = proc_.apvts.getParameter("src2_level")) lvl->setValueNotifyingHost(lvl->convertTo0to1(0.5f));
+            });
+            job.steps.push_back([this, typeName, sourcesRow, stem, writePng, &job] {
+                help_->topics.selectRow(sourcesRow);
+                help_->showTopic(sourcesRow);
+                ManualJob::Tab t;
+                t.name = "TYPE " + typeName;
+                t.caption = "Source 2 switched to the " + typeName + " type: the knobs that type uses are lit, the rest greyed out, and the display shows "
+                          + (typeName == "Additive" ? juce::String("the partials of its bank.")
+                           : typeName == "Wavetable" ? juce::String("the current frame of the table.")
+                           : typeName == "FM" ? juce::String("the modulated waveform of the pair.")
+                           : typeName == "Texture" ? juce::String("the loaded clip with the grains reading it.")
+                           : typeName == "Stretch" ? juce::String("the loaded clip with the stretched read position crawling through it.")
+                           : juce::String("the spectrum of the noise colour."));
+                t.file = writePng(snapshotTab(0, 1), stem(sourcesRow) + "-type-" + typeName.toLowerCase() + ".png");
+                if (t.file.isEmpty()) return;
+                t.sections.add("Source 2");
+                t.blurb = juce::CharPointer_UTF8(ambient::tabHelp(t.name.toRawUTF8()));
+                job.tabs[static_cast<size_t>(sourcesRow)].push_back(t);
+            });
+        }
+        job.steps.push_back([typeParam, &job] {
+            if (typeParam != nullptr && job.originalType.isNotEmpty()) typeParam->setValueNotifyingHost(job.originalType.getFloatValue());
+        });
+    }
+
+    // ---- the last step: the file that names it all, and the cover pictures
+    job.steps.push_back([this, last, dir, writePng, &job] {
+        juce::String json = "{\n  \"topics\": [\n";
+        for (int row = 0; row <= last; ++row) {
+            const juce::String title = row < last ? juce::String(ambient::helpTopicTitle(row)) : "All parameters";
+            const juce::String body  = row < last ? juce::String(juce::CharPointer_UTF8(ambient::helpTopicText(row)))
+                                                  : help_->parameters;
+            json << "    { \"title\": " << juce::JSON::toString(juce::var(title))
+                 << ", \"text\": " << juce::JSON::toString(juce::var(body))
+                 << ", \"images\": [";
+            const auto& files = job.images[static_cast<size_t>(row)];
+            for (size_t i = 0; i < files.size(); ++i)
+                json << (i ? ", " : "") << "{ \"file\": " << juce::JSON::toString(juce::var(files[i].file))
+                     << ", \"caption\": " << juce::JSON::toString(juce::var(files[i].caption)) << " }";
+            json << "], \"tabs\": [";
+            const auto& tabs = job.tabs[static_cast<size_t>(row)];
+            for (size_t i = 0; i < tabs.size(); ++i) {
+                json << (i ? ", " : "") << "{ \"file\": " << juce::JSON::toString(juce::var(tabs[i].file))
+                     << ", \"name\": " << juce::JSON::toString(juce::var(tabs[i].name))
+                     << ", \"caption\": " << juce::JSON::toString(juce::var(tabs[i].caption))
+                     << ", \"blurb\": " << juce::JSON::toString(juce::var(tabs[i].blurb))
+                     << ", \"sections\": [";
+                for (int k = 0; k < tabs[i].sections.size(); ++k) json << (k ? ", " : "") << juce::JSON::toString(juce::var(tabs[i].sections[k]));
+                json << "] }";
+            }
+            json << "] }" << (row < last ? ",\n" : "\n");
+        }
+        // Every parameter, structured, so the manual can print each tab's own under its picture.
+        json << "  ],\n  \"params\": [\n";
+        bool first = true;
+        for (const ParamDesc& d : paramTable()) {
+            juce::String range;
+            if (d.kind == ParamKind::Choice) { for (int i = 0; i < d.numChoices; ++i) range += (i ? " / " : "") + juce::String(d.choices[i]); }
+            else if (d.kind == ParamKind::Bool) range = "on / off";
+            else range = juce::String(d.min, d.kind == ParamKind::Int ? 0 : 2) + " .. " + juce::String(d.max, d.kind == ParamKind::Int ? 0 : 2) + (d.unit[0] ? juce::String(" ") + d.unit : juce::String());
+            json << (first ? "" : ",\n") << "    { \"section\": " << juce::JSON::toString(juce::var(juce::String(d.section)))
+                 << ", \"name\": " << juce::JSON::toString(juce::var(juce::String(d.name)))
+                 << ", \"key\": " << juce::JSON::toString(juce::var(juce::String(d.key)))
+                 << ", \"range\": " << juce::JSON::toString(juce::var(range))
+                 << ", \"help\": " << juce::JSON::toString(juce::var(juce::String(juce::CharPointer_UTF8(ambient::paramHelp(d.id))))) << " }";
+            first = false;
+        }
+        json << "\n  ],\n  \"version\": " << juce::JSON::toString(juce::var(juce::String(JucePlugin_VersionString)))
+             << ",\n  \"shapes\": " << ambient::kZShapes
+             << ",\n  \"presets\": " << numPresets()
+             << ",\n  \"cosmos\": " << numCosmosPresets()
+             << ",\n  \"zpresets\": " << numZPresets()
+             << ",\n  \"strike\": " << numStrikePresets() << "\n}\n";
+        dir.getChildFile("manual.json").replaceWithText(json);
+        // Coverage: every page of every tab row must have been photographed exactly once. Written
+        // as a file so make_manual.py can refuse to print a manual with a hole in it.
+        juce::String coverage;
+        for (int r = 0; r < static_cast<int>(tabRows_.size()); ++r)
+            for (int pg = 0; pg < static_cast<int>(tabRows_[static_cast<size_t>(r)].names.size()); ++pg) {
+                const juce::String nm = tabRows_[static_cast<size_t>(r)].names[static_cast<size_t>(pg)];
+                int seen = 0;
+                for (const auto& chapter : job.tabs) for (const auto& t : chapter) if (t.name == nm) ++seen;
+                coverage << nm << ": " << seen << "\n";
+            }
+        dir.getChildFile("coverage.txt").replaceWithText(coverage);
+
+        // One picture of the whole panel, for the cover: the instrument as it actually looks.
+        // And one of the header on its own, which is where the pages, the master and the
+        // loudness meter live.
+        setPage(0);
+        resized();
+        writePng(createComponentSnapshot(getLocalBounds(), true, 1.0f), "panel.png");
+        writePng(createComponentSnapshot(getLocalBounds().withHeight(kHeaderH), true, 2.0f), "header.png");
+        if (job.done) job.done();
+    });
+    runManualStep();
+}
+
+void AmbientSynthEditor::runManualStep()
+{
+    if (manual_ == nullptr || manual_->next >= manual_->steps.size()) return;
+    manual_->steps[manual_->next++]();
+    if (manual_ != nullptr && manual_->next < manual_->steps.size())
+        juce::Timer::callAfterDelay(350, [this] { runManualStep(); });
 }
 
 void AmbientSynthEditor::HelpView::showTopic(int row)
 {
     topic = row;
     pics.clear();
+    picCaptions.clear();
+    tabPics.clear();
+    tabNames.clear();
+    tabCaptions.clear();
+    tabSections.clear();
     live.reset();
     flow.setVisible(row == 0);
-    // Which sections and which live display belong to a topic. The order follows kTopics in Help.cpp.
+    // Which sections and which live display belong to a topic. The order follows kTopics in
+    // Help.cpp. `sections` are the pictures the help page itself shows, at most two or three:
+    // the column they are stacked in runs out of height after that.
     struct Spec { std::vector<juce::String> sections; int liveKind; };   // liveKind: 0 none, 1 source, 2 filter, 3 stage, 4 cosmos, 5 brain, 6 env
     static const Spec kSpecs[] = {
         { {}, 0 },                                          // overview: the diagram
-        { { "Source 1", "Strands", "Source 3", "Vector" }, 1 },   // sources
+        { { "Source 1", "Vector" }, 1 },                    // sources
         { { "Filter", "Z-Plane" }, 2 },                     // filters
         { { "Space", "Foundation", "Air" }, 3 },            // space
-        { { "Delay", "Far Reverb", "Feedback" }, 0 },       // effects
+        { { "Delay", "Far Reverb" }, 0 },                   // effects
         { { "Cosmos" }, 4 },                                // cosmos
-        { { "Cluster Brain", "Tuning", "Coherence" }, 5 },  // conductor
+        { { "Cluster Brain", "Tuning" }, 5 },               // conductor
         { {}, 0 },                                          // modulation: the strip
         { { "Morph", "Macros" }, 6 },                       // morph
         { {}, 0 },                                          // presets: the browser
@@ -1279,11 +1547,23 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
         { { "Master" }, 0 },                                // midi / osc / files
         { {}, 0 },                                          // shortcuts
     };
+    static const char* const kLiveCaption[7] = {
+        "", "The live display of Source 1: the partials of the loudest voice, exactly the amplitudes the oscillator is summing right now.",
+        "The live filter response: the voice filter, the z-plane, and what a note actually meets after both, from the same maths the audio path uses.",
+        "The live stage: every sounding voice as a dot at its distance from the ear, the far plane at the back.",
+        "The live Cosmos display: the shifter, the resonator and the vowel as the section currently has them.",
+        "The live conductor: the brain's notes, their holds and where on the planes it has put them.",
+        "The live envelope: the six modulation envelopes' shapes and where each one's clock currently is.",
+    };
     const int n = static_cast<int>(sizeof(kSpecs) / sizeof(kSpecs[0]));
+    // The sections and the live display, for the help page and the manual both.
     if (row >= 0 && row < n) {
-        for (const auto& name : kSpecs[row].sections) { juce::Image img = owner.snapshotSection(name); if (img.isValid()) pics.push_back(img); }
-        if (row == 7) pics.push_back(owner.snapshotStrip());
-        if (row == 9) pics.push_back(owner.snapshotBrowse());
+        for (const auto& name : kSpecs[row].sections) {
+            juce::Image img = owner.snapshotSection(name);
+            if (!img.isValid()) continue;
+            pics.push_back(img);
+            picCaptions.add("The " + name + " section, with the values of the preset the manual was exported from.");
+        }
         switch (kSpecs[row].liveKind) {
         case 1: live = std::make_unique<SourceView>(proc, 1); break;
         case 2: live = std::make_unique<FilterView>(proc); break;
@@ -1293,7 +1573,71 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
         case 6: live = std::make_unique<EnvView>(proc); break;
         default: break;
         }
+        liveCaption = kLiveCaption[kSpecs[row].liveKind];
         if (live) addAndMakeVisible(*live);
+    }
+    // The tabs, for the manual only. Every page of every tab row belongs to exactly one chapter
+    // -- by its row, with three exceptions -- and is enumerated from the rows themselves, so a
+    // tab that is added to the panel is in the manual the next time it is exported, and one
+    // cannot be forgotten by a list written by hand. (One was, twice.)
+    auto addTab = [&](juce::Image img, const juce::String& name, const juce::String& caption, juce::StringArray sections) {
+        if (!img.isValid()) return;
+        tabPics.push_back(img); tabNames.add(name); tabCaptions.add(caption); tabSections.push_back(sections);
+    };
+    static const int kRowChapter[] = { 1, 2, 8, 4, 4, 6, 5 };    // tab row -> chapter
+    for (int r = 0; r < static_cast<int>(owner.tabRows_.size()); ++r) {
+        const auto& t = owner.tabRows_[static_cast<size_t>(r)];
+        for (int pg = 0; pg < static_cast<int>(t.pages.size()); ++pg) {
+            int chapter = r < 7 ? kRowChapter[r] : 4;
+            if (r == 1 && pg == 2) chapter = 7;      // AMP ENV with the modulation
+            if (r == 1 && pg == 3) chapter = 11;     // EXPRESSION with MIDI
+            if (r == 5 && pg == 5) chapter = 10;     // CLOCK with the clock chapter
+            if (chapter != row) continue;
+            const juce::StringArray secs = owner.tabSectionNames(r, pg);
+            juce::String what = secs.joinIntoString(", ");
+            juce::String caption = "The " + t.names[static_cast<size_t>(pg)] + " tab as it opens: the " + what
+                                 + (secs.size() > 1 ? " sections" : " section")
+                                 + " with the values of the preset the manual was exported from"
+                                 + (pg < static_cast<int>(t.displays.size()) && t.displays[static_cast<size_t>(pg)] != nullptr
+                                        ? ", and beside them the tab's live display." : ".");
+            addTab(owner.snapshotTab(r, pg), t.names[static_cast<size_t>(pg)], caption, secs);
+        }
+    }
+    if (row == 1)   // the strand bank, under Source 1's display
+        addTab(owner.snapshotSection("Strands"), "STRANDS",
+               "The Strands section, which sits under Source 1's display: the strand bank's ten controls.", { "Strands" });
+    if (row == 3) {
+        addTab(owner.snapshotSection("Space"), "SPACE", "The Space section: the spatial model's controls, two rows side by side.", { "Space" });
+        addTab(owner.snapshotSection("Foundation"), "FOUNDATION", "The Foundation section: the sub and its source.", { "Foundation" });
+    }
+    if (row == 4)   // the master, in its corner of the header
+        addTab(owner.snapshotHeader(), "MASTER",
+               "The right-hand half of the header: the note roll (every sounding note as a bar, the keys' notes lit), the loudness meter under it, the Master section (tilt, bass mono, side air, width, mono safe, subsonic) and the master gain knob.", { "Master" });
+    if (row == 7) {
+        static const char* const kStrip[3] = { "LFO", "ENV", "MATRIX" };
+        static const char* const kStripCap[3] = {
+            "The modulation strip along the bottom of the page, LFO tab: the eight LFO cards, each a shape, a rate, a phase, a depth and a mode. A card is dragged onto a knob to route it.",
+            "The strip's ENV tab: the six envelope cards and the shape editor, where an envelope is drawn as points on a curve.",
+            "The strip's MATRIX tab: every route as a row -- source, target, depth, via, and the 0..1 flag." };
+        static const char* const kStripSection[3] = { "LFO 1", "Env 1", "" };
+        static const char* const kStripDetail[3] = {
+            "The left third of the LFO tab at readable size: the source cards -- LFO 1 to 4 are the first four -- and LFO 1's own panel: Shape, Rate, Phase, Depth, Mode, Sync.",
+            "The left third of the ENV tab at readable size: the envelope editor of Env 1 -- points on a curve, dragged; double-click adds or removes one -- with its Mode, Time, Depth and Sync.",
+            "The left third of the MATRIX tab at readable size: the first routes, each a source, a target, a depth slider, a Via source and the 0..1 flag, and the '+ route' button." };
+        for (int t = 0; t < 3; ++t) {
+            juce::StringArray secs; if (kStripSection[t][0]) secs.add(kStripSection[t]);
+            addTab(owner.snapshotStripTab(t), kStrip[t], kStripCap[t], {});
+            addTab(owner.snapshotStripTab(t, true), juce::String(kStrip[t]) + " (detail)", kStripDetail[t], secs);
+        }
+    }
+    if (row == 8)
+        addTab(owner.snapshotPerform(), "PERFORM",
+               "The Perform page: the macros large, the morph and the map cursor, the note roll and the stage, and the set recorder.", {});
+    if (row == 9) {
+        addTab(owner.snapshotBrowse(), "BROWSE",
+               "The Browse page in its list view: the columns that narrow the library (family, character, motion, features), the search, and the list of every preset the instrument knows.", {});
+        addTab(owner.snapshotBrowseMap(), "MAP",
+               "The Browse page in its map view: every preset as a point, clustered by what it sounds like; the cursor and its radius, and the Map blend switch that makes the space between presets playable.", { "Map" });
     }
     resized();
     repaint();
@@ -1318,11 +1662,18 @@ void AmbientSynthEditor::HelpView::selectedRowsChanged(int row)
     showTopic(row);
 }
 
+juce::Rectangle<int> AmbientSynthEditor::HelpView::FlowDiagram::drawn() const
+{
+    const float sc = juce::jmin(getWidth() / kCanvasW, getHeight() / kCanvasH);
+    if (sc <= 0.0f) return getLocalBounds();
+    return juce::Rectangle<int>(0, 0, juce::roundToInt(kCanvasW * sc), juce::roundToInt(kCanvasH * sc));
+}
+
 // The signal flow as a picture: the units as boxes in their group colours, the buses as arrows.
 void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
 {
-    // Drawn on a 1000 x 560 canvas, scaled to fit whatever the column offers.
-    const float sx = getWidth() / 1000.0f, sy = getHeight() / 560.0f, sc = juce::jmin(sx, sy);
+    // Drawn on a fixed canvas, scaled to fit whatever the column offers.
+    const float sx = getWidth() / kCanvasW, sy = getHeight() / kCanvasH, sc = juce::jmin(sx, sy);
     if (sc <= 0.05f) return;
     g.addTransform(juce::AffineTransform::scale(sc));
     auto node = [&](float x, float y, float w, float h, const juce::String& t, juce::Colour c, float fs = 12.0f) {
@@ -1346,56 +1697,70 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
 
     const juce::Colour V = ui::voiceCol, F = ui::foreCol, B = ui::backCol, C = ui::cosmosCol, K = ui::condCol, M = ui::masterCol, A = ui::accent;
     // conductors
-    auto brain = node(20, 16, 150, 40, "Cluster Brain", K);
-    auto keys  = node(185, 16, 120, 40, "MIDI keys", K);
-    auto hands = node(320, 16, 130, 40, "OSC / hands / macros", K, 11.0f);
-    label(20, 60, "every note gets a DISTANCE: 0 at the ear, 1 the infinite background", ui::dim);
+    auto brain = node(20, 14, 150, 36, "Cluster Brain", K);
+    auto keys  = node(185, 14, 120, 36, "MIDI keys", K);
+    auto hands = node(320, 14, 130, 36, "OSC / hands / macros", K, 11.0f);
+    label(20, 54, "every note gets a DISTANCE: 0 at the ear, 1 the infinite background", ui::dim);
     // the voice
-    g.setColour(V.withAlpha(0.35f)); g.drawRoundedRectangle(14.0f, 82.0f, 442.0f, 210.0f, 8.0f, 1.0f);
-    g.setColour(V); g.setFont(ui::title(10.5f)); g.drawText("VOICE  x16", 24, 86, 200, 14, juce::Justification::centredLeft, false);
-    auto s1 = node(24, 104, 130, 40, "Source 1\nadditive bank / any", V, 11.0f);
-    auto s2 = node(164, 104, 130, 40, "Source 2\nwavetable / FM / grains / noise", V, 10.0f);
-    auto s3 = node(304, 104, 130, 40, "Source 3\n+ Air (noise on the note)", V, 10.0f);
-    auto filt = node(24, 160, 200, 40, "Filter (nine models)", V);
-    auto zp   = node(234, 160, 200, 40, "Z-plane filter", V);
-    auto env  = node(24, 216, 410, 40, "Envelope  -  x (1 - distance/2)  -  interaural time difference  -  presence on the near plane", V, 10.5f);
-    arrow(brain.getBottomLeft().translated(75, 0), { 95, 104 }, K);
-    arrow(keys.getBottomLeft().translated(60, 0), { 229, 104 }, K);
-    arrow(hands.getBottomLeft().translated(65, 0), { 369, 104 }, K, true);
-    for (auto* r : { &s1, &s2, &s3 }) arrow({ r->getCentreX(), r->getBottom() }, { juce::jlimit(124.0f, 334.0f, r->getCentreX()), 160.0f }, V);
-    label(232, 146, "series / parallel", ui::dim);
-    arrow({ 124, 200 }, { 124, 216 }, V); arrow({ 334, 200 }, { 334, 216 }, V);
-    // the split
-    arrow({ 434, 236 }, { 500, 130 }, F); label(440, 172, "near = cos(d)", F);
-    arrow({ 434, 236 }, { 500, 330 }, B); label(440, 290, "far = sin(d)", B);
+    g.setColour(V.withAlpha(0.35f)); g.drawRoundedRectangle(14.0f, 74.0f, 442.0f, 250.0f, 8.0f, 1.0f);
+    g.setColour(V); g.setFont(ui::title(10.5f)); g.drawText("VOICE  x16", 24, 78, 200, 14, juce::Justification::centredLeft, false);
+    // Four equal source slots. Slot 1 is the strand bank while its type is Additive, and then the
+    // Strands section is its own; set to anything else it renders like the other three.
+    auto s1 = node(24, 96, 100, 38, "Source 1\nstrand bank / any", V, 9.5f);
+    auto s2 = node(130, 96, 100, 38, "Source 2\nany type", V, 9.5f);
+    auto s3 = node(236, 96, 100, 38, "Source 3\nany type", V, 9.5f);
+    auto s4 = node(342, 96, 92, 38, "Source 4\nany type", V, 9.5f);
+    auto vec = node(24, 142, 410, 26, "Vector: the four slots on the corners of one square   -   Strike: a struck string, wood or metal on top", V, 9.5f);
+    auto filt = node(24, 176, 200, 36, "Filter (ten models) + fold", V, 11.0f);
+    auto zp   = node(234, 176, 200, 36, "Z-plane filter (155 shapes)\nafter the filter, or beside it", V, 9.5f);
+    auto env  = node(24, 228, 410, 36, "Envelope  -  x (1 - distance/2)  -  interaural time difference  -  presence on the near plane", V, 9.5f);
+    auto air  = node(24, 274, 410, 36, "Air: noise on the note (band) or resonators on its harmonics (ghost)", V, 10.0f);
+    arrow(brain.getBottomLeft().translated(75, 0), { 74, 96 }, K);
+    arrow(keys.getBottomLeft().translated(60, 0), { 245, 96 }, K);
+    arrow(hands.getBottomLeft().translated(65, 0), { 388, 96 }, K, true);
+    for (auto* r : { &s1, &s2, &s3, &s4 }) arrow({ r->getCentreX(), r->getBottom() }, { r->getCentreX(), 142.0f }, V);
+    arrow({ 124, 168 }, { 124, 176 }, V); arrow({ 334, 168 }, { 334, 176 }, V);
+    arrow({ 124, 212 }, { 124, 228 }, V); arrow({ 334, 212 }, { 334, 228 }, V);
+    arrow({ 229, 264 }, { 229, 274 }, V);
+    // The split, said once and in words: two labels hung on the two arrows sat across them.
+    label(150, 332, "splits by distance:  near = cos(d),  far = sin(d)", ui::dim);
+    arrow({ 434, 292 }, { 500, 130 }, F);
+    arrow({ 434, 300 }, { 500, 356 }, B);
     // near chain
-    auto ens = node(500, 110, 100, 40, "Ensemble", F);
-    auto d1  = node(612, 110, 100, 40, "Delay", F);
-    auto d2  = node(724, 110, 100, 40, "Delay 2", F);
-    auto nr  = node(836, 110, 130, 40, "Near reverb", F);
-    arrow({ 600, 130 }, { 612, 130 }, F); arrow({ 712, 130 }, { 724, 130 }, F); arrow({ 824, 130 }, { 836, 130 }, F);
     label(500, 92, "NEAR  --  the dry, bright foreground", F);
-    auto cos = node(500, 190, 330, 40, "Cosmos (parallel): frequency shifter -> resonator -> vowel -> nebula", C, 10.5f);
-    arrow({ 550, 150 }, { 550, 190 }, C); arrow({ 780, 190 }, { 780, 150 }, C); label(590, 236, "send / return -- added, never replacing", ui::dim);
-    auto cloud = node(846, 190, 120, 40, "Cloud (grains)", B, 11.0f);
-    arrow({ 900, 150 }, { 900, 190 }, B); arrow({ 906, 230 }, { 906, 320 }, B);
-    arrow({ 668, 150 }, { 668, 320 }, B, true); label(672, 250, "to far", B);
+    auto ens = node(500, 110, 108, 38, "Ensemble\nchorus / microshift", F, 9.5f);
+    auto d1  = node(614, 110, 96, 38, "Delay", F);
+    auto d2  = node(716, 110, 96, 38, "Delay 2", F);
+    auto nr  = node(818, 110, 148, 38, "Near reverb\n+ the Haas band", F, 9.5f);
+    arrow({ 608, 129 }, { 614, 129 }, F); arrow({ 710, 129 }, { 716, 129 }, F); arrow({ 812, 129 }, { 818, 129 }, F);
+    auto blur = node(500, 158, 210, 26, "Blur: attacks wiped into texture", F, 9.5f);
+    auto cos = node(500, 194, 320, 38, "Cosmos (parallel): frequency shifter -> resonator -> vowel -> nebula", C, 9.5f);
+    arrow({ 540, 148 }, { 540, 194 }, C); arrow({ 780, 194 }, { 780, 148 }, C);
+    label(500, 236, "send / return -- added, never replacing", ui::dim);
+    auto cloud = node(846, 194, 120, 38, "Cloud (grains)", B, 10.5f);
+    arrow({ 906, 148 }, { 906, 194 }, B); arrow({ 906, 232 }, { 906, 348 }, B);
+    // To the far plane, down the gap between the Cosmos and the Cloud rather than through them.
+    arrow({ 834, 148 }, { 834, 348 }, B, true); label(700, 268, "delay sends to far", B);
     // far
-    label(500, 302, "FAR  --  the infinite background, 100 % wet", B);
-    auto fr  = node(500, 320, 150, 40, "Far reverb", B);
-    auto rm  = node(662, 320, 150, 40, "Room (convolution)", B, 11.0f);
-    auto sh  = node(824, 320, 142, 40, "Shimmer loop", B);
-    arrow({ 650, 340 }, { 662, 340 }, B); arrow({ 895, 360 }, { 575, 380 }, B, true);
-    // output
-    auto out = node(500, 420, 466, 44, "Mid / Side  (bass mono, side air, width)   ->   Master   ->   soft clip", M, 11.5f);
-    arrow({ 901, 150 }, { 940, 420 }, F); arrow({ 575, 360 }, { 575, 420 }, B); arrow({ 737, 360 }, { 737, 420 }, B);
-    label(500, 470, "no compressor anywhere: what you hear is the dynamics of the drone", ui::dim);
-    // feedback, modulation, clock
-    arrow({ 500, 452 }, { 120, 452 }, A, true); arrow({ 120, 452 }, { 120, 256 }, A, true);
-    label(130, 458, "Feedback: to bus / to pitch (phase-modulates every partial), tape", A);
-    node(20, 494, 436, 44, "Modulation: 8 LFOs - 6 envelopes - matrix -> any knob        Clock: internal / host / MIDI, Sync on every rate", A, 10.5f);
-    node(500, 494, 466, 44, "Foundation sub (root or difference tone), mono, after mid/side", M, 11.0f);
-    juce::ignoreUnused(ens, d1, d2, nr, cos, cloud, fr, rm, sh, out, env, filt, zp);
+    label(500, 326, "FAR  --  the infinite background, 100 % wet, unmasked band by band", B);
+    auto fr  = node(500, 348, 150, 38, "Far reverb\n+ its own width", B, 9.5f);
+    auto rm  = node(662, 348, 150, 38, "Room (convolution)", B, 10.5f);
+    auto sh  = node(824, 348, 142, 38, "Shimmer loop", B);
+    arrow({ 650, 367 }, { 662, 367 }, B);
+    arrow({ 895, 386 }, { 580, 394 }, B, true);
+    // output: the master chain in the order it actually runs
+    auto out1 = node(500, 410, 466, 30, "Body (twelve tuned modes)   ->   Mid / Side  (bass mono, side air, width)", M, 9.5f);
+    auto out2 = node(500, 446, 466, 30, "+ Foundation sub   ->   Patina   ->   subsonic   ->   Master   ->   soft clip", M, 9.5f);
+    arrow({ 575, 386 }, { 575, 410 }, B); arrow({ 737, 386 }, { 737, 410 }, B);
+    arrow({ 966, 129 }, { 972, 406 }, F);      // the near bus, down the right-hand margin
+    arrow({ 972, 406 }, { 966, 414 }, F);
+    arrow({ 733, 440 }, { 733, 446 }, M);
+    label(500, 478, "no compressor anywhere: what you hear is the dynamics of the drone", ui::dim);
+    // feedback, modulation
+    arrow({ 500, 461 }, { 120, 461 }, A, true); arrow({ 120, 461 }, { 120, 312 }, A, true);
+    label(130, 466, "Feedback: to bus / to pitch (phase-modulates every partial), tape", A);
+    node(20, 500, 946, 34, "Modulation: 8 LFOs  -  6 envelopes  -  aftertouch, wheel, slide  -  the note, its velocity, its distance  -  matrix -> any knob", A, 10.0f);
+    juce::ignoreUnused(ens, d1, d2, nr, cos, cloud, fr, rm, sh, out1, out2, env, filt, zp, s4, vec, air, blur);
 }
 
 void AmbientSynthEditor::timerCallback()

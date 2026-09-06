@@ -607,8 +607,14 @@ void AmbientSynthEditor::LoudnessView::paint(juce::Graphics& g)
     const float y = plot.getCentreY();
     g.setColour(ui::track.withAlpha(0.5f));
     g.fillRoundedRectangle(plot.getX(), y - 3.0f, plot.getWidth() * 0.42f, 6.0f, 2.0f);
+    // The window a dark-ambient master is asked to land in: -24 to -16 LUFS, the range the genre's
+    // own mastering advice gives (-16 to -20) together with the quieter end the drone literature
+    // uses. The thin line at -14 is where the streaming services normalise to: a master louder
+    // than that is turned down again, and arrives flat rather than loud.
     g.setColour(ui::accent.withAlpha(0.20f));
-    g.fillRoundedRectangle(xOf(-24.0f), y - 3.0f, xOf(-18.0f) - xOf(-24.0f), 6.0f, 2.0f);
+    g.fillRoundedRectangle(xOf(-24.0f), y - 3.0f, xOf(-16.0f) - xOf(-24.0f), 6.0f, 2.0f);
+    g.setColour(ui::dim.withAlpha(0.7f));
+    g.drawVerticalLine(juce::roundToInt(xOf(-14.0f)), y - 5.0f, y + 5.0f);
     if (ld.shortTerm > -119.0f) {
         g.setColour(ld.shortTerm > -14.0f ? juce::Colour(0xffe0a060) : ui::live);
         g.fillRoundedRectangle(plot.getX(), y - 3.0f, juce::jmax(2.0f, xOf(ld.shortTerm) - plot.getX()), 6.0f, 2.0f);

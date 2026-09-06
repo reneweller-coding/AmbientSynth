@@ -296,6 +296,9 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         else if (m.isController()) {
             const int cc = m.getControllerNumber();
             if (cc < 0 || cc >= 128) continue;
+            // The wheel is a modulation source in its own right. It is not an "else": a player
+            // may also have learned CC 1 onto a knob, and both should work.
+            if (cc == 1) engine_.setWheel(m.getControllerValue() / 127.0f);
             const int learn = learnTarget_.exchange(-1);
             if (learn >= 0) {
                 for (auto& c : ccMap_) if (c.load() == learn) c.store(-1);   // one controller per parameter

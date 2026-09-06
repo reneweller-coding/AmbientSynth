@@ -313,7 +313,7 @@ that has moved in pitch.
 
 ### Filter models
 
-`Core/include/ambient/Filter.h`. The voice filter is one of nine models
+`Core/include/ambient/Filter.h`. The voice filter is one of ten models
 behind the same five knobs (*Model*, *Cutoff*, *Resonance*, *Env Amount*,
 *Drift*, *Key Track*, plus *Drive*): LP 6 (one pole), LP 12 (the
 state-variable low pass the instrument always had, bit-identical), LP 24 (two
@@ -1330,6 +1330,151 @@ second. The tool tries the new flag first and falls back, so an older browser
 still works, and if there is no browser at all the HTML is still written --
 the manual is not held hostage by one.
 
+### The manual, second draft: every block, every type, every tab
+
+The first manual was a book of chapter texts with two or three section
+pictures each and an appendix of every parameter. Read by somebody who did
+not have the instrument in front of them it was thin in exactly the places a
+manual is for: what does the *Feedback + Room* tab contain, what do its knobs
+do, what does the *Stretch* type look like when it is playing. The second
+draft answers those questions mechanically, so they cannot go unanswered
+again:
+
+* **Every tab of the panel is a picture**, photographed as the tab (its bar,
+  its sections, its display, and on Source 1 the strand bank under the
+  display), captioned with the name it wears on its bar. Twenty-four tabs,
+  the three tabs of the modulation strip, the Perform and Browse pages, the
+  sections that have no tab (Space, Foundation, Strands, the Master in its
+  corner of the header). The in-app help page does not draw these -- its
+  picture column holds two or three -- so they are a second list
+  (`tabPics`) that only the export reads.
+* **Under every picture a paragraph says what the block is for**, and under
+  that every parameter of the sections in the picture with its help text.
+  The paragraphs are a table in `Help.cpp` (`tabHelp`) keyed on the tab's
+  name; the parameter lists come from the same `paramHelp` the tooltips use,
+  exported structured (`params` in `manual.json`) rather than as the text
+  blob the appendix is. Sources 2, 3 and 4 are the same twenty-six knobs
+  three times over, so they are printed once under Source 2 and the other
+  two pages say so.
+* **The gallery of source types.** A slot's picture shows whatever type the
+  preset happens to use. For the manual the export sets Source 2 to each type
+  in turn -- Additive, Wavetable, FM, Texture, Stretch, Noise -- loads a field
+  recording for the two that need a clip (`AMBIENT_MANUAL_CLIP`), waits for
+  the display and the greyed-out knobs to follow, and photographs the tab.
+  That is why `exportManual` became a list of steps a third of a second apart
+  rather than one function: a parameter set from the message thread reaches
+  the display on the next timer tick, not in the same call.
+* **The presets chapter explains the groups**: the twelve families of the
+  built-in presets and all thirty-two packs, each in a sentence -- who it is
+  written in the spirit of and what corner of the repertoire it covers --
+  rather than the list of numbers it was.
+
+Two pictures were wrong in the first draft and both for the same reason. The
+Master section is painted in the header, so its bounds are the editor's, not
+the content's; photographed from the content it came out as a strip of the
+panel's top-left corner, which is what a reader saw under "MIDI, OSC, files".
+And the signal-flow diagram is a fixed canvas scaled to fit its component, so
+one of the two dimensions is always left over; photographed whole it was a
+diagram with a field of black under it. Both now photograph what is drawn
+(`drawn()`), from the component that draws it.
+
+The diagram itself was redrawn: it still showed three sources, nine filter
+models and no Vector, Strike, Blur, Body or Patina, and it drew the master
+chain in an order the code does not run it in. It now shows the four slots,
+the Vector and the Strike, both filters with the fold, the foreground with
+the Haas band and the microshift, the background with its own width, and the
+output chain in its real order -- body, mid/side, sub, patina, subsonic,
+master, clip.
+
+And the printing broke a second time, differently. Edge with the default
+profile -- or with any profile the script had used before -- takes the
+command over and exits at once, without a file; a reused folder printed
+nothing in twenty seconds, a fresh one in two. The launcher also returns
+before the child that prints has written anything. `make_manual.py` now
+makes a new profile folder per print, removes it afterwards, and waits for
+the file to appear and stop growing.
+
+### The mixing desk
+
+The dark-ambient production literature -- a second paper after the ambient
+sound-design one -- is mostly about mixing: stereo width that survives mono,
+depth as a funnel, a wavefolder where a saturator would be, aftertouch on
+three things at once. Measured against the instrument, most of it was there
+(bass mono, side air, three reverb tiers with pre-delay and low cuts, air
+absorption with distance, free-running LFOs, comb filters, Paulstretch, the
+LUFS meter). Five things were not, and all five are now parameters that are
+neutral at their default, so six thousand finished presets sound as they did:
+
+* **Aftertouch, the wheel and the slide as modulation sources**
+  (`pressure`, `wheel`, `slide`). Pressure and slide already reached the
+  sound through fixed routes; the wheel reached it only through MIDI learn,
+  one knob per controller. Now all three are ordinary sources, read from the
+  loudest voice (pressure, slide) or the instrument (wheel, smoothed over
+  30 ms so a 7-bit controller never steps a cutoff). They rest at zero, which
+  through the bipolar mapping is -1, so a route wanting "nothing until I move
+  it" carries the 0..1 flag -- and that is what makes them safe to put into
+  every preset in the library, which the retrofit did.
+* **The background's own width** (`far_width`). A mix in which everything is
+  spread as wide as it goes is a flat wall; the far plane pulled in towards
+  the centre while the foreground stays wide is what the ear reads as
+  distance. A mid/side stage on the far bus alone, before it joins the near
+  bus. Measured: width 0 leaves no side at all, 1 leaves the reverb's own,
+  1.5 is wider, and the mid never moves.
+* **Microshift** (`ens_mode`). The two channels detuned a few cents against
+  each other, at different base delays, with nothing modulated. The textbook
+  construction -- two taps half a cycle apart under a Hann pair -- has both
+  taps audible all the time at a fixed delay difference, which on a sustained
+  tone is a comb filter: measured, it lost a fifth of the signal. The version
+  that ships uses a long ramp (200 ms of travel) and a short hand-over
+  (25 ms), so the two taps overlap for a thousandth of the cycle and the
+  shifter is a plain delay line at a slowly changing delay. Measured by
+  counting zero crossings of a 440 Hz sine: left 443.06 Hz, right 436.96 Hz,
+  twelve cents each way to within half a hertz; no step at the wrap; no dip.
+* **The band-limited Haas effect** (`haas`, `haas_time`). Delaying a whole
+  channel widens it and destroys it in mono. The 1.2-4 kHz band of the centre
+  is delayed and put into the side channel -- added on the left, taken off on
+  the right -- so the edges open, the low end stays, and a mono sum is exactly
+  the picture it was, to the sample. The first version cross-fed the delayed
+  band symmetrically and produced, from a mono input, no width at all: the
+  test that found it fed mono noise and measured zero side. What "hard to the
+  opposite side" comes to once it is made symmetrical is the side channel.
+* **The wavefolder** (`filter_fold`), after both filters. A clipper flattens
+  what will not fit; a folder reflects it, and the mirrored wave grows a
+  family of high partials no saturation makes. `sin` is the smooth version of
+  that curve, divided by its own gain so small signals pass unchanged; the
+  positive half is driven a third harder than the negative, which is where the
+  even harmonics and the body come from; the amount both drives and mixes, so
+  the knob leaves the identity continuously. The makeup gain is measured: 2.2
+  holds a 0.3-amplitude sine within 1.3 dB across the knob, and a loud input
+  loses about 9 dB at the top, which is not a fault -- past the first fold the
+  fundamental itself is being folded away.
+
+The sound oracle -- forty presets rendered and hashed before and after --
+came back forty identical. Then the library was retrofitted on purpose
+(`Tools/library/retrofit_presets.py`, `Tools/retrofit_builtins.py`): every
+preset judged from its own settings, the hands almost everywhere, the funnel
+where there is a background deep enough to matter, the Haas band where there
+is a foreground and it is not already at the edges, the microshift only where
+the chorus was slow and quiet enough to have been a widener, the fold only
+where saturation was already asked for, and a quiet spectrally-stretched
+field recording under presets in the packs that are about places. The
+built-in presets get the same rules, each sound-changing addition rendered
+first and kept only if the preset still sounds like itself. Measured on a
+sample before and after: level median 0.00 dB, worst +3.4 dB (which the
+measurement pass then corrected), width shifts modest, mono loss unchanged,
+no clipping, no silence, no click.
+
+One more piece of the literature came in on the content side: **convolution
+with a struck object**. The Room is a convolution reverb, and an impulse
+response does not have to be a room. `make_impulses.py` gained a family cut
+from the field recordings -- the sharpest event in a recording of a
+foundry, a cistern, a hangar, shaped into a decaying impulse of a tenth to
+half a second -- and a pad convolved with one is played on that object.
+Measured on the room stem: five to fourteen decibels RMS different from a
+hall across the third-octave bands, peaks of up to 27 dB where the object
+rings. Forty of them, three megabytes, in the library and in the
+thirty-second pack, *Cryo Chamber*, which was written for all of the above.
+
 ### The three section layers
 
 A layer is a preset bank that touches one section and nothing else, so it
@@ -1416,7 +1561,7 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 6200 presets in 31 packs, with 1700
+`Library/` holds a generated library of 6400 presets in 32 packs, with 1700
 clips (1200 textures and 500 seamless field recordings), 608 wavetables and
 200 impulse responses (see
 `Library/README.md` and `Tools/library/`). Its descriptors and map positions
@@ -1699,7 +1844,7 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 6200 presets in
+* **The sample library** (`Tools/make_content_pack.py`). The 6400 presets in
   the packs name 1584 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced

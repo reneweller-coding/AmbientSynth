@@ -174,6 +174,10 @@ enum class ParamId : int {
     Src4Partials, Src4Tilt, Src4Bright, Src4OddEven, Src4Inharm, Src4Shimmer, Src4ShimmerRate, Src4Drift,
     // The Stretch type's two settings, one pair per slot, fields 26 and 27 of the slot.
     Src1Stretch, Src1Xfade, Src2Stretch, Src2Xfade, Src3Stretch, Src3Xfade, Src4Stretch, Src4Xfade,
+    // Four things a dark-ambient mixing desk does that this instrument could not, each off at its
+    // default so nothing that exists sounds different: the background narrowed as it goes back,
+    // a static micro-detune instead of the chorus, a band delayed to one side, and a wavefolder.
+    FarWidth, EnsMode, Haas, HaasTime, FilterFold,
     Count
 };
 
@@ -233,6 +237,7 @@ extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
+extern const char* const kEnsModeNames[2];      // "Chorus" (modulated) or "Microshift" (static detune)
 extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal
 extern const char* const kStrikeWhoNames[2];    // Keys, Keys + Brain     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)
 constexpr int kNumStacks = 8;

@@ -88,9 +88,14 @@ if (-not $SkipManual) {
     if (Test-Path $manualDir) { throw "cannot clear $manualDir -- something still has a file open" }
     $env:AMBIENT_PRESET = "Three Voices, One Key"
     $env:AMBIENT_MANUAL = $manualDir
+    # A clip for the manual's gallery of source types: the Texture and Stretch pictures show it
+    # loaded and playing. Any seamless field recording will do; the first one alphabetically is
+    # the same one every time.
+    $clip = Get-ChildItem (Join-Path $root "Library\Textures") -Filter "field_recordings_*_loop.wav" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
+    if ($clip) { $env:AMBIENT_MANUAL_CLIP = $clip.FullName }
     $mp = Start-Process $exe -PassThru
     if (-not $mp.WaitForExit(90000)) { $mp.Kill() ; throw "the manual export did not finish" }
-    Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET
+    Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET, env:AMBIENT_MANUAL_CLIP -ErrorAction SilentlyContinue
     & $python (Join-Path $root "Tools\make_manual.py")
 }
 $manualPdf = Join-Path $manualDir "AmbientSynth-Manual.pdf"

@@ -69,7 +69,7 @@ The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (31 packs, 6200 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **preset library** (32 packs, 6400 presets) into `ProgramData\AmbientSynth\Packs`,
 * the **sample library** — 1584 samples, wavetables and impulse responses, 4.9 GB (467 of
   them seamless field recordings for the Stretch type), downloaded from the release and checked
   against its hash — into the same folder,
@@ -153,7 +153,7 @@ and a wavetable of their own. They appear everywhere the built-in presets do
 -- programs, browser, map, routes -- each pack as its own family. Drop
 `*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
 `AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
-library of 6200 presets in 31 packs with the 1584 samples, wavetables and
+library of 6400 presets in 32 packs with the samples, wavetables and
 impulse responses they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
@@ -206,7 +206,9 @@ wood, plate, bell or string), an **Unmask** that lets the background step aside 
 foreground band by band, a **Patina** on the master (tape wow, lost highs, a noise floor,
 gentle saturation), and **Externalise** for headphones (pinna notch and shoulder reflection).
 **Expression**: pressure, slide and per-note bend, over MPE or a plain keyboard; pressure pulls
-a voice out of the background towards you. A **second conductor** for the background, the first
+a voice out of the background towards you -- and **aftertouch, the mod wheel and the slide are
+sources in the modulation matrix** as well, so one hand can open the filter, move the wavetable
+and lift the reverb at once. A **second conductor** for the background, the first
 one's decisions optionally **on the clock's grid**, and a **Room Morph** between two impulse
 responses.
 
@@ -429,13 +431,18 @@ Sections of the GUI (all parameters are automatable in a DAW):
   fireflies falling into step) move brightness, depth, pan and the Z-plane
   point; *Coherence* 0 leaves them independent, 1 locks them into one pulse.
 * **Envelope** — attack up to 60 s, release up to 120 s.
-* **Filter** — state-variable low-pass with key tracking, envelope amount and slow drift.
+* **Filter** — ten models (one- to four-pole low-pass, high-pass, band-pass,
+  notch, peak, saturating ladder, tuned comb, formant) with key tracking,
+  envelope amount, slow drift and drive, and a *Fold*: a wavefolder after both
+  filters that mirrors the wave instead of flattening it, for the metallic edge
+  no saturation reaches.
 * **Z-Plane** — a Morpheus-style morphing filter: four frames of up to six
   cascaded pole/zero sections sit on the corners of a square, a point
   between them is a filter interpolated from all four, and the point
-  wanders on its own (*Rate*, *Depth*). Sixteen shapes — Vowel Morph,
-  Choir, Nasal, Low/High/Band Sweep, Phaser, Comb, Flanger, Notch Cluster,
-  Strings, Metal Bars, Wood, Glass, Peaks, Infinite — in series after the
+  wanders on its own (*Rate*, *Depth*), and a third axis *Z* makes the square
+  a cube. 155 shapes in twelve families — vowel morphs, choirs, sweeps,
+  phasers, combs, notch clusters, strings, metal bars, wood, glass, peaks,
+  and the families generated from acoustic ratios — in series after the
   filter or instead of it, with resonance and key tracking.
 * **Space** — *Depth*: how far back the brain places its notes (most go deep,
   some stay intimately close); *Keys Depth*: the plane of MIDI notes; *Pan
@@ -446,7 +453,10 @@ Sections of the GUI (all parameters are automatable in a DAW):
   far plane), the articulation that makes the room behind it feel deep.
   *Breath* and *Breath Rate*: each voice's distance wanders slowly, so a
   note drifts forward and sinks back on its own — the room breathes.
-* **Ensemble** — three-tap modulated chorus.
+* **Ensemble** — *Chorus*, three modulated taps, or *Microshift*: the two
+  channels detuned a few cents in opposite directions and delayed by different
+  amounts, with nothing moving. A drone widened that way survives a mono sum,
+  where a deep chorus at 13–22 ms is a comb filter waiting to be summed.
 * **Delay** — stereo delay with independent L/R times (asymmetric by default),
   feedback, cross-feed, damping, mix, and *To Far*: how much of the echoes
   recede into the background reverb.
@@ -457,12 +467,23 @@ Sections of the GUI (all parameters are automatable in a DAW):
   (*Spray*), optionally transposed by octaves and fifths (*Pitch*), spread
   across the stereo field and dropped into the far reverb.
 * **Near Reverb** — small room for the foreground plane.
+* **Haas** (in Space) — the 1.2–4 kHz band of the centre, delayed and put into
+  the side channel: width where the ear takes its direction from level rather
+  than from time. What is added on one side comes off the other, so the mono
+  sum is exactly the picture it was.
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*
-  (low-pass on the tail: distance darkens), *Freeze*.
+  (low-pass on the tail: distance darkens), *Low Cut*, *Freeze*, and *Width*:
+  the background's own stereo width before it joins the foreground. A mix in
+  which everything is spread as far as it will go is a flat wall; pulling the
+  far plane towards the centre while the foreground stays wide is the funnel
+  the ear reads as distance.
 * **Room** — a third reverb, optional and additional: a convolution reverb
   on the far plane playing an impulse response (*Impulse…* loads a mono or
-  stereo file, a built-in dark hall plays without one). *Level*, *Source*
+  stereo file, a built-in dark hall plays without one). The library's 240
+  impulses include forty struck objects cut from the field recordings — a
+  chain on concrete, a knocked pipe — so a pad can be played on a piece of
+  the world rather than in a room. *Level*, *Source*
   (far sends or the finished foreground), *Pre-Delay*, *Tail Cut*.
   `Tools/ImpulseGen` designs rooms from numbers, cuts impulses out of
   recordings or AI renders of a clap in a described room, and blends both.
@@ -484,8 +505,12 @@ Sections of the GUI (all parameters are automatable in a DAW):
   *Smear* = 1 freezes the spectrum), *Shimmer* (pitch-shifted feedback around
   the far reverb at *Shimmer Pitch*, self-regulating so it blooms and holds).
 * **Master** — mid/side stage: *Bass Mono* (side channel high-passed, the low
-  end stays centred), *Side Air* (broad upper-mid lift on the sides), *Width*.
-  No compressor: dynamics are left alone.
+  end stays centred), *Side Air* (broad upper-mid lift on the sides), *Width*,
+  *Subsonic* (a steep high-pass on the finished output). No compressor:
+  dynamics are left alone. The loudness meter under it reads the output to
+  BS.1770 — integrated, short term, range, true peak and crest — with the
+  −24…−16 LUFS window a dark ambient master is asked to land in marked on the
+  bar and the −14 LUFS streaming line drawn across it.
 * **Cluster Brain** — density, event rate, hold time range, register range,
   *Consonance* (1 = only simple ratios to the root, 0 = clusters), *Wander*.
 * **Z-Plane** — a morphing filter after Dave Rossum's idea from the E-mu

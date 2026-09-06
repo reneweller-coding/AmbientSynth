@@ -380,6 +380,9 @@ void Engine::renderChunk(float* L, float* R, int n)
     // Unmasking: the background gives way to the foreground band by band, before the two planes
     // are summed (the near bus is the side chain, and it is finished by now).
     unmask_.process(nl, nr, fl, fr, n);
+    // The Haas band, on the foreground only: the background has the reverb's own width and does
+    // not need help. After the unmask, so what the side chain measured is the plane as it was.
+    haas_.process(nl, nr, n);
     // Sympathy: this block's foreground is what the voices will hear of each other in the next
     // one. A block of delay is what makes the loop safe, and at these depths inaudible.
     if (sympathy_ > 0.0f && static_cast<int>(coupleBuf_.size()) >= n)
@@ -388,8 +391,18 @@ void Engine::renderChunk(float* L, float* R, int n)
     const float master = dbToGain(masterGain_);
     for (int i = 0; i < n; ++i) {
         const float far = smFarLevel_.next(farLevel_);
-        L[i] = nl[i] + fl[i] * far;
-        R[i] = nr[i] + fr[i] * far;
+        // The width of the background alone. A mix in which everything is spread as wide as it
+        // will go has no depth left: the far plane pulled in towards the centre while the
+        // foreground stays wide is the funnel that reads as distance rather than as width. At 1
+        // the background is as the reverb made it, which is where every existing preset is.
+        const float fw = smFarWidth_.next(farWidth_);
+        float bgL = fl[i], bgR = fr[i];
+        if (fw != 1.0f) {
+            const float mid = 0.5f * (bgL + bgR), side = 0.5f * (bgL - bgR) * fw;
+            bgL = mid + side; bgR = mid - side;
+        }
+        L[i] = nl[i] + bgL * far;
+        R[i] = nr[i] + bgR * far;
         if (stems_ != nullptr) {
             // The Cosmos return was added into the near bus above, so it has to come out of the
             // near stem or it would be counted twice and the four would no longer sum to the mix.
@@ -398,8 +411,8 @@ void Engine::renderChunk(float* L, float* R, int n)
             // which is where it is heard.
             stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i];
             stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i];
-            stems_[2][stemPos_ + i] = fl[i] * far;
-            stems_[3][stemPos_ + i] = fr[i] * far;
+            stems_[2][stemPos_ + i] = bgL * far;   // the far stem as it is heard: width included
+            stems_[3][stemPos_ + i] = bgR * far;
         }
     }
     if (roomOn) {

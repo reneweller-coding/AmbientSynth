@@ -45,13 +45,13 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
     PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
-    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_ })
+    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_ })
         s->setTime(0.02f, sr_);
     smDelayMix_.snap(getParam(ParamId::DelayMix)); smDelayToFar_.snap(getParam(ParamId::DelayToFar));
     smDelay2Mix_.snap(getParam(ParamId::Delay2Mix)); smDelay2ToFar_.snap(getParam(ParamId::Delay2ToFar));
     smCloudSend_.snap(getParam(ParamId::CloudSend)); smCosmosSend_.snap(getParam(ParamId::CosmosSend));
     smCosmosReturn_.snap(getParam(ParamId::CosmosReturn)); smCosmosToFar_.snap(getParam(ParamId::CosmosToFar));
-    smFarLevel_.snap(getParam(ParamId::FarLevel));
+    smFarLevel_.snap(getParam(ParamId::FarLevel)); smFarWidth_.snap(getParam(ParamId::FarWidth));
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
     for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_,
@@ -98,6 +98,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     smBlur_.setTime(0.02f, sr_);
     smBody_.setTime(0.02f, sr_);
     unmask_.prepare(sr_);
+    haas_.prepare(sr_);
     diffuser_.prepare(sr_);
     coupleBuf_.assign(static_cast<size_t>(maxBlock_), 0.0f);
     roomB_.prepare(sr_, roomMaxSeconds_);
@@ -470,6 +471,11 @@ void Engine::setPressure(int note, float v)
 void Engine::setSlide(int note, float v)
 {
     for (auto& x : voices_) if (x.isActive() && (note < 0 || x.note() == note)) x.setSlide(v);
+}
+
+void Engine::setWheel(float v)
+{
+    wheelTarget_ = clampv(v, 0.0f, 1.0f);
 }
 
 void Engine::setBend(int note, float normalised)

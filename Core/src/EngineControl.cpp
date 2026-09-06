@@ -240,6 +240,13 @@ void Engine::stepModulation(float dt)
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
     modSrc_[static_cast<int>(ModSource::RandomPerNote)] = randomPerNote_;
     modSrc_[static_cast<int>(ModSource::Beat)] = updateBeat(dt);
+    // The hands. Pressure and slide are per note and read from the loudest voice -- it is the one
+    // being leaned on; the wheel belongs to the instrument. All three rest at zero, which through
+    // uni() is -1, so a route wanting "nothing until I move it" carries the 0..1 flag.
+    modSrc_[static_cast<int>(ModSource::Pressure)] = uni(loud ? loud->pressure() : 0.0f);
+    modSrc_[static_cast<int>(ModSource::Slide)]    = uni(loud ? loud->slide() : 0.0f);
+    wheel_ += (1.0f - std::exp(-dt / 0.03f)) * (wheelTarget_ - wheel_);   // 30 ms: no step from a 7-bit controller
+    modSrc_[static_cast<int>(ModSource::Wheel)]    = uni(wheel_);
     modSrc_[static_cast<int>(ModSource::None)] = 0.0f;
 
     std::memset(modOut_, 0, sizeof(modOut_));
@@ -444,6 +451,7 @@ void Engine::readParams()
     vp_.filterParallel = std::lround(g(ParamId::ZRoute)) == 1;
     vp_.filterModel = static_cast<int>(std::lround(g(ParamId::FilterModel)));
     vp_.filterDrive = g(ParamId::FilterDrive);
+    vp_.fold = g(ParamId::FilterFold);
     vp_.cutoff      = g(ParamId::Cutoff);
     vp_.resonance   = g(ParamId::Resonance);
     vp_.filterEnv   = g(ParamId::FilterEnv);
@@ -481,6 +489,7 @@ void Engine::readParams()
     blurMix_    = g(ParamId::BlurMix);
     blur_.set(g(ParamId::BlurSmear));
     farRotate_  = g(ParamId::FarRotate);
+    farWidth_   = g(ParamId::FarWidth);
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
@@ -548,6 +557,8 @@ void Engine::readParams()
     depth_ = clampv(depth_ * (1.0f + 0.3f * a), 0.0f, 1.0f);
 
     ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), syncedHz(ParamId::EnsembleSync, g(ParamId::EnsembleRate)));
+    ensemble_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::EnsMode))), 0, 1));
+    haas_.set(g(ParamId::Haas), g(ParamId::HaasTime));
     delay_.set(syncedSeconds(ParamId::DelaySyncL, g(ParamId::DelayTimeL)), syncedSeconds(ParamId::DelaySyncR, g(ParamId::DelayTimeR)),
                g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp), g(ParamId::DelayAbsorb));
     delay_.setDuck(g(ParamId::DelayDuck));

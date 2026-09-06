@@ -8,6 +8,7 @@
 #include "ambient/Sources.h"
 #include <vector>
 #include <memory>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -90,12 +91,24 @@ private:
         // The pictures: snapshots of the topic's sections, fresh from the panel with its current
         // values, and a live display of the unit -- the same component the page uses, a second copy.
         std::vector<juce::Image> pics;
+        // Pictures of whole tabs. The help page does not draw these -- its picture column
+        // holds two or three -- but the manual prints every one of them, with its tab's
+        // own name as the caption.
+        std::vector<juce::Image> tabPics;
+        juce::StringArray        tabNames, tabCaptions, picCaptions;
+        juce::String             liveCaption;
+        std::vector<juce::StringArray> tabSections;   // per tab picture: the sections under it
         std::vector<juce::Rectangle<int>> picRects;
         std::unique_ptr<juce::Component> live;
         // The signal flow, drawn large enough to read: what the routing map in the header was for.
         struct FlowDiagram : juce::Component {
             explicit FlowDiagram(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); }
             void paint(juce::Graphics&) override;
+            // The part of this component the drawing actually covers. The diagram is a fixed
+            // canvas scaled to fit, so one of the two dimensions is always left over; a picture
+            // of the whole component would be a diagram with a field of black under it.
+            juce::Rectangle<int> drawn() const;
+            static constexpr float kCanvasW = 1000.0f, kCanvasH = 545.0f;
             AmbientSynthProcessor& proc;
         };
         FlowDiagram flow;
@@ -104,12 +117,23 @@ private:
     // Snapshots for the manual: a section as it stands on the panel (its tab is switched in for
     // the picture and back again), the modulation strip, the browser page.
     juce::Image snapshotSection(const juce::String& name);
+    juce::Image snapshotTab(int rowIndex, int page);
+    juce::Image snapshotPage(juce::Component* page);
     juce::Image snapshotStrip();
     juce::Image snapshotBrowse();
+    juce::Image snapshotPerform();
+    juce::Image snapshotHeader();
+    juce::Image snapshotBrowseMap();
+    juce::Image snapshotStripTab(int tab, bool detail = false);
+    juce::StringArray tabSectionNames(int rowIndex, int page) const;
+    juce::String tabName(int rowIndex, int page) const;
     // Writes the manual out as pictures and text for Tools/make_manual.py to turn into a PDF.
     // It has to happen here, in a running editor, because the pictures ARE the panel: snapshots
     // of the real sections with their real values, not drawings kept somewhere in step with it.
-    void exportManual(const juce::File& dir);
+    void exportManual(const juce::File& dir, std::function<void()> onDone);
+    struct ManualJob;
+    std::unique_ptr<ManualJob> manual_;
+    void runManualStep();
     std::unique_ptr<HelpView> help_;
     std::unique_ptr<juce::TextButton> helpButton_;
     std::unique_ptr<juce::TooltipWindow> tooltips_;

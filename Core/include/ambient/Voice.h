@@ -35,6 +35,7 @@ struct VoiceParams {
     float cutoff = 2500.0f, resonance = 0.15f, filterEnv = 0.3f, filterDrift = 0.3f, keyTrack = 0.5f;
     int   filterModel = 1;      // FilterModel (Filter.h); 1 = the 12 dB state-variable low pass
     float filterDrive = 0.0f;
+    float fold = 0.0f;          // wavefolder after the filters, 0 = off (see Voice.cpp)
     // Rich refinements: the binaural phase field, the breathing doppler, the pitch tide (from the
     // engine, already a multiplier), and the strike layer
     float phaseWidth = 0.0f, phaseRate = 0.03f, doppler = 0.0f;
@@ -95,6 +96,7 @@ public:
     void setSlide(float v)    { slideTarget_ = clampv(v, 0.0f, 1.0f); }
     void setBend(float semitones) { bendTarget_ = semitones; }
     float pressure() const { return press_; }
+    float slide() const    { return slide_; }
     // Portamento: start at fromHz and slide to the note's frequency over `seconds`, slowing near
     // consonant ratios to the root by `gravity` (0 = an even log-domain glide).
     void glideFrom(double fromHz, float seconds, float gravity);

@@ -49,6 +49,7 @@
 #include <vector>
 #include <cstring>
 #include <set>
+#include <array>
 
 using namespace ambient;
 
@@ -2790,6 +2791,277 @@ void testModulationEngine()
     }
 }
 
+// ---------------------------------------------------------------- the mixing desk's five
+//
+// Five things a dark-ambient mixing engineer does that the instrument could not do by itself:
+// the wavefolder, the background's own width, the microshift, the band-limited Haas, and the
+// hands as modulation sources. Each is measured for the thing it claims to do AND for being
+// neutral at its default, because every one of them was added to an instrument with six thousand
+// finished presets and none of them may move a single one.
+void testMixDeskFive()
+{
+    const int sr = 48000;
+
+    // ---- 1. the wavefolder ------------------------------------------------------------------
+    {
+        // At zero the function must be the identity, exactly: this is what keeps the folder out
+        // of every preset that does not ask for it.
+        for (float x = -1.5f; x <= 1.5f; x += 0.01f)
+            CHECK(std::fabs(wavefold(x, 0.0f) - x) < 1e-6f, "fold at 0 is the identity");
+        // Harmonics: fold a sine and count what is not at the fundamental. A folded wave is
+        // mirrored at the fold, so the spectrum fills; a clipper only rounds the shoulders.
+        auto harmonicEnergy = [&](float amount) {
+            const int n = sr / 4;
+            double fund = 0.0, total = 0.0;
+            double reC = 0.0, imC = 0.0;
+            for (int i = 0; i < n; ++i) {
+                const double t = static_cast<double>(i) / sr;
+                const float x = 0.4f * static_cast<float>(std::sin(kTwoPi * 220.0 * t));
+                const float y = wavefold(x, amount);
+                total += static_cast<double>(y) * y;
+                reC += y * std::cos(kTwoPi * 220.0 * t);
+                imC += y * std::sin(kTwoPi * 220.0 * t);
+            }
+            fund = 2.0 * (reC * reC + imC * imC) / (static_cast<double>(n) * n);
+            return std::max(0.0, (total / n - fund)) / std::max(1e-12, total / n);
+        };
+        const double plain = harmonicEnergy(0.0f), folded = harmonicEnergy(1.0f);
+        CHECK(plain < 0.001, "a sine that is not folded is a sine");
+        CHECK(folded > 0.25, "folding fills the spectrum");
+        // Even harmonics: the asymmetry is the whole reason for the 1.33. A symmetric folder
+        // leaves the wave odd about zero, and then f(x) = -f(-x) holds sample by sample.
+        double asym = 0.0;
+        for (float x = 0.05f; x < 1.2f; x += 0.05f) asym += std::fabs(wavefold(x, 0.7f) + wavefold(-x, 0.7f));
+        CHECK(asym > 0.05, "the folder is asymmetric, so the even harmonics are there");
+        // Level: the makeup keeps a 0.3 sine within a decibel and a half over the whole knob.
+        auto rmsOf = [&](float amount) {
+            double sq = 0.0;
+            const int n = sr / 8;
+            for (int i = 0; i < n; ++i) {
+                const float x = 0.3f * static_cast<float>(std::sin(kTwoPi * 220.0 * i / sr));
+                const float y = wavefold(x, amount);
+                sq += static_cast<double>(y) * y;
+            }
+            return std::sqrt(sq / n);
+        };
+        const double r0 = rmsOf(0.0f);
+        for (float a = 0.1f; a <= 1.0f; a += 0.1f) {
+            const double db = 20.0 * std::log10(rmsOf(a) / r0);
+            CHECK(std::fabs(db) < 1.5, "the folder's makeup keeps the level");
+        }
+    }
+
+    // ---- 2. the background's own width -------------------------------------------------------
+    {
+        // The far stem, measured as mid and side. Width 0 must leave no side at all; width 1 must
+        // leave the stem exactly as the reverb made it.
+        auto sideOfFar = [&](float width, double& side, double& mid) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::FarLevel, 0.8f);
+            e.setParam(ParamId::FarAsym, 0.8f);      // the two sides deliberately different
+            e.setParam(ParamId::Depth, 1.0f);
+            e.setParam(ParamId::KeysDepth, 1.0f);    // the note goes to the background
+            e.setParam(ParamId::FarWidth, width);
+            e.reset();
+            std::vector<float> s[8];
+            float* p[8];
+            for (int i = 0; i < 8; ++i) { s[i].assign(256, 0.0f); p[i] = s[i].data(); }
+            e.setStemBuffers(p);
+            e.noteOn(48, 0.8f);
+            std::vector<float> L(256), R(256);
+            side = mid = 0.0;
+            for (int b = 0; b < 400; ++b) {
+                e.process(L.data(), R.data(), 256);
+                if (b < 100) continue;               // let the reverb fill
+                for (int i = 0; i < 256; ++i) {
+                    const double m = 0.5 * (s[2][static_cast<size_t>(i)] + s[3][static_cast<size_t>(i)]);
+                    const double sd = 0.5 * (s[2][static_cast<size_t>(i)] - s[3][static_cast<size_t>(i)]);
+                    mid += m * m; side += sd * sd;
+                }
+            }
+            e.setStemBuffers(nullptr);
+        };
+        double s0 = 0, m0 = 0, s1 = 0, m1 = 0, s15 = 0, m15 = 0;
+        sideOfFar(0.0f, s0, m0);
+        sideOfFar(1.0f, s1, m1);
+        sideOfFar(1.5f, s15, m15);
+        CHECK(m1 > 1e-9, "the far plane is sounding at all");
+        CHECK(s0 < 1e-9 * m1, "far width 0 is a mono background");
+        CHECK(s1 > 100.0 * s0 + 1e-12, "far width 1 leaves the reverb's own width");
+        CHECK(s15 > s1 * 1.5, "above 1 the background is wider");
+        CHECK(std::fabs(m15 - m1) < 0.02 * m1 && std::fabs(m0 - m1) < 0.02 * m1, "width moves the side, never the mid");
+    }
+
+    // ---- 3. the microshift -------------------------------------------------------------------
+    {
+        // What it claims is a pitch shift of a few cents, one channel up and the other down, and
+        // that is measurable directly: feed a sine, count zero crossings, compare with the
+        // arithmetic. Twelve cents on 440 Hz is 443.06 up and 436.96 down.
+        Ensemble ens;
+        ens.prepare(sr);
+        ens.set(1.0f, 1.0f, 0.0f);        // wet only, full detune, no wander: a number to check
+        ens.setMode(1);
+        const int n = sr * 8;
+        std::vector<float> L(static_cast<size_t>(n)), R(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            const float x = 0.5f * static_cast<float>(std::sin(kTwoPi * 440.0 * i / sr));
+            L[static_cast<size_t>(i)] = R[static_cast<size_t>(i)] = x;
+        }
+        std::vector<float> dry = L;
+        ens.process(L.data(), R.data(), n);
+        auto hz = [&](const std::vector<float>& v) {
+            // Upward zero crossings over the last six seconds, linearly interpolated at each end.
+            const int from = sr * 2, to = n;
+            int count = 0; double first = -1.0, last = 0.0;
+            for (int i = from + 1; i < to; ++i) {
+                if (v[static_cast<size_t>(i - 1)] < 0.0f && v[static_cast<size_t>(i)] >= 0.0f) {
+                    const double frac = -v[static_cast<size_t>(i - 1)] / (v[static_cast<size_t>(i)] - v[static_cast<size_t>(i - 1)]);
+                    const double t = (i - 1 + frac) / sr;
+                    if (first < 0.0) first = t; else { last = t; ++count; }
+                }
+            }
+            return count > 0 ? count / (last - first) : 0.0;
+        };
+        const double fl = hz(L), fr = hz(R), fdry = hz(dry);
+        CHECK(std::fabs(fdry - 440.0) < 0.05, "the measurement itself is right");
+        CHECK(std::fabs(fl - 443.06) < 0.5, "the left channel is twelve cents up");
+        CHECK(std::fabs(fr - 436.96) < 0.5, "the right channel is twelve cents down");
+        // Continuity: the hand-over at the wrap must not be a step. A 440 Hz sine at amplitude
+        // 0.5 steps by at most 0.5 * 2*pi*440/sr = 0.029 between neighbouring samples; anything
+        // much beyond that is the shifter, not the signal.
+        double jump = 0.0;
+        for (int i = sr + 1; i < n; ++i) jump = std::max(jump, std::fabs(static_cast<double>(L[static_cast<size_t>(i)]) - L[static_cast<size_t>(i - 1)]));
+        CHECK(jump < 0.05, "no step where the shifter's ramp wraps");
+        // And it holds its level through the hand-over: a shifter whose two taps fight each other
+        // dips every time it wraps. Measured as the quietest tenth of a second of the run.
+        double quietest = 1e30;
+        for (int b = sr; b + sr / 10 < n; b += sr / 10) {
+            double sq = 0.0;
+            for (int i = b; i < b + sr / 10; ++i) sq += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)];
+            quietest = std::min(quietest, std::sqrt(sq / (sr / 10)));
+        }
+        CHECK(quietest > 0.3, "and it does not dip when it wraps");
+        // Decorrelation is the point of the pair: after the shift the two channels are no longer
+        // the same signal, so the stereo picture opens.
+        double num = 0.0, dl = 0.0, dr = 0.0;
+        for (int i = sr; i < n; ++i) {
+            num += static_cast<double>(L[static_cast<size_t>(i)]) * R[static_cast<size_t>(i)];
+            dl += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)];
+            dr += static_cast<double>(R[static_cast<size_t>(i)]) * R[static_cast<size_t>(i)];
+        }
+        CHECK(std::fabs(num / std::sqrt(std::max(1e-12, dl * dr))) < 0.5, "the two channels are decorrelated");
+    }
+
+    // ---- 4. the band-limited Haas ------------------------------------------------------------
+    {
+        auto measure = [&](float amount, double& sideLow, double& sideBand, double& monoLoss) {
+            HaasBand h;
+            h.prepare(sr);
+            h.set(amount, 15.0f);
+            const int n = sr * 2;
+            std::vector<float> L(static_cast<size_t>(n)), R(static_cast<size_t>(n));
+            uint32_t rng = 4242;
+            for (int i = 0; i < n; ++i) {
+                rng = rng * 1664525u + 1013904223u;
+                const float w = 0.3f * ((static_cast<float>(rng >> 8) / 8388608.0f) - 1.0f);
+                L[static_cast<size_t>(i)] = R[static_cast<size_t>(i)] = w;   // mono in: any side is the effect's own
+            }
+            const std::vector<float> dry = L;
+            h.process(L.data(), R.data(), n);
+            const float cA = 1.0f - std::exp(-kTwoPi * 1200.0f / sr), cB = 1.0f - std::exp(-kTwoPi * 4000.0f / sr);
+            const float cLo = 1.0f - std::exp(-kTwoPi * 300.0f / sr);
+            float lo[3] = { 0.0f, 0.0f, 0.0f }, a = 0.0f, b = 0.0f;
+            sideLow = sideBand = monoLoss = 0.0;
+            double monoSq = 0.0, drySq = 0.0;
+            for (int i = sr / 2; i < n; ++i) {
+                const float s = 0.5f * (L[static_cast<size_t>(i)] - R[static_cast<size_t>(i)]);
+                // Three poles at 300 Hz, not one: a single pole is only 6 dB an octave and the
+                // band being measured is two octaves above it, so a gentle filter reports the
+                // band's own leakage as low end. That is what the first version of this did.
+                lo[0] += cLo * (s - lo[0]);
+                lo[1] += cLo * (lo[0] - lo[1]);
+                lo[2] += cLo * (lo[1] - lo[2]);
+                sideLow += static_cast<double>(lo[2]) * lo[2];
+                a += cA * (s - a);
+                b += cB * (s - b);
+                const float band = b - a;
+                sideBand += static_cast<double>(band) * band;
+                const double m = 0.5 * (L[static_cast<size_t>(i)] + R[static_cast<size_t>(i)]);
+                monoSq += m * m;
+                drySq += static_cast<double>(dry[static_cast<size_t>(i)]) * dry[static_cast<size_t>(i)];
+            }
+            monoLoss = monoSq / std::max(1e-12, drySq);
+        };
+        double l0 = 0, b0 = 0, m0 = 0, l1 = 0, b1 = 0, m1 = 0;
+        measure(0.0f, l0, b0, m0);
+        measure(1.0f, l1, b1, m1);
+        CHECK(l0 < 1e-12 && b0 < 1e-12, "the Haas band is silent when it is off");
+        CHECK(b1 > 1e-4, "the Haas band opens its own band");
+        CHECK(l1 < 0.02 * b1, "and leaves the low end where it was");
+        // Exactly mono-safe: what goes to one side comes off the other, so the sum is untouched.
+        CHECK(std::fabs(m1 - 1.0) < 1e-6, "and the mono sum is the same picture it was");
+    }
+
+    // ---- 5. the hands as modulation sources --------------------------------------------------
+    {
+        ModMatrix m;
+        CHECK(m.parse("pressure>cutoff:0.5:u;wheel>z_x:0.3;slide>resonance:0.25:u"), "the three new sources parse");
+        CHECK(m.count() == 3, "three routes");
+        CHECK(m.route(0).source == ModSource::Pressure && m.route(0).unipolar, "pressure, read 0..1");
+        CHECK(m.route(1).source == ModSource::Wheel, "wheel");
+        CHECK(m.route(2).source == ModSource::Slide, "slide");
+        char buf[256];
+        m.write(buf, sizeof(buf));
+        ModMatrix again;
+        CHECK(again.parse(buf) && again.count() == 3 && again.route(1).source == ModSource::Wheel, "and they survive a round trip");
+
+        // In the engine: at rest a unipolar route must do nothing at all, which is what lets one
+        // be put into a preset without changing how that preset sounds untouched.
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Cutoff, 1000.0f);
+        e.setModMatrixText("pressure>cutoff:0.5:u;wheel>cutoff:0.25:u");
+        e.reset();
+        std::vector<float> L(256), R(256);
+        e.noteOn(60, 0.8f);
+        e.process(L.data(), R.data(), 256);
+        // What the matrix is adding, which is where modulation lives: effectiveParam is the
+        // knob after morph and map and knows nothing about it.
+        const float atRest = e.modAmount(ParamId::Cutoff);
+        CHECK(std::fabs(atRest) < 1.0f, "at rest the hands change nothing");
+        // Leaning on the key opens it. Pressure is smoothed inside the voice, so give it a moment.
+        e.setPressure(-1, 1.0f);
+        for (int b = 0; b < 40; ++b) e.process(L.data(), R.data(), 256);
+        const float pressed = e.modAmount(ParamId::Cutoff);
+        CHECK(pressed > 100.0f, "aftertouch reaches the cutoff through the matrix");
+        // The wheel is not per note: it works with nothing held.
+        e.allNotesOff();
+        for (int b = 0; b < 20; ++b) e.process(L.data(), R.data(), 256);
+        e.setWheel(1.0f);
+        for (int b = 0; b < 40; ++b) e.process(L.data(), R.data(), 256);
+        CHECK(e.modAmount(ParamId::Cutoff) > 100.0f, "the wheel works with no note held");
+        // And it is smoothed: no step from a seven-bit controller.
+        Engine e2;
+        e2.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e2.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e2.setParam(ParamId::BrainOn, 0.0f);
+        e2.setModMatrixText("wheel>cutoff:1.0:u");
+        e2.reset();
+        e2.process(L.data(), R.data(), 64);
+        const float before = e2.modAmount(ParamId::Cutoff);
+        e2.setWheel(1.0f);
+        e2.process(L.data(), R.data(), 64);
+        const float after = e2.modAmount(ParamId::Cutoff);
+        const ParamDesc& cd = paramDesc(ParamId::Cutoff);
+        CHECK(after - before < 0.25f * (cd.max - cd.min), "the wheel is smoothed, not stepped");
+    }
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -2835,6 +3107,7 @@ int main()
     testZModal();
     testZPlaneBank();
     testFilterModels();
+    testMixDeskFive();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

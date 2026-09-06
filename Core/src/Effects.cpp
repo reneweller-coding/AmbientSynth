@@ -13,7 +13,9 @@ int pow2At(int n) { int p = 1; while (p < n) p <<= 1; return p; }
 void Ensemble::prepare(double sampleRate)
 {
     sr_ = sampleRate;
-    const int size = pow2At(static_cast<int>(0.08 * sr_) + 8);
+    // Room for the chorus taps (22 ms) and for the microshifter, whose longest read is the right
+    // channel's 19 ms base plus two 200 ms ramps.
+    const int size = pow2At(static_cast<int>(0.45 * sr_) + 8);
     bufL_.assign(static_cast<size_t>(size), 0.0f);
     bufR_.assign(static_cast<size_t>(size), 0.0f);
     mask_ = size - 1;
@@ -21,6 +23,75 @@ void Ensemble::prepare(double sampleRate)
 }
 
 void Ensemble::process(float* L, float* R, int n)
+{
+    if (mode_ == 1) processShift(L, R, n);
+    else            processChorus(L, R, n);
+}
+
+// Two delay-line pitch shifters, +c cents on the left and -c on the right. A read pointer that
+// walks towards the write head raises the pitch and one that walks away lowers it, and since it
+// cannot walk for ever it is wrapped, with a short cross-fade to a second tap one ramp behind.
+//
+// The ramp is long (200 ms of travel) and the cross-fade short (25 ms), and that is the whole
+// design. The obvious construction -- two taps half a cycle apart under a Hann pair, which is how
+// a granular pitch shifter is drawn in every textbook -- has both taps audible all the time, at a
+// fixed delay difference, which for a sustained tone is a comb filter: the two cancel wherever
+// that difference happens to be half a wavelength, and at twelve cents the pattern crawls through
+// the spectrum once every few seconds. Measured, it lost a fifth of the signal. Here the two taps
+// overlap for a thousandth of the cycle instead, so the shifter is a plain delay line at a
+// slowly changing delay, which is what a micro-shift is.
+//
+// The two channels also sit at different base delays (11 and 19 ms). Opposite detune and unequal
+// delay together decorrelate the pair without ever holding them at a fixed phase difference.
+void Ensemble::processShift(float* L, float* R, int n)
+{
+    const float msToSamples = static_cast<float>(sr_ / 1000.0);
+    const float ramp = 200.0f * msToSamples;          // how far the read pointer travels
+    const float xfadeSamples = 25.0f * msToSamples;   // and how long the hand-over takes
+    const float baseL = 11.0f * msToSamples + 1.0f, baseR = 19.0f * msToSamples + 1.0f;
+    const float mix = clampv(mix_, 0.0f, 1.0f);
+    // Rate is a very slow wander of the detune itself: two channels whose difference never
+    // settles cannot dig a fixed hole anywhere.
+    const double wanderInc = static_cast<double>(rate_) * 0.25 / sr_;
+    float* bl = bufL_.data();
+    float* br = bufR_.data();
+    for (int i = 0; i < n; ++i) {
+        wanderPh_ += wanderInc;
+        if (wanderPh_ >= 1.0) wanderPh_ -= 1.0;
+        const float cents = clampv(depth_, 0.0f, 1.0f) * 12.0f * (1.0f + 0.15f * sin01(wanderPh_));
+        bl[w_ & mask_] = L[i];
+        br[w_ & mask_] = R[i];
+        float out[2] = { 0.0f, 0.0f };
+        for (int ch = 0; ch < 2; ++ch) {
+            const float ratio = std::pow(2.0f, (ch == 0 ? cents : -cents) / 1200.0f);
+            const float base = ch == 0 ? baseL : baseR;
+            const float* buf = ch == 0 ? bl : br;
+            const double inc = static_cast<double>(std::fabs(1.0f - ratio)) / ramp;
+            shPh_[ch] += inc;
+            if (shPh_[ch] >= 1.0) shPh_[ch] -= 1.0;
+            const double p = shPh_[ch];
+            // The cross-fade as a fraction of this cycle. As the detune goes to nothing the cycle
+            // becomes infinitely long and the fraction goes to zero: at zero cents this is a
+            // plain static delay, with no hand-over at all.
+            const double xf = clampv(static_cast<double>(xfadeSamples) * inc, 1.0e-9, 0.4);
+            // Up: the delay shrinks from base+ramp to base. Down: it grows.
+            const float d1 = base + static_cast<float>(ratio > 1.0f ? 1.0 - p : p) * ramp;
+            const float d2 = d1 + ramp;               // one ramp behind: where the tap will restart
+            float y = ringRead(buf, mask_, w_, d1);
+            if (p > 1.0 - xf) {                       // the hand-over, equal power
+                const float t = static_cast<float>((p - (1.0 - xf)) / xf);
+                const float gA = std::cos(0.5f * kPi * t), gB = std::sin(0.5f * kPi * t);
+                y = gA * y + gB * ringRead(buf, mask_, w_, d2);
+            }
+            out[ch] = y;
+        }
+        L[i] = L[i] * (1.0f - mix) + out[0] * mix;
+        R[i] = R[i] * (1.0f - mix) + out[1] * mix;
+        ++w_;
+    }
+}
+
+void Ensemble::processChorus(float* L, float* R, int n)
 {
     static const float kBaseMs[3]  = { 13.0f, 17.0f, 22.0f };
     static const float kRateMul[3] = { 1.0f, 1.27f, 0.81f };

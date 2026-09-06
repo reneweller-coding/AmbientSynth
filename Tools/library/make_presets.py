@@ -17,6 +17,7 @@ Texture and wavetable references are taken from Library/Textures and Library/Wav
 they are there; presets whose sample is missing simply load nothing into that slot.
 """
 import argparse
+import io
 import glob
 import math
 import os
@@ -348,6 +349,39 @@ def modulation_for(p, style, rng, shade_name):
 
 # ---------------------------------------------------------------- one preset
 
+# Aftertouch, the wheel and the slide, as ordinary routes. All three rest at zero and are
+# written with the 0..1 flag, so a preset carrying them sounds exactly as it did until a hand
+# moves -- which is what makes it safe to put them in six thousand finished patches.
+HAND_TARGETS = {
+    "pressure": [("cutoff", 0.20, 0.45), ("brightness", 0.15, 0.35), ("z_x", 0.15, 0.4),
+                 ("resonance", 0.1, 0.3), ("far_level", 0.1, 0.25), ("shimmer", 0.15, 0.4)],
+    "wheel":    [("cloud_send", 0.2, 0.5), ("cosmos_send", 0.2, 0.5), ("far_level", 0.15, 0.4),
+                 ("dly_mix", 0.15, 0.4), ("z_y", 0.2, 0.5), ("air", 0.15, 0.4),
+                 ("blur_mix", 0.2, 0.5), ("filter_fold", 0.2, 0.6)],
+    "slide":    [("z_y", 0.15, 0.4), ("inharmonic", 0.15, 0.4), ("odd_even", 0.15, 0.4),
+                 ("tilt", 0.15, 0.35), ("cosmos_vowel", 0.2, 0.5)],
+}
+
+
+def add_hands(p, style, rng, matrix):
+    if rng.random() >= style["modules"].get("hands", 0.0):
+        return matrix
+    rows = [r for r in matrix.split(";") if r] if matrix else []
+    used = {r.split(">")[1].split(":")[0] for r in rows}
+    for source in rng.sample(["pressure", "wheel", "slide"], k=rng.choice([1, 1, 2])):
+        # Only targets the preset actually has: a route at the cloud of a patch with no cloud is
+        # a row that does nothing, and the library is full enough of real routes already.
+        choices = [(t, lo, hi) for t, lo, hi in HAND_TARGETS[source]
+                   if (t in p or t in ("cutoff", "brightness", "air", "tilt", "shimmer", "resonance", "far_level"))
+                   and t not in used]
+        if not choices or len(rows) >= 16:
+            continue
+        target, lo, hi = choices[rng.randrange(len(choices))]
+        rows.append("%s>%s:%.3f:u" % (source, target, u(rng, lo, hi)))
+        used.add(target)
+    return ";".join(rows)
+
+
 def make_preset(style, rng, textures, wavetables, impulses, shade):
     p = {}
     for key, spec in style["params"].items():
@@ -635,6 +669,22 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         p["tide_period"] = logu(rng, 4.0, 30.0)
     if on("rotate"):                                 # the background turns
         p["far_rotate"] = u(rng, 0.2, 0.8)
+    # ---- the mixing desk. Every one of these is neutral at its default, so a preset only has
+    # them because its style asked for them.
+    if on("narrow") and p.get("far_level", 0.8) > 0.3:
+        # The funnel: the background narrower than the foreground reads as distance rather than
+        # as width. Deep patches narrow further -- that is the whole point of the trick.
+        deep = p.get("depth", 0.5)
+        p["far_width"] = round(u(rng, 0.35, 0.85) * (1.0 - 0.25 * deep) + 0.1, 3)
+    if on("haas") and p.get("near_mix", 0.0) >= 0.0:
+        p["haas"] = round(u(rng, 0.15, 0.5), 3)
+        p["haas_time"] = round(u(rng, 10.0, 22.0), 1)
+    if on("microshift") and p.get("ens_mix", 0.0) > 0.05:
+        p["ens_mode"] = "Microshift"
+        p["ens_depth"] = round(u(rng, 0.3, 1.0), 3)     # the detune, up to twelve cents
+        p["ens_rate"] = round(logu(rng, 0.02, 0.09), 4)  # and how slowly it wanders (0.02 is the knob's floor)
+    if on("fold"):
+        p["filter_fold"] = round(u(rng, 0.08, 0.45), 3)
     p["seed"] = rng.randrange(1, 9999)
 
     # brain_high must stay above brain_low, and hold_max above hold_min
@@ -643,6 +693,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
     if "brain_hold_min" in p and "brain_hold_max" in p and p["brain_hold_max"] < p["brain_hold_min"] * 1.5:
         p["brain_hold_max"] = p["brain_hold_min"] * 2.0
     matrix, envs = modulation_for(p, style, rng, shade[0])
+    matrix = add_hands(p, style, rng, matrix)
     if len(set(slot_textures.values())) > 1:
         texture_file = ";".join(slot_textures.get(k, "") for k in range(1, 5))
     return p, texture_file, wavetable_file, impulse_file, matrix, envs
@@ -869,6 +920,25 @@ def main():
         print(f"{len(rejects)} clips skipped (see {os.path.join(a.textures, 'rejected.txt')})")
     packs = []
     taken = set()          # map cells already used, across the whole library
+    # And the cells the library already occupies. The nudge below only knows about the presets
+    # this run has written, so writing ONE pack into a side folder put 109 of its 200 presets on
+    # a dot another pack was already sitting on -- invisible in the browser, and nothing said so
+    # until verify_packs counted them.
+    for existing in sorted(glob.glob(os.path.join(ROOT, "Library", "Packs", "*.ambientpack"))
+                           + glob.glob(os.path.join(a.out_dir, "*.ambientpack"))):
+        with io.open(existing, encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("#") or "|" not in line:
+                    continue
+                cols = line.split("|")
+                if len(cols) < 3:
+                    continue
+                bits = cols[2].split()
+                if len(bits) >= 2:
+                    try:
+                        taken.add((round(float(bits[0]), 3), round(float(bits[1]), 3)))
+                    except ValueError:
+                        pass
     # Names stay unique across the whole synth, so "--preset <name>" and the browser search
     # always mean one preset -- the built-in ones included.
     # Pointed at the library, so the names already in it count as taken. Without this the render

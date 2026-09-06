@@ -85,6 +85,63 @@ int Engine::writeEnvShape(int index, char* buf, size_t cap) const
 
 // One step of every modulator, then the matrix summed into modOut_. Called once per block, before
 // readParams, so the values the parameters are read with already carry the modulation.
+// ---------------------------------------------------------------- the Beat source
+//
+// The instrument listening to its own harmonic friction.
+//
+// The Foundation's ghost tone already takes the two lowest sounding voices and uses their
+// frequency difference as a bass note. That difference is only half the story: what the ear
+// actually reacts to in a sustained chord is not the combination tone itself but whether the
+// interval is IN TUNE -- two voices a fifth apart beat at |2*f2 - 3*f1|, which is silent when
+// the fifth is just and gets quicker the further it has drifted. That is the rate this source
+// runs at.
+//
+// So a chord sitting exactly on its just ratios makes this oscillator stand still, and as Purity
+// Drift loosens the tuning it starts to turn, in time with the roughness you can already hear.
+// Route it at a filter, at the Nebula's smear, at anything: the sound then breathes at the rate
+// of its own mistuning rather than at a rate somebody typed into an LFO.
+float Engine::updateBeat(float dt)
+{
+    // The two lowest distinct pitches, exactly as the ghost tone finds them.
+    double f1 = 0.0, f2 = 0.0;
+    for (const auto& v : voices_)
+        if (v.isActive() && (f1 <= 0.0 || v.frequency() < f1)) f1 = v.frequency();
+    if (f1 > 0.0)
+        for (const auto& v : voices_)
+            if (v.isActive() && v.frequency() / f1 > 1.003 && (f2 <= 0.0 || v.frequency() < f2)) f2 = v.frequency();
+
+    float want = 0.0f;
+    if (f1 > 0.0 && f2 > 0.0) {
+        // The simplest ratio near the interval they make. Small numbers only: those are the ones
+        // whose harmonics are close enough together to beat audibly, which is the whole point.
+        static const int kRatios[][2] = { {1,1}, {6,5}, {5,4}, {4,3}, {3,2}, {8,5}, {5,3}, {7,4}, {2,1}, {5,2}, {3,1}, {4,1} };
+        const double r = f2 / f1;
+        double bestErr = 1e30;
+        int bp = 1, bq = 1;
+        for (const auto& pq : kRatios) {
+            const double err = std::fabs(std::log(r / (static_cast<double>(pq[0]) / pq[1])));
+            if (err < bestErr) { bestErr = err; bp = pq[0]; bq = pq[1]; }
+        }
+        // The harmonics that would coincide if the interval were just: q*f2 against p*f1. Their
+        // difference IS the beat, and it is zero for a perfectly tuned interval. For a mistuned
+        // unison (p = q = 1) this is |f2 - f1|, the difference tone itself.
+        want = static_cast<float>(std::fabs(static_cast<double>(bq) * f2 - static_cast<double>(bp) * f1));
+        if (!(want == want) || want > 30.0f) want = 30.0f;      // NaN guard and a ceiling
+    }
+    // Followed slowly. A voice arriving or leaving changes which pair is lowest, and the rate
+    // would otherwise jump; over about two seconds it slides instead, which is also how long the
+    // ear takes to decide that a chord has stopped beating.
+    const float follow = 1.0f - std::exp(-dt / 2.0f);
+    beatHz_ += follow * (want - beatHz_);
+    // Turned into a modulation value. Below a fiftieth of a hertz the phase simply holds: a
+    // chord that is in tune should leave whatever it is driving exactly where it is, not creep.
+    if (beatHz_ > 0.02f) {
+        beatPhase_ += kTwoPi * beatHz_ * dt;
+        while (beatPhase_ > kTwoPi) beatPhase_ -= kTwoPi;
+    }
+    return std::sin(beatPhase_);
+}
+
 void Engine::stepModulation(float dt)
 {
     // Pick up matrix or shape edits made on the message thread (fixed-size objects, no allocation).
@@ -145,6 +202,7 @@ void Engine::stepModulation(float dt)
     modSrc_[static_cast<int>(ModSource::Velocity)] = uni(loud ? loud->level() : 0.0f);
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
     modSrc_[static_cast<int>(ModSource::RandomPerNote)] = randomPerNote_;
+    modSrc_[static_cast<int>(ModSource::Beat)] = updateBeat(dt);
     modSrc_[static_cast<int>(ModSource::None)] = 0.0f;
 
     std::memset(modOut_, 0, sizeof(modOut_));

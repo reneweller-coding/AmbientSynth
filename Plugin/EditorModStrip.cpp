@@ -85,6 +85,7 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
     card(MS::Velocity, "VELO", 2, 0);
     card(MS::Distance, "DIST", 2, 0);
     card(MS::RandomPerNote, "RAND", 2, 0);
+    card(MS::Beat, "BEAT", 2, 0);   // the chord listening to how far out of tune it is
 
     for (auto* b : { &tabLfo, &tabEnv, &tabMatrix }) {
         b->setClickingTogglesState(true);

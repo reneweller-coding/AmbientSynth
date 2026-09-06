@@ -916,6 +916,35 @@ on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
 changes the render between 90 and 180 bpm; every preset (all Free) is
 unchanged.
 
+### BEAT: the instrument listening to its own tuning
+
+The Foundation's ghost tone already takes the two lowest sounding voices and
+sings their frequency difference as a bass note. That difference is only half
+the story. What the ear reacts to in a held chord is not the combination tone
+but whether the interval is *in tune*: two voices a fifth apart beat at
+|2f₂ − 3f₁|, which is silent when the fifth is just and quicker the further it
+has drifted. **BEAT** is a modulation source whose rate is exactly that.
+
+It finds the simplest just ratio near the interval the two lowest voices make
+(from a short list — small numbers only, because those are the ones whose
+harmonics are close enough together to beat audibly) and runs at the difference
+between the harmonics that would coincide if the interval were exact. For a
+mistuned unison that is |f₂ − f₁|, the difference tone itself. Below a fiftieth
+of a hertz the phase simply holds: a chord in tune should leave whatever it is
+driving exactly where it is, not creep.
+
+So the sound breathes at the rate of its own mistuning. Purity Drift is what
+sets it moving; route BEAT at a filter, at the Nebula's smear, at anything.
+
+The test compares two intervals in one tuning rather than one interval in two
+tunings, and the difference matters. The first version played a fifth with the
+scale set to just and again in equal temperament, expecting near-zero and about
+half a hertz. Equal temperament gave 0.469 Hz, which is textbook — two cents
+narrow at that pitch. "Just" gave 5.8 Hz, because it was measuring the tuning
+system and the per-voice pitch drift rather than this source. An octave is
+exactly 2:1 in every temperament there is, so the test now uses that as its
+zero: octave 0.000 Hz, tempered fifth 0.469 Hz.
+
 ### Six small things, and what measuring them cost
 
 Six changes that each sound like a one-line tweak. Four were; two were not, and

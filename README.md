@@ -409,6 +409,11 @@ Sections of the GUI (all parameters are automatable in a DAW):
   own in four families. *Fires* decides whether it answers the keys only or
   the conductor as well; the latter turns it from something you play into
   something the piece does on its own.
+* **BEAT** — a modulation source that is the instrument listening to its own
+  tuning: it turns at the beat between the two lowest voices and the nearest
+  just ratio, so it stands still when the chord is in tune and quickens as
+  Purity Drift loosens it. Route it at anything and the sound breathes in time
+  with its own harmonic friction.
 * **Envelopes** — the voice has a plain **ADSR** (Attack, Decay, Sustain,
   Release; up to a minute of attack and two of release, which is what a drone
   wants). On top of that, six **modulation envelopes** with up to sixteen

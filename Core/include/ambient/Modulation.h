@@ -153,6 +153,12 @@ enum class ModSource : int {
     Kura1, Kura2, Kura3, Kura4,   // the coherence ring, now addressable
     Note, Velocity, Distance,     // per voice: pitch 0..1 over the keyboard, velocity, plane
     RandomPerNote,
+    // The instrument listening to its own harmonic friction. The two lowest sounding voices are
+    // compared with the simplest just ratio near the interval they make, and the rate of this
+    // oscillator is the beat between them: silent when the chord is in tune, and quicker the
+    // further the tuning has drifted from it. Route it at anything and the sound breathes in
+    // time with how far out of tune it currently is.
+    Beat,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

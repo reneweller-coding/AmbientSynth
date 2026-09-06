@@ -153,6 +153,8 @@ public:
     const ModEnv& envShape(int index) const { return envPending_[index < 0 ? 0 : (index >= kNumModEnvs ? kNumModEnvs - 1 : index)]; }
     // For the displays: the current value of every source, and each LFO's phase.
     float modSource(int source) const { return (source >= 0 && source < kNumModSources) ? modSrc_[source] : 0.0f; }
+    // How fast the Beat source is turning, in hertz: zero when the chord is in tune.
+    float beatRate() const { return beatHz_; }
     float lfoPhase(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)].phase(); }
     const Lfo& lfo(int i) const { return lfo_[i < 0 ? 0 : (i >= kNumLfos ? kNumLfos - 1 : i)]; }
     float envTime() const { return static_cast<float>(envTime_); }
@@ -338,6 +340,10 @@ private:
     float             inertiaCur_[kNumParams] = {};
     float             lastBlockSeconds_ = 0.005f;
     float             kuraPhase_[4] = { 0.0f, 1.3f, 2.9f, 4.4f };   // Kuramoto bank phases
+    // The Beat modulation source: the instrument listening to its own tuning.
+    float             beatPhase_ = 0.0f, beatHz_ = 0.0f;
+    float             updateBeat(float dt);
+    float             beatRateHz() const { return beatHz_; }        // for the card's readout
     float             farDiffuse_ = 0.0f;                           // how hard the air ahead of the far reverb saturates
     float             portamento_ = 0.0f, portaGravity_ = 0.5f;
     double            lastKeyHz_ = 0.0;   // frequency of the last key pressed, for portamento

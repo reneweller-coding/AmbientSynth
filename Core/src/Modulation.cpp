@@ -266,6 +266,7 @@ const char* const kSourceNames[kNumModSources] = {
     "kura1", "kura2", "kura3", "kura4",
     "note", "velocity", "distance",
     "random",
+    "beat",
 };
 }
 

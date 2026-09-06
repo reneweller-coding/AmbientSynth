@@ -459,7 +459,7 @@ COHERENCE: four slow Kuramoto oscillators coupled by Coherence (free at 0, in st
 CLOCK: where the tempo comes from -- Internal (Tempo, Run), Host (the DAW's play head) or MIDI (MIDI clock at the input). See the topic "Clock and sync".)" },
 
     { "Modulation: LFOs, envelopes, matrix",
-R"(The strip along the bottom holds every modulation source as a card: LFO 1-8, ENV 1-6, MACRO A-H, KURA 1-4, AMP (the voice's own envelope), NOTE, VELO, DIST (the voice's plane) and RAND (a random value per note). Its tabs edit the sources:
+R"(The strip along the bottom holds every modulation source as a card: LFO 1-8, ENV 1-6, MACRO A-H, KURA 1-4, AMP (the voice's own envelope), NOTE, VELO, DIST (the voice's plane), RAND (a random value per note) and BEAT. Its tabs edit the sources:
 
 LFO  Eight free LFOs with Shape (Sine, Triangle, Ramp Up/Down, soft Square, Random, Steps, or Table -- a frame of the user wavetable as a shape, so any drawn curve is an LFO), Rate from one cycle in twenty minutes to 20 Hz or a note value (Sync), Phase, Depth, and Mode: Global (one phase for the instrument, every voice breathes together), Voice (each voice its own copy), Retrigger (each voice restarts from Phase). The editors show the shape with a running dot.
 
@@ -468,6 +468,8 @@ ENVELOPES  Six multi-segment envelopes: up to sixteen breakpoints, a curve on ev
 The voice's own AMP ENVELOPE is a plain ADSR -- Attack, Decay, Sustain, Release -- on the AMP ENV tab, with times in seconds up to a minute for the attack and two for the release. These six are for everything else.
 
 MATRIX  Up to 32 routes "source > target : depth [: via] [: u]". Depth is a fraction of the target's range (-1..1); via scales the depth by a second source (a macro, typically); u treats a bipolar source as 0..1. One source may drive as many targets as it likes.
+
+BEAT  The instrument listening to its own tuning. It takes the two lowest sounding voices, finds the simplest just ratio near the interval they make, and turns at the beat between the harmonics that would coincide if that interval were exact -- which is zero when the chord is in tune and quicker the further it has drifted. An exact octave leaves it standing still; a fifth in equal temperament, two cents narrow, turns it about half a hertz. Route it at a filter, at the Nebula's smear, at anything, and the sound breathes in time with its own harmonic friction rather than at a rate somebody typed into an LFO. Purity Drift is what sets it moving.
 
 ROUTING WITHOUT TYPING  Drag a card from the strip onto any knob: a route at a quarter of the range is added. Right-click a card to see and remove its routes; right-click a knob to see what drives it. A modulated knob wears a thin ring in its source's colour (LFOs turquoise, envelopes green, macros pink, coherence blue) and a second arc from its value to where the modulation is pushing it right now. Performance state (morph, macros, map, route, clock) can never be a target.)" },
 

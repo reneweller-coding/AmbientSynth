@@ -2329,6 +2329,39 @@ void testEnvShapePresets()
 // The delay's Duck: while the input is loud the loop's high cut drops, so the echoes are darker
 // during an attack and open again as it decays. Measured on a burst, because a drone has no
 // transients and on one the feature correctly does almost nothing -- which is not evidence.
+// The Beat modulation source: the chord listening to how far out of tune it is. Its rate is the
+// beat between the harmonics that would coincide if the interval were just, so a fifth played in
+// just intonation should barely turn it and the same fifth in equal temperament -- two cents
+// narrow, which is what equal temperament does to a fifth -- should turn it about half a hertz.
+// The promise is comparative, and so is the test.
+void testBeatSource()
+{
+    auto rateFor = [](int high) {
+        Engine e;
+        e.prepare(48000.0, 256);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::TunePurity, 0.0f);      // equal temperament, so the octave is exact
+        e.setParam(ParamId::Drift, 0.0f);           // and no per-voice pitch drift on top of it
+        e.setParam(ParamId::RootNote, 48.0f);
+        e.noteOn(48, 0.8f);
+        e.noteOn(high, 0.8f);
+        std::vector<float> l(256), r(256);
+        for (int i = 0; i < 48000 * 6 / 256; ++i) e.process(l.data(), r.data(), 256);   // six seconds
+        return e.beatRate();
+    };
+    // Two intervals in one tuning, not one interval in two tunings. An octave is exactly 2:1 in
+    // every temperament there is, so it must leave this source standing still; a fifth in equal
+    // temperament is two cents narrow, which at this pitch is a beat a little under half a hertz.
+    // Comparing tunings was the first attempt, and it measured the tuning system rather than this
+    // source: with the scale set to just, the fifth from the root came out well away from 3:2 and
+    // the supposedly in-tune case read 5.8 Hz.
+    const float octave = rateFor(60), fifth = rateFor(55);
+    std::printf("  beat source: octave %.3f Hz, tempered fifth %.3f Hz\n", octave, fifth);
+    CHECK(octave >= 0.0f && fifth >= 0.0f, "the beat source reports a rate");
+    CHECK(octave < 0.05f, "an exact octave leaves the beat source standing still");
+    CHECK(fifth > 0.2f && fifth < 1.0f, "a tempered fifth turns it about half a hertz, which is what two cents at this pitch is");
+}
+
 void testDelayDuck()
 {
     const int sr = 48000;
@@ -2667,6 +2700,7 @@ int main()
     testSampleRates();
     testExpressionBodyPatina();
     testEnvShapePresets();
+    testBeatSource();
     testDelayDuck();
     testZModal();
     testZPlaneBank();

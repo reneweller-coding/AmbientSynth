@@ -28,7 +28,10 @@ import html
 import json
 import os
 import re
+import shutil
 import subprocess
+import tempfile
+import time
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -151,7 +154,7 @@ def main():
     body.append('<p class="sub">Manual &middot; version %s</p>' % html.escape(man.get("version", "")))
     if os.path.isfile(os.path.join(a.dir, "panel.png")):
         body.append('<img class="panel" src="panel.png" alt="The instrument">')
-    body.append('<p class="facts">%s built-in presets and 5000 in the library &middot; '
+    body.append('<p class="facts">%s built-in presets and 6200 in the library &middot; '
                 '%s filter shapes &middot; %s Cosmos, %s filter and %s Strike presets</p>'
                 % (man.get("presets", "?"), man.get("shapes", "?"), man.get("cosmos", "?"),
                    man.get("zpresets", "?"), man.get("strike", "?")))
@@ -203,13 +206,32 @@ def main():
     # --headless=new, not --headless. On Edge 152 the old flag exits without a word and without
     # a file; the new one prints in a second. Tried in that order so an older browser still works.
     url = "file:///" + out_html.replace("\\", "/")
+    # A profile folder of its own, and a NEW one every time. With the default profile, or with one
+    # this script used before, the launcher returns at once -- rc 0, not a word -- and no file
+    # ever comes: measured, a reused folder printed nothing in twenty seconds, a fresh one in two.
+    # And the process we start is only the launcher; it can return before the child that does
+    # the printing has written anything, so the file is waited for, not just looked for. That is
+    # how a print that worked in the morning produced nothing in the afternoon.
     for flag in ("--headless=new", "--headless"):
-        cmd = [edge, flag, "--disable-gpu", "--no-pdf-header-footer", "--print-to-pdf=" + pdf, url]
+        profile = tempfile.mkdtemp(prefix="ambientsynth-manual-print-")
+        cmd = [edge, flag, "--disable-gpu", "--no-pdf-header-footer", "--user-data-dir=" + profile,
+               "--print-to-pdf=" + pdf, url]
         try:
             subprocess.run(cmd, timeout=180, capture_output=True)
         except subprocess.TimeoutExpired:
             print("%s did not finish in three minutes" % flag)
             continue
+        for _ in range(60):
+            if os.path.isfile(pdf):
+                break
+            time.sleep(0.5)
+        if os.path.isfile(pdf):
+            # and finished: a PDF still being written grows between two looks
+            size = -1
+            while size != os.path.getsize(pdf):
+                size = os.path.getsize(pdf)
+                time.sleep(0.5)
+        shutil.rmtree(profile, ignore_errors=True)
         if os.path.isfile(pdf):
             break
     if os.path.isfile(pdf):

@@ -457,7 +457,8 @@ private:
     juce::Component::SafePointer<juce::TextEditor> mapEditor_;
     juce::String mapText_;
     bool mapOpen_ = false;
-    std::unique_ptr<juce::ComboBox> soundBox_, cosmosBox_;
+    std::unique_ptr<juce::ComboBox> soundBox_;
+    juce::ComboBox* cosmosBox_ = nullptr;   // not owned: its cell in the Cosmos section owns it
     juce::ComboBox* morphABox_ = nullptr;   // owned by their cells
     juce::ComboBox* morphBBox_ = nullptr;
     std::unique_ptr<juce::FileChooser> chooser_;

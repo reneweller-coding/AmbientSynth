@@ -397,6 +397,7 @@ void AmbientSynthProcessor::setCurrentProgram(int index)
     currentProgram_ = index;
     soundIndex_ = index;
     soundName_ = preset(index).name;
+    zIndex_ = -1; strikeIndex_ = -1;
     cosmosIndex_ = -1;   // the program brought its own Cosmos layer
     applyScoped(preset(index), PresetScope::Full);
     loadPresetFiles(index);
@@ -407,6 +408,10 @@ void AmbientSynthProcessor::applySoundPreset(int index)
     if (index < 0 || index >= numPresets()) return;
     soundIndex_ = index;
     soundName_ = preset(index).name;
+    // A sound preset brings its own Z-plane and its own Strike with it, so whatever layer preset
+    // was picked before is no longer what is loaded. Cleared rather than left standing: a box
+    // that names a filter the sound preset has just overwritten is worse than an empty one.
+    zIndex_ = -1; strikeIndex_ = -1;
     applyScoped(preset(index), PresetScope::Sound);
     loadPresetFiles(index);
     applyLevelMatch(index);
@@ -695,6 +700,9 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             // either way, only the label would have been a lie.
             soundName_  = tree.getProperty("soundPreset").toString();
             cosmosName_ = tree.getProperty("cosmosPreset").toString();
+            // A whole state came in: the layer boxes have no name to show, because the state is
+            // the parameters themselves and not the presets they may once have come from.
+            zIndex_ = -1; strikeIndex_ = -1;
             if (soundName_.isNotEmpty()) {
                 soundIndex_ = -1;
                 for (int i = 0; i < numPresets(); ++i) if (soundName_ == preset(i).name) { soundIndex_ = i; break; }

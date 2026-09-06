@@ -109,12 +109,17 @@ within a few seconds. Presets come in four independent layers that combine
 freely, and loading one never touches the others:
 
 * the **Sound** box in the header — 191 built-in presets (voices, space,
-  delays, reverbs, brain, tuning), plus everything the packs add;
-* the **Cosmos** box beside it — 257 presets in sixteen families for the
-  Cosmos section only;
-* **Preset** in the Z-Plane section — 156, one per filter shape, grouped by
-  the same twelve families as the shapes;
-* **Preset** in the Strike section — 41 for the Karplus-Strong pluck.
+  delays, reverbs, brain, tuning), plus everything the packs add. The only
+  one on the header, because it is the only one about the whole instrument;
+* **Preset** in the **Cosmos** section — 257 in sixteen families;
+* **Preset** in the **Z-Plane** section — 156, one per filter shape, grouped
+  by the same twelve families as the shapes;
+* **Preset** in the **Strike** section — 41 for the Karplus-Strong pluck.
+
+The three section banks sit in the sections they belong to, beside the
+controls they move. Loading a *sound* preset clears the three names: a sound
+preset brings its own filter and its own pluck with it, and a box still
+naming the filter that has just been overwritten would be a lie.
 
 In a DAW the full presets are the plugin's programs (every layer at once).
 Each of the three section banks is generated and then measured: every one is

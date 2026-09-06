@@ -160,21 +160,6 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         if (idx >= 0 && idx != proc_.soundPresetIndex()) { pushUndo("preset"); proc_.applySoundPreset(idx); }
     };
     addAndMakeVisible(*soundBox_);
-    cosmosBox_ = std::make_unique<juce::ComboBox>();
-    cosmosBox_->setTextWhenNothingSelected("Cosmos preset");
-    for (int fam = 0; fam < numCosmosPresetFamilies(); ++fam) {
-        cosmosBox_->addSectionHeading(cosmosPresetFamily(fam));
-        for (int i = 0; i < numCosmosPresets(); ++i)
-            if (cosmosPresetCategory(i) == fam) cosmosBox_->addItem(cosmosPreset(i).name, i + 1);
-    }
-    cosmosBox_->addSectionHeading("Off");
-    cosmosBox_->addItem(cosmosPreset(0).name, 1);
-    cosmosBox_->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
-    cosmosBox_->onChange = [this] {
-        const int idx = cosmosBox_->getSelectedId() - 1;
-        if (idx >= 0 && idx != proc_.cosmosPresetIndex()) proc_.applyCosmosPreset(idx);
-    };
-    addAndMakeVisible(*cosmosBox_);
 
     saveButton_ = std::make_unique<juce::TextButton>("Save...");
     saveButton_->onClick = [this] {
@@ -408,6 +393,28 @@ void AmbientSynthEditor::buildCells()
     step->setTooltip("Exchange one voice of the cluster now, whatever the interval says");
     step->onClick = [this] { proc_.engine().autoplayStep(); };
     addExtraCell("Autoplay", std::move(step), "by hand", 2);
+    // The three section banks, each inside the section it belongs to rather than on the header:
+    // 257 cosmos presets, 156 filters and 41 plucks are lists you go looking for, and the header
+    // keeps only the Sound box, which is the one preset that is about the whole instrument.
+    {
+        auto cb = std::make_unique<juce::ComboBox>();
+        cb->setTextWhenNothingSelected("Cosmos preset");
+        cb->setTooltip("257 presets for the Cosmos section in sixteen families. Touches nothing outside it, so it lands on top of whatever sound is loaded.");
+        for (int fam = 0; fam < numCosmosPresetFamilies(); ++fam) {
+            cb->addSectionHeading(cosmosPresetFamily(fam));
+            for (int i = 0; i < numCosmosPresets(); ++i)
+                if (cosmosPresetCategory(i) == fam) cb->addItem(cosmosPreset(i).name, i + 1);
+        }
+        cb->addSectionHeading("Off");
+        cb->addItem(cosmosPreset(0).name, 1);
+        cb->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
+        cb->onChange = [this] {
+            const int idx = cosmosBox_->getSelectedId() - 1;
+            if (idx >= 0 && idx != proc_.cosmosPresetIndex()) { pushUndo("cosmos preset"); proc_.applyCosmosPreset(idx); }
+        };
+        cosmosBox_ = cb.get();
+        addExtraCell("Cosmos", std::move(cb), "Preset", 3);
+    }
     // The Z-plane and Strike banks. Each is a layer like the Cosmos one -- it resets its own
     // section and nothing else -- and each sits inside the section it belongs to, grouped by
     // family, because a flat list of a hundred and fifty-six filters is a list nobody reads.
@@ -582,11 +589,12 @@ void AmbientSynthEditor::resized()
     for (auto* child : getChildren()) child->setTransform(tf);
 
     header_ = juce::Rectangle<int>(0, 0, designW_, kHeaderH);
-    if (soundBox_) soundBox_->setBounds(200, 8, 180, 24);
-    if (cosmosBox_) cosmosBox_->setBounds(388, 8, 160, 24);
-    if (saveButton_) saveButton_->setBounds(556, 8, 64, 24);
-    if (loadButton_) loadButton_->setBounds(626, 8, 64, 24);
-    if (recButton_) recButton_->setBounds(696, 8, 56, 24);
+    // The Sound box gets the room the Cosmos box used to take: it holds the longest names, and
+    // with the packs loaded it holds five thousand of them.
+    if (soundBox_) soundBox_->setBounds(200, 8, 260, 24);
+    if (saveButton_) saveButton_->setBounds(474, 8, 64, 24);
+    if (loadButton_) loadButton_->setBounds(544, 8, 64, 24);
+    if (recButton_) recButton_->setBounds(614, 8, 56, 24);
     if (calibButton_) calibButton_->setBounds(880, 8, 76, 24);
     if (mapButton_) mapButton_->setBounds(962, 8, 84, 24);
     if (performButton_) performButton_->setBounds(1052, 8, 70, 24);
@@ -1250,8 +1258,16 @@ void AmbientSynthEditor::timerCallback()
     }
     if (soundBox_ && soundBox_->getSelectedId() != proc_.soundPresetIndex() + 1)
         soundBox_->setSelectedId(proc_.soundPresetIndex() + 1, juce::dontSendNotification);
+    // The three section boxes follow the processor rather than the other way round, so a layer
+    // loaded from a program change, from OSC or by a whole state coming back shows up in them --
+    // and so does a sound preset clearing them, which it does, because a sound preset brings its
+    // own filter and its own pluck and the name of a layer preset would then be a lie.
     if (cosmosBox_ && cosmosBox_->getSelectedId() != proc_.cosmosPresetIndex() + 1)
         cosmosBox_->setSelectedId(proc_.cosmosPresetIndex() + 1, juce::dontSendNotification);
+    if (zPresetBox_ && zPresetBox_->getSelectedId() != proc_.zPresetIndex() + 1)
+        zPresetBox_->setSelectedId(proc_.zPresetIndex() + 1, juce::dontSendNotification);
+    if (strikePresetBox_ && strikePresetBox_->getSelectedId() != proc_.strikePresetIndex() + 1)
+        strikePresetBox_->setSelectedId(proc_.strikePresetIndex() + 1, juce::dontSendNotification);
     const int learn = proc_.learnTarget();
     for (auto& c : cells_) {
         if (c.param < 0) continue;

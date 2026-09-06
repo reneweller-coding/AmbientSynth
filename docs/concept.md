@@ -919,7 +919,9 @@ unchanged.
 ### The three section layers
 
 A layer is a preset bank that touches one section and nothing else, so it
-lands on top of whatever sound is loaded. There are three, and all three are
+lands on top of whatever sound is loaded. There are three; each lives in the
+section it belongs to rather than on the header, which keeps only the Sound
+box — the one preset that is about the whole instrument. All three are
 generated and then *measured*:
 
 * **Cosmos** — 257 presets in sixteen families (shift, beating, resonators,

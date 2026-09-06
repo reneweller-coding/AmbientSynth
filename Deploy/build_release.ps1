@@ -78,16 +78,17 @@ if ($dumpbin) {
 # out of date the way a drawing would. AMBIENT_PRESET picks a patch with all three sources and the
 # effects in use, or the Sources chapter would be illustrated with a greyed-out section.
 $manualDir = Join-Path $root "docs\manual"
+# The manual is exported into a work folder of its own and only then copied into docs\manual.
+# docs\manual is where people open the PDF, and a PDF open in a reader cannot be deleted or
+# overwritten -- which twice cost a whole release build. The work folder is nobody's reading
+# copy, so it can always be cleared; the copy into docs\manual is best effort, and the
+# installer stages the PDF from the work folder either way.
+$manualWork = Join-Path $root "Deploy\manual-work"
 if (-not $SkipManual) {
-    # Patiently: a browser that has just finished printing can still hold the PDF for a moment,
-    # and losing a whole release build to that would be silly.
-    for ($i = 0; $i -lt 10 -and (Test-Path $manualDir); $i++) {
-        Remove-Item $manualDir -Recurse -Force -ErrorAction SilentlyContinue
-        if (Test-Path $manualDir) { Start-Sleep -Milliseconds 700 }
-    }
-    if (Test-Path $manualDir) { throw "cannot clear $manualDir -- something still has a file open" }
+    if (Test-Path $manualWork) { Remove-Item $manualWork -Recurse -Force }
+    New-Item -ItemType Directory -Force $manualWork | Out-Null
     $env:AMBIENT_PRESET = "Three Voices, One Key"
-    $env:AMBIENT_MANUAL = $manualDir
+    $env:AMBIENT_MANUAL = $manualWork
     # A clip for the manual's gallery of source types: the Texture and Stretch pictures show it
     # loaded and playing. Any seamless field recording will do; the first one alphabetically is
     # the same one every time.
@@ -99,9 +100,18 @@ if (-not $SkipManual) {
     $mp = Start-Process $exe -PassThru
     if (-not $mp.WaitForExit(90000)) { $mp.Kill() ; throw "the manual export did not finish" }
     Remove-Item env:AMBIENT_MANUAL, env:AMBIENT_PRESET, env:AMBIENT_MANUAL_CLIP, env:AMBIENT_PACKS -ErrorAction SilentlyContinue
-    & $python (Join-Path $root "Tools\make_manual.py")
+    & $python (Join-Path $root "Tools\make_manual.py") --dir $manualWork
+    if ($LASTEXITCODE -ne 0) { throw "the manual did not print" }
+    # Into docs\manual, as far as a reader lets us.
+    New-Item -ItemType Directory -Force $manualDir | Out-Null
+    $copyFailed = $false
+    Get-ChildItem $manualWork -File | ForEach-Object {
+        try { Copy-Item $_.FullName (Join-Path $manualDir $_.Name) -Force -ErrorAction Stop }
+        catch { $copyFailed = $true }
+    }
+    if ($copyFailed) { Write-Warning "docs\manual could not be fully updated (a file is open there); the installer takes the manual from $manualWork" }
 }
-$manualPdf = Join-Path $manualDir "AmbientSynth-Manual.pdf"
+$manualPdf = if ($SkipManual) { Join-Path $manualDir "AmbientSynth-Manual.pdf" } else { Join-Path $manualWork "AmbientSynth-Manual.pdf" }
 
 # ---------------------------------------------------------------- stage
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }

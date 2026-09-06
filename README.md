@@ -274,6 +274,13 @@ gaps were different ones: the BEAT source, the filter's third axis, the
 delay's duck, and LFO rates snapped onto a golden ladder so no two of a
 preset's modulators come back into step. 5637 of 5969 kept.
 
+`Tools/param_usage.py` asks the same question from the other end: for each of
+the 386 parameters, how many of the 6191 presets move it off its default and
+how many point a modulation route at it (`--sections` rolls it up per
+section, `--unused` lists what nothing touches, `--json` writes
+`docs/param-usage.json`). It is how you find out that a control shipped and
+nobody ever used it.
+
 What it did *not* do is worth saying too. Deeper modulation does not make a
 preset more alive: measured over three minutes -- the timescale these LFOs
 actually run at -- turning every added LFO to full depth moves the median

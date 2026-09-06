@@ -1,0 +1,3095 @@
+{
+ "presets": 6191,
+ "builtin": 191,
+ "packs": 6000,
+ "parameters": [
+  {
+   "key": "master_gain",
+   "section": "Master",
+   "builtin": 65,
+   "pack": 6000,
+   "total": 6065,
+   "modulated": 0
+  },
+  {
+   "key": "src1_type",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "osc_level",
+   "section": "Source 1",
+   "builtin": 51,
+   "pack": 0,
+   "total": 51,
+   "modulated": 0
+  },
+  {
+   "key": "partials",
+   "section": "Source 1",
+   "builtin": 113,
+   "pack": 5648,
+   "total": 5761,
+   "modulated": 0
+  },
+  {
+   "key": "tilt",
+   "section": "Source 1",
+   "builtin": 40,
+   "pack": 6000,
+   "total": 6040,
+   "modulated": 55
+  },
+  {
+   "key": "brightness",
+   "section": "Source 1",
+   "builtin": 56,
+   "pack": 6000,
+   "total": 6056,
+   "modulated": 1604
+  },
+  {
+   "key": "odd_even",
+   "section": "Source 1",
+   "builtin": 177,
+   "pack": 6000,
+   "total": 6177,
+   "modulated": 0
+  },
+  {
+   "key": "inharmonic",
+   "section": "Source 1",
+   "builtin": 20,
+   "pack": 5647,
+   "total": 5667,
+   "modulated": 5
+  },
+  {
+   "key": "shimmer",
+   "section": "Source 1",
+   "builtin": 15,
+   "pack": 6000,
+   "total": 6015,
+   "modulated": 1214
+  },
+  {
+   "key": "shimmer_rate",
+   "section": "Source 1",
+   "builtin": 4,
+   "pack": 6000,
+   "total": 6004,
+   "modulated": 0
+  },
+  {
+   "key": "strands",
+   "section": "Strands",
+   "builtin": 17,
+   "pack": 4574,
+   "total": 4591,
+   "modulated": 0
+  },
+  {
+   "key": "detune",
+   "section": "Strands",
+   "builtin": 15,
+   "pack": 6000,
+   "total": 6015,
+   "modulated": 1189
+  },
+  {
+   "key": "drift",
+   "section": "Strands",
+   "builtin": 7,
+   "pack": 6000,
+   "total": 6007,
+   "modulated": 1
+  },
+  {
+   "key": "drift_rate",
+   "section": "Strands",
+   "builtin": 4,
+   "pack": 6000,
+   "total": 6004,
+   "modulated": 0
+  },
+  {
+   "key": "spread",
+   "section": "Strands",
+   "builtin": 0,
+   "pack": 6000,
+   "total": 6000,
+   "modulated": 62
+  },
+  {
+   "key": "bloom",
+   "section": "Strands",
+   "builtin": 5,
+   "pack": 6000,
+   "total": 6005,
+   "modulated": 0
+  },
+  {
+   "key": "bloom_time",
+   "section": "Strands",
+   "builtin": 5,
+   "pack": 6000,
+   "total": 6005,
+   "modulated": 0
+  },
+  {
+   "key": "stack",
+   "section": "Strands",
+   "builtin": 5,
+   "pack": 2506,
+   "total": 2511,
+   "modulated": 0
+  },
+  {
+   "key": "rate_wander",
+   "section": "Strands",
+   "builtin": 0,
+   "pack": 6000,
+   "total": 6000,
+   "modulated": 0
+  },
+  {
+   "key": "src1_octave",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_ratio",
+   "section": "Source 1",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "src1_pan",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_table",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_pos",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_pos_drift",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_fm_ratio",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_fm_index",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_grain",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_density",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_density_sync",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_follow",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_grains",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_spread",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_noise",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_noise_q",
+   "section": "Source 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src1_drift",
+   "section": "Source 1",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "src2_type",
+   "section": "Source 2",
+   "builtin": 176,
+   "pack": 3073,
+   "total": 3249,
+   "modulated": 0
+  },
+  {
+   "key": "src2_level",
+   "section": "Source 2",
+   "builtin": 176,
+   "pack": 3073,
+   "total": 3249,
+   "modulated": 493
+  },
+  {
+   "key": "src2_octave",
+   "section": "Source 2",
+   "builtin": 163,
+   "pack": 1455,
+   "total": 1618,
+   "modulated": 0
+  },
+  {
+   "key": "src2_ratio",
+   "section": "Source 2",
+   "builtin": 162,
+   "pack": 3073,
+   "total": 3235,
+   "modulated": 0
+  },
+  {
+   "key": "src2_pan",
+   "section": "Source 2",
+   "builtin": 8,
+   "pack": 3073,
+   "total": 3081,
+   "modulated": 0
+  },
+  {
+   "key": "src2_table",
+   "section": "Source 2",
+   "builtin": 6,
+   "pack": 949,
+   "total": 955,
+   "modulated": 0
+  },
+  {
+   "key": "src2_pos",
+   "section": "Source 2",
+   "builtin": 9,
+   "pack": 1439,
+   "total": 1448,
+   "modulated": 478
+  },
+  {
+   "key": "src2_pos_drift",
+   "section": "Source 2",
+   "builtin": 9,
+   "pack": 1439,
+   "total": 1448,
+   "modulated": 0
+  },
+  {
+   "key": "src2_fm_ratio",
+   "section": "Source 2",
+   "builtin": 2,
+   "pack": 179,
+   "total": 181,
+   "modulated": 0
+  },
+  {
+   "key": "src2_fm_index",
+   "section": "Source 2",
+   "builtin": 2,
+   "pack": 225,
+   "total": 227,
+   "modulated": 46
+  },
+  {
+   "key": "src2_grain",
+   "section": "Source 2",
+   "builtin": 3,
+   "pack": 1163,
+   "total": 1166,
+   "modulated": 0
+  },
+  {
+   "key": "src2_density",
+   "section": "Source 2",
+   "builtin": 3,
+   "pack": 1200,
+   "total": 1203,
+   "modulated": 206
+  },
+  {
+   "key": "src2_density_sync",
+   "section": "Source 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src2_follow",
+   "section": "Source 2",
+   "builtin": 4,
+   "pack": 1653,
+   "total": 1657,
+   "modulated": 0
+  },
+  {
+   "key": "src2_grains",
+   "section": "Source 2",
+   "builtin": 3,
+   "pack": 1125,
+   "total": 1128,
+   "modulated": 0
+  },
+  {
+   "key": "src2_spread",
+   "section": "Source 2",
+   "builtin": 3,
+   "pack": 1163,
+   "total": 1166,
+   "modulated": 208
+  },
+  {
+   "key": "src2_noise",
+   "section": "Source 2",
+   "builtin": 4,
+   "pack": 490,
+   "total": 494,
+   "modulated": 0
+  },
+  {
+   "key": "src2_noise_q",
+   "section": "Source 2",
+   "builtin": 2,
+   "pack": 490,
+   "total": 492,
+   "modulated": 82
+  },
+  {
+   "key": "src2_partials",
+   "section": "Source 2",
+   "builtin": 161,
+   "pack": 233,
+   "total": 394,
+   "modulated": 0
+  },
+  {
+   "key": "src2_tilt",
+   "section": "Source 2",
+   "builtin": 1,
+   "pack": 246,
+   "total": 247,
+   "modulated": 0
+  },
+  {
+   "key": "src2_bright",
+   "section": "Source 2",
+   "builtin": 161,
+   "pack": 246,
+   "total": 407,
+   "modulated": 0
+  },
+  {
+   "key": "src2_odd_even",
+   "section": "Source 2",
+   "builtin": 0,
+   "pack": 121,
+   "total": 121,
+   "modulated": 0
+  },
+  {
+   "key": "src2_inharmonic",
+   "section": "Source 2",
+   "builtin": 0,
+   "pack": 80,
+   "total": 80,
+   "modulated": 0
+  },
+  {
+   "key": "src2_shimmer",
+   "section": "Source 2",
+   "builtin": 0,
+   "pack": 246,
+   "total": 246,
+   "modulated": 0
+  },
+  {
+   "key": "src2_shimmer_rate",
+   "section": "Source 2",
+   "builtin": 0,
+   "pack": 246,
+   "total": 246,
+   "modulated": 0
+  },
+  {
+   "key": "src2_drift",
+   "section": "Source 2",
+   "builtin": 161,
+   "pack": 1176,
+   "total": 1337,
+   "modulated": 0
+  },
+  {
+   "key": "src3_type",
+   "section": "Source 3",
+   "builtin": 23,
+   "pack": 1753,
+   "total": 1776,
+   "modulated": 0
+  },
+  {
+   "key": "src3_level",
+   "section": "Source 3",
+   "builtin": 23,
+   "pack": 1753,
+   "total": 1776,
+   "modulated": 301
+  },
+  {
+   "key": "src3_octave",
+   "section": "Source 3",
+   "builtin": 6,
+   "pack": 900,
+   "total": 906,
+   "modulated": 0
+  },
+  {
+   "key": "src3_ratio",
+   "section": "Source 3",
+   "builtin": 7,
+   "pack": 1753,
+   "total": 1760,
+   "modulated": 0
+  },
+  {
+   "key": "src3_pan",
+   "section": "Source 3",
+   "builtin": 11,
+   "pack": 1753,
+   "total": 1764,
+   "modulated": 0
+  },
+  {
+   "key": "src3_table",
+   "section": "Source 3",
+   "builtin": 3,
+   "pack": 567,
+   "total": 570,
+   "modulated": 0
+  },
+  {
+   "key": "src3_pos",
+   "section": "Source 3",
+   "builtin": 13,
+   "pack": 847,
+   "total": 860,
+   "modulated": 259
+  },
+  {
+   "key": "src3_pos_drift",
+   "section": "Source 3",
+   "builtin": 10,
+   "pack": 847,
+   "total": 857,
+   "modulated": 0
+  },
+  {
+   "key": "src3_fm_ratio",
+   "section": "Source 3",
+   "builtin": 2,
+   "pack": 113,
+   "total": 115,
+   "modulated": 0
+  },
+  {
+   "key": "src3_fm_index",
+   "section": "Source 3",
+   "builtin": 2,
+   "pack": 143,
+   "total": 145,
+   "modulated": 27
+  },
+  {
+   "key": "src3_grain",
+   "section": "Source 3",
+   "builtin": 9,
+   "pack": 630,
+   "total": 639,
+   "modulated": 0
+  },
+  {
+   "key": "src3_density",
+   "section": "Source 3",
+   "builtin": 10,
+   "pack": 652,
+   "total": 662,
+   "modulated": 125
+  },
+  {
+   "key": "src3_density_sync",
+   "section": "Source 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "src3_follow",
+   "section": "Source 3",
+   "builtin": 9,
+   "pack": 910,
+   "total": 919,
+   "modulated": 0
+  },
+  {
+   "key": "src3_grains",
+   "section": "Source 3",
+   "builtin": 9,
+   "pack": 610,
+   "total": 619,
+   "modulated": 0
+  },
+  {
+   "key": "src3_spread",
+   "section": "Source 3",
+   "builtin": 9,
+   "pack": 630,
+   "total": 639,
+   "modulated": 108
+  },
+  {
+   "key": "src3_noise",
+   "section": "Source 3",
+   "builtin": 8,
+   "pack": 280,
+   "total": 288,
+   "modulated": 0
+  },
+  {
+   "key": "src3_noise_q",
+   "section": "Source 3",
+   "builtin": 1,
+   "pack": 280,
+   "total": 281,
+   "modulated": 66
+  },
+  {
+   "key": "src3_partials",
+   "section": "Source 3",
+   "builtin": 1,
+   "pack": 126,
+   "total": 127,
+   "modulated": 0
+  },
+  {
+   "key": "src3_tilt",
+   "section": "Source 3",
+   "builtin": 1,
+   "pack": 133,
+   "total": 134,
+   "modulated": 0
+  },
+  {
+   "key": "src3_bright",
+   "section": "Source 3",
+   "builtin": 1,
+   "pack": 133,
+   "total": 134,
+   "modulated": 0
+  },
+  {
+   "key": "src3_odd_even",
+   "section": "Source 3",
+   "builtin": 0,
+   "pack": 63,
+   "total": 63,
+   "modulated": 0
+  },
+  {
+   "key": "src3_inharmonic",
+   "section": "Source 3",
+   "builtin": 0,
+   "pack": 43,
+   "total": 43,
+   "modulated": 0
+  },
+  {
+   "key": "src3_shimmer",
+   "section": "Source 3",
+   "builtin": 0,
+   "pack": 133,
+   "total": 133,
+   "modulated": 0
+  },
+  {
+   "key": "src3_shimmer_rate",
+   "section": "Source 3",
+   "builtin": 0,
+   "pack": 133,
+   "total": 133,
+   "modulated": 0
+  },
+  {
+   "key": "src3_drift",
+   "section": "Source 3",
+   "builtin": 1,
+   "pack": 678,
+   "total": 679,
+   "modulated": 0
+  },
+  {
+   "key": "sub_level",
+   "section": "Foundation",
+   "builtin": 9,
+   "pack": 3912,
+   "total": 3921,
+   "modulated": 38
+  },
+  {
+   "key": "sub_octave",
+   "section": "Foundation",
+   "builtin": 1,
+   "pack": 600,
+   "total": 601,
+   "modulated": 0
+  },
+  {
+   "key": "sub_glide",
+   "section": "Foundation",
+   "builtin": 2,
+   "pack": 3912,
+   "total": 3914,
+   "modulated": 0
+  },
+  {
+   "key": "sub_binaural",
+   "section": "Foundation",
+   "builtin": 4,
+   "pack": 1660,
+   "total": 1664,
+   "modulated": 0
+  },
+  {
+   "key": "sub_tone",
+   "section": "Foundation",
+   "builtin": 0,
+   "pack": 5999,
+   "total": 5999,
+   "modulated": 0
+  },
+  {
+   "key": "sub_source",
+   "section": "Foundation",
+   "builtin": 3,
+   "pack": 400,
+   "total": 403,
+   "modulated": 0
+  },
+  {
+   "key": "pad_low_cut",
+   "section": "Foundation",
+   "builtin": 3,
+   "pack": 6000,
+   "total": 6003,
+   "modulated": 0
+  },
+  {
+   "key": "strike_level",
+   "section": "Strike",
+   "builtin": 4,
+   "pack": 1170,
+   "total": 1174,
+   "modulated": 0
+  },
+  {
+   "key": "strike_type",
+   "section": "Strike",
+   "builtin": 4,
+   "pack": 1170,
+   "total": 1174,
+   "modulated": 0
+  },
+  {
+   "key": "strike_decay",
+   "section": "Strike",
+   "builtin": 4,
+   "pack": 1170,
+   "total": 1174,
+   "modulated": 0
+  },
+  {
+   "key": "strike_damp",
+   "section": "Strike",
+   "builtin": 4,
+   "pack": 1170,
+   "total": 1174,
+   "modulated": 0
+  },
+  {
+   "key": "strike_who",
+   "section": "Strike",
+   "builtin": 1,
+   "pack": 505,
+   "total": 506,
+   "modulated": 0
+  },
+  {
+   "key": "air",
+   "section": "Air",
+   "builtin": 41,
+   "pack": 6000,
+   "total": 6041,
+   "modulated": 1188
+  },
+  {
+   "key": "air_color",
+   "section": "Air",
+   "builtin": 27,
+   "pack": 6000,
+   "total": 6027,
+   "modulated": 0
+  },
+  {
+   "key": "air_q",
+   "section": "Air",
+   "builtin": 27,
+   "pack": 6000,
+   "total": 6027,
+   "modulated": 0
+  },
+  {
+   "key": "attack",
+   "section": "Envelope",
+   "builtin": 67,
+   "pack": 6000,
+   "total": 6067,
+   "modulated": 0
+  },
+  {
+   "key": "decay",
+   "section": "Envelope",
+   "builtin": 12,
+   "pack": 6000,
+   "total": 6012,
+   "modulated": 0
+  },
+  {
+   "key": "sustain",
+   "section": "Envelope",
+   "builtin": 13,
+   "pack": 6000,
+   "total": 6013,
+   "modulated": 0
+  },
+  {
+   "key": "release",
+   "section": "Envelope",
+   "builtin": 66,
+   "pack": 6000,
+   "total": 6066,
+   "modulated": 0
+  },
+  {
+   "key": "filter_on",
+   "section": "Filter",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "filter_model",
+   "section": "Filter",
+   "builtin": 1,
+   "pack": 2199,
+   "total": 2200,
+   "modulated": 0
+  },
+  {
+   "key": "cutoff",
+   "section": "Filter",
+   "builtin": 33,
+   "pack": 6000,
+   "total": 6033,
+   "modulated": 3343
+  },
+  {
+   "key": "resonance",
+   "section": "Filter",
+   "builtin": 3,
+   "pack": 6000,
+   "total": 6003,
+   "modulated": 1206
+  },
+  {
+   "key": "filter_env",
+   "section": "Filter",
+   "builtin": 1,
+   "pack": 6000,
+   "total": 6001,
+   "modulated": 0
+  },
+  {
+   "key": "filter_drift",
+   "section": "Filter",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 0
+  },
+  {
+   "key": "keytrack",
+   "section": "Filter",
+   "builtin": 1,
+   "pack": 6000,
+   "total": 6001,
+   "modulated": 0
+  },
+  {
+   "key": "filter_drive",
+   "section": "Filter",
+   "builtin": 0,
+   "pack": 233,
+   "total": 233,
+   "modulated": 0
+  },
+  {
+   "key": "z_mode",
+   "section": "Z-Plane",
+   "builtin": 50,
+   "pack": 2734,
+   "total": 2784,
+   "modulated": 0
+  },
+  {
+   "key": "z_route",
+   "section": "Z-Plane",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "z_shape",
+   "section": "Z-Plane",
+   "builtin": 50,
+   "pack": 2734,
+   "total": 2784,
+   "modulated": 0
+  },
+  {
+   "key": "z_x",
+   "section": "Z-Plane",
+   "builtin": 46,
+   "pack": 2734,
+   "total": 2780,
+   "modulated": 471
+  },
+  {
+   "key": "z_y",
+   "section": "Z-Plane",
+   "builtin": 46,
+   "pack": 2734,
+   "total": 2780,
+   "modulated": 656
+  },
+  {
+   "key": "z_z",
+   "section": "Z-Plane",
+   "builtin": 33,
+   "pack": 2619,
+   "total": 2652,
+   "modulated": 0
+  },
+  {
+   "key": "z_rate",
+   "section": "Z-Plane",
+   "builtin": 49,
+   "pack": 2779,
+   "total": 2828,
+   "modulated": 0
+  },
+  {
+   "key": "z_depth",
+   "section": "Z-Plane",
+   "builtin": 49,
+   "pack": 2739,
+   "total": 2788,
+   "modulated": 0
+  },
+  {
+   "key": "z_res",
+   "section": "Z-Plane",
+   "builtin": 46,
+   "pack": 2739,
+   "total": 2785,
+   "modulated": 488
+  },
+  {
+   "key": "z_keytrack",
+   "section": "Z-Plane",
+   "builtin": 6,
+   "pack": 1102,
+   "total": 1108,
+   "modulated": 0
+  },
+  {
+   "key": "z_mix",
+   "section": "Z-Plane",
+   "builtin": 50,
+   "pack": 2734,
+   "total": 2784,
+   "modulated": 0
+  },
+  {
+   "key": "z_decay",
+   "section": "Z-Plane",
+   "builtin": 0,
+   "pack": 133,
+   "total": 133,
+   "modulated": 0
+  },
+  {
+   "key": "z_damp",
+   "section": "Z-Plane",
+   "builtin": 0,
+   "pack": 133,
+   "total": 133,
+   "modulated": 0
+  },
+  {
+   "key": "depth",
+   "section": "Space",
+   "builtin": 50,
+   "pack": 6000,
+   "total": 6050,
+   "modulated": 1586
+  },
+  {
+   "key": "keys_depth",
+   "section": "Space",
+   "builtin": 17,
+   "pack": 619,
+   "total": 636,
+   "modulated": 0
+  },
+  {
+   "key": "pan_drift",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 6000,
+   "total": 6003,
+   "modulated": 1177
+  },
+  {
+   "key": "itd",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 6000,
+   "total": 6003,
+   "modulated": 0
+  },
+  {
+   "key": "arc",
+   "section": "Space",
+   "builtin": 19,
+   "pack": 6000,
+   "total": 6019,
+   "modulated": 64
+  },
+  {
+   "key": "arc_period",
+   "section": "Space",
+   "builtin": 19,
+   "pack": 6000,
+   "total": 6019,
+   "modulated": 0
+  },
+  {
+   "key": "arc_sync",
+   "section": "Space",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "presence",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 0,
+   "total": 3,
+   "modulated": 0
+  },
+  {
+   "key": "breath",
+   "section": "Space",
+   "builtin": 7,
+   "pack": 6000,
+   "total": 6007,
+   "modulated": 1
+  },
+  {
+   "key": "breath_rate",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 5999,
+   "total": 6002,
+   "modulated": 0
+  },
+  {
+   "key": "phase_width",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 2734,
+   "total": 2737,
+   "modulated": 0
+  },
+  {
+   "key": "phase_rate",
+   "section": "Space",
+   "builtin": 3,
+   "pack": 2734,
+   "total": 2737,
+   "modulated": 0
+  },
+  {
+   "key": "doppler",
+   "section": "Space",
+   "builtin": 2,
+   "pack": 2146,
+   "total": 2148,
+   "modulated": 0
+  },
+  {
+   "key": "externalise",
+   "section": "Space",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "press_distance",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "press_bright",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "press_level",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "slide_cutoff",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "slide_z",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "bend_range",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "mpe",
+   "section": "Expression",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "ens_mix",
+   "section": "Ensemble",
+   "builtin": 11,
+   "pack": 6000,
+   "total": 6011,
+   "modulated": 0
+  },
+  {
+   "key": "ens_depth",
+   "section": "Ensemble",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 1204
+  },
+  {
+   "key": "ens_rate",
+   "section": "Ensemble",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 0
+  },
+  {
+   "key": "ensemble_sync",
+   "section": "Ensemble",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "dly_time_l",
+   "section": "Delay",
+   "builtin": 11,
+   "pack": 6000,
+   "total": 6011,
+   "modulated": 0
+  },
+  {
+   "key": "dly_time_r",
+   "section": "Delay",
+   "builtin": 11,
+   "pack": 6000,
+   "total": 6011,
+   "modulated": 0
+  },
+  {
+   "key": "dly_sync_l",
+   "section": "Delay",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "dly_sync_r",
+   "section": "Delay",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "dly_feedback",
+   "section": "Delay",
+   "builtin": 25,
+   "pack": 6000,
+   "total": 6025,
+   "modulated": 1129
+  },
+  {
+   "key": "dly_cross",
+   "section": "Delay",
+   "builtin": 4,
+   "pack": 6000,
+   "total": 6004,
+   "modulated": 0
+  },
+  {
+   "key": "dly_damp",
+   "section": "Delay",
+   "builtin": 5,
+   "pack": 6000,
+   "total": 6005,
+   "modulated": 0
+  },
+  {
+   "key": "dly_absorb",
+   "section": "Delay",
+   "builtin": 2,
+   "pack": 2976,
+   "total": 2978,
+   "modulated": 0
+  },
+  {
+   "key": "dly_mix",
+   "section": "Delay",
+   "builtin": 31,
+   "pack": 6000,
+   "total": 6031,
+   "modulated": 1150
+  },
+  {
+   "key": "dly_to_far",
+   "section": "Delay",
+   "builtin": 9,
+   "pack": 6000,
+   "total": 6009,
+   "modulated": 0
+  },
+  {
+   "key": "dly_duck",
+   "section": "Delay",
+   "builtin": 0,
+   "pack": 5213,
+   "total": 5213,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_time_l",
+   "section": "Delay 2",
+   "builtin": 2,
+   "pack": 1634,
+   "total": 1636,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_time_r",
+   "section": "Delay 2",
+   "builtin": 2,
+   "pack": 1634,
+   "total": 1636,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_sync_l",
+   "section": "Delay 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_sync_r",
+   "section": "Delay 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_feedback",
+   "section": "Delay 2",
+   "builtin": 3,
+   "pack": 1634,
+   "total": 1637,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_cross",
+   "section": "Delay 2",
+   "builtin": 0,
+   "pack": 1634,
+   "total": 1634,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_damp",
+   "section": "Delay 2",
+   "builtin": 0,
+   "pack": 1634,
+   "total": 1634,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_absorb",
+   "section": "Delay 2",
+   "builtin": 1,
+   "pack": 796,
+   "total": 797,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_mix",
+   "section": "Delay 2",
+   "builtin": 3,
+   "pack": 1634,
+   "total": 1637,
+   "modulated": 0
+  },
+  {
+   "key": "dly2_to_far",
+   "section": "Delay 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "near_mix",
+   "section": "Near Reverb",
+   "builtin": 18,
+   "pack": 6000,
+   "total": 6018,
+   "modulated": 1160
+  },
+  {
+   "key": "near_decay",
+   "section": "Near Reverb",
+   "builtin": 8,
+   "pack": 6000,
+   "total": 6008,
+   "modulated": 4
+  },
+  {
+   "key": "near_damp",
+   "section": "Near Reverb",
+   "builtin": 0,
+   "pack": 6000,
+   "total": 6000,
+   "modulated": 0
+  },
+  {
+   "key": "blur_mix",
+   "section": "Blur",
+   "builtin": 1,
+   "pack": 871,
+   "total": 872,
+   "modulated": 0
+  },
+  {
+   "key": "blur_smear",
+   "section": "Blur",
+   "builtin": 1,
+   "pack": 871,
+   "total": 872,
+   "modulated": 0
+  },
+  {
+   "key": "far_level",
+   "section": "Far Reverb",
+   "builtin": 26,
+   "pack": 6000,
+   "total": 6026,
+   "modulated": 0
+  },
+  {
+   "key": "far_size",
+   "section": "Far Reverb",
+   "builtin": 20,
+   "pack": 6000,
+   "total": 6020,
+   "modulated": 3337
+  },
+  {
+   "key": "far_decay",
+   "section": "Far Reverb",
+   "builtin": 155,
+   "pack": 6000,
+   "total": 6155,
+   "modulated": 1112
+  },
+  {
+   "key": "far_damp",
+   "section": "Far Reverb",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 3
+  },
+  {
+   "key": "far_predelay",
+   "section": "Far Reverb",
+   "builtin": 0,
+   "pack": 6000,
+   "total": 6000,
+   "modulated": 3
+  },
+  {
+   "key": "far_asym",
+   "section": "Far Reverb",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 0
+  },
+  {
+   "key": "far_highcut",
+   "section": "Far Reverb",
+   "builtin": 61,
+   "pack": 6000,
+   "total": 6061,
+   "modulated": 1124
+  },
+  {
+   "key": "far_freeze",
+   "section": "Far Reverb",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "far_rotate",
+   "section": "Far Reverb",
+   "builtin": 1,
+   "pack": 2196,
+   "total": 2197,
+   "modulated": 0
+  },
+  {
+   "key": "far_unmask",
+   "section": "Far Reverb",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "far_diffuse",
+   "section": "Far Reverb",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "fb_bus",
+   "section": "Feedback",
+   "builtin": 4,
+   "pack": 1407,
+   "total": 1411,
+   "modulated": 0
+  },
+  {
+   "key": "fb_fm",
+   "section": "Feedback",
+   "builtin": 4,
+   "pack": 487,
+   "total": 491,
+   "modulated": 0
+  },
+  {
+   "key": "fb_tone",
+   "section": "Feedback",
+   "builtin": 4,
+   "pack": 1427,
+   "total": 1431,
+   "modulated": 287
+  },
+  {
+   "key": "fb_drive",
+   "section": "Feedback",
+   "builtin": 3,
+   "pack": 1427,
+   "total": 1430,
+   "modulated": 0
+  },
+  {
+   "key": "room_level",
+   "section": "Room",
+   "builtin": 2,
+   "pack": 2705,
+   "total": 2707,
+   "modulated": 496
+  },
+  {
+   "key": "room_source",
+   "section": "Room",
+   "builtin": 0,
+   "pack": 2705,
+   "total": 2705,
+   "modulated": 0
+  },
+  {
+   "key": "room_predelay",
+   "section": "Room",
+   "builtin": 0,
+   "pack": 2705,
+   "total": 2705,
+   "modulated": 0
+  },
+  {
+   "key": "room_highcut",
+   "section": "Room",
+   "builtin": 0,
+   "pack": 2705,
+   "total": 2705,
+   "modulated": 0
+  },
+  {
+   "key": "room_morph",
+   "section": "Room",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_send",
+   "section": "Cosmos",
+   "builtin": 42,
+   "pack": 1751,
+   "total": 1793,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_shift",
+   "section": "Cosmos",
+   "builtin": 19,
+   "pack": 542,
+   "total": 561,
+   "modulated": 301
+  },
+  {
+   "key": "cosmos_shift_drift",
+   "section": "Cosmos",
+   "builtin": 15,
+   "pack": 542,
+   "total": 557,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_res",
+   "section": "Cosmos",
+   "builtin": 12,
+   "pack": 423,
+   "total": 435,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_res_pitch",
+   "section": "Cosmos",
+   "builtin": 12,
+   "pack": 360,
+   "total": 372,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_res_fb",
+   "section": "Cosmos",
+   "builtin": 12,
+   "pack": 423,
+   "total": 435,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_vowel",
+   "section": "Cosmos",
+   "builtin": 10,
+   "pack": 633,
+   "total": 643,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_vowel_rate",
+   "section": "Cosmos",
+   "builtin": 10,
+   "pack": 633,
+   "total": 643,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_nebula",
+   "section": "Cosmos",
+   "builtin": 20,
+   "pack": 372,
+   "total": 392,
+   "modulated": 306
+  },
+  {
+   "key": "cosmos_smear",
+   "section": "Cosmos",
+   "builtin": 19,
+   "pack": 372,
+   "total": 391,
+   "modulated": 398
+  },
+  {
+   "key": "cosmos_shimmer",
+   "section": "Cosmos",
+   "builtin": 17,
+   "pack": 414,
+   "total": 431,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_shimmer_pitch",
+   "section": "Cosmos",
+   "builtin": 15,
+   "pack": 414,
+   "total": 429,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_return",
+   "section": "Cosmos",
+   "builtin": 42,
+   "pack": 1751,
+   "total": 1793,
+   "modulated": 0
+  },
+  {
+   "key": "cosmos_to_far",
+   "section": "Cosmos",
+   "builtin": 32,
+   "pack": 1751,
+   "total": 1783,
+   "modulated": 0
+  },
+  {
+   "key": "cloud_send",
+   "section": "Cloud",
+   "builtin": 7,
+   "pack": 1564,
+   "total": 1571,
+   "modulated": 0
+  },
+  {
+   "key": "cloud_density",
+   "section": "Cloud",
+   "builtin": 4,
+   "pack": 1564,
+   "total": 1568,
+   "modulated": 281
+  },
+  {
+   "key": "cloud_sync",
+   "section": "Cloud",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "cloud_size",
+   "section": "Cloud",
+   "builtin": 3,
+   "pack": 1564,
+   "total": 1567,
+   "modulated": 279
+  },
+  {
+   "key": "cloud_pitch",
+   "section": "Cloud",
+   "builtin": 5,
+   "pack": 1564,
+   "total": 1569,
+   "modulated": 264
+  },
+  {
+   "key": "cloud_spray",
+   "section": "Cloud",
+   "builtin": 1,
+   "pack": 1564,
+   "total": 1565,
+   "modulated": 0
+  },
+  {
+   "key": "cloud_level",
+   "section": "Cloud",
+   "builtin": 0,
+   "pack": 1564,
+   "total": 1564,
+   "modulated": 0
+  },
+  {
+   "key": "body_level",
+   "section": "Body",
+   "builtin": 5,
+   "pack": 200,
+   "total": 205,
+   "modulated": 0
+  },
+  {
+   "key": "body_material",
+   "section": "Body",
+   "builtin": 5,
+   "pack": 0,
+   "total": 5,
+   "modulated": 0
+  },
+  {
+   "key": "body_pitch",
+   "section": "Body",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "body_decay",
+   "section": "Body",
+   "builtin": 5,
+   "pack": 200,
+   "total": 205,
+   "modulated": 0
+  },
+  {
+   "key": "body_tone",
+   "section": "Body",
+   "builtin": 4,
+   "pack": 0,
+   "total": 4,
+   "modulated": 0
+  },
+  {
+   "key": "body_spread",
+   "section": "Body",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "patina",
+   "section": "Patina",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "patina_wow",
+   "section": "Patina",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "patina_hiss",
+   "section": "Patina",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "patina_age",
+   "section": "Patina",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "master_tilt",
+   "section": "Master",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "tilt_pivot",
+   "section": "Master",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "bass_mono",
+   "section": "Master",
+   "builtin": 7,
+   "pack": 6000,
+   "total": 6007,
+   "modulated": 0
+  },
+  {
+   "key": "side_air",
+   "section": "Master",
+   "builtin": 2,
+   "pack": 6000,
+   "total": 6002,
+   "modulated": 0
+  },
+  {
+   "key": "width",
+   "section": "Master",
+   "builtin": 8,
+   "pack": 6000,
+   "total": 6008,
+   "modulated": 1123
+  },
+  {
+   "key": "mono_guard",
+   "section": "Master",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "brain_on",
+   "section": "Cluster Brain",
+   "builtin": 13,
+   "pack": 619,
+   "total": 632,
+   "modulated": 0
+  },
+  {
+   "key": "brain_density",
+   "section": "Cluster Brain",
+   "builtin": 118,
+   "pack": 4807,
+   "total": 4925,
+   "modulated": 0
+  },
+  {
+   "key": "brain_rate",
+   "section": "Cluster Brain",
+   "builtin": 33,
+   "pack": 6000,
+   "total": 6033,
+   "modulated": 0
+  },
+  {
+   "key": "brain_sync",
+   "section": "Cluster Brain",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "brain_hold_min",
+   "section": "Cluster Brain",
+   "builtin": 31,
+   "pack": 6000,
+   "total": 6031,
+   "modulated": 0
+  },
+  {
+   "key": "brain_hold_max",
+   "section": "Cluster Brain",
+   "builtin": 30,
+   "pack": 6000,
+   "total": 6030,
+   "modulated": 0
+  },
+  {
+   "key": "brain_low",
+   "section": "Cluster Brain",
+   "builtin": 48,
+   "pack": 5562,
+   "total": 5610,
+   "modulated": 0
+  },
+  {
+   "key": "brain_high",
+   "section": "Cluster Brain",
+   "builtin": 48,
+   "pack": 5758,
+   "total": 5806,
+   "modulated": 0
+  },
+  {
+   "key": "brain_consonance",
+   "section": "Cluster Brain",
+   "builtin": 26,
+   "pack": 6000,
+   "total": 6026,
+   "modulated": 0
+  },
+  {
+   "key": "brain_wander",
+   "section": "Cluster Brain",
+   "builtin": 4,
+   "pack": 6000,
+   "total": 6004,
+   "modulated": 0
+  },
+  {
+   "key": "brain_quantize",
+   "section": "Cluster Brain",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "auto_mode",
+   "section": "Autoplay",
+   "builtin": 4,
+   "pack": 200,
+   "total": 204,
+   "modulated": 0
+  },
+  {
+   "key": "auto_rate",
+   "section": "Autoplay",
+   "builtin": 3,
+   "pack": 200,
+   "total": 203,
+   "modulated": 0
+  },
+  {
+   "key": "auto_sync",
+   "section": "Autoplay",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "auto_lead",
+   "section": "Autoplay",
+   "builtin": 4,
+   "pack": 200,
+   "total": 204,
+   "modulated": 0
+  },
+  {
+   "key": "auto_tension",
+   "section": "Autoplay",
+   "builtin": 4,
+   "pack": 200,
+   "total": 204,
+   "modulated": 0
+  },
+  {
+   "key": "auto_root_move",
+   "section": "Autoplay",
+   "builtin": 4,
+   "pack": 200,
+   "total": 204,
+   "modulated": 0
+  },
+  {
+   "key": "auto_step",
+   "section": "Autoplay",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_on",
+   "section": "Brain 2",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_density",
+   "section": "Brain 2",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_rate",
+   "section": "Brain 2",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_hold_min",
+   "section": "Brain 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_hold_max",
+   "section": "Brain 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_low",
+   "section": "Brain 2",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_high",
+   "section": "Brain 2",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_depth",
+   "section": "Brain 2",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_interval",
+   "section": "Brain 2",
+   "builtin": 2,
+   "pack": 0,
+   "total": 2,
+   "modulated": 0
+  },
+  {
+   "key": "brain2_consonance",
+   "section": "Brain 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "scale",
+   "section": "Tuning",
+   "builtin": 61,
+   "pack": 6000,
+   "total": 6061,
+   "modulated": 0
+  },
+  {
+   "key": "keymap",
+   "section": "Tuning",
+   "builtin": 3,
+   "pack": 0,
+   "total": 3,
+   "modulated": 0
+  },
+  {
+   "key": "root",
+   "section": "Tuning",
+   "builtin": 53,
+   "pack": 6000,
+   "total": 6053,
+   "modulated": 0
+  },
+  {
+   "key": "ref_pitch",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "seed",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 6000,
+   "total": 6000,
+   "modulated": 0
+  },
+  {
+   "key": "hold",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "purity",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 5644,
+   "total": 5644,
+   "modulated": 1193
+  },
+  {
+   "key": "purity_drift",
+   "section": "Tuning",
+   "builtin": 1,
+   "pack": 1683,
+   "total": 1684,
+   "modulated": 0
+  },
+  {
+   "key": "purity_rate",
+   "section": "Tuning",
+   "builtin": 1,
+   "pack": 1683,
+   "total": 1684,
+   "modulated": 0
+  },
+  {
+   "key": "freeze",
+   "section": "Strands",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "tide",
+   "section": "Tuning",
+   "builtin": 1,
+   "pack": 1807,
+   "total": 1808,
+   "modulated": 0
+  },
+  {
+   "key": "tide_period",
+   "section": "Tuning",
+   "builtin": 1,
+   "pack": 1807,
+   "total": 1808,
+   "modulated": 0
+  },
+  {
+   "key": "air_mode",
+   "section": "Air",
+   "builtin": 1,
+   "pack": 746,
+   "total": 747,
+   "modulated": 0
+  },
+  {
+   "key": "portamento",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 620,
+   "total": 620,
+   "modulated": 0
+  },
+  {
+   "key": "porta_gravity",
+   "section": "Tuning",
+   "builtin": 0,
+   "pack": 620,
+   "total": 620,
+   "modulated": 0
+  },
+  {
+   "key": "fb_tape",
+   "section": "Feedback",
+   "builtin": 1,
+   "pack": 1228,
+   "total": 1229,
+   "modulated": 0
+  },
+  {
+   "key": "coherence",
+   "section": "Coherence",
+   "builtin": 0,
+   "pack": 1325,
+   "total": 1325,
+   "modulated": 0
+  },
+  {
+   "key": "coherence_depth",
+   "section": "Coherence",
+   "builtin": 0,
+   "pack": 1325,
+   "total": 1325,
+   "modulated": 0
+  },
+  {
+   "key": "coherence_rate",
+   "section": "Coherence",
+   "builtin": 0,
+   "pack": 1325,
+   "total": 1325,
+   "modulated": 0
+  },
+  {
+   "key": "sympathy",
+   "section": "Coherence",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_shape",
+   "section": "LFO 1",
+   "builtin": 0,
+   "pack": 5778,
+   "total": 5778,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_rate",
+   "section": "LFO 1",
+   "builtin": 190,
+   "pack": 5778,
+   "total": 5968,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_phase",
+   "section": "LFO 1",
+   "builtin": 0,
+   "pack": 5774,
+   "total": 5774,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_depth",
+   "section": "LFO 1",
+   "builtin": 190,
+   "pack": 5768,
+   "total": 5958,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_mode",
+   "section": "LFO 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_table",
+   "section": "LFO 1",
+   "builtin": 0,
+   "pack": 671,
+   "total": 671,
+   "modulated": 0
+  },
+  {
+   "key": "lfo1_sync",
+   "section": "LFO 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_shape",
+   "section": "LFO 2",
+   "builtin": 0,
+   "pack": 5284,
+   "total": 5284,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_rate",
+   "section": "LFO 2",
+   "builtin": 190,
+   "pack": 5284,
+   "total": 5474,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_phase",
+   "section": "LFO 2",
+   "builtin": 0,
+   "pack": 5280,
+   "total": 5280,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_depth",
+   "section": "LFO 2",
+   "builtin": 190,
+   "pack": 5277,
+   "total": 5467,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_mode",
+   "section": "LFO 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_table",
+   "section": "LFO 2",
+   "builtin": 0,
+   "pack": 568,
+   "total": 568,
+   "modulated": 0
+  },
+  {
+   "key": "lfo2_sync",
+   "section": "LFO 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_shape",
+   "section": "LFO 3",
+   "builtin": 0,
+   "pack": 4122,
+   "total": 4122,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_rate",
+   "section": "LFO 3",
+   "builtin": 190,
+   "pack": 4122,
+   "total": 4312,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_phase",
+   "section": "LFO 3",
+   "builtin": 0,
+   "pack": 4118,
+   "total": 4118,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_depth",
+   "section": "LFO 3",
+   "builtin": 190,
+   "pack": 4121,
+   "total": 4311,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_mode",
+   "section": "LFO 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_table",
+   "section": "LFO 3",
+   "builtin": 0,
+   "pack": 427,
+   "total": 427,
+   "modulated": 0
+  },
+  {
+   "key": "lfo3_sync",
+   "section": "LFO 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_shape",
+   "section": "LFO 4",
+   "builtin": 0,
+   "pack": 2630,
+   "total": 2630,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_rate",
+   "section": "LFO 4",
+   "builtin": 190,
+   "pack": 2630,
+   "total": 2820,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_phase",
+   "section": "LFO 4",
+   "builtin": 0,
+   "pack": 2626,
+   "total": 2626,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_depth",
+   "section": "LFO 4",
+   "builtin": 190,
+   "pack": 2628,
+   "total": 2818,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_mode",
+   "section": "LFO 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_table",
+   "section": "LFO 4",
+   "builtin": 0,
+   "pack": 290,
+   "total": 290,
+   "modulated": 0
+  },
+  {
+   "key": "lfo4_sync",
+   "section": "LFO 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_shape",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 1316,
+   "total": 1316,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_rate",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 1316,
+   "total": 1316,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_phase",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 1315,
+   "total": 1315,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_depth",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 1316,
+   "total": 1316,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_mode",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_table",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 150,
+   "total": 150,
+   "modulated": 0
+  },
+  {
+   "key": "lfo5_sync",
+   "section": "LFO 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_shape",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 540,
+   "total": 540,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_rate",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 540,
+   "total": 540,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_phase",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 540,
+   "total": 540,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_depth",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 539,
+   "total": 539,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_mode",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_table",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 49,
+   "total": 49,
+   "modulated": 0
+  },
+  {
+   "key": "lfo6_sync",
+   "section": "LFO 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_shape",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 178,
+   "total": 178,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_rate",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 178,
+   "total": 178,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_phase",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 178,
+   "total": 178,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_depth",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 177,
+   "total": 177,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_mode",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_table",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 18,
+   "total": 18,
+   "modulated": 0
+  },
+  {
+   "key": "lfo7_sync",
+   "section": "LFO 7",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_shape",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_rate",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_phase",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_depth",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_mode",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_table",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "lfo8_sync",
+   "section": "LFO 8",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env1_mode",
+   "section": "Env 1",
+   "builtin": 0,
+   "pack": 3986,
+   "total": 3986,
+   "modulated": 0
+  },
+  {
+   "key": "env1_time",
+   "section": "Env 1",
+   "builtin": 0,
+   "pack": 3986,
+   "total": 3986,
+   "modulated": 0
+  },
+  {
+   "key": "env1_depth",
+   "section": "Env 1",
+   "builtin": 0,
+   "pack": 3980,
+   "total": 3980,
+   "modulated": 0
+  },
+  {
+   "key": "env1_sync",
+   "section": "Env 1",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env2_mode",
+   "section": "Env 2",
+   "builtin": 0,
+   "pack": 2021,
+   "total": 2021,
+   "modulated": 0
+  },
+  {
+   "key": "env2_time",
+   "section": "Env 2",
+   "builtin": 0,
+   "pack": 2021,
+   "total": 2021,
+   "modulated": 0
+  },
+  {
+   "key": "env2_depth",
+   "section": "Env 2",
+   "builtin": 0,
+   "pack": 2019,
+   "total": 2019,
+   "modulated": 0
+  },
+  {
+   "key": "env2_sync",
+   "section": "Env 2",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env3_mode",
+   "section": "Env 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env3_time",
+   "section": "Env 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env3_depth",
+   "section": "Env 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env3_sync",
+   "section": "Env 3",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env4_mode",
+   "section": "Env 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env4_time",
+   "section": "Env 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env4_depth",
+   "section": "Env 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env4_sync",
+   "section": "Env 4",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env5_mode",
+   "section": "Env 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env5_time",
+   "section": "Env 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env5_depth",
+   "section": "Env 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env5_sync",
+   "section": "Env 5",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env6_mode",
+   "section": "Env 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env6_time",
+   "section": "Env 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env6_depth",
+   "section": "Env 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "env6_sync",
+   "section": "Env 6",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "morph_active",
+   "section": "Morph",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "morph",
+   "section": "Morph",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "morph_glide",
+   "section": "Morph",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_a",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_b",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_c",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_d",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_e",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_f",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_g",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "macro_h",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "inertia",
+   "section": "Macros",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "map_active",
+   "section": "Map",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "map_x",
+   "section": "Map",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "map_y",
+   "section": "Map",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "map_radius",
+   "section": "Map",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "route_active",
+   "section": "Route",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "route_speed",
+   "section": "Route",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "route_loop",
+   "section": "Route",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "clock_source",
+   "section": "Clock",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  },
+  {
+   "key": "tempo",
+   "section": "Clock",
+   "builtin": 1,
+   "pack": 0,
+   "total": 1,
+   "modulated": 0
+  },
+  {
+   "key": "clock_run",
+   "section": "Clock",
+   "builtin": 0,
+   "pack": 0,
+   "total": 0,
+   "modulated": 0
+  }
+ ]
+}

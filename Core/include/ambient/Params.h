@@ -178,6 +178,10 @@ enum class ParamId : int {
     // default so nothing that exists sounds different: the background narrowed as it goes back,
     // a static micro-detune instead of the chorus, a band delayed to one side, and a wavefolder.
     FarWidth, EnsMode, Haas, HaasTime, FilterFold,
+    // What the literature after the classics asks for: a stretched octave (Ward 1954, Terhardt),
+    // a reverb with scattering in its loop (Schlecht and Habets 2020), masking that spreads
+    // upward (Zwicker), and a binaural mode that follows the head. Neutral at every default.
+    TuneStretch, FarMode, FarUnmaskSpread, Binaural,
     Count
 };
 
@@ -238,6 +242,8 @@ extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost to
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[2];      // "Chorus" (modulated) or "Microshift" (static detune)
+extern const char* const kFarModeNames[2];      // "Classic" or "Scattering" (all-passes inside the loop)
+extern const char* const kBinauralNames[2];     // "Off" or "Headphones"
 extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal
 extern const char* const kStrikeWhoNames[2];    // Keys, Keys + Brain     // "Band" (one band-pass) or "Ghost" (resonators on the just harmonics)
 constexpr int kNumStacks = 8;

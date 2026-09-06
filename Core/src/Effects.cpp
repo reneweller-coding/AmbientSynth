@@ -287,7 +287,7 @@ void Unmask::reset()
     for (float& g : gain_) g = 1.0f;
 }
 
-void Unmask::set(float amount) { amount_ = clampv(amount, 0.0f, 1.0f); }
+void Unmask::set(float amount, float spread) { amount_ = clampv(amount, 0.0f, 1.0f); spread_ = clampv(spread, 0.0f, 1.0f); }
 
 void Unmask::process(const float* nearL, const float* nearR, float* farL, float* farR, int n)
 {
@@ -302,8 +302,19 @@ void Unmask::process(const float* nearL, const float* nearR, float* farL, float*
         for (int b = 0; b < 3; ++b) {
             const float mag = std::fabs(nb[b]);
             env_[b] += (mag > env_[b] ? aCoef_ : rCoef_) * (mag - env_[b]);
+        }
+        for (int b = 0; b < 3; ++b) {
+            // The upward spread of masking: a band is also masked by the bands below it, at
+            // half strength one band down and a quarter two down, and only a little by the
+            // band above. At spread 0 each band hears itself alone.
+            float e = env_[b];
+            if (spread_ > 0.0f) {
+                if (b >= 1) e += spread_ * 0.5f * env_[b - 1];
+                if (b >= 2) e += spread_ * 0.25f * env_[b - 2];
+                if (b <= 1) e += spread_ * 0.1f * env_[b + 1];
+            }
             // A gain that falls smoothly with the foreground's level and returns on its own.
-            const float target = 1.0f / (1.0f + depth * env_[b] * 24.0f);
+            const float target = 1.0f / (1.0f + depth * e * 24.0f);
             gain_[b] += (target < gain_[b] ? aCoef_ : rCoef_) * (target - gain_[b]);
         }
         // Far bus, the same split, each band scaled, then put back together.
@@ -415,6 +426,9 @@ void Reverb::prepare(double sampleRate)
 
     static const float kApMs[kAllpasses] = { 5.1f, 7.3f, 11.3f, 13.7f };
     for (int k = 0; k < kAllpasses; ++k) apLen_[k] = std::max(1, static_cast<int>(kApMs[k] * sr_ / 1000.0));
+    // The scattering all-passes: short, mutually prime lengths, so no two lines scatter alike.
+    static const float kScMs[kLines] = { 1.9f, 2.3f, 2.9f, 3.7f, 4.3f, 5.3f, 6.1f, 7.1f };
+    for (int l = 0; l < kLines; ++l) { sc_[l].assign(static_cast<size_t>(size), 0.0f); scLen_[l] = std::max(1, static_cast<int>(kScMs[l] * sr_ / 1000.0)); }
     static const float kModHz[kLines] = { 0.11f, 0.13f, 0.17f, 0.19f, 0.23f, 0.29f, 0.31f, 0.37f };
     for (int l = 0; l < kLines; ++l) { modRate_[l] = kModHz[l]; modPh_[l] = l / static_cast<double>(kLines); lp_[l] = 0.0f; lenCur_[l] = 0.0f; }
     preCur_ = 0.0f;
@@ -488,7 +502,14 @@ void Reverb::process(float* L, float* R, int n)
             modPh_[l] += modRate_[l] / sr_;
             if (modPh_[l] >= 1.0) modPh_[l] -= 1.0;
             const float d = lenCur_[l] + 1.5f * sin01(modPh_[l]) + 2.0f;
-            const float v = ringRead(line_[l].data(), mask_, w_, d);
+            float v = ringRead(line_[l].data(), mask_, w_, d);
+            if (mode_ == 1) {   // scattering: a Schroeder all-pass in the loop, gain 0.5
+                float* sb = sc_[l].data();
+                const float sd = sb[(w_ - scLen_[l]) & mask_];
+                const float sy = sd - 0.5f * v;
+                sb[w_ & mask_] = v + 0.5f * sy;
+                v = sy;
+            }
             lp_[l] += lpc * (v - lp_[l]);
             o[l] = lp_[l];
             sum += o[l];

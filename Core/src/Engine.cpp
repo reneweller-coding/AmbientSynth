@@ -320,9 +320,19 @@ double Engine::frequencyOf(int note) const
     // slows down as the intervals close in on their ratios.
     const double pure = scaleFrequency(*scale_, note, rootNote_, refPitch_, snapKeys_);
     const double p = purityCur_;
-    if (p >= 0.9999) return pure;
-    const double et = refPitch_ * std::pow(2.0, (note - 69) / 12.0);
-    return std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
+    double f = pure;
+    if (p < 0.9999) {
+        const double et = refPitch_ * std::pow(2.0, (note - 69) / 12.0);
+        f = std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
+    }
+    // The stretched octave. Listeners prefer octaves a little wider than 2:1 -- ten to twenty
+    // cents at the extremes of the range (Ward 1954; Terhardt) -- and a piano is tuned that
+    // way (the Railsback curve). Every octave away from the reference pitch is widened by
+    // Stretch cents, in both directions, so the reference itself does not move:
+    //     log2 f' = log2 A4 + (1 + s/1200) (log2 f - log2 A4)
+    if (stretchCents_ > 0.0f && f > 0.0 && refPitch_ > 0.0)
+        f = refPitch_ * std::pow(f / refPitch_, 1.0 + stretchCents_ / 1200.0);
+    return f;
 }
 
 const char* Engine::stemName(int i)
@@ -471,6 +481,11 @@ void Engine::setPressure(int note, float v)
 void Engine::setSlide(int note, float v)
 {
     for (auto& x : voices_) if (x.isActive() && (note < 0 || x.note() == note)) x.setSlide(v);
+}
+
+void Engine::setHeadYaw(float degrees)
+{
+    headYawDeg_.store(degrees, std::memory_order_relaxed);
 }
 
 void Engine::setWheel(float v)

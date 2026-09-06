@@ -78,6 +78,7 @@ bool dispatchOsc(const OscMessage& m, OscSink& sink, GestureLayer& gestures)
     if (std::strcmp(a, "head") == 0) {
         if (m.numArgs < 1) return false;
         gestures.setHead(m.floats[0], m.numArgs > 1 ? m.floats[1] : 0.0f, m.numArgs > 2 ? m.floats[2] : 0.0f);
+        sink.setHeadYaw(m.floats[0]);
         return true;
     }
     if (std::strcmp(a, "calibrate") == 0) {

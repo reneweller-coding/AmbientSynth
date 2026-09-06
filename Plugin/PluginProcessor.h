@@ -178,6 +178,7 @@ private:
     void setParam(ambient::ParamId id, float value) override;
     void setParamNormalised(ambient::ParamId id, float norm) override;
     void event(const ambient::ControlEvent& e) override;
+    void setHeadYaw(float degrees) override { engine_.setHeadYaw(degrees); }
     ambient::GestureLayer gestures_;
     ambient::OscServer    osc_;
     ambient::EventQueue   events_;

@@ -59,6 +59,9 @@ public:
     // The mod wheel (CC 1), 0..1. It belongs to the instrument rather than to a note, and reaches
     // the sound only through the matrix -- there is no fixed route from it.
     void setWheel(float v);
+    // The head's yaw in degrees (0 ahead, positive to the right), from a headset or an OSC head
+    // tracker. Only the Headphones binaural mode listens to it.
+    void setHeadYaw(float degrees);
 
     // Renders `n` stereo samples (replaces L/R). Any n; larger than maxBlockSize is chunked.
     void process(float* L, float* R, int n);
@@ -283,6 +286,12 @@ private:
     // The wheel: where it was put, and where the modulation has got to. A controller sends 128
     // steps and a step on a cutoff is audible, so what the matrix reads is the smoothed one.
     float        wheelTarget_ = 0.0f, wheel_ = 0.0f;
+    // The stretched octave, in cents per octave away from the reference pitch (0 = exact 2:1).
+    float        stretchCents_ = 0.0f;
+    bool         stretchChanged_ = false;
+    // The head's yaw in degrees, for the Headphones binaural mode: the whole field turns the
+    // other way so a source stays where it is in the room. Written from any thread.
+    std::atomic<float> headYawDeg_{ 0.0f };
     void         stepModulation(float dt);
     // clock: the three candidates and the one resolved for this block
     double       hostBpm_ = 0.0, hostBeat_ = 0.0;

@@ -64,6 +64,9 @@ struct OscSink {
     virtual void setParam(ParamId id, float value) = 0;          // real value
     virtual void setParamNormalised(ParamId id, float norm) = 0; // 0..1 along the knob curve
     virtual void event(const ControlEvent& e) = 0;
+    // The head's yaw in degrees, from /ambient/head. The gesture layer gets it as well; this is
+    // for the binaural mode, which wants the angle itself rather than a mapping of it.
+    virtual void setHeadYaw(float) {}
 };
 
 // One parsed OSC message (arguments already decoded).

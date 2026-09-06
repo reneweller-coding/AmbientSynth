@@ -359,7 +359,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Tuning") s.maxUnits = 9;
             if (s.name == "Morph") s.maxUnits = 9;
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
-            if (s.name == "Space") s.maxUnits = 8;                           // two rows each, side by side
+            if (s.name == "Space") s.maxUnits = 10;                          // two rows of ten
             if (s.name == "Foundation") s.maxUnits = 5;
             // Source 1 is narrower than the others on purpose: its page shares the row with the
             // strand bank under the display, and the display column needs the width for it.

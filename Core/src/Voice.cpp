@@ -349,13 +349,34 @@ void Voice::control(int blockLen, const VoiceParams& p)
     lastUnison_ = unison;
 
     // Interaural time difference from the centre pan: the far ear hears it later.
-    const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
-    itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
-    itdRTarget_ = centre < 0.0f ? -centre * maxItd : 0.0f;
+    float lateral = centre;          // -1..1: where the source is, left to right
+    bool  behind = false;
+    float shadowOct = 2.7f * p.itd;
+    if (p.binaural) {
+        // Headphones: the pan is an azimuth (90 degrees at full pan) and the head's yaw turns
+        // the field the other way, so a source stays put in the room while the head moves.
+        float az = centre * 90.0f - p.headYawDeg;
+        while (az > 180.0f) az -= 360.0f;
+        while (az < -180.0f) az += 360.0f;
+        behind = std::fabs(az) > 90.0f;
+        const float folded = behind ? (az > 0.0f ? 180.0f - az : -180.0f - az) : az;   // -90..90
+        const float th = folded * (kPi / 180.0f);
+        // Woodworth's spherical head: tau = (a/c)(theta + sin theta), a = 8.75 cm, which is
+        // 0.656 ms at ninety degrees -- the figure the plain mode's 0.65 ms came from.
+        const float tau = (0.0875f / 343.0f) * (std::fabs(th) + std::sin(std::fabs(th)));
+        const float itdSamples = tau * static_cast<float>(sr_);
+        itdLTarget_ = th > 0.0f ? itdSamples : 0.0f;
+        itdRTarget_ = th < 0.0f ? itdSamples : 0.0f;
+        lateral = std::sin(th);
+        shadowOct = 2.7f;            // the head is the head, whatever Time Width says
+    } else {
+        const float maxItd = 0.00065f * static_cast<float>(sr_) * p.itd;
+        itdLTarget_ = centre > 0.0f ?  centre * maxItd : 0.0f;
+        itdRTarget_ = centre < 0.0f ? -centre * maxItd : 0.0f;
+    }
     // Head shadow: the far ear also loses highs (20 kHz -> ~3 kHz at full lateral position).
-    const float shadowOct = 2.7f * p.itd;
-    const float fcL = 20000.0f * std::pow(2.0f, -shadowOct * std::max(centre, 0.0f));
-    const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-centre, 0.0f));
+    const float fcL = 20000.0f * std::pow(2.0f, -shadowOct * std::max(lateral, 0.0f));
+    const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-lateral, 0.0f));
     shadowCoefL_ = fcL >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcL / static_cast<float>(sr_));
     shadowCoefR_ = fcR >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcR / static_cast<float>(sr_));
     // Externalisation: the pinna's notch sits near 7 kHz for a source in front and climbs towards
@@ -363,8 +384,12 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // millisecond later. Together they are most of what tells the ear a sound is outside the head.
     extAmt_ = clampv(p.externalise, 0.0f, 1.0f);
     if (extAmt_ > 0.0f) {
-        const float lat = std::fabs(centre);
-        pinnaL_.setQ(clampv(7000.0f + 2000.0f * lat, 2000.0f, 0.45f * static_cast<float>(sr_)), 2.2f, static_cast<float>(sr_));
+        const float lat = std::fabs(lateral);
+        // Behind the head the pinna's notch sits lower (Brown and Duda 1998), which is most of
+        // what tells front from back with no visual cue; only the binaural mode knows about
+        // behind, the plain mode's pan has no back.
+        const float notch = 7000.0f + 2000.0f * lat - (behind ? 1800.0f : 0.0f);
+        pinnaL_.setQ(clampv(notch, 2000.0f, 0.45f * static_cast<float>(sr_)), 2.2f, static_cast<float>(sr_));
         pinnaR_.copyCoefficients(pinnaL_);
         shoulder_ = std::max(1, static_cast<int>(0.00026 * sr_));
     }

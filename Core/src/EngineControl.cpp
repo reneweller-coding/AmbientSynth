@@ -452,6 +452,8 @@ void Engine::readParams()
     vp_.filterModel = static_cast<int>(std::lround(g(ParamId::FilterModel)));
     vp_.filterDrive = g(ParamId::FilterDrive);
     vp_.fold = g(ParamId::FilterFold);
+    vp_.binaural = std::lround(getParam(ParamId::Binaural)) == 1;
+    vp_.headYawDeg = headYawDeg_.load(std::memory_order_relaxed);
     vp_.cutoff      = g(ParamId::Cutoff);
     vp_.resonance   = g(ParamId::Resonance);
     vp_.filterEnv   = g(ParamId::FilterEnv);
@@ -490,6 +492,7 @@ void Engine::readParams()
     blur_.set(g(ParamId::BlurSmear));
     farRotate_  = g(ParamId::FarRotate);
     farWidth_   = g(ParamId::FarWidth);
+    farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 1));
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
@@ -572,7 +575,7 @@ void Engine::readParams()
     cloudSend_ = g(ParamId::CloudSend);
     nearReverb_.setSpace(0.3f, 20000.0f, g(ParamId::NearLowcut));
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
-    unmask_.set(g(ParamId::FarUnmask));
+    unmask_.set(g(ParamId::FarUnmask), g(ParamId::FarUnmaskSpread));
     bodyLevel_ = g(ParamId::BodyLevel);
     bodyPitch_ = g(ParamId::BodyPitch);
     body_.set(static_cast<BodyMaterial>(clampv(static_cast<int>(std::lround(g(ParamId::BodyMaterial))), 0, kNumBodyMaterials - 1)),
@@ -622,6 +625,10 @@ void Engine::readParams()
     const int scaleIdx = clampv(static_cast<int>(std::lround(g(ParamId::Scale))), 0, kNumScaleChoices - 1);
     scale_ = &scales_[scaleIdx];
     refPitch_ = g(ParamId::RefPitch);
+    {   // The stretched octave. A change while notes are held retunes them like a purity change.
+        const float st = g(ParamId::TuneStretch);
+        if (st != stretchCents_) { stretchCents_ = st; stretchChanged_ = true; }
+    }
     snapKeys_ = std::lround(g(ParamId::KeyMap)) == 0;
     const int rootPc = clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11);
     rootNote_ = 60 + rootPc;
@@ -629,7 +636,8 @@ void Engine::readParams()
         const float purity = g(ParamId::TunePurity), drift = g(ParamId::TuneDrift);
         const float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()
         purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
-        retune_ = purityCur_ < 0.9999 || drift > 0.0f;
+        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_;
+        stretchChanged_ = false;
     }
     vp_.freeze = g(ParamId::Freeze) >= 0.5f;
     vp_.airGhost = std::lround(g(ParamId::AirMode)) == 1;

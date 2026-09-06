@@ -43,6 +43,11 @@ struct VoiceParams {
     float pressDistance = 0.0f, pressBright = 0.0f, pressLevel = 0.0f;
     float slideCutoff = 0.0f, slideZ = 0.0f;
     float externalise = 0.0f;   // pinna notch + shoulder reflection, for headphones
+    // Headphones binaural mode: the pan becomes an azimuth, the head's yaw turns the field the
+    // other way, the interaural delay follows Woodworth's head and the shadow is at full
+    // strength whatever Time Width says. Off, everything below is exactly as it was.
+    bool  binaural = false;
+    float headYawDeg = 0.0f;
     float sympathy = 0.0f;      // how much of the other voices this one hears, through its own filter
     float pitchMul = 1.0f;
     float strikeLevel = 0.0f, strikeDecay = 0.4f, strikeDamp = 0.5f;

@@ -1475,6 +1475,47 @@ hall across the third-octave bands, peaks of up to 27 dB where the object
 rings. Forty of them, three megabytes, in the library and in the
 thirty-second pack, *Cryo Chamber*, which was written for all of the above.
 
+### After the classics: four things the newer literature asked for
+
+The design chapters of the manual lean on the classic psychoacoustics, and a
+check of where the field has moved produced four changes, all neutral at their
+defaults and all measured:
+
+* **Stretch** (Tuning): the octave a few cents wider than 2:1 -- Ward's octave
+  enlargement, the Railsback curve -- as a slope about the reference pitch, so
+  A4 stays and every octave away from it is `s` cents wider. Applied after
+  Purity, retunes held notes through the same glide. Measured 1212.00 cents at
+  twelve, twice that over two octaves.
+* **Far reverb Mode = Scattering** (Schlecht and Habets 2020): a Schroeder
+  all-pass with a mutually prime length inside every line's loop. Echo density
+  after 50 ms 0.60 -> 0.76 of Gaussian (Abel and Huang's measure), decay
+  unchanged, late-tail flatness 0.487 -> 0.501 -- so the honest claim is
+  density, not colour, and the help text says so.
+* **Unmask Spread**: the upward spread of masking. A band's effective
+  side-chain envelope gains half of the band below, a quarter of the one two
+  below and a tenth of the one above. Measured: a bass note in front ducks the
+  background's middle to less than half of what it did without the spread.
+* **Binaural = Headphones** (Space) with head tracking: pan becomes azimuth,
+  Woodworth's ITD, full head shadow, a lower pinna notch behind the head, and
+  the head's yaw -- from the Quest's OpenXR pose or an OSC `/ambient/head`
+  tracker, through a new `OscSink::setHeadYaw` -- turns the field the other way.
+  Measured: a centred voice with the head turned ninety degrees has the
+  interaural lag of a hard-panned voice with the head straight (34 samples:
+  Woodworth's 31.5 plus the shadow filter's group delay); off, bit-identical.
+
+Two measurement lessons from the round. The reverb's coloration barely moved
+because a modulated eight-line network is already nearly free of fixed modes;
+the first test asserted a ten per cent gain in flatness and was wrong to. And
+the unmask's one-pole crossovers leak: a 6 dB/octave split lets a ducked low
+band show up in a middle-band measurement, so the surviving claims are
+relative ones. The manual's design chapters were corrected in three places
+the newer literature contradicts the classics -- loudness adaptation is small
+(Scharf), the darkening with distance is a recording convention rather than
+air absorption (ISO 9613 gives half a decibel over twenty metres), and bass
+mono is a production rule rather than a perceptual limit -- and gained the
+harmonicity account of consonance (McDermott et al. 2010, 2016; Harrison and
+Pearce 2020) beside the roughness one.
+
 ### The three section layers
 
 A layer is a preset bank that touches one section and nothing else, so it

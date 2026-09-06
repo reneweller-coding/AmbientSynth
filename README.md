@@ -523,13 +523,21 @@ Sections of the GUI (all parameters are automatable in a DAW):
   the side channel: width where the ear takes its direction from level rather
   than from time. What is added on one side comes off the other, so the mono
   sum is exactly the picture it was.
+* **Binaural** (in Space) — a headphone mode: the pan becomes an angle round
+  the head, the interaural delay follows Woodworth's head model, a source
+  behind you gets the lower pinna notch, and with a headset or an OSC head
+  tracker (`/ambient/head`) the whole field turns against your head, so voices
+  stay where they are in the room while you look round. Off on speakers.
 * **Far Reverb** — 8-line FDN with decay up to 90 s, size, damping, pre-delay,
   *Asymmetry* (right-hand lines longer, right output later), *Tail Cut*
   (low-pass on the tail: distance darkens), *Low Cut*, *Freeze*, and *Width*:
   the background's own stereo width before it joins the foreground. A mix in
   which everything is spread as far as it will go is a flat wall; pulling the
   far plane towards the centre while the foreground stays wide is the funnel
-  the ear reads as distance.
+  the ear reads as distance. *Mode*: the classic network, or *Scattering* with
+  an all-pass inside every line's loop — a denser tail at the same decay.
+  *Unmask* lets the background step aside for the foreground band by band, and
+  *Spread* gives it the ear's upward spread of masking.
 * **Room** — a third reverb, optional and additional: a convolution reverb
   on the far plane playing an impulse response (*Impulse…* loads a mono or
   stereo file, a built-in dark hall plays without one). The library's 240
@@ -626,7 +634,9 @@ Sections of the GUI (all parameters are automatable in a DAW):
   sounding notes gliding along. *Freeze* (Oscillator) holds every voice's
   spectrum still. *Portamento* slides a new key in from the last one;
   *Gravity* makes the slide linger on consonant intervals to the root and
-  hurry across the dissonant stretches.
+  hurry across the dissonant stretches. *Stretch* widens the octave by a few
+  cents, the way listeners prefer it and pianos are tuned, as a slope about
+  the reference pitch; 0 is the exact 2:1.
 
 ## Measuring instead of listening
 

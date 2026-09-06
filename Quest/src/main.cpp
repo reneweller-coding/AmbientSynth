@@ -864,6 +864,7 @@ private:
         float yaw, pitch, roll;
         quatToEulerDeg(loc.pose.orientation, yaw, pitch, roll);
         gestures_.setHead(yaw, pitch, roll);
+        engine_.setHeadYaw(yaw);   // the binaural mode turns the field against the head
         if (osc_.ok()) { const float args[3] = { yaw, pitch, roll }; osc_.send("/ambient/head", args, 3); }
     }
 

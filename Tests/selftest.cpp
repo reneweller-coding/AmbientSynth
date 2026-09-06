@@ -3062,6 +3062,209 @@ void testMixDeskFive()
     }
 }
 
+// ---------------------------------------------------------------- after the classics: four more
+//
+// The stretched octave, the scattering reverb, the upward-spreading unmask and the headphone
+// binaural mode. Each measured for what it claims and for being neutral at its default.
+void testAfterTheClassics()
+{
+    const int sr = 48000;
+    auto fresh = [&](Engine& e) {
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::TunePurity, 1.0f);
+        e.setParam(ParamId::Scale, 0.0f);          // 12-TET, so the octave is exactly 2:1 to begin with
+        e.reset();
+    };
+
+    // ---- 1. the stretched octave ------------------------------------------------------------
+    {
+        Engine e; fresh(e);
+        std::vector<float> L(256), R(256);
+        e.process(L.data(), R.data(), 256);
+        const double a4 = e.frequencyOf(69), a5 = e.frequencyOf(81), a3 = e.frequencyOf(57);
+        CHECK(std::fabs(a5 / a4 - 2.0) < 1e-9 && std::fabs(a4 / a3 - 2.0) < 1e-9, "at 0 the octave is exactly 2:1");
+        e.setParam(ParamId::TuneStretch, 12.0f);
+        e.process(L.data(), R.data(), 256);
+        const double s4 = e.frequencyOf(69), s5 = e.frequencyOf(81), s3 = e.frequencyOf(57);
+        CHECK(std::fabs(s4 - a4) < 1e-9, "the reference pitch does not move");
+        // log2 f' = log2 A4 + (1 + 12/1200)(log2 f - log2 A4): one octave up is 1212 cents
+        const double up = 1200.0 * std::log2(s5 / s4), down = 1200.0 * std::log2(s4 / s3);
+        CHECK(std::fabs(up - 1212.0) < 0.01, "an octave above A4 is twelve cents wider");
+        CHECK(std::fabs(down - 1212.0) < 0.01, "and an octave below is twelve cents wider too");
+        // Two octaves stretch by twice as much: it is a slope, not an offset.
+        CHECK(std::fabs(1200.0 * std::log2(e.frequencyOf(93) / s4) - 2424.0) < 0.02, "two octaves, twice the stretch");
+        // A held note follows: the retune path picks the change up.
+        Engine h; fresh(h);
+        h.noteOn(81, 0.8f);
+        for (int b = 0; b < 20; ++b) h.process(L.data(), R.data(), 256);
+        double before = 0.0, after = 0.0;
+        for (int b = 0; b < 8; ++b) h.process(L.data(), R.data(), 256);
+        before = h.displayFrequency();
+        h.setParam(ParamId::TuneStretch, 20.0f);
+        for (int b = 0; b < 600; ++b) h.process(L.data(), R.data(), 256);   // the glide takes a few seconds
+        after = h.displayFrequency();
+        CHECK(after > before * 1.005 && after < before * 1.02, "a held note retunes to the stretched pitch");
+    }
+
+    // ---- 2. the scattering reverb -----------------------------------------------------------
+    {
+        // An impulse through both modes. Two things are claimed: the echo density grows faster
+        // (measured as the fraction of samples above the local RMS in the first 200 ms, the
+        // normalised echo density of Abel and Huang 2006 in its simplest form), and the late
+        // tail is less coloured (its spectrum is flatter). And one thing must not change: the
+        // decay time.
+        auto run = [&](int mode, double& density, double& flatness, double& t60) {
+            Reverb rv;
+            rv.prepare(sr);
+            rv.setMode(mode);
+            rv.set(1.6f, 4.0f, 0.0f, 0.0f, false, 1.0f);
+            rv.setSpace(0.0f, 20000.0f);
+            const int n = sr * 6;
+            std::vector<float> L(static_cast<size_t>(n), 0.0f), R(static_cast<size_t>(n), 0.0f);
+            L[100] = R[100] = 1.0f;
+            rv.process(L.data(), R.data(), n);
+            // echo density over 50..250 ms: how Gaussian the tail already looks
+            int above = 0, count = 0;
+            {
+                double sq = 0.0;
+                const int a = sr / 20, b = sr / 4;
+                for (int i = a; i < b; ++i) sq += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)];
+                const double rms = std::sqrt(sq / (b - a));
+                for (int i = a; i < b; ++i) { if (std::fabs(L[static_cast<size_t>(i)]) > rms) ++above; ++count; }
+            }
+            density = static_cast<double>(above) / std::max(1, count) / 0.3173;   // 1 = Gaussian noise
+            // spectral flatness of the tail 1..3 s: 1 for white, small for a comb of modes
+            {
+                const int a = sr, len = 65536;
+                std::vector<double> mag(static_cast<size_t>(len / 2), 0.0);
+                for (int k = 1; k < len / 2; k += 1) {
+                    if (k % 16 != 0) continue;   // every 16th bin: enough of the shape, a tenth of the time
+                    double re = 0.0, im = 0.0;
+                    for (int i = 0; i < len; ++i) {
+                        const double w = 0.5 * (1.0 - std::cos(kTwoPi * i / len));
+                        const double x = L[static_cast<size_t>(a + i)] * w;
+                        re += x * std::cos(kTwoPi * k * i / len); im -= x * std::sin(kTwoPi * k * i / len);
+                    }
+                    mag[static_cast<size_t>(k)] = std::sqrt(re * re + im * im) + 1e-12;
+                }
+                double lg = 0.0, lin = 0.0; int m = 0;
+                for (int k = 16; k < len / 2 && k * sr / len < 8000; k += 16) { lg += std::log(mag[static_cast<size_t>(k)]); lin += mag[static_cast<size_t>(k)]; ++m; }
+                flatness = std::exp(lg / m) / (lin / m);
+            }
+            // T60 from the energy at 1 s and 3 s
+            auto energy = [&](int from, int to) { double s = 0.0; for (int i = from; i < to; ++i) s += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)]; return s / (to - from); };
+            const double e1 = energy(sr, sr + sr / 4), e3 = energy(3 * sr, 3 * sr + sr / 4);
+            t60 = 60.0 * 2.0 / (10.0 * std::log10(e1 / std::max(e3, 1e-30)));
+        };
+        double d0, f0, t0, d1, f1, t1;
+        run(0, d0, f0, t0);
+        run(1, d1, f1, t1);
+        // Measured: density 0.60 -> 0.76, flatness 0.487 -> 0.501, decay unchanged. The density is
+        // the claim; the flatness is the thing that must not get worse. A modulated network with
+        // eight lines is already nearly free of the comb of fixed modes, so the scattering buys
+        // a little smoothness and a lot of density -- which is what it is for.
+        CHECK(d1 > d0 * 1.15, "scattering: the echo density grows faster");
+        CHECK(f1 > f0 * 0.98, "scattering: the late tail is at least as smooth");
+        CHECK(std::fabs(t1 - t0) < 0.3 * t0, "scattering: the decay time is the same");
+        CHECK(std::fabs(t0 - 4.0) < 1.6, "and the classic decay is about what the knob says");
+    }
+
+    // ---- 3. the unmask's upward spread ------------------------------------------------------
+    {
+        // A near bus with energy in the low band only. Without spread the far reverb's middle
+        // band must be untouched; with spread it must be ducked too, and more than the top.
+        auto run = [&](float spread, double& midGain, double& hiGain) {
+            Unmask u;
+            u.prepare(sr);
+            u.set(1.0f, spread);
+            const int n = sr * 2;
+            std::vector<float> nl(static_cast<size_t>(n)), nr(static_cast<size_t>(n)), fl(static_cast<size_t>(n)), fr(static_cast<size_t>(n));
+            uint32_t rng = 99;
+            for (int i = 0; i < n; ++i) {
+                nl[static_cast<size_t>(i)] = nr[static_cast<size_t>(i)] = 0.8f * static_cast<float>(std::sin(kTwoPi * 80.0 * i / sr));   // a bass note in front
+                rng = rng * 1664525u + 1013904223u;
+                fl[static_cast<size_t>(i)] = fr[static_cast<size_t>(i)] = 0.3f * ((static_cast<float>(rng >> 8) / 8388608.0f) - 1.0f);   // a broadband background
+            }
+            std::vector<float> dry = fl;
+            u.process(nl.data(), nr.data(), fl.data(), fr.data(), n);
+            // band energies of the far bus before and after, over the last second
+            auto band = [&](const std::vector<float>& v, float lo, float hi) {
+                float a = 0.0f, b = 0.0f; const float ca = 1.0f - std::exp(-kTwoPi * lo / sr), cb = 1.0f - std::exp(-kTwoPi * hi / sr);
+                double s = 0.0;
+                for (int i = 0; i < n; ++i) { a += ca * (v[static_cast<size_t>(i)] - a); b += cb * (v[static_cast<size_t>(i)] - b); if (i >= sr) s += static_cast<double>(b - a) * (b - a); }
+                return s;
+            };
+            midGain = band(fl, 400.0f, 2000.0f) / band(dry, 400.0f, 2000.0f);
+            hiGain  = band(fl, 4000.0f, 12000.0f) / band(dry, 4000.0f, 12000.0f);
+        };
+        double m0, h0, m1, h1;
+        run(0.0f, m0, h0);
+        run(1.0f, m1, h1);
+        // The bands are one-pole splits, 6 dB an octave, so a measurement through two more one-poles
+        // sees the ducked low band leaking into its middle: with spread 0 the middle still reads
+        // 0.23 of what it was. The claims that survive that are relative ones -- spread ducks the
+        // middle far more than no spread does, and the top less than the middle.
+        CHECK(m0 > 0.15 && h0 > m0, "without spread the middle and the top are ducked only by the crossovers' leakage, the top least");
+        CHECK(m1 < 0.5 * m0, "with spread the bass note ducks the middle as well");
+        CHECK(h1 > m1, "and the top less than the middle: the spread is upward and fading");
+    }
+
+    // ---- 4. the headphone binaural mode -----------------------------------------------------
+    {
+        // Off must be bit-identical to before (the oracle says so for forty presets; here one
+        // render against itself with the switch flipped and flipped back is enough). On, a
+        // centred voice with the head turned ninety degrees must arrive at the ears the way a
+        // hard-panned voice does with the head straight: that is what head tracking means.
+        auto renderHash = [&](bool binaural, float yaw, float pan, std::vector<float>* outL, std::vector<float>* outR) {
+            Engine e; fresh(e);
+            e.setParam(ParamId::Binaural, binaural ? 1.0f : 0.0f);
+            e.setParam(ParamId::Src1Pan, pan);
+            e.setParam(ParamId::PanDrift, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setHeadYaw(yaw);
+            e.noteOn(57, 0.8f);
+            std::vector<float> L(256), R(256);
+            uint64_t h = 1469598103934665603ull;
+            for (int b = 0; b < 400; ++b) {
+                e.process(L.data(), R.data(), 256);
+                for (int i = 0; i < 256; ++i) {
+                    const int32_t qa = static_cast<int32_t>(L[static_cast<size_t>(i)] * 1.0e6f), qb = static_cast<int32_t>(R[static_cast<size_t>(i)] * 1.0e6f);
+                    h = (h ^ static_cast<uint64_t>(static_cast<uint32_t>(qa))) * 1099511628211ull;
+                    h = (h ^ static_cast<uint64_t>(static_cast<uint32_t>(qb))) * 1099511628211ull;
+                    if (outL && b >= 200) { outL->push_back(L[static_cast<size_t>(i)]); outR->push_back(R[static_cast<size_t>(i)]); }
+                }
+            }
+            return h;
+        };
+        CHECK(renderHash(false, 0.0f, 0.0f, nullptr, nullptr) == renderHash(false, 60.0f, 0.0f, nullptr, nullptr), "off, the head's yaw changes nothing");
+        // The interaural delay by cross-correlation: which lag lines the two ears up.
+        auto lagOf = [&](const std::vector<float>& L, const std::vector<float>& R) {
+            int best = 0; double bestC = -1e30;
+            for (int lag = -60; lag <= 60; ++lag) {
+                double c = 0.0;
+                for (size_t i = 100; i + 100 < L.size(); ++i) c += static_cast<double>(L[i]) * R[static_cast<size_t>(static_cast<long>(i) + lag)];
+                if (c > bestC) { bestC = c; best = lag; }
+            }
+            return best;
+        };
+        std::vector<float> aL, aR, bL, bR, cL, cR;
+        renderHash(true, 0.0f, 1.0f, &aL, &aR);      // hard right, head straight
+        renderHash(true, -90.0f, 0.0f, &bL, &bR);    // centre, head turned left: the source is now to the right
+        renderHash(true, 0.0f, 0.0f, &cL, &cR);      // centre, head straight: no delay
+        const int lagA = lagOf(aL, aR), lagB = lagOf(bL, bR), lagC = lagOf(cL, cR);
+        // Measured -34, -34, -1. The centred source is a sample off because three detuned strands
+        // spread across the field do not correlate to exactly zero lag; the hard-panned one is two
+        // or three samples past Woodworth's 31.5 because the far ear's head-shadow one-pole adds
+        // its group delay (1 / (2 pi 3 kHz) is 53 us, 2.5 samples), which a real head does too.
+        CHECK(std::abs(lagC) <= 1, "a centred source arrives at both ears together");
+        CHECK(lagA != 0 && lagA == lagB, "turning the head ninety degrees puts a centred source where a hard-panned one is");
+        CHECK(std::abs(lagA) >= 29 && std::abs(lagA) <= 36, "and the interaural delay is Woodworth's 0.65 ms plus the shadow's group delay");
+    }
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -3108,6 +3311,7 @@ int main()
     testZPlaneBank();
     testFilterModels();
     testMixDeskFive();
+    testAfterTheClassics();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

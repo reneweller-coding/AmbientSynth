@@ -33,6 +33,8 @@ const char* const kSubSourceNames[2] = { "Root", "Difference" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[2] = { "Chorus", "Microshift" };
+const char* const kFarModeNames[2] = { "Classic", "Scattering" };
+const char* const kBinauralNames[2] = { "Off", "Headphones" };
 const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
 const char* const kStrikeWhoNames[2] = { "Keys", "Keys + Brain" };
@@ -539,6 +541,11 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Haas,       "haas",        "Haas",      "Space",      0.f, 1.f,   0.f,  1.f,  ""),
     F(ParamId::HaasTime,   "haas_time",   "Haas Time", "Space",      6.f, 28.f,  15.f, 1.f,  "ms"),
     F(ParamId::FilterFold, "filter_fold", "Fold",      "Filter",     0.f, 1.f,   0.f,  1.f,  ""),
+    // ---- after the classics: all neutral at their defaults
+    F(ParamId::TuneStretch,     "stretch",           "Stretch",  "Tuning",     0.f, 30.f, 0.f, 1.f, "ct"),
+    C(ParamId::FarMode,         "far_mode",          "Mode",     "Far Reverb", kFarModeNames, 2, 0),
+    F(ParamId::FarUnmaskSpread, "far_unmask_spread", "Spread",   "Far Reverb", 0.f, 1.f,  0.f, 1.f, ""),
+    C(ParamId::Binaural,        "binaural",          "Binaural", "Space",      kBinauralNames, 2, 0),
 }};
 } // namespace
 

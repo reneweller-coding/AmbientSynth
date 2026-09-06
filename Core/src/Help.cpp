@@ -126,6 +126,7 @@ const HelpEntry kHelp[] = {
     { "phase_rate", "How fast the phase field drifts. Keep it slow: the effect is space, not tremolo." },
     { "haas", "The Haas trick, done to one band only. Delaying a whole channel by ten to thirty milliseconds widens it and destroys it in mono. Between about 1.2 and 4 kHz, where the ear takes its direction from level rather than from time, each side is given the other side's delayed band six decibels down: the edges open and the bass and the top stay exactly where they were. Off at 0." },
     { "haas_time", "How far that band is delayed. Twelve to eighteen milliseconds is the studio figure: long enough to be a separate arrival, short enough that the ear fuses it with the original instead of hearing an echo." },
+    { "binaural", "Headphones turns the stereo picture into a binaural one: the pan becomes an angle round the head, the interaural delay follows Woodworth's head model (0.65 ms at ninety degrees), the head shadow is at full strength whatever Time Width says, and a source behind the head gets the lower pinna notch that tells back from front. With a headset or an OSC head tracker sending /ambient/head, the whole field turns against the head, so a voice stays where it is in the room while you look round. On speakers leave it off." },
     { "externalise", "The two cues a headphone image needs to sit outside the head: the notch the pinna cuts into what arrives from the side, and the reflection off the shoulder a quarter of a millisecond later. Both follow each voice's own position. On speakers leave it off." },
     { "doppler", "As a voice breathes closer or further away its pitch bends a little, the way a moving source does. A few cents at most; the ear reads approach and retreat from it." },
 
@@ -183,6 +184,8 @@ const HelpEntry kHelp[] = {
     { "patina_age", "How much top end the machine has lost: from untouched down to about 4 kHz." },
     { "far_diffuse", "Modulated all-passes in front of the far reverb: the tail arrives instead of starting. At zero the reverb answers immediately, as it always has; turned up, the first reflections smear into a slow swell that takes a second to become a room." },
     { "far_rotate", "The whole background slowly turns: the far field's left and right rotate into each other on a minute-scale curve. Depth of the turn." },
+    { "far_mode", "Classic is the network as it always was: eight delay lines behind four all-passes. Scattering puts a short all-pass inside every line's loop, so each pass round the network scatters every echo into many: the echo density grows much faster (a quarter more of the tail is dense after 50 ms, measured) and the late tail is at least as smooth as before. Same decay, same level, a denser texture of tail -- after Schlecht and Habets." },
+    { "far_unmask_spread", "How far a loud low band of the foreground also ducks the far reverb's bands above it. Masking in the ear is asymmetric: a low tone masks the frequencies above it far more than those below (the upward spread of masking), so a bass note in front should thin the background's middle as well as its bottom. At 0 the three bands are independent, as they always were." },
     { "far_width", "The width of the background alone, before it is added to the foreground. A mix in which everything is spread as far as it will go has no depth left -- it is a flat wall. Pulling the far plane in towards the centre while the foreground stays wide is the funnel that reads as distance: the ear is drawn into the middle of the horizon. 1 is the reverb as it made itself, 0 a mono background, and above 1 wider." },
     { "blur_mix", "A spectral smear on the near bus itself, ahead of the effects: every attack is wiped into texture, notes flow into each other. Mix of the blurred signal (latency 43 ms on the blurred part)." },
     { "blur_smear", "How much the blur smears: 0 follows the input closely, 1 is a spectral freeze that only lets new energy in slowly." },
@@ -288,6 +291,7 @@ const HelpEntry kHelp[] = {
     { "strike_decay", "Seconds the strike rings." },
     { "strike_damp", "Brightness loss per round of the string: 0 bright and long, 1 dull and short." },
     { "strike_who", "Keys: only your notes strike. Keys + Brain: the conductor's notes too." },
+    { "stretch", "The stretched octave, in cents per octave away from the reference pitch. Listeners prefer octaves a little wider than 2:1 -- ten to twenty cents at the extremes of the range -- and a piano is tuned that way; here every octave above A4 is that much wider and every octave below that much narrower, the reference itself staying put. 0 is the exact 2:1 of every preset that was ever saved." },
     { "portamento", "Seconds a new key glides from the last one." },
     { "porta_gravity", "Slows the glide near consonant ratios to the root, so a slide clicks into the harmonic nodes on the way." },
 
@@ -640,7 +644,7 @@ R"(AmbientSynth was built for one kind of music: the slowly breathing clusters R
 
 THE TIME SCALE
 
-A drone is heard over minutes, not over the half second a piano note occupies. The ear adapts: the loudness of a steady tone declines over the first tens of seconds (Zwicker and Fastl 1999 give the standard account of loudness adaptation), a steady spectrum stops being attended to, and a change that would be a gesture in a song is the whole event in a drone. So the instrument's rates are drone rates. Attacks reach a minute and releases two; the LFOs run from twenty hertz down to one cycle in twenty minutes; the Arc leans on the whole night on a period in minutes; a wandering pitch drifts over a hundred seconds. This is the range in which an ear that has adapted to what is there can still hear that something is moving.
+A drone is heard over minutes, not over the half second a piano note occupies. What changes over those minutes is less the ear than the listener: loudness adaptation for a steady tone at a moderate level is small (Scharf 1983 -- it is mainly at low sensation levels and high frequencies that a tone fades), but attention habituates, a steady spectrum stops being attended to, and slow changes go unnoticed altogether (the change deafness of Eramudugolla et al. 2005). A change that would be a gesture in a song is the whole event in a drone. So the instrument's rates are drone rates. Attacks reach a minute and releases two; the LFOs run from twenty hertz down to one cycle in twenty minutes; the Arc leans on the whole night on a period in minutes; a wandering pitch drifts over a hundred seconds. This is the range in which an ear that has adapted to what is there can still hear that something is moving.
 
 The same time scale is why the instrument has a conductor rather than a sequencer. A sequencer repeats, and repetition is exactly what adaptation punishes. The Cluster Brain draws hold times from a range, intervals between its events from an exponential distribution, notes from a weighted choice; it forgets nothing because it keeps nothing, and two hours of it never recur. The exponential distribution is chosen because it is the one with no rhythm in it: for a Poisson process the waiting time to the next event has the density
 
@@ -844,7 +848,7 @@ Every note has a distance d between 0, at the ear, and 1, the infinite backgroun
     dryness  near gain cos(d pi/2),  far gain sin(d pi/2)      cos^2 + sin^2 = 1
     presence P(f, d) = G (1 - d) * max(0, 1 - ((log2 f - log2 3200) / 0.8)^2)   in decibels
 
-Air absorbs high frequencies far more than low ones -- the molecular relaxation of oxygen and nitrogen, tabulated in ISO 9613-1 -- so a distant sound is dark, and the ear reads darkness as distance even when the level says otherwise; two and a half octaves per plane unit is a stylised version of that, tuned by ear against Rich's recordings. Level alone is a weak cue -- a quiet close sound and a loud distant one are told apart by their spectra and their reverberation, not by their level (Zahorik 2005) -- so the level falls by only six decibels per unit. The cosine-sine split keeps the total power constant while the direct-to-reverberant ratio, which is the strongest distance cue in a room, falls from all direct to all reverberant. And the presence bell -- a parabola in log frequency centred on 3.2 kHz, zero at plus or minus 0.8 octave, so about 1.8 to 5.6 kHz -- is the proximity of a close microphone and the reason a foreground voice sounds articulate rather than merely loud; multiplied by 1 - d it is gone on the far plane.
+Air absorbs high frequencies far more than low ones -- the molecular relaxation of oxygen and nitrogen, tabulated in ISO 9613-1 -- but honestly, not by much: at 20 degrees and 50 % humidity the loss at 4 kHz is about 0.02 dB per metre, under half a decibel over twenty metres. The two and a half octaves per plane unit are therefore not atmospheric physics. They are the recording engineer's convention that far is dark, which in a real room comes from absorption at the walls, from sources heard off their axis and above all from the direct-to-reverberant ratio, and it is tuned by ear against Rich's recordings. The literature agrees that the spectral cue to distance is weak on its own (Zahorik 2005) and that the ratio of direct to reverberant sound is the strong one (Bronkhorst and Houtgast 1999), which is what the cosine-sine split below implements; the darkening is the stylisation on top. Level alone is a weak cue -- a quiet close sound and a loud distant one are told apart by their spectra and their reverberation, not by their level (Zahorik 2005) -- so the level falls by only six decibels per unit. The cosine-sine split keeps the total power constant while the direct-to-reverberant ratio, which is the strongest distance cue in a room, falls from all direct to all reverberant. And the presence bell -- a parabola in log frequency centred on 3.2 kHz, zero at plus or minus 0.8 octave, so about 1.8 to 5.6 kHz -- is the proximity of a close microphone and the reason a foreground voice sounds articulate rather than merely loud; multiplied by 1 - d it is gone on the far plane.
 
 Because the four cues move together from one number, a voice that moves in depth moves believably. Breath lets every voice's distance wander by up to 0.35 on its own Drifter, and everything hanging on the distance moves with it: the room breathes. Doppler adds the last cue -- the breathing distance has a velocity, and the pitch follows it,
 
@@ -876,14 +880,22 @@ with notches at f = (2k+1) / (2D), the first at 33 Hz for D = 15 ms, in the bass
 
 so a mono sum is exactly the picture it was, to the sample. The edges open; the bass and the top stay where they were.
 
+The Headphones binaural mode takes the same model one step further. With it on, the pan becomes an azimuth round the head (ninety degrees at full pan), the interaural delay follows Woodworth's formula exactly rather than a straight line, the head shadow is at full strength whatever Time Width says, and a source that ends up behind the head gets a lower pinna notch, which is most of what tells back from front with no visual cue (Brown and Duda 1998). And it listens to the head: a headset, or an OSC head tracker sending /ambient/head, gives the engine the head's yaw, and the whole field is turned the other way,
+
+    azimuth = pan * 90 deg - yaw,   tau = (a / c)(|theta| + sin |theta|)
+
+so a voice stays where it is in the room while the listener looks round. That dynamic cue is, by the current research, the strongest single contributor to externalisation on headphones -- stronger than the pinna's spectral detail (Best et al. 2020; Hendrickx et al. 2017), which is why the mode exists at all rather than another filter. Measured: with the head turned ninety degrees a centred voice arrives at the ears with the same interaural delay as a hard-panned voice with the head straight, and that delay is Woodworth's 31.5 samples at 48 kHz plus the two or three the far ear's shadow filter adds as group delay -- which a real head adds too. Off, it is bit-identical to before.)"
+R"(
+
 The Ensemble's Microshift is the same argument applied to detuning. A chorus at thirteen to twenty-two milliseconds is a comb filter waiting to be summed; two channels detuned by c cents in opposite directions, at ratios r = 2^(c/1200) and 2^(-c/1200), and at different base delays, are never at a fixed phase difference, so there is no comb to cancel into. A pitch shift by a delay line is a delay that changes at a constant rate, d(t) = d_0 + (1 - r) t, and since it cannot change for ever it is wrapped: a ramp of 200 ms of travel and a 25 ms equal-power hand-over to a second tap one ramp behind. The textbook construction -- two taps half a cycle apart under a Hann pair -- was measured and rejected, because both taps are audible all the time at a fixed delay difference, which on a sustained tone is the comb above; it lost a fifth of the signal. With the long ramp the two taps overlap for a thousandth of the cycle. Measured by counting zero crossings of a 440 Hz sine: 443.06 Hz left, 436.96 Hz right, twelve cents each way to within half a hertz.
 
 THREE TIERS, AND THE FUNNEL
 
 There are three reverbs because a room has three kinds of reflection. The near reverb is the small room around the dry voices: short, bright, what makes a foreground sound placed rather than pasted. The far reverb is the infinite background: a feedback delay network in the sense of Jot and Chaigne (1991) and, before them, Schroeder (1962) -- eight delay lines behind four input all-passes, per-line damping, a slow modulation of the line lengths so no mode ever stands still -- heard by the far plane alone, 100 % wet, with a decay in tens of seconds. For a decay time T60 the gain of a line of length L_i samples is
 
-    g_i = 10^(-3 L_i / (T60 f_s)))"
-R"(
+    g_i = 10^(-3 L_i / (T60 f_s))
+
+The far reverb has a second mode, Scattering, after Schlecht and Habets (2020): a short Schroeder all-pass inside every delay line's loop, with mutually prime lengths between 1.9 and 7.1 ms, so that each pass round the network scatters every echo into many. The echo density -- measured as the fraction of samples above the local RMS, which for Gaussian noise is 0.317 (Abel and Huang 2006) -- reaches 0.76 of Gaussian after fifty milliseconds against 0.60 for the classic network, with the same decay time and a late tail at least as smooth. The classic mode is the default and unchanged, because six thousand presets were voiced with it; the difference is a texture of tail, denser and more diffuse, not a different room.
 
 The convolution room is a measured or designed space -- or, with the struck impulses, an object -- in parallel on the far plane, by uniform partitioned convolution in blocks of 512 samples (Gardner 1995): each input block's spectrum enters a frequency-domain delay line, every output block is the sum over partitions of input spectrum times impulse-partition spectrum, one inverse transform per block, overlap-added, one block of latency, which the far plane does not notice. Pre-delay on each reverb is the gap between the direct sound and the first reflection, which the ear reads not as the room's size but as where the source stands in it (Blauert 1997): a long pre-delay puts the source close and the wall far, a short one merges it with the room.
 
@@ -893,15 +905,20 @@ The far reverb's Asymmetry stretches the right-hand lines by 1 + 0.08 a and dela
 
 applied to the far bus alone before it joins the near bus. A mix in which everything is spread as far as it will go is a flat wall, because width is a relative cue and a wall of equal width has no depth in it; a narrower background behind a wider foreground reads as distance. Measured: width 0 leaves no side at all, 1 leaves the reverb's own, 1.5 is wider, and the mid never moves.
 
-Every reverb has a low cut beside its high cut -- two one-poles, 12 dB an octave, their common corner set 1.5538 times below the knob so the minus-3-dB point lands where the knob says -- which is the filter funnel a mixing engineer puts on a return: dense tails pile up between 200 and 450 Hz, and that is where a background stops sitting behind the music and starts covering it. Unmask lets the background step aside for the foreground band by band: three bands split at 300 Hz and 2.5 kHz, the near bus as the side chain, an attack of 50 ms and a return of 1.2 s. It is the frequency masking of the ear (Zwicker and Fastl 1999) turned into a control -- a loud component masks quieter ones in the same critical band -- and a pad that does not duck its own reverb swallows its own notes.
+Every reverb has a low cut beside its high cut -- two one-poles, 12 dB an octave, their common corner set 1.5538 times below the knob so the minus-3-dB point lands where the knob says -- which is the filter funnel a mixing engineer puts on a return: dense tails pile up between 200 and 450 Hz, and that is where a background stops sitting behind the music and starts covering it. Unmask lets the background step aside for the foreground band by band: three bands split at 300 Hz and 2.5 kHz, the near bus as the side chain, an attack of 50 ms and a return of 1.2 s. It is the frequency masking of the ear (Zwicker and Fastl 1999) turned into a control -- a loud component masks quieter ones in the same critical band -- and a pad that does not duck its own reverb swallows its own notes. Masking in the ear is not symmetric: a tone masks the frequencies above it far more than those below, the upward spread of masking, with a masking pattern that falls steeply towards lower frequencies and shallowly, and more shallowly the louder the masker, towards higher ones. Unmask Spread puts that asymmetry into the control: a band is also masked by the bands below it,
+
+    e_b = env_b + spread * (0.5 env_{b-1} + 0.25 env_{b-2} + 0.1 env_{b+1})
+
+so a bass note in the foreground thins the background's middle as well as its bottom. At 0 the three bands are independent, as they always were. Measured: with the spread on, a bass note in front ducks the far reverb's middle to less than half of what it did without, and the top less than the middle.
 
 THE MASTER, AND WHY THERE IS NO COMPRESSOR
 
-Bass Mono high-passes the side channel with a second-order filter at about 150 Hz. The directional resolution of hearing is poorest at low frequencies, where wavelengths are longer than the head and interaural differences are tiny (Blauert 1997), and a low end that differs between the channels buys almost no image while it cancels on a mono system and overloads a vinyl cutter; a mono low end under a wide picture is also what makes the picture feel anchored. Side Air lifts the side channel with a broad bell at 3 kHz (Q 0.6, up to +6 dB), the region where interaural level differences are largest and the directional bands of the pinna begin, so the width is heard rather than merely present. The mono guard measures side power against mid power over about a second and a half and eases the width back only if the side is half again the mid's power, by a quarter at most, at two per cent a second. That threshold cost a measurement: at side-louder-than-mid the guard engaged on thirty of thirty-seven reference presets, minutely, and a safety net that is always slightly on is a change to the sound.
+Bass Mono high-passes the side channel with a second-order filter at about 150 Hz. This is a production rule rather than a perceptual limit, and the manual says so: in an anechoic room listeners localise low tones quite well by their interaural time differences, which work down to well under 100 Hz. In a listening room, where the wavelengths are longer than the room's dimensions and standing waves dominate, that resolution is gone, and a low end that differs between the channels buys almost no image while it cancels on a mono system and overloads a vinyl cutter. A mono low end under a wide picture is also what makes the picture feel anchored. Side Air lifts the side channel with a broad bell at 3 kHz (Q 0.6, up to +6 dB), the region where interaural level differences are largest and the directional bands of the pinna begin, so the width is heard rather than merely present. The mono guard measures side power against mid power over about a second and a half and eases the width back only if the side is half again the mid's power, by a quarter at most, at two per cent a second. That threshold cost a measurement: at side-louder-than-mid the guard engaged on thirty of thirty-seven reference presets, minutely, and a safety net that is always slightly on is a change to the sound.
 
 There is no compressor anywhere, and that is a decision. The impression of an enormous room comes from the distance between the quietest texture and the loudest swell -- the loudness range -- and a limiter takes the finest amplitude movement out of a reverb tail and leaves it flat. Instead the instrument measures itself to ITU-R BS.1770-4 (2015), the standard EBU R 128 is built on. The signal is K-weighted -- a second-order high-shelf of about +4 dB above 1.5 kHz modelling the head's acoustic effect, then a second-order high pass near 38 Hz, the revised low-frequency B-weighting -- and the loudness of a block is
 
-    L_K = -0.691 + 10 log10( sum_channels G_i * z_i )      z_i the mean square of the weighted channel
+    L_K = -0.691 + 10 log10( sum_channels G_i * z_i )      z_i the mean square of the weighted channel)"
+R"(
 
 with 400 ms blocks overlapping by 75 %. The integrated value is gated twice, first absolutely at -70 LUFS and then relatively at 10 LU below the ungated mean, so that a piece that is mostly silence does not measure as mostly silence; the loudness range is the spread between the 10th and 95th percentiles of the short-term values above the gate; the true peak is estimated between the samples, and the crest factor is the peak above the RMS. The K-weighting is implemented from the analogue prototype rather than from the RBJ cookbook, because the cookbook shelf comes out about two per cent away from the coefficients the standard prints -- close enough to look right -- and the whole meter was checked against an independent implementation over the same render: -23.62 against -23.62 integrated. The window a dark-ambient master is asked to land in, -24 to -16 LUFS, is marked on the meter, with the -14 LUFS line the streaming services normalise to drawn across it.)" },
     { "Design IV: tuning, harmony and the conductor",
@@ -909,13 +926,21 @@ R"(Just intonation is not a period flavour in this instrument; it is the reason 
 
 WHY JUST INTONATION
 
-Two tones in a simple ratio share partials: for the fifth 3:2, the upper tone's second harmonic 2 * (3/2) f = 3 f is the lower's third; for the major third 5:4, the upper's fourth is the lower's fifth. In equal temperament those partials are a few cents apart and beat -- the tempered fifth is 700 cents against the just 701.955, so the coinciding partials of a fifth on A3 beat at about three quarters of a hertz, and every other pair of partials beats at its own rate -- and a chord of six voices with thirty-two partials each is a field of slow beats that never resolves. In just intonation the shared partials coincide exactly and the beating vanishes, and the chord locks into a single complex tone the ear can rest inside for an hour. That is the roughness theory of consonance: Helmholtz (1877) proposed that dissonance is the roughness of beating partials, and Plomp and Levelt (1965) measured it -- two pure tones are most dissonant when they are about a quarter of a critical bandwidth apart, consonant when they coincide or are more than a critical bandwidth apart, and the dissonance of complex tones is the sum over all their pairs of partials. Sethares (2005) makes the same account the basis of matching a timbre to a tuning. The built-in scales are the just ones -- Ptolemy's major, a just minor, a seven-limit scale, the Pythagorean, a just pentatonic, the harmonic series 8 to 16 and the subharmonic 16 to 8, slendro, Bohlen-Pierce, an otonality 1-3-5-7-9-11 -- with 12-TET for comparison and any Scala file.
+Two tones in a simple ratio share partials: for the fifth 3:2, the upper tone's second harmonic 2 * (3/2) f = 3 f is the lower's third; for the major third 5:4, the upper's fourth is the lower's fifth. In equal temperament those partials are a few cents apart and beat -- the tempered fifth is 700 cents against the just 701.955, so the coinciding partials of a fifth on A3 beat at about three quarters of a hertz, and every other pair of partials beats at its own rate -- and a chord of six voices with thirty-two partials each is a field of slow beats that never resolves. In just intonation the shared partials coincide exactly and the beating vanishes, and the chord locks into a single complex tone the ear can rest inside for an hour. That is the roughness theory of consonance: Helmholtz (1877) proposed that dissonance is the roughness of beating partials, and Plomp and Levelt (1965) measured it -- two pure tones are most dissonant when they are about a quarter of a critical bandwidth apart, consonant when they coincide or are more than a critical bandwidth apart, and the dissonance of complex tones is the sum over all their pairs of partials. Sethares (2005) makes the same account the basis of matching a timbre to a tuning.
+
+The research has moved on from there, and the manual should say how. Roughness turns out to be only part of what listeners call consonant: preferences track harmonicity -- how well a chord fits a single harmonic series, Terhardt's virtual pitch -- at least as strongly as they track the absence of beating (McDermott, Lehr and Oxenham 2010), the two are combined with familiarity in the current models (Harrison and Pearce 2020), and the preference itself is partly cultural: listeners with no exposure to Western harmony show no preference for consonant over dissonant chords at all (McDermott et al. 2016). For this instrument the practical consequence is small, because a just chord maximises harmonicity and minimises roughness at once -- the partials that coincide are the partials of one series. The consequence for the design is worth naming, though: the conductor's consonance score is a number about the ratio, not about the spectrum actually sounding, and for a strongly inharmonic timbre Sethares shows that the consonant intervals move. A roughness computed from the real partials would be the next step, and it is not taken here. The built-in scales are the just ones -- Ptolemy's major, a just minor, a seven-limit scale, the Pythagorean, a just pentatonic, the harmonic series 8 to 16 and the subharmonic 16 to 8, slendro, Bohlen-Pierce, an otonality 1-3-5-7-9-11 -- with 12-TET for comparison and any Scala file.
 
 Purity is the blend between the two worlds, per note, in the log domain,
 
     f = f_ET^(1 - P) * f_JI^P        P the Purity knob
 
-so at one the partials lock, at zero they beat like a piano, and in between the beats slow as the intervals close in on their ratios: E4 over a C root is 327.03 Hz pure and 329.63 Hz tempered, and 0.5 gives their geometric mean. Purity Drift lets P wander on a Drifter at a rate of one swing in about a hundred seconds, so the lock-in comes and goes -- harmony that breathes in and out of tune -- and sounding voices follow with a one-second glide, never a retrigger. Tide leans the whole instrument's pitch by up to thirty cents on a minute-scale curve, and the sub follows, so the harmony stays while the pitch centre drifts the way an organ's does with the temperature of the room.
+so at one the partials lock, at zero they beat like a piano, and in between the beats slow as the intervals close in on their ratios: E4 over a C root is 327.03 Hz pure and 329.63 Hz tempered, and 0.5 gives their geometric mean. Purity Drift lets P wander on a Drifter at a rate of one swing in about a hundred seconds, so the lock-in comes and goes -- harmony that breathes in and out of tune -- and sounding voices follow with a one-second glide, never a retrigger.
+
+Stretch widens the octave. Listeners judge an octave as in tune when it is a little wider than 2:1 -- ten to twenty cents at the extremes of the range, the octave enlargement measured by Ward (1954) and explained by Terhardt from the pitch shifts of the partials -- and a piano is tuned that way, the Railsback curve (1938) being the measured result on real instruments, where the inharmonicity of the strings adds its own reason. The instrument does it as a slope about the reference pitch,
+
+    log2 f' = log2 A4 + (1 + s / 1200) (log2 f - log2 A4)
+
+so every octave above A4 is s cents wider and every octave below s cents narrower, the reference itself not moving, and the same slope in both directions keeps every interval within an octave nearly as it was -- a fifth a note above A4 is stretched by seven twelfths of s. It is applied after Purity and before the per-voice drift, so it composes with the just ratios rather than replacing them; a held note follows the change through the same glide the purity drift uses. At 0 it is the exact 2:1 of every preset that was ever saved. Measured: at twelve cents an octave up from A4 is 1212.00 cents, an octave down 1212.00, two octaves 2424. Tide leans the whole instrument's pitch by up to thirty cents on a minute-scale curve, and the sub follows, so the harmony stays while the pitch centre drifts the way an organ's does with the temperature of the room.
 
 CONSONANCE AS A NUMBER
 
@@ -935,7 +960,8 @@ BEAT is a modulation source whose rate is the interval's mistuning. Two voices a
 
 which is silent when the interval is in tune and quicker the further it has drifted; for a mistuned unison it is |f2 - f1|, the difference tone itself. BEAT finds the simplest ratio near the interval the two lowest voices make, from a short list of small-number ratios -- small numbers only, because those are the ones whose harmonics are close enough together to beat audibly -- and runs at exactly that rate, followed over about two seconds so that a voice arriving or leaving slides the rate rather than jumping it; below a fiftieth of a hertz it holds still, because a chord in tune should leave whatever it drives exactly where it is. Routed at a filter or at the Nebula's smear, the sound breathes at the rate of its own mistuning, and Purity Drift is what sets it moving. The test compares an octave (2:1 in every temperament there is: 0.000 Hz) with a tempered fifth (0.469 Hz at the test's pitch, two cents narrow), because the first version compared two tunings and measured the tuning system instead of the source.
 
-THE CONDUCTOR
+THE CONDUCTOR)"
+R"(
 
 The Cluster Brain chooses notes from the scale, places them on the planes, holds them for minutes and lets them go. Its events come at exponentially distributed intervals around Event Rate, clamped between half a second and four times the rate. When a slot's hold time -- uniform between Hold Min and Hold Max -- expires, the note is released and the voice's long release does the fade; when Density is reached, an event either retires the note ending soonest or does nothing. Its choices are weighted, not random: every note n in the register not already sounding gets the weight
 
@@ -951,8 +977,7 @@ Portamento with Gravity is the microtonal glide of a lap steel. A new key slides
 
 half at thirty cents, eight per cent at a semitone, nothing between the nodes -- a Lorentzian, chosen because a magnet has almost no reach and then all of it. The first version braked in proportion to the consonance of whatever ratio the slide was passing through, a quantity that rises and falls smoothly across the whole glide, so the pull was everywhere and nowhere.
 
-COHERENCE)"
-R"(
+COHERENCE
 
 Four slow oscillators coupled after Kuramoto (1984; Strogatz 2000 for the review) move brightness, depth, pan and the z-plane point. The Kuramoto model is the mathematics of fireflies falling into step, of pacemaker cells, of any population of rhythms that pull on each other:
 
@@ -1049,6 +1074,11 @@ WHAT THE LITERATURE SAID, AND WHAT WAS DONE
 
 Two production papers on ambient and dark-ambient sound design were checked against the instrument late in its development, and most of what they ask for was already present: bass mono below the region of poor directional resolution, a side lift where directional hearing is sharpest, three reverb tiers with pre-delay and low cuts, air absorption with distance, free-running modulators on incommensurable rates, comb filters modulated by slow random curves, Paulstretch, a loudness meter and no limiter. Five things were not, and became parameters that are neutral at their default: the hands as modulation sources, the background's own width, the microshift, the band-limited Haas effect and the wavefolder. Two of the five were wrong in their first version and were caught by measurement rather than by ear -- the textbook microshift that was a comb filter on a sustained tone, and a Haas cross-feed that, fed a mono signal, produced no width at all -- and both are described honestly in the chapters above, because the instrument's manual is also its record.
 
+WHERE THE RESEARCH HAS MOVED ON)"
+R"(
+
+The design leans on classic accounts, and in four places the field has moved past them in ways the reader should know. Consonance is harmonicity and culture as much as roughness (above). Externalisation on headphones is, by the current evidence, driven first by reverberation and by the dynamic cues of head movement rather than by static spectral detail, which is what the head-tracked binaural mode answers and what a static pinna filter cannot. The Haas and precedence effects and the duplex theory have held up, with the refinement that low-frequency interaural time differences dominate when the cues conflict (Wightman and Kistler 1992; Macpherson and Middlebrooks 2002). And artificial reverberation has its own recent literature -- scattering delay networks, networks designed to be colourless -- of which the Scattering mode takes the first and simplest step. What the instrument still does by convention rather than by measurement is said where it happens: the darkening with distance, the mono low end, the darker background as depth.
+
 WHAT IS NOT CLAIMED
 
 Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
@@ -1068,6 +1098,18 @@ Brown, C. P. and Duda, R. O.: A structural model for binaural sound synthesis. I
 Wallach, H., Newman, E. B. and Rosenzweig, M. R.: The precedence effect in sound localization. American Journal of Psychology 62, 315-336, 1949.
 
 Haas, H.: Ueber den Einfluss eines Einfachechos auf die Hoersamkeit von Sprache. Acustica 1, 49-58, 1951 (English: The influence of a single echo on the audibility of speech, Journal of the Audio Engineering Society 20, 146-159, 1972).
+
+Bronkhorst, A. W. and Houtgast, T.: Auditory distance perception in rooms. Nature 397, 517-520, 1999. The direct-to-reverberant ratio as the distance cue.
+
+Macpherson, E. A. and Middlebrooks, J. C.: Listener weighting of cues for lateral angle: the duplex theory of sound localization revisited. Journal of the Acoustical Society of America 111, 2219-2236, 2002.
+
+Best, V., Baumgartner, R., Lavandier, M., Majdak, P. and Kopco, N.: Sound externalization: a review of recent research. Trends in Hearing 24, 2020. Reverberation, spectral detail and head movement as the cues that put a headphone image outside the head.
+
+Hendrickx, E., Stitt, P., Messonnier, J.-C., Lyzwa, J.-M., Katz, B. F. G. and de Boishéraud, C.: Influence of head tracking on the externalization of speech stimuli for non-individualized binaural synthesis. Journal of the Acoustical Society of America 141, 2011-2023, 2017.
+
+Scharf, B.: Loudness adaptation. In Tobias, J. V. and Schubert, E. D. (eds.): Hearing Research and Theory, volume 2, Academic Press, 1983. Adaptation is small for steady tones at moderate levels.
+
+Eramudugolla, R., Irvine, D. R. F., McAnally, K. I., Martin, R. L. and Mattingley, J. B.: Directed attention eliminates change deafness in complex auditory scenes. Current Biology 15, 1108-1113, 2005.
 
 Zahorik, P., Brungart, D. S. and Bronkhorst, A. W.: Auditory distance perception in humans: a summary of past and present research. Acta Acustica united with Acustica 91, 409-420, 2005. Intensity, direct-to-reverberant ratio and spectrum as distance cues.
 
@@ -1090,6 +1132,18 @@ Plomp, R. and Levelt, W. J. M.: Tonal consonance and critical bandwidth. Journal
 Plomp, R.: Detectability threshold for combination tones. Journal of the Acoustical Society of America 37, 1110-1123, 1965.
 
 Sethares, W. A.: Tuning, Timbre, Spectrum, Scale. Second edition, Springer, 2005. The roughness account applied to scales and timbres; just intonation and the partials that coincide.
+
+Terhardt, E.: Pitch, consonance, and harmony. Journal of the Acoustical Society of America 55, 1061-1069, 1974; and Calculating virtual pitch. Hearing Research 1, 155-182, 1979. Harmonicity and virtual pitch as a basis of consonance; the octave enlargement.
+
+Ward, W. D.: Subjective musical pitch. Journal of the Acoustical Society of America 26, 369-380, 1954. The stretched octave: listeners set an octave a little wider than 2:1.
+
+Railsback, O. L.: Scale temperament as applied to piano tuning. Journal of the Acoustical Society of America 9, 274, 1938. The measured stretch of tuned pianos.
+
+McDermott, J. H., Lehr, A. J. and Oxenham, A. J.: Individual differences reveal the basis of consonance. Current Biology 20, 1035-1041, 2010. Consonance preference tracks harmonicity rather than the absence of beating.
+
+McDermott, J. H., Schultz, A. F., Undurraga, E. A. and Godoy, R. A.: Indifference to dissonance in native Amazonians reveals cultural variation in music perception. Nature 535, 547-550, 2016.
+
+Harrison, P. M. C. and Pearce, M. T.: Simultaneous consonance in music perception and composition. Psychological Review 127, 216-244, 2020. A composite model: harmonicity, interference and familiarity.
 
 Tenney, J.: John Cage and the Theory of Harmony. 1983 (in Soundings 13, 1984). Harmonic distance log2(p q), the measure the consonance score is built on.
 
@@ -1115,7 +1169,8 @@ Roads, C.: Microsound. MIT Press, 2001. Granular synthesis.
 
 Nasca, P. (Nasca Octavian Paul): Paul's Extreme Sound Stretch (Paulstretch), 2006, with the algorithm description published alongside the program. The Stretch type and the Nebula.
 
-Zavalishin, V.: The Art of VA Filter Design. Revision 2.1.0, Native Instruments, 2018. The topology-preserving transform and the zero-delay-feedback state-variable filter.
+Zavalishin, V.: The Art of VA Filter Design. Revision 2.1.0, Native Instruments, 2018. The topology-preserving transform and the zero-delay-feedback state-variable filter.)"
+R"(
 
 Rossum, D.: Dynamic digital IIR audio filter and method which provides dynamic digital filtering for audio signals. United States patent 5,170,369, 1992. The z-plane filter of the E-mu Morpheus: interpolating pole and zero parameters between frames.
 
@@ -1126,6 +1181,10 @@ Bilbao, S.: Numerical Sound Synthesis. Finite Difference Schemes and Simulation 
 Peterson, G. E. and Barney, H. L.: Control methods used in a study of the vowels. Journal of the Acoustical Society of America 24, 175-184, 1952. The formant tables of the vowel filters.
 
 Schroeder, M. R.: Natural sounding artificial reverberation. Journal of the Audio Engineering Society 10 (3), 219-223, 1962; Jot, J.-M. and Chaigne, A.: Digital delay networks for designing artificial reverberators. 90th AES Convention, preprint 3030, 1991. The feedback delay network of the far reverb.
+
+Schlecht, S. J. and Habets, E. A. P.: Scattering in feedback delay networks. IEEE/ACM Transactions on Audio, Speech, and Language Processing 28, 1915-1924, 2020. All-passes inside the loop of a delay network: the Scattering mode.
+
+Abel, J. S. and Huang, P.: A simple, robust measure of reverberation echo density. 121st AES Convention, paper 6985, 2006. The normalised echo density the reverb test measures.
 
 Gardner, W. G.: Efficient convolution without input-output delay. Journal of the Audio Engineering Society 43 (3), 127-136, 1995. Partitioned convolution for the Room.
 
@@ -1143,8 +1202,7 @@ ITU-R BS.1770-4: Algorithms to measure audio programme loudness and true-peak au
 
 EBU R 128: Loudness normalisation and permitted maximum level of audio signals. European Broadcasting Union, 2020 edition; and EBU Tech 3342: Loudness Range, a measure to supplement loudness normalisation. The loudness range and the gating practice.
 
-VECTOR SYNTHESIS)"
-R"(
+VECTOR SYNTHESIS
 
 Sequential Circuits: Prophet VS operation manual, 1986; Korg: Wavestation owner's manual, 1990. The joystick between four sources that the Vector follows.
 

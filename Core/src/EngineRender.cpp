@@ -68,9 +68,19 @@ void Engine::process(float* L, float* R, int n)
         const float dt = static_cast<float>(n / sr_);
         const float periods[4] = { 23.0f, 31.0f, 41.0f, 53.0f };
         float dth[4];
+        // The coupling is deliberately NOT symmetric. With every pair pulling on the other
+        // equally, a high Coherence settles into exact synchrony and stays there: four
+        // oscillators behaving as one, which is the opposite of what this section is for. An
+        // antisymmetric perturbation of the weights -- each oscillator pulled a little harder by
+        // the one behind it in the ring than by the one in front -- has no such fixed point, so
+        // the bank locks in frequency and keeps a slowly turning spread of phase. That is what a
+        // ring of coupled biological oscillators does, and it is why they never look identical.
         for (int i = 0; i < 4; ++i) {
             float coupling = 0.0f;
-            for (int j = 0; j < 4; ++j) coupling += std::sin(kuraPhase_[j] - kuraPhase_[i]);
+            for (int j = 0; j < 4; ++j) {
+                const float w = 1.0f + 0.22f * std::sin(kTwoPi * static_cast<float>(j - i) / 4.0f);
+                coupling += w * std::sin(kuraPhase_[j] - kuraPhase_[i]);
+            }
             dth[i] = kTwoPi * rate / periods[i] + K * coupling * 0.25f;
         }
         for (int i = 0; i < 4; ++i) { kuraPhase_[i] += dth[i] * dt; if (kuraPhase_[i] > kTwoPi) kuraPhase_[i] -= kTwoPi; if (kuraPhase_[i] < 0.0f) kuraPhase_[i] += kTwoPi; }
@@ -319,6 +329,25 @@ void Engine::renderChunk(float* L, float* R, int n)
         roomTailLeft_ = roomLevel_ > 0.0005f ? static_cast<long>(room_.impulseSeconds() * sr_) + Convolver::kBlock : std::max(0L, roomTailLeft_ - n);
     }
     diffuser_.process(fl, fr, n);
+    {
+        // Air saturates. A real room is not linear at a peak -- the medium itself gives a little,
+        // and a dense cluster fired into a hall comes back thickened rather than reflected. This
+        // is a very gentle asymmetric shaper between the diffuser and the reverb's own feedback
+        // network, so only the peaks are touched and the tail is what changes character, not the
+        // level. Amount rides on Diffuse, which is already the "how much room" control, so there
+        // is no new knob for a thing nobody would know how to set.
+        const float amt = 0.35f * farDiffuse_;
+        if (amt > 0.001f) {
+            const float pre = 1.0f + 2.2f * amt, post = 1.0f / (1.0f + 0.55f * amt);
+            for (int i = 0; i < n; ++i) {
+                const float a = fl[i] * pre, b = fr[i] * pre;
+                // Asymmetric on purpose: a touch of second harmonic reads as warmth, where the
+                // symmetric curve of a plain tanh only ever reads as compression.
+                fl[i] = (std::tanh(a) + 0.06f * a * a * (a > 0.0f ? 1.0f : -1.0f) * (1.0f - std::fabs(std::tanh(a)))) * post;
+                fr[i] = (std::tanh(b) + 0.06f * b * b * (b > 0.0f ? 1.0f : -1.0f) * (1.0f - std::fabs(std::tanh(b)))) * post;
+            }
+        }
+    }
     farReverb_.process(fl, fr, n);
     if (farRotate_ > 0.0f) {   // the background slowly turns: left and right rotate into each other
         const float a = rotDrift_.value() * farRotate_ * 0.6f, c = std::cos(a), sn = std::sin(a);

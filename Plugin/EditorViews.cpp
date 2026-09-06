@@ -232,13 +232,24 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
     const bool zOn = zMode != 0;
     const bool parallel = std::lround(rawParam(proc, "z_route")) == 1;
 
-    // The z-plane cascade, from the frame the engine would build at this point.
+    // The z-plane, from the frame the engine would build at this point -- and in the same form:
+    // a cascade of biquads in Series and Replace, a parallel bank of resonators in Modal. Drawing
+    // the cascade's response for a modal bank would be a picture of a different filter.
     ambient::ZBiquad zb[ambient::kZSections];
+    ambient::ZModal zModal;
     float zNorm = 1.0f; int zUsed = 0;
+    const bool zIsModal = zMode == 3;
     if (zMode != 0) {
-        const ambient::ZFrame frame = ambient::zInterpolate(zShape, rawParam(proc, "z_x"), rawParam(proc, "z_y"));
-        zNorm = ambient::zBuildCascade(frame, zb, sr);
-        zUsed = frame.used;
+        const ambient::ZFrame frame = ambient::zInterpolate(zShape, rawParam(proc, "z_x"),
+                                                            rawParam(proc, "z_y"), rawParam(proc, "z_z"));
+        if (zIsModal) {
+            zModal.prepare(sr);
+            zModal.set(frame, rawParam(proc, "z_decay"), rawParam(proc, "z_damp"));
+            zUsed = zModal.used();
+        } else {
+            zNorm = ambient::zBuildCascade(frame, zb, sr);
+            zUsed = frame.used;
+        }
     }
 
     juce::Path svf, zp, both;
@@ -250,7 +261,10 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
         // the chosen model's own response, from the same maths the voice uses
         const float hs = fOn ? ambient::VoiceFilter::magnitude(static_cast<ambient::FilterModel>(model), cutoff, res, hz, sr) : 1.0f;
         float hz_ = 1.0f;
-        if (zUsed > 0) { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
+        if (zUsed > 0) {
+            if (zIsModal) hz_ = zModal.magnitudeAt(hz);          // the modes add, they do not multiply
+            else { hz_ = zNorm; for (int s = 0; s < zUsed; ++s) hz_ *= zb[s].magnitudeAt(w); }
+        }
         // Magnitudes combine as the voice combines the signals; the parallel sum ignores the phase
         // between the two branches, which is the one thing this picture cannot show.
         float combined = hs;

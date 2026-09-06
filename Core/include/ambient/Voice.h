@@ -51,6 +51,7 @@ struct VoiceParams {
     bool  filterParallel = false;   // both filters on: z-plane after the filter (false) or beside it (true)
     // Z-plane filter (ZPlane.h): 0 off, 1 in series after the SVF, 2 instead of it
     int   zMode = 0, zShape = 0;
+    float zDecay = 2.5f, zDamp = 0.6f;   // Modal: T60 of the lowest mode, and how much shorter the high ones
     float zX = 0.5f, zY = 0.5f, zZ = 0.0f, zRate = 0.05f, zDepth = 0.5f, zRes = 0.5f, zKeyTrack = 0.0f, zMix = 0.7f;
     float panDrift = 0.4f, itd = 0.6f;
     // Rich's foreground/background carving inside the voice (see concept.md):
@@ -164,6 +165,14 @@ private:
     Drifter  filterDrift_, airDrift_, panCenter_, breath_, rateWander_;
     Drifter  zDriftX_, zDriftY_;
     ZBiquad  zbL_[kZSections], zbR_[kZSections];
+    ZModal   zModal_;                  // the same frame read as a bank of ringing modes
+    // Series of biquads, or a parallel bank of resonators: one call so the two paths cannot
+    // drift apart at the two places the filter is applied.
+    inline void zRun(float& l, float& r)
+    {
+        if (zModeCur_ == 3) { l = zModal_.tick(0, l); r = zModal_.tick(1, r); return; }
+        for (int k = 0; k < zUsed_; ++k) { l = zbL_[k].tick(l); r = zbR_[k].tick(r); }
+    }
     int      zUsed_ = 0;
     float    zNorm_ = 1.0f;
     float    fmHpXL_ = 0.0f, fmHpXR_ = 0.0f, fmHpYL_ = 0.0f, fmHpYR_ = 0.0f, fmHpCoef_ = 0.9987f;   // DC blocker for feedback FM

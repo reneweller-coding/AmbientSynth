@@ -174,8 +174,21 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const double total = std::log(freqTarget_ / portaFrom_);
         if (std::fabs(total) < 1e-9) { portaLeft_ = 0.0f; freq_ = freqTarget_; }
         else {
-            const double c = intervalConsonance(freq_ / std::max(p.rootHz, 1.0));
-            const double slow = 1.0 - 0.85 * portaGravity_ * std::min(1.0, c * 3.5);   // unison/octave and fifth slow to ~15 %
+            // Gravity as an attraction to the nearest node, not as a function of how consonant
+            // the present ratio happens to be. The first version braked in proportion to
+            // intervalConsonance(), which rises and falls smoothly across the whole slide, so the
+            // pull was everywhere and nowhere -- more like wading than like a magnet. A magnet
+            // has almost no reach and then all of it: 1/(1 + (d/d0)^2) with d the distance in
+            // cents to the nearest just ratio. Thirty cents away it is at half strength; a
+            // semitone away it is down to eight per cent and the slide runs free.
+            const double cents = 1200.0 * std::log2(std::max(freq_, 1.0) / std::max(p.rootHz, 1.0));
+            double fold = std::fmod(cents, 1200.0);
+            if (fold < 0.0) fold += 1200.0;
+            static const double kNodes[] = { 0.0, 203.91, 315.64, 386.31, 498.04, 701.96, 813.69, 884.36, 996.09, 1200.0 };
+            double dist = 1200.0;
+            for (double node : kNodes) dist = std::min(dist, std::fabs(fold - node));
+            const double pull = 1.0 / (1.0 + (dist / 30.0) * (dist / 30.0));
+            const double slow = 1.0 - 0.90 * portaGravity_ * pull;
             const double step = total / portaSeconds_ * dtReal * slow;
             double lf = std::log(freq_) + step;
             const double lt = std::log(freqTarget_);
@@ -379,7 +392,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // Z-plane: the point wanders around (X, Y) on two Drifters, the frame is interpolated from
     // the shape's corners, resonance narrows the bandwidths, key tracking moves the frame with
     // the note. Mode changes ramp the wet/dry gains so switching never clicks.
-    zModeCur_ = clampv(p.zMode, 0, 2);
+    zModeCur_ = clampv(p.zMode, 0, 3);   // 3 = Modal
     if (zModeCur_ != 0) {
         const float dx = zDriftX_.update(dt, p.zRate * rateMul, rng_), dy = zDriftY_.update(dt, p.zRate * 0.77f * rateMul, rng_);
         const float x = clampv(p.zX + 0.5f * p.zDepth * dx + p.cohZ + p.slideZ * slide_, 0.0f, 1.0f), y = clampv(p.zY + 0.5f * p.zDepth * dy - p.cohZ, 0.0f, 1.0f);
@@ -393,9 +406,17 @@ void Voice::control(int blockLen, const VoiceParams& p)
             s.poleHz *= track; s.poleBw = std::max(s.poleBw * bwScale * track, 0.5f);
             if (s.zeroHz > 0.0f) { s.zeroHz *= track; s.zeroBw = std::max(s.zeroBw * track, 0.5f); }
         }
-        zUsed_ = scaled.used;
-        zNorm_ = zBuildCascade(scaled, zbL_, sr);
-        for (int i = 0; i < zUsed_; ++i) zbR_[i].copyCoefficients(zbL_[i]);
+        if (zModeCur_ == 3) {
+            // Modal: the frame's frequencies are modes of a ringing object, not the corners of a
+            // filter. Nothing is cascaded -- the resonators sit in parallel and add.
+            zModal_.set(scaled, p.zDecay, p.zDamp);
+            zUsed_ = zModal_.used();
+            zNorm_ = 1.0f;                      // the bank normalises itself on expected power
+        } else {
+            zUsed_ = scaled.used;
+            zNorm_ = zBuildCascade(scaled, zbL_, sr);
+            for (int i = 0; i < zUsed_; ++i) zbR_[i].copyCoefficients(zbL_[i]);
+        }
         zWet_ = p.zMix; zDry_ = 1.0f - p.zMix;
     } else {
         zWet_ = 0.0f; zDry_ = 1.0f; zUsed_ = 0;
@@ -507,14 +528,14 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (fOn && zOn) {
                 filt_.tick(accL, accR, outL, outR);
                 float zl = parallel ? accL : outL, zr = parallel ? accR : outR;
-                for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
+                zRun(zl, zr);
                 outL = outL * zDry_ + zl * zNorm_ * zWet_;
                 outR = outR * zDry_ + zr * zNorm_ * zWet_;
             } else if (fOn) {
                 filt_.tick(accL, accR, outL, outR);
             } else if (zOn) {   // the z-plane alone (Replace, or the filter switched off)
                 float zl = accL, zr = accR;
-                for (int k = 0; k < zUsed_; ++k) { zl = zbL_[k].tick(zl); zr = zbR_[k].tick(zr); }
+                zRun(zl, zr);
                 outL = accL * zDry_ + zl * zNorm_ * zWet_;
                 outR = accR * zDry_ + zr * zNorm_ * zWet_;
             } else {

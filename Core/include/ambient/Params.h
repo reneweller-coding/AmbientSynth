@@ -45,6 +45,7 @@ enum class ParamId : int {
     // dry signal and Mix balances them (Parallel); Replace is the z-plane alone
     // ZZ is the cube's third axis (Transform); 0 is the filter as it was before it existed
     ZMode, ZRoute, ZShape, ZX, ZY, ZZ, ZRate, ZDepth, ZResonance, ZKeyTrack, ZMix,
+    ZDecay, ZDamp,          // Modal mode: how long the modes ring, and how much shorter the high ones
     // Space: front-to-back planes, per-voice interaural time difference, hour-scale arc,
     // presence bell for the near plane, slow breathing of every voice's distance
     Depth, KeysDepth, PanDrift, Itd, ArcAmount, ArcPeriod, ArcSync, Presence, Breath, BreathRate,
@@ -58,7 +59,7 @@ enum class ParamId : int {
     // Ensemble
     EnsembleMix, EnsembleDepth, EnsembleRate, EnsembleSync,
     // Stereo delay (asymmetric L/R)
-    DelayTimeL, DelayTimeR, DelaySyncL, DelaySyncR, DelayFeedback, DelayCross, DelayDamp, DelayAbsorb, DelayMix, DelayToFar,
+    DelayTimeL, DelayTimeR, DelaySyncL, DelaySyncR, DelayFeedback, DelayCross, DelayDamp, DelayAbsorb, DelayMix, DelayToFar, DelayDuck,
     // Second stereo delay, in series after the first
     Delay2TimeL, Delay2TimeR, Delay2SyncL, Delay2SyncR, Delay2Feedback, Delay2Cross, Delay2Damp, Delay2Absorb, Delay2Mix, Delay2ToFar,
     // Near reverb (foreground room)
@@ -90,7 +91,7 @@ enum class ParamId : int {
     // more than any other, and the one thing the master stage did not have
     Tilt2, TiltPivot,
     // Mid/side master stage
-    BassMono, SideAir, Width,
+    BassMono, SideAir, Width, MonoGuard,
     // Cluster brain (generative sleep-concert mode)
     BrainOn, BrainDensity, BrainRate, BrainSync, BrainHoldMin, BrainHoldMax,
     BrainLow, BrainHigh, BrainConsonance, BrainWander, BrainQuantize,

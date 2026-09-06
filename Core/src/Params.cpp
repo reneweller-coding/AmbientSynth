@@ -189,7 +189,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::KeyTrack,    "keytrack",     "Key Track",     "Filter",     0.f,   1.f,    0.5f,  1.f,  ""),
     F(ParamId::FilterDrive, "filter_drive", "Drive",         "Filter",     0.f,   1.f,    0.f,   1.f,  ""),
 
-    C(ParamId::ZMode,       "z_mode",       "Mode",          "Z-Plane",    kZModeNames, 3, 0),
+    C(ParamId::ZMode,       "z_mode",       "Mode",          "Z-Plane",    kZModeNames, 4, 0),
     C(ParamId::ZRoute,      "z_route",      "Route",         "Z-Plane",    kFilterRouteNames, 2, 0),
     C(ParamId::ZShape,      "z_shape",      "Shape",         "Z-Plane",    kZShapeNames, kZShapes, 0),
     F(ParamId::ZX,          "z_x",          "X",             "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
@@ -200,6 +200,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ZResonance,  "z_res",        "Resonance",     "Z-Plane",    0.f,   1.f,    0.5f,  1.f,  ""),
     F(ParamId::ZKeyTrack,   "z_keytrack",   "Key Track",     "Z-Plane",    0.f,   1.f,    0.f,   1.f,  ""),
     F(ParamId::ZMix,        "z_mix",        "Mix",           "Z-Plane",    0.f,   1.f,    0.7f,  1.f,  ""),
+    F(ParamId::ZDecay,      "z_decay",      "Decay",         "Z-Plane",    0.02f, 40.f,   2.5f,  0.35f, "s"),
+    F(ParamId::ZDamp,       "z_damp",       "Damping",       "Z-Plane",    0.f,   1.f,    0.6f,  1.f,  ""),
 
     F(ParamId::Depth,       "depth",        "Depth",         "Space",      0.f,   1.f,    0.7f,  1.f,  ""),
     F(ParamId::KeysDepth,   "keys_depth",   "Keys Depth",    "Space",      0.f,   1.f,    0.f,   1.f,  ""),
@@ -239,6 +241,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::DelayAbsorb,   "dly_absorb",   "Absorb",    "Delay", 0.f,   1.f,   0.f,   1.f,  ""),
     F(ParamId::DelayMix,      "dly_mix",      "Mix",       "Delay", 0.f,   1.f,   0.25f, 1.f,  ""),
     F(ParamId::DelayToFar,    "dly_to_far",   "To Far",    "Delay", 0.f,   1.f,   0.4f,  1.f,  ""),
+    F(ParamId::DelayDuck,     "dly_duck",     "Duck",      "Delay", 0.f,   1.f,   0.f,   1.f,  ""),
 
     F(ParamId::Delay2TimeL,    "dly2_time_l",   "Time L",    "Delay 2", 0.02f, 4.f,   1.5f,  0.4f, "s"),
     F(ParamId::Delay2TimeR,    "dly2_time_r",   "Time R",    "Delay 2", 0.02f, 4.f,   2.2f,  0.4f, "s"),
@@ -321,6 +324,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::BassMono, "bass_mono", "Bass Mono", "Master", 40.f, 300.f, 150.f, 0.5f, "Hz"),
     F(ParamId::SideAir,  "side_air",  "Side Air",  "Master", 0.f,  6.f,   2.f,   1.f,  "dB"),
     F(ParamId::Width,    "width",     "Width",     "Master", 0.f,  2.f,   1.2f,  1.f,  ""),
+    B(ParamId::MonoGuard,"mono_guard","Mono Safe", "Master", true),
 
     B(ParamId::BrainOn,         "brain_on",         "Active",     "Cluster Brain", true),
     I(ParamId::BrainDensity,    "brain_density",    "Density",    "Cluster Brain", 1.f,  10.f,  5.f),

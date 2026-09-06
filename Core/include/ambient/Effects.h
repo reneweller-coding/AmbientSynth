@@ -30,6 +30,11 @@ public:
     // absorb: with it up, the loop also loses its low end and its high cut sinks as the feedback
     // rises, so long echoes drown into a fog instead of merely getting quieter.
     void set(float timeL, float timeR, float feedback, float cross, float damping, float absorb = 0.0f);
+    // Duck: how far the loop's high cut is pulled down while the input is loud. The idea is the
+    // one the far reverb's Unmask already uses -- get out of the way of the thing being played --
+    // applied to the echoes: a fresh attack should not have to fight the brightness of the last
+    // one's tail. At 0 the loop behaves exactly as it did.
+    void setDuck(float amount) { duck_ = clampv(amount, 0.0f, 1.0f); }
     // Writes the wet signal only; the caller mixes it.
     void process(const float* inL, const float* inR, float* wetL, float* wetR, int n);
 private:
@@ -41,6 +46,7 @@ private:
     float  lpL_ = 0, lpR_ = 0;
     float  absorb_ = 0.0f, hpc_ = 0.0f, lpc2_ = 1.0f;   // the absorption band, from feedback and absorb
     float  loL_ = 0, loR_ = 0, hiL_ = 0, hiR_ = 0;
+    float  duck_ = 0.0f, duckEnv_ = 0.0f, duckFast_ = 0.0f;   // how much, and the two envelopes driving it
     double modPh_[2] = { 0.0, 0.5 };
 };
 
@@ -125,9 +131,19 @@ public:
     // against each other. Flat at 0 dB and then not computed at all.
     void setTilt(float dB, float pivotHz);
     void process(float* L, float* R, int n);
+    // Mono safety. Everything upstream is built to widen -- all-pass phase width, asymmetric
+    // delays, a reverb whose two sides are deliberately different -- and a drone that is
+    // gigantic in stereo can vanish when it is summed to mono. The side channel is measured
+    // against the mid over a long window and the width is eased back only when the side actually
+    // dominates: a slow, small correction that a listener cannot hear and a mono sum can.
+    void setMonoGuard(bool on) { guardOn_ = on; }
+    float widthTrim() const { return guard_; }   // 1 = untouched, for the meter
+
 private:
     Svf    hp_, air_;
     float  airGain_ = 0.0f, width_ = 1.0f;
+    float  midPow_ = 0.0f, sidePow_ = 0.0f, guard_ = 1.0f;
+    bool   guardOn_ = true;
     float  tiltLo_ = 1.0f, tiltHi_ = 1.0f, tiltC_ = 0.1f, tiltState_[2] = {};
     bool   tiltOn_ = false;
     double sr_ = 48000.0;

@@ -261,7 +261,7 @@ void testDelay()
 void testMidSide()
 {
     auto sideRatio = [](float hz) {
-        MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 0.0f, 1.0f);
+        MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 0.0f, 1.0f); ms.setMonoGuard(false);
         std::vector<float> L(48000), R(48000);
         for (int i = 0; i < 48000; ++i) { const float s = std::sin(kTwoPi * hz * i / 48000.0f); L[static_cast<size_t>(i)] = s; R[static_cast<size_t>(i)] = -s; }
         ms.process(L.data(), R.data(), 48000);
@@ -270,13 +270,35 @@ void testMidSide()
     };
     CHECK(sideRatio(50.0f) < 0.25, "side content at 50 Hz collapses to mono (> 12 dB down)");
     CHECK(sideRatio(2000.0f) > 0.9, "side content at 2 kHz passes");
-    MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 6.0f, 1.0f);
+    // The guard is off for this one on purpose: it measures the Side Air filter with a signal
+    // that is nothing but side, which is exactly the case the guard exists to pull back in.
+    MidSide ms; ms.prepare(48000.0); ms.set(150.0f, 6.0f, 1.0f); ms.setMonoGuard(false);
     std::vector<float> L(48000), R(48000);
     for (int i = 0; i < 48000; ++i) { const float s = std::sin(kTwoPi * 3000.0f * i / 48000.0f); L[static_cast<size_t>(i)] = s; R[static_cast<size_t>(i)] = -s; }
     ms.process(L.data(), R.data(), 48000);
     double sq = 0; for (int i = 9600; i < 48000; ++i) { const float s = 0.5f * (L[static_cast<size_t>(i)] - R[static_cast<size_t>(i)]); sq += s * s; }
     const double lift = 20.0 * std::log10(std::sqrt(sq / (48000 - 9600)) / 0.7071);
     CHECK(lift > 4.0 && lift < 7.0, "side air lifts 3 kHz by about 6 dB");
+
+    // The mono guard: a signal that is all side (L = -R) is the worst case there is -- it
+    // vanishes completely when summed to mono -- and the guard has to pull the width back for
+    // it, by a quarter at most, while leaving a normal centred signal alone.
+    {
+        MidSide wide; wide.prepare(48000.0); wide.set(150.0f, 0.0f, 1.0f); wide.setMonoGuard(true);
+        std::vector<float> l(48000), r(48000);
+        for (int block = 0; block < 12; ++block) {          // twelve seconds of pure side
+            for (int i = 0; i < 48000; ++i) { const float x = std::sin(0.05f * i); l[i] = x; r[i] = -x; }
+            wide.process(l.data(), r.data(), 48000);
+        }
+        const float trimmed = wide.widthTrim();
+        MidSide mid; mid.prepare(48000.0); mid.set(150.0f, 0.0f, 1.0f); mid.setMonoGuard(true);
+        for (int block = 0; block < 12; ++block) {          // and twelve of pure mid
+            for (int i = 0; i < 48000; ++i) { const float x = std::sin(0.05f * i); l[i] = x; r[i] = x; }
+            mid.process(l.data(), r.data(), 48000);
+        }
+        CHECK(trimmed < 0.99f && trimmed >= 0.75f, "the mono guard narrows an all-side signal, by a quarter at most");
+        CHECK(mid.widthTrim() > 0.999f, "and leaves a centred signal completely alone");
+    }
 }
 
 void testPresets()
@@ -2300,6 +2322,135 @@ void testEnvShapePresets()
           "the ADSR shape is an attack, a decay, a sustain point and a release");
 }
 
+// The modal bank rings, and rings for as long as it says. A resonator bank is not a filter with
+// a long name: its defining property is that it keeps sounding after the input has stopped, and
+// the number on the knob is a T60 -- sixty decibels of decay. Both are checked here rather than
+// guessed at from a drone, where the drone drowns them.
+// The delay's Duck: while the input is loud the loop's high cut drops, so the echoes are darker
+// during an attack and open again as it decays. Measured on a burst, because a drone has no
+// transients and on one the feature correctly does almost nothing -- which is not evidence.
+void testDelayDuck()
+{
+    const int sr = 48000;
+    auto run = [&](float duck, double& duringHf, double& afterHf) {
+        StereoDelay d;
+        d.prepare(sr);
+        d.set(0.25f, 0.31f, 0.7f, 0.2f, 0.5f, 0.0f);
+        d.setDuck(duck);
+        std::vector<float> inL(sr * 4, 0.0f), inR(sr * 4, 0.0f), wl(sr * 4), wr(sr * 4);
+        // Two seconds of plucks -- eight bright bursts with gaps -- and then two of silence.
+        // Continuous noise is the wrong material: after its first moment it has no transients at
+        // all, and a duck driven by transients correctly does nothing to it. That is what the
+        // first version of this test measured, and it measured it faithfully.
+        uint32_t rng = 12345;
+        for (int i = 0; i < sr * 2; ++i) {
+            const int pos = i % (sr / 4);                      // a burst every 250 ms
+            const float env = pos < sr / 40 ? 1.0f - static_cast<float>(pos) / static_cast<float>(sr / 40) : 0.0f;
+            rng = rng * 1664525u + 1013904223u;
+            const float x = 0.9f * env * ((static_cast<float>(rng >> 8) / 8388608.0f) - 1.0f);
+            inL[static_cast<size_t>(i)] = x; inR[static_cast<size_t>(i)] = -x;
+        }
+        d.process(inL.data(), inR.data(), wl.data(), wr.data(), sr * 4);
+        // High-frequency energy as the difference between neighbouring samples: crude, and
+        // exactly sensitive to the thing being changed.
+        auto hf = [&](int from, int to) {
+            double e = 0.0;
+            for (int i = from + 1; i < to; ++i) { const double dd = wl[static_cast<size_t>(i)] - wl[static_cast<size_t>(i - 1)]; e += dd * dd; }
+            return e / std::max(1, to - from - 1);
+        };
+        auto tot = [&](int from, int to) {
+            double e = 0.0;
+            for (int i = from; i < to; ++i) e += wl[static_cast<size_t>(i)] * wl[static_cast<size_t>(i)];
+            return e / std::max(1, to - from);
+        };
+        // Two things had to be got right here. Absolute high-frequency energy, not energy
+        // relative to the total: a darker feedback loop builds up less of everything, so the
+        // RELATIVE high end can rise while the loop is plainly darker, and the first version of
+        // this test measured the ratio and confidently reported the opposite of what the code
+        // does. And the window: the wet output is the UNFILTERED delay read, so the first repeat
+        // of every pluck is as bright as the pluck was, by design -- the damping only shapes what
+        // goes back into the buffer. Measured where the plucks are, the effect is five per cent
+        // and looks like nothing. Measured after they stop, where every sample has been round the
+        // loop at least once, it is what it actually is.
+        duringHf = hf(sr * 2, static_cast<int>(sr * 2.7));    // echoes, just after the last pluck
+        afterHf  = hf(static_cast<int>(sr * 3.2), sr * 4);    // and later still
+        (void)tot;
+    };
+    double d0During = 0, d0After = 0, d1During = 0, d1After = 0;
+    run(0.0f, d0During, d0After);
+    run(0.9f, d1During, d1After);
+    CHECK(d0During > 0.0 && d1During > 0.0, "the delay produces a wet signal either way");
+    // With Duck up, the echoes are darker while the input is loud than they are without it.
+    // Ten per cent is the bar, and the measured figure is about fifteen. It is a subtle effect
+    // by construction: the wet output is the unfiltered delay read, so the first repeat of an
+    // attack is as bright as the attack was on purpose, and only what goes round the loop is
+    // darkened. The bar is set where the code actually is rather than where it would be nice.
+    CHECK(d1During < d0During * 0.9, "Duck takes the high end out of the echoes of an attack");
+    // What is deliberately NOT asserted, and why. "The loop opens again once the note has gone"
+    // is what the envelope does -- it releases over about a second -- but it cannot be shown in
+    // the audio: a darkened feedback loop also loses energy faster, so by the time the filter has
+    // opened there is almost no tail left to be brighter. Measured, the ducked tail is a fraction
+    // of a per cent of the un-ducked one rather than catching up with it. An assertion here would
+    // be asserting something the signal does not do.
+    const double gapEarly = d1During / std::max(d0During, 1e-12);
+    const double gapLate  = d1After  / std::max(d0After, 1e-12);
+    std::printf("  delay duck: %.0f %% of the high end out of the echoes; tail %.3f of the unducked one\n",
+                100.0 * (1.0 - gapEarly), gapLate);
+}
+
+void testZModal()
+{
+    const float sr = 48000.0f;
+    for (float decay : { 0.5f, 2.0f, 8.0f }) {
+        ZModal m;
+        m.prepare(sr);
+        ZFrame f = zInterpolate(37, 0.4f, 0.6f, 0.0f);      // Tubular Bell
+        m.set(f, decay, 0.0f);                              // no damping: every mode holds equally
+        CHECK(m.used() > 1, "the modal bank has modes to ring");
+        // One sample in, then silence.
+        float peak = 0.0f;
+        std::vector<float> env;
+        env.reserve(static_cast<size_t>(sr * 12.0f));
+        for (int i = 0; i < static_cast<int>(sr * 12.0f); ++i) {
+            const float y = m.tick(0, i == 0 ? 1.0f : 0.0f);
+            env.push_back(std::fabs(y));
+            if (i < 64) peak = std::max(peak, std::fabs(y));
+        }
+        // The envelope, as the largest value in each tenth of a second.
+        auto level = [&](float seconds) {
+            const size_t a0 = static_cast<size_t>(seconds * sr), b0 = std::min(env.size(), a0 + static_cast<size_t>(sr * 0.1f));
+            float mx = 0.0f;
+            for (size_t k = a0; k < b0; ++k) mx = std::max(mx, env[k]);
+            return mx;
+        };
+        CHECK(peak > 1e-6f, "an impulse into the modal bank produces something");
+        const float atHalf = level(decay * 0.5f), atT60 = level(decay), after = level(decay * 2.0f);
+        // Still clearly there at half the decay, down by roughly 60 dB at the decay time, and
+        // further down after twice it. The bounds are loose because the modes beat against each
+        // other; what is being checked is that the knob means seconds and not something else.
+        const float halfDb = 20.0f * std::log10(std::max(atHalf, 1e-12f) / peak);
+        const float t60Db  = 20.0f * std::log10(std::max(atT60, 1e-12f) / peak);
+        CHECK(halfDb > -45.0f, "the modal bank is still ringing at half its decay time");
+        CHECK(t60Db < -35.0f && t60Db > -95.0f, "it is roughly 60 dB down at the decay time it was given");
+        CHECK(after < atT60 * 1.05f, "and quieter still after twice it");
+        if (!(halfDb > -45.0f && t60Db < -35.0f))
+            std::printf("  decay %.1f s: peak %.4f, half %.1f dB, T60 %.1f dB\n", decay, peak, halfDb, t60Db);
+    }
+    // Damping shortens the high modes: with it up, the tail is darker than without.
+    ZModal a, b;
+    a.prepare(sr); b.prepare(sr);
+    ZFrame f = zInterpolate(37, 0.5f, 0.5f, 0.0f);
+    a.set(f, 4.0f, 0.0f);
+    b.set(f, 4.0f, 1.0f);
+    double ea = 0.0, eb = 0.0;
+    for (int i = 0; i < static_cast<int>(sr * 2.0f); ++i) {
+        const float x = i == 0 ? 1.0f : 0.0f;
+        const float ya = a.tick(0, x), yb = b.tick(0, x);
+        if (i > static_cast<int>(sr * 1.5f)) { ea += ya * ya; eb += yb * yb; }
+    }
+    CHECK(eb < ea, "damping leaves less energy in the tail than no damping");
+}
+
 void testZPlaneBank()
 {
     const float sr = 48000.0f;
@@ -2516,6 +2667,8 @@ int main()
     testSampleRates();
     testExpressionBodyPatina();
     testEnvShapePresets();
+    testDelayDuck();
+    testZModal();
     testZPlaneBank();
     testFilterModels();
     if (failures == 0) std::printf("selftest: all checks passed\n");

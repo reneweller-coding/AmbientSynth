@@ -13,7 +13,11 @@ What counts as a failure, and why:
   SILENT     more than 25 dB quieter than the carrier alone -- the layer swallowed the sound
   LOUD       peak above 0.99, or more than 9 dB above the carrier -- it will clip in a mix
   DEAD       every descriptor within a hair of the carrier's -- the preset does nothing at all
-  TWIN       identical to another preset in the same bank, to three decimals in every descriptor
+  TWIN       identical to another preset in the same bank: the same in every descriptor to three
+             decimals AND the same audio hash. The descriptors alone are not enough -- a bank of
+             narrow resonators fed with noise measures almost the same whatever its modes are,
+             and five modal presets were flagged as twins whose rendered audio differed. The hash
+             settles it: same hash, same sound; different hash, different sound.
 
 The carrier is one fixed sound preset with a held chord, rendered once, so every measurement is
 against the same thing. Twenty seconds each: long enough for a slow resonator to build up, which
@@ -57,6 +61,9 @@ def measure(settings, notes=None):
     out = {}
     for k, v in re.findall(r"(\w+)=(-?[\d.]+)", line[-1]):
         out[k] = float(v)
+    m = re.search(r"hash=([0-9a-f]+)", line[-1])
+    if m:
+        out["hash"] = m.group(1)
     return out if "rms" in out else None
 
 
@@ -136,8 +143,8 @@ def main():
                 why.append("SILENT (%.1f dB)" % m["rms"])
             if m["peak"] > 0.99 or (not notes and m["rms"] > ref["rms"] + 9.0):
                 why.append("LOUD (peak %.2f, %.1f dB)" % (m["peak"], m["rms"]))
-            key = tuple(round(m.get(f, 0.0), 3) for f in FIELDS)
-            if i > 0 and key == tuple(round(ref.get(f, 0.0), 3) for f in FIELDS):
+            key = tuple(round(m.get(f, 0.0), 3) for f in FIELDS) + (m.get("hash", ""),)
+            if i > 0 and key[:len(FIELDS)] == tuple(round(ref.get(f, 0.0), 3) for f in FIELDS):
                 why.append("DEAD (identical to the carrier)")
                 dead += 1
             if key in seen:

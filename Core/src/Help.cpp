@@ -98,6 +98,8 @@ const HelpEntry kHelp[] = {
     { "z_route", "With both filters on: Series puts the z-plane after the voice filter; Parallel feeds both the dry sum and Mix balances them." },
     { "z_shape", "One of sixteen frame sets, four frames on the corners of a square: vowel morphs, bell clusters, resonator banks, the sweeps." },
     { "z_z", "The third axis of the cube. X and Y move the point around a square of four filters; Transform lifts it out of that square towards a fourth of its own -- usually the same shape far more resonant, sometimes its peaks turned into notches, sometimes an octave up. What that is depends on the shape, and it is written down for each of them in Tools/make_zplane_bank.py. At 0 the filter is exactly the square it always was, which is why every preset made before this knob existed still sounds the way it did." },
+    { "z_decay", "Modal only: how long the lowest mode rings, from a tap to forty seconds. This is a T60 -- the time the mode takes to fall by 60 dB -- so 8 s means a struck bell that is still audibly there after eight. Every resonator is normalised to unity gain at its own frequency, so a long decay makes the instrument ring, not clip." },
+    { "z_damp", "Modal only: how much shorter the higher modes ring than the lowest. At 0 every mode holds for the same time, which no real object does and which is exactly why it sounds unreal in a useful way. At 1 the decay time is inversely proportional to frequency, which is roughly what wood, metal and skin do. Between them is where most objects live." },
     { "z_x", "The point's horizontal position in the frame square; the filter interpolates the four corners' poles and zeros." },
     { "z_y", "The point's vertical position in the frame square." },
     { "z_rate", "How fast the point wanders around (X, Y) on two slow random curves." },
@@ -136,6 +138,7 @@ const HelpEntry kHelp[] = {
     { "dly_feedback", "How much of the delay returns into itself. Near 1 the echoes last for minutes." },
     { "dly_cross", "How much the left echo feeds the right and vice versa -- ping-pong at 1." },
     { "dly_damp", "Low-pass in the feedback path: each repeat darker than the last." },
+    { "dly_duck", "The echoes make room. While the input is loud the high cut inside the feedback loop drops, so a fresh attack does not have to fight the brightness of the last one's tail; as the note settles the loop opens again over about a second. It is the same idea as Unmask in the far reverb -- get out of the way of what is being played -- applied to the delay. At 0 the loop behaves exactly as it always did." },
     { "dly_absorb", "Absorption: with Absorb up, the loop also loses its low end and its high cut moves down as Feedback rises, so long echoes drown into a warm fog instead of merely getting quieter." },
     { "dly_mix", "Level of the echoes on the near (dry) bus." },
     { "dly_to_far", "Level of the echoes sent into the far reverb instead: echoes that recede into the background." },
@@ -212,6 +215,7 @@ const HelpEntry kHelp[] = {
     { "tilt_pivot", "The frequency the tilt turns around: everything below moves one way, everything above the other." },
     { "bass_mono", "Below this frequency the side channel is removed: a mono low end, the foundation of a wide picture." },
     { "side_air", "A broad bell at 3 kHz on the side channel, up to +6 dB: air in the width." },
+    { "mono_guard", "A safety net for mono. Everything in this instrument is built to widen -- all-pass phase width, asymmetric delays, a reverb whose two sides are deliberately different -- and a drone that sounds gigantic in stereo can lose most of itself when a phone, a club system or a radio sums it to mono. With this on, the side channel is measured against the mid over about a second and a half, and if the side really is the louder of the two the width is eased back, by at most a quarter and at about two per cent a second. It never touches the middle of the mix, only how far the sides may go, and on anything that is already mono-safe it does nothing at all. Off if you would rather have the width and check the mono sum yourself." },
     { "width", "Stereo width: 1 as recorded, above widens, 0 mono." },
 
     // ---- cluster brain

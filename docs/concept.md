@@ -916,6 +916,134 @@ on 1/4 at 90 bpm renders identically to 0.6667 s typed in; an LFO on one bar
 changes the render between 90 and 180 bpm; every preset (all Free) is
 unchanged.
 
+### Six small things, and what measuring them cost
+
+Six changes that each sound like a one-line tweak. Four were; two were not, and
+the two that were not are the interesting ones.
+
+**Gravity is now a magnet, not a mood.** The portamento's pull towards
+consonant ratios braked in proportion to `intervalConsonance()` of the ratio
+the slide happened to be passing through -- a quantity that rises and falls
+smoothly across the whole glide, so the pull was everywhere and nowhere, more
+like wading than like a magnet. It is now the distance, in cents, to the
+nearest just ratio, with the strength `1 / (1 + (d/30)^2)`: half strength at
+thirty cents, eight per cent at a semitone, nothing at all in between the
+nodes. A magnet has almost no reach and then all of it.
+
+**The Kuramoto ring is asymmetric.** Every pair pulled on the other equally,
+so a high Coherence settled into exact synchrony and stayed there -- four
+oscillators behaving as one, which is the opposite of what the section is for.
+Each is now pulled a little harder by the oscillator behind it in the ring than
+by the one in front (`w = 1 + 0.22 sin(2*pi*(j-i)/4)`). An antisymmetric
+perturbation has no synchronous fixed point, so the bank locks in frequency and
+keeps a slowly turning spread of phase, which is what a ring of coupled
+biological oscillators does.
+
+**The air ahead of the far reverb saturates.** A very gentle asymmetric shaper
+between the diffuser and the reverb's feedback network, riding on Diffuse so
+there is no new knob: a dense cluster fired into the hall comes back thickened
+rather than reflected.
+
+**A mono safety net in the master.** Everything upstream is built to widen, and
+a drone that is gigantic in stereo can vanish when a phone sums it. The side is
+measured against the mid over about a second and a half, and if the side is
+half again the power of the mid the width is eased back -- by a quarter at
+most, at two per cent a second, never touching the middle of the mix. It is a
+parameter (*Mono Safe*, on) because someone may prefer the width and their own
+ears.
+
+That threshold cost a measurement. At "side louder than mid" the guard engaged,
+minutely, on thirty of the thirty-seven reference presets -- by an amount too
+small to move any descriptor, but it engaged, and a safety net that is always
+slightly on is not a safety net, it is a change to the sound. At half again it
+leaves the median preset bit for bit identical and pulls back the few that were
+genuinely collapsing: the worst case gains 0.44 dB of level and loses 0.45 dB
+of mono loss, which is the trade the feature exists to make.
+
+**The delay ducks.** While the input is loud the high cut inside the feedback
+loop drops, so a fresh attack does not fight the brightness of the last one's
+tail. Three things had to be got right, and each of the first two produced a
+confident wrong answer first:
+
+* The trigger. A level follower simply darkens any loud passage, which is a
+  tone control with extra steps. It is now the fast envelope against the slow
+  one -- how far the input stands above its own average -- so a drone ducks
+  nothing and an attack ducks hard.
+* The release. Ten milliseconds, which meant the loop was dark for the first
+  echo and open for the rest; the measured effect was five per cent and looked
+  like nothing. A second lets a whole train of echoes stay out of the way.
+* The measurement. The first version compared high-frequency energy *relative
+  to total* energy and reported that ducking makes the loop brighter -- a
+  darker feedback loop builds up less of everything, so the ratio rises while
+  the sound plainly darkens. And it measured during the plucks, where the wet
+  output is the unfiltered delay read and the first repeat is as bright as the
+  attack by design. Measured absolutely, in the echoes, it is fifteen per cent
+  of the high end.
+
+One claim is deliberately not asserted anywhere: that the loop "opens again
+once the note has gone". The envelope does release, but it cannot be shown in
+the audio, because a darkened feedback loop also loses energy faster -- by the
+time the filter has opened there is almost no tail left to be brighter. The
+test says so in a comment rather than asserting something the signal does not
+do.
+
+### Modal mode: the same bank, read as objects
+
+The cascade shapes; a modal bank rings. That is the whole difference, and it is
+larger than it sounds. Six biquads in series take away what is not wanted and
+leave what is: stop the input and the filter stops. Six two-pole resonators in
+*parallel*, each with its own decay time, keep sounding after the input has
+gone -- which is what a bar, a bell, a membrane or a room actually does. It is
+modal synthesis (Smith, *Physical Audio Signal Processing*; Bilbao, *Numerical
+Sound Synthesis*), and it costs almost nothing here because **the data was
+already in the building**: the 155 shapes are mode series of struck and blown
+objects taken from the acoustics literature, and the cascade was using them as
+filter frequencies. Modal mode uses them as what they are.
+
+`z_mode = Modal` (a fourth value, appended, so no preset that names Series or
+Replace is touched) with two parameters of its own: *Decay*, the T60 of the
+lowest mode, up to forty seconds; and *Damping*, how much shorter the higher
+modes ring -- 0 for everything holding equally, which no real object does, 1
+for decay inversely proportional to frequency, which is roughly what wood,
+metal and skin do.
+
+Every resonator is normalised to unity gain at its own frequency, so a steady
+tone at a mode cannot make the bank run away however long the decay is set, and
+the bank as a whole is normalised on expected power rather than on the sum of
+the peaks -- the modes are at different frequencies and almost never in phase,
+so adding peaks would leave a bank of six far quieter than a bank of two.
+
+The self test measures the two claims rather than repeating them: an impulse
+in, and the tail has to be clearly present at half the stated decay and roughly
+sixty decibels down at the decay itself, for 0.5, 2 and 8 seconds; and damping
+has to leave less energy in the tail than no damping. The 44 modal presets --
+one for every shape that is a physical object -- are rendered and measured with
+the rest.
+
+**And the descriptors were not enough this time.** Five modal presets came out
+as identical twins: a bank of narrow resonators fed with noise measures almost
+the same whatever its modes are. Their rendered audio hashes were all
+different. The twin test now needs both -- the same descriptors *and* the same
+hash -- which is the third time in this instrument that a measurement had to be
+sharpened before it meant anything, and the third time the symptom was a
+confident report that everything was the same.
+
+### The ZDF question
+
+The first thing in the literature on modulating filters is Zavalishin's
+topology-preserving transform: solve the zero-delay feedback rather than let a
+unit delay sit in the loop, and a filter stops detuning and clicking when it is
+swept. That has been in this instrument since the beginning -- `Svf` in
+`Dsp.h` is exactly that structure (`g = tan(pi f / sr)`, the trapezoidal
+integrators, the feedback resolved algebraically), and the low pass, high pass,
+band pass, notch, peak and formant models are all built on it.
+
+The one place that is *not* zero-delay is the four-pole Ladder, which keeps a
+sample of delay in its feedback path on purpose: that delay is part of what the
+model sounds like, and every preset that uses it was voiced with it. A
+zero-delay ladder would be a different filter and belongs beside it as a new
+model rather than in place of it.
+
 ### Envelopes, and a control that was only a picture
 
 The voice's amplitude envelope has always been a plain ADSR -- Attack, Decay,

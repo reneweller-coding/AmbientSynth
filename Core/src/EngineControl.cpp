@@ -319,6 +319,8 @@ void Engine::readParams()
     vp_.zX          = g(ParamId::ZX);
     vp_.zY          = g(ParamId::ZY);
     vp_.zZ          = g(ParamId::ZZ);
+    vp_.zDecay      = g(ParamId::ZDecay);
+    vp_.zDamp       = g(ParamId::ZDamp);
     vp_.zRate       = g(ParamId::ZRate);
     vp_.zDepth      = g(ParamId::ZDepth);
     vp_.zRes        = g(ParamId::ZResonance);
@@ -413,6 +415,7 @@ void Engine::readParams()
     ensemble_.set(g(ParamId::EnsembleMix), g(ParamId::EnsembleDepth), syncedHz(ParamId::EnsembleSync, g(ParamId::EnsembleRate)));
     delay_.set(syncedSeconds(ParamId::DelaySyncL, g(ParamId::DelayTimeL)), syncedSeconds(ParamId::DelaySyncR, g(ParamId::DelayTimeR)),
                g(ParamId::DelayFeedback), g(ParamId::DelayCross), g(ParamId::DelayDamp), g(ParamId::DelayAbsorb));
+    delay_.setDuck(g(ParamId::DelayDuck));
     delayMix_   = g(ParamId::DelayMix);
     delayToFar_ = g(ParamId::DelayToFar);
     delay2_.set(syncedSeconds(ParamId::Delay2SyncL, g(ParamId::Delay2TimeL)), syncedSeconds(ParamId::Delay2SyncR, g(ParamId::Delay2TimeR)),
@@ -434,8 +437,10 @@ void Engine::readParams()
     farReverb_.set(g(ParamId::FarSize), g(ParamId::FarDecay), g(ParamId::FarDamp), g(ParamId::FarPreDelay), g(ParamId::FarFreeze) >= 0.5f, 1.0f);
     farLevel_ = g(ParamId::FarLevel);
     midSide_.set(g(ParamId::BassMono), g(ParamId::SideAir), g(ParamId::Width));
+    midSide_.setMonoGuard(g(ParamId::MonoGuard) >= 0.5f);
     midSide_.setTilt(g(ParamId::Tilt2), g(ParamId::TiltPivot));
     diffuser_.set(g(ParamId::FarDiffuse));
+    farDiffuse_ = g(ParamId::FarDiffuse);   // also drives the air saturation ahead of the reverb
     sympathy_ = g(ParamId::Sympathy);
     vp_.sympathy = sympathy_;
     roomLevel_    = g(ParamId::RoomLevel);

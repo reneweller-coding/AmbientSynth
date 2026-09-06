@@ -26,7 +26,7 @@ extern const char* const kZCategoryNames[kZCategories];
 // Which family a shape belongs to. Display only -- the parameter's numbering stays historical,
 // and the editor sorts the list into families for the eye.
 extern const unsigned char kZShapeCategory[kZShapes];
-extern const char* const kZModeNames[3];   // Off, Series, Replace
+extern const char* const kZModeNames[4];   // Off, Series, Replace, Modal
 
 // One two-pole / two-zero section. A zero frequency of 0 means "no zeros" (a plain resonator).
 struct ZSection { float poleHz = 1000.0f, poleBw = 100.0f, zeroHz = 0.0f, zeroBw = 0.0f, gain = 1.0f; };
@@ -50,6 +50,57 @@ extern const ZCornerSpec kZCorners[kZShapes][8];
 ZFrame zFrameFromSpec(const ZCornerSpec& c);
 // Trilinear interpolation of the eight corner frames in the log-frequency / log-bandwidth domain.
 ZFrame zInterpolate(int shape, float x, float y, float z = 0.0f);
+
+// ---------------------------------------------------------------- modal
+//
+// The same frames read as what they physically are. A cascade of biquads SHAPES a spectrum: it
+// takes away what is not there and leaves what is. A parallel bank of two-pole resonators, one
+// per mode, each with its own decay time, RINGS: hit it and it goes on sounding after the input
+// has stopped, which is what a bar, a bell, a membrane or a room actually does. That is modal
+// synthesis (Smith, Physical Audio Signal Processing; Bilbao, Numerical Sound Synthesis), and
+// the bank already holds the data for it -- the mode ratios of struck and blown objects, taken
+// from the acoustics literature. The cascade was using them as filter frequencies. This uses
+// them as modes.
+//
+// Every resonator is normalised to unity gain at its own peak, so a steady tone at a mode's
+// frequency comes out at the level it went in and the bank cannot run away however long the
+// decay is set.
+class ZModal {
+public:
+    void prepare(float sr) { sr_ = sr; reset(); }
+    void reset();
+    // `decaySeconds` is the T60 of the lowest mode; `damp` shortens the higher ones (0 = every
+    // mode rings as long as the lowest, 1 = decay time inversely proportional to frequency,
+    // which is roughly what a real object does).
+    void set(const ZFrame& f, float decaySeconds, float damp);
+    int  used() const { return used_; }
+    inline float tick(int ch, float x)
+    {
+        float sum = 0.0f;
+        for (int i = 0; i < used_; ++i) {
+            Mode& m = modes_[i];
+            const float y = m.b0 * x + m.a1 * m.z1[ch] + m.a2 * m.z2[ch];
+            m.z2[ch] = m.z1[ch];
+            m.z1[ch] = y;
+            sum += y * m.gain;
+        }
+        return sum * norm_;
+    }
+    // |H(f)| of the whole bank, for the display: the modes add, they do not multiply.
+    float magnitudeAt(float hz) const;
+
+private:
+    struct Mode {
+        float b0 = 0.0f, a1 = 0.0f, a2 = 0.0f, gain = 1.0f, hz = 0.0f, r = 0.0f;
+        float z1[2] = { 0.0f, 0.0f }, z2[2] = { 0.0f, 0.0f };
+    };
+    Mode  modes_[kZSections];
+    int   used_ = 0;
+    float norm_ = 1.0f;
+    float sr_ = 48000.0f;
+};
+
+
 
 // A cascaded two-pole/two-zero section, transposed direct form II.
 struct ZBiquad {

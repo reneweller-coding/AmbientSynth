@@ -3,7 +3,73 @@
 
 namespace ambient {
 
-const char* const kZModeNames[3] = { "Off", "Series", "Replace" };
+const char* const kZModeNames[4] = { "Off", "Series", "Replace", "Modal" };
+
+// ---------------------------------------------------------------- modal bank
+
+void ZModal::reset()
+{
+    for (Mode& m : modes_) { m.z1[0] = m.z1[1] = 0.0f; m.z2[0] = m.z2[1] = 0.0f; }
+}
+
+void ZModal::set(const ZFrame& f, float decaySeconds, float damp)
+{
+    used_ = 0;
+    const float nyq = sr_ * 0.49f;
+    const float d = clampv(decaySeconds, 0.02f, 40.0f);
+    const float dp = clampv(damp, 0.0f, 1.0f);
+    // The lowest mode sets the reference: with damp = 1 every other mode's decay is shortened in
+    // proportion to how far above it sits, which is what makes a bright object sound short and a
+    // heavy one long without touching two knobs.
+    float lowest = 1.0e9f;
+    for (int i = 0; i < f.used; ++i) if (f.s[i].poleHz > 0.0f) lowest = std::min(lowest, f.s[i].poleHz);
+    if (lowest > 1.0e8f) lowest = 100.0f;
+
+    float power = 0.0f;
+    for (int i = 0; i < f.used && used_ < kZSections; ++i) {
+        const float hz = f.s[i].poleHz;
+        if (hz <= 5.0f || hz >= nyq) continue;               // nothing above Nyquist can ring
+        Mode& m = modes_[used_];
+        const float t60 = std::max(0.01f, d * std::pow(lowest / hz, dp));
+        // T60 to pole radius: 60 dB is a factor of 1000, so r^(t60*sr) = 1e-3.
+        const float r = std::exp(-6.907755f / (t60 * sr_));
+        const float w = 2.0f * kPi * hz / sr_;
+        m.hz = hz;
+        m.r  = std::min(r, 0.9999995f);                      // strictly inside the unit circle
+        m.a1 = 2.0f * m.r * std::cos(w);
+        m.a2 = -(m.r * m.r);
+        // Unity gain at the mode's own frequency: |H| = b0 / |1 - a1 e^-jw - a2 e^-2jw|.
+        const float c1 = std::cos(w), s1 = std::sin(w), c2 = std::cos(2.0f * w), s2 = std::sin(2.0f * w);
+        const float dr = 1.0f - m.a1 * c1 - m.a2 * c2, di = m.a1 * s1 + m.a2 * s2;
+        m.b0 = std::sqrt(dr * dr + di * di);
+        m.gain = f.s[i].gain;
+        power += m.gain * m.gain;
+        ++used_;
+    }
+    // Normalised on expected power rather than on the sum of the peaks. The modes are at
+    // different frequencies and almost never in phase, so adding their peaks would leave a bank
+    // of six far quieter than a bank of two; adding their powers keeps the level even.
+    norm_ = power > 0.0f ? 1.0f / std::sqrt(power) : 0.0f;
+}
+
+float ZModal::magnitudeAt(float hz) const
+{
+    // The modes add. |H| of the bank is the magnitude of the sum, and the phases matter, so this
+    // sums the complex responses rather than the magnitudes.
+    const float w = 2.0f * kPi * clampv(hz, 1.0f, sr_ * 0.5f) / sr_;
+    const float c1 = std::cos(w), s1 = std::sin(w), c2 = std::cos(2.0f * w), s2 = std::sin(2.0f * w);
+    float re = 0.0f, im = 0.0f;
+    for (int i = 0; i < used_; ++i) {
+        const Mode& m = modes_[i];
+        const float dr = 1.0f - m.a1 * c1 - m.a2 * c2, di = m.a1 * s1 + m.a2 * s2;
+        const float den = std::max(dr * dr + di * di, 1e-20f);
+        // b0 / (dr + j di) = b0 (dr - j di) / |den|
+        re += m.gain * m.b0 * dr / den;
+        im -= m.gain * m.b0 * di / den;
+    }
+    return std::sqrt(re * re + im * im) * norm_;
+}
+
 
 #include "ZPlaneBank.inc"
 

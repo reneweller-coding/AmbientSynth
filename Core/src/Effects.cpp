@@ -100,8 +100,29 @@ void StereoDelay::process(const float* inL, const float* inR, float* wetL, float
         const float dR = tRcur_ + modDepth * sin01(modPh_[1]) + 1.0f;
         const float oL = ringRead(bl, mask_, w_, dL);
         const float oR = ringRead(br, mask_, w_, dR);
-        lpL_ += lpc_ * (oL - lpL_);
-        lpR_ += lpc_ * (oR - lpR_);
+        // Ducking the loop's brightness. The envelope follows the input fast and lets go slowly,
+        // so an attack darkens the feedback at once and the tail opens again over a second or so
+        // as the note settles -- the echoes make room for the articulation instead of piling a
+        // new attack onto the brightness of the last one.
+        float lpc = lpc_;
+        if (duck_ > 0.0f) {
+            // Driven by the input's level against its own slow average, not by the level itself.
+            // A drone has no transients and correctly ducks nothing; an attack stands well above
+            // the average and ducks hard. A plain level follower would simply darken any loud
+            // passage, which is a tone control with extra steps.
+            const float x = 0.5f * (std::fabs(inL[i]) + std::fabs(inR[i]));
+            // Fast up, slow down: the duck grabs an attack in a millisecond and lets go over
+            // about a second, so a whole train of echoes stays out of the way rather than only
+            // the first ten milliseconds of it. The release used to be 10 ms, which is why the
+            // effect measured at five per cent and looked like nothing.
+            duckFast_ += (x > duckFast_ ? 0.05f : 0.00002f) * (x - duckFast_);
+            duckEnv_  += 0.000006f * (x - duckEnv_);                       // the slow average, ~3.5 s
+            const float excess = duckFast_ - duckEnv_;
+            const float amount = duck_ * clampv(excess * 14.0f, 0.0f, 1.0f);
+            lpc = lpc_ * (1.0f - 0.92f * amount);       // a lower coefficient is a lower cut-off
+        }
+        lpL_ += lpc * (oL - lpL_);
+        lpR_ += lpc * (oR - lpR_);
         float fdL = lpL_, fdR = lpR_;
         if (absorb_ > 0.0f) {   // the absorption band: low cut, then the sinking high cut
             loL_ += hpc_ * (fdL - loL_); loR_ += hpc_ * (fdR - loR_);
@@ -525,9 +546,41 @@ void MidSide::process(float* L, float* R, int n)
         s = hp;
         air_.tick(s, lp, bp, hp);
         s += airGain_ * bp;               // lift the side's upper mids
-        s *= width_;
+        const float sWide = s * width_;         // what the side would be without the guard
+        s = sWide * guard_;
         L[i] = m + s;
         R[i] = m - s;
+        if (guardOn_) {
+            // Both powers on a very slow average -- about a second and a half at 48 kHz -- so a
+            // single wide transient does nothing and a drone that has settled into anti-phase is
+            // caught. The correction is a trim on the width, never on the mid: the centre of the
+            // mix is not touched, only how far the sides are allowed to go.
+            constexpr float kA = 1.5e-5f;
+            // Measured on the side BEFORE the guard's own trim. Watching its own output makes
+            // the guard a feedback loop that hunts around the threshold; watching the mix means
+            // it decides once and holds.
+            midPow_  += kA * (m * m - midPow_);
+            sidePow_ += kA * (sWide * sWide - sidePow_);
+            // Side louder than mid means a mono sum loses more than it keeps. The trim follows
+            // sqrt(mid/side), floored at a third, and moves at about 4 % per second either way.
+            // A quarter is as far as it goes. This is a safety net, not a stereo policy: the
+            // point is that a mono sum keeps most of what it had, not that the width is
+            // "corrected" to something the mix never asked for.
+            // The threshold is 1.3 and not 1.0 on purpose. At 1.02 the guard engaged, minutely,
+            // on thirty of the thirty-seven reference presets -- by an amount too small to move
+            // any descriptor, but it engaged. A safety net that is always slightly on is not a
+            // safety net, it is a change to the sound. At 1.3 the side has to be half again the
+            // power of the mid, which is a mix that really is collapsing in mono, and everything
+            // else is left bit for bit alone.
+            const float want = sidePow_ > midPow_ * 1.3f
+                             ? clampv(std::sqrt(midPow_ / std::max(sidePow_, 1e-12f)), 0.75f, 1.0f)
+                             : 1.0f;
+            const float step = 5.0e-7f;                      // about 2 % of the range per second
+            guard_ += clampv(want - guard_, -step, step);
+            guard_ = clampv(guard_, 0.75f, 1.0f);
+        } else {
+            guard_ = 1.0f;
+        }
     }
 }
 

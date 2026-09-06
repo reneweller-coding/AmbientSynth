@@ -338,6 +338,7 @@ private:
     float             inertiaCur_[kNumParams] = {};
     float             lastBlockSeconds_ = 0.005f;
     float             kuraPhase_[4] = { 0.0f, 1.3f, 2.9f, 4.4f };   // Kuramoto bank phases
+    float             farDiffuse_ = 0.0f;                           // how hard the air ahead of the far reverb saturates
     float             portamento_ = 0.0f, portaGravity_ = 0.5f;
     double            lastKeyHz_ = 0.0;   // frequency of the last key pressed, for portamento
     float             fbTape_ = 0.0f;

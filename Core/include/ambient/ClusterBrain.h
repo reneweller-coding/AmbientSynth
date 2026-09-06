@@ -18,6 +18,55 @@ enum class BrainMode : int { Free = 0, Chords, Count };
 constexpr int kNumBrainModes = static_cast<int>(BrainMode::Count);
 extern const char* const kBrainModeNames[kNumBrainModes];
 
+// The spectrum the conductor judges intervals with when Timbre is up: the partial template of
+// the voice as it stands -- the same tilt, odd/even weight, brightness window and inharmonic
+// stretch the bank renders with -- as frequency ratios to the fundamental and amplitudes.
+struct BrainSpectrum {
+    static constexpr int kMax = 12;
+    int    count = 0;
+    double ratio[kMax] = {};    // f_h / f0, including the stiff-string stretch
+    double amp[kMax] = {};
+};
+
+// Roughness of two tones with this template at f1 and f2, after Sethares (1993, 2005), which is
+// Plomp and Levelt's curve for a pair of pure tones summed over every pair of partials:
+//     d(x) = a1 a2 (exp(-b1 s x) - exp(-b2 s x)),  s = d* / (s1 min(f) + s2),
+//     b1 = 3.5, b2 = 5.75, d* = 0.24, s1 = 0.021, s2 = 19
+// so that the peak of the roughness sits at about a quarter of a critical bandwidth whatever the
+// register. Pairs more than a few critical bandwidths apart contribute nothing and are skipped.
+inline double spectralRoughness(double f1, double f2, const BrainSpectrum& sp)
+{
+    double d = 0.0;
+    for (int i = 0; i < sp.count; ++i) {
+        const double fa = f1 * sp.ratio[i];
+        for (int j = 0; j < sp.count; ++j) {
+            const double fb = f2 * sp.ratio[j];
+            const double lo = fa < fb ? fa : fb;
+            const double x = std::fabs(fb - fa);
+            const double s = 0.24 / (0.021 * lo + 19.0);
+            const double u = s * x;
+            if (u > 2.0) continue;                       // exp(-3.5 * 2) is under a thousandth
+            d += sp.amp[i] * sp.amp[j] * (std::exp(-3.5 * u) - std::exp(-5.75 * u));
+        }
+    }
+    return d;
+}
+
+// The roughness turned into a consonance in 0..1 that sits on the same scale as
+// intervalConsonance(): 1 for a tone against itself, about a tenth for a semitone. The semitone
+// is the yardstick because it is the roughest interval a scale contains, and measuring against
+// it rather than against a fixed number keeps the score meaningful for a soft timbre with few
+// partials and for a bright one alike.
+inline double spectralConsonance(double f1, double f2, const BrainSpectrum& sp)
+{
+    if (sp.count <= 0) return 1.0;
+    const double d = spectralRoughness(f1, f2, sp) - spectralRoughness(f1, f1, sp);   // less the tone's own roughness
+    const double ref = spectralRoughness(f1, f1 * 1.0594630943592953, sp) - spectralRoughness(f1, f1, sp);
+    if (ref <= 1.0e-12) return 1.0;
+    const double c = std::exp(-2.3 * (d > 0.0 ? d : 0.0) / ref);
+    return c < 0.05 ? 0.05 : c;
+}
+
 struct BrainParams {
     bool  on = true;
     BrainMode mode = BrainMode::Free;
@@ -30,6 +79,18 @@ struct BrainParams {
     int   low = 36, high = 79;    // MIDI range for chosen notes
     float consonance = 0.7f;      // 0 = anything goes (clusters), 1 = strictly consonant
     float wander = 0.3f;          // probability weight for root movement
+    // Timbre: how much of the consonance is judged from the actual spectrum (Sethares) rather
+    // than from the ratio alone. 0 is the ratio score the conductor always had.
+    float timbre = 0.0f;
+    const BrainSpectrum* spectrum = nullptr;
+    // The consonance of two frequencies, as this conductor currently hears it.
+    double consonanceOf(double fa, double fb) const
+    {
+        const double byRatio = intervalConsonance(fa / fb);
+        if (timbre <= 0.0f || spectrum == nullptr || spectrum->count <= 0) return byRatio;
+        const double bySpectrum = spectralConsonance(fb, fa, *spectrum);
+        return byRatio + (bySpectrum - byRatio) * static_cast<double>(timbre);
+    }
 };
 
 struct BrainEvent {
@@ -120,7 +181,7 @@ public:
             bool duplicate = false;   // with snapped keys two keys can share one pitch
             for (auto& s : slots_) if (s.note >= 0 && std::fabs(std::log2(freqOf(s.note) / fc)) * 1200.0 < 1.0) duplicate = true;
             if (duplicate) continue;
-            const double cons = intervalConsonance(fc / rootFreq);
+            const double cons = p.consonanceOf(fc, rootFreq);
             float w = static_cast<float>(std::pow(cons, p.consonance * 3.0f));
             w *= 0.6f + 0.4f * static_cast<float>(1.0 - std::fabs(c - mid) / half);
             for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) w *= 0.15f;  // octave doubling is rare
@@ -231,9 +292,9 @@ private:
             for (const auto& s : slots_) if (s.note >= 0 && std::fabs(std::log2(freqOf(s.note) / fc)) * 1200.0 < 1.0) duplicate = true;
             if (duplicate) continue;
             // How it sits against the voices that stay, and against the root.
-            double fit = intervalConsonance(fc / rootFreq);
+            double fit = p.consonanceOf(fc, rootFreq);
             int n = 1;
-            for (const auto& s : slots_) if (s.note >= 0) { fit += intervalConsonance(fc / freqOf(s.note)); ++n; }
+            for (const auto& s : slots_) if (s.note >= 0) { fit += p.consonanceOf(fc, freqOf(s.note)); ++n; }
             fit /= n;
             double score = std::pow(fit, 1.0 + 2.5 * (1.0 - clampv(p.chordTension, 0.0f, 1.0f)));
             // Voice leading: the further this voice has to travel, the worse, and beyond the

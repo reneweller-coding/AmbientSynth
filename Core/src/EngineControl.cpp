@@ -518,6 +518,25 @@ void Engine::readParams()
     bp_.high        = static_cast<int>(std::lround(g(ParamId::BrainHigh)));
     bp_.consonance  = g(ParamId::BrainConsonance);
     bp_.wander      = g(ParamId::BrainWander);
+    // The spectrum the conductor judges by: the bank's own template, as the voice renders it.
+    bp_.timbre = g(ParamId::BrainTimbre);
+    if (bp_.timbre > 0.0f) {
+        const int count = std::min(BrainSpectrum::kMax, std::max(1, vp_.partials));
+        const float hc = 1.0f + vp_.brightness * vp_.brightness * 31.0f;
+        const double B = static_cast<double>(vp_.inharmonic) * vp_.inharmonic * 0.02;
+        brainSpec_.count = count;
+        for (int h = 1; h <= count; ++h) {
+            double a = std::pow(static_cast<double>(h), -static_cast<double>(vp_.tilt));
+            if (vp_.oddEven > 0.0f && (h % 2) == 0) a *= 1.0 - vp_.oddEven;
+            if (vp_.oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0 + vp_.oddEven;
+            if (static_cast<float>(h) > hc) { const float x = std::min((static_cast<float>(h) - hc) / 6.0f, 1.0f); a *= 0.5 * (1.0 + std::cos(kPi * x)); }
+            brainSpec_.amp[h - 1] = a;
+            brainSpec_.ratio[h - 1] = h * (B > 0.0 ? std::sqrt(1.0 + B * h * h) : 1.0);
+        }
+    }
+    bp_.spectrum = &brainSpec_;
+    bp2_.timbre = bp_.timbre;
+    bp2_.spectrum = &brainSpec_;
     brainQuant_     = clampv(static_cast<int>(std::lround(g(ParamId::BrainQuantize))), 0, kNumSyncDivs - 1);
     // Autoplay. In Chords the conductor keeps the cluster full and exchanges one voice at a time;
     // the rate can come from the clock instead of the seconds knob.

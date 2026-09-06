@@ -286,6 +286,7 @@ private:
     // The wheel: where it was put, and where the modulation has got to. A controller sends 128
     // steps and a step on a cutoff is audible, so what the matrix reads is the smoothed one.
     float        wheelTarget_ = 0.0f, wheel_ = 0.0f;
+    BrainSpectrum brainSpec_;     // the partial template the conductor judges intervals with (Timbre)
     // The stretched octave, in cents per octave away from the reference pitch (0 = exact 2:1).
     float        stretchCents_ = 0.0f;
     bool         stretchChanged_ = false;

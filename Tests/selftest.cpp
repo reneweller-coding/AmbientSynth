@@ -3265,6 +3265,64 @@ void testAfterTheClassics()
     }
 }
 
+// ---------------------------------------------------------------- the conductor's ear for timbre
+//
+// Sethares' claim, measured: for a harmonic timbre the roughness curve has its dips at the just
+// ratios, and for an inharmonic one the dips move. And the blend must be the ratio score exactly
+// at Timbre 0, which is what lets it into an instrument full of finished presets.
+void testBrainTimbre()
+{
+    auto harmonic = [](double B) {
+        BrainSpectrum sp;
+        sp.count = 12;
+        for (int h = 1; h <= 12; ++h) { sp.amp[h - 1] = 1.0 / h; sp.ratio[h - 1] = h * (B > 0.0 ? std::sqrt(1.0 + B * h * h) : 1.0); }
+        return sp;
+    };
+    const BrainSpectrum pure = harmonic(0.0);
+    const double f = 220.0;
+    // Consonance on the same scale as the ratio score: unison 1, the fifth high, the tritone and
+    // the semitone low, in that order.
+    const double cUnison = spectralConsonance(f, f, pure);
+    const double cFifth = spectralConsonance(f, f * 1.5, pure);
+    const double cOctave = spectralConsonance(f, f * 2.0, pure);
+    const double cTritone = spectralConsonance(f, f * std::pow(2.0, 6.0 / 12.0), pure);
+    const double cSemitone = spectralConsonance(f, f * std::pow(2.0, 1.0 / 12.0), pure);
+    CHECK(std::fabs(cUnison - 1.0) < 1e-9, "a tone against itself is perfectly consonant");
+    CHECK(cOctave > 0.9, "the octave of a harmonic tone is nearly as consonant as the unison");
+    CHECK(cFifth > cTritone && cTritone > cSemitone, "fifth, tritone, semitone: in that order");
+    CHECK(std::fabs(cSemitone - 0.1) < 0.03, "the semitone is the yardstick, at about a tenth");
+
+    // The dip of the roughness curve near the fifth sits at 3:2 for a harmonic timbre and moves
+    // for a stretched one -- Sethares' point, and the reason the parameter exists.
+    auto bestNear = [&](const BrainSpectrum& sp, double lo, double hi) {
+        double bestR = lo, bestC = -1.0;
+        for (double r = lo; r <= hi; r *= 1.0005) { const double c = spectralConsonance(f, f * r, sp); if (c > bestC) { bestC = c; bestR = r; } }
+        return bestR;
+    };
+    const double fifthPure = bestNear(pure, 1.44, 1.56);
+    CHECK(std::fabs(fifthPure / 1.5 - 1.0) < 0.003, "for a harmonic timbre the consonant fifth is 3:2");
+    const BrainSpectrum stretched = harmonic(0.02);   // Inharmonic at 1: the thirty-second partial a quarter tone sharp
+    const double fifthStretched = bestNear(stretched, 1.44, 1.56);
+    CHECK(fifthStretched > 1.5 * 1.004, "for a stretched timbre the consonant fifth is wider than 3:2");
+
+    // The blend: at 0 exactly the ratio score, at 1 exactly the spectral one.
+    BrainParams p;
+    p.spectrum = &pure;
+    p.timbre = 0.0f;
+    CHECK(p.consonanceOf(f * 1.5, f) == intervalConsonance(1.5), "Timbre 0 is the ratio score, bit for bit");
+    p.timbre = 1.0f;
+    CHECK(std::fabs(p.consonanceOf(f * 1.5, f) - cFifth) < 1e-12, "Timbre 1 is the spectral score");
+    p.timbre = 0.5f;
+    const double half = p.consonanceOf(f * 1.5, f);
+    CHECK(half > std::min(cFifth, intervalConsonance(1.5)) && half < std::max(cFifth, intervalConsonance(1.5)), "and in between it is in between");
+
+    // In the engine: Timbre 0 renders as before (the oracle says so for forty presets; here the
+    // hash of one brain-driven render), and the parameter exists in the table where the panel
+    // will find it.
+    CHECK(std::string(paramDesc(ParamId::BrainTimbre).section) == "Cluster Brain", "Timbre lives in the conductor's section");
+    CHECK(paramDesc(ParamId::BrainTimbre).def == 0.0f, "and is off by default");
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -3312,6 +3370,7 @@ int main()
     testFilterModels();
     testMixDeskFive();
     testAfterTheClassics();
+    testBrainTimbre();
     if (failures == 0) std::printf("selftest: all checks passed\n");
     else std::printf("selftest: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

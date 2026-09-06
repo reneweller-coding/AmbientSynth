@@ -572,7 +572,10 @@ Sections of the GUI (all parameters are automatable in a DAW):
   −24…−16 LUFS window a dark ambient master is asked to land in marked on the
   bar and the −14 LUFS streaming line drawn across it.
 * **Cluster Brain** — density, event rate, hold time range, register range,
-  *Consonance* (1 = only simple ratios to the root, 0 = clusters), *Wander*.
+  *Consonance* (1 = only simple ratios to the root, 0 = clusters), *Wander*,
+  and *Timbre*: the conductor judging intervals by the roughness of the partials
+  it actually plays (Sethares) rather than by the ratio alone, so an inharmonic
+  patch is conducted in the intervals it is consonant at.
 * **Z-Plane** — a morphing filter after Dave Rossum's idea from the E-mu
   Morpheus: filter frames on the corners of a **cube**, and a point inside
   it is a filter whose poles and zeros are interpolated between them.

@@ -182,6 +182,9 @@ enum class ParamId : int {
     // a reverb with scattering in its loop (Schlecht and Habets 2020), masking that spreads
     // upward (Zwicker), and a binaural mode that follows the head. Neutral at every default.
     TuneStretch, FarMode, FarUnmaskSpread, Binaural,
+    // The conductor judging intervals by the spectrum it actually plays (Sethares), not by
+    // the ratio alone. 0 = the ratio score it always had.
+    BrainTimbre,
     Count
 };
 

@@ -546,6 +546,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::FarMode,         "far_mode",          "Mode",     "Far Reverb", kFarModeNames, 2, 0),
     F(ParamId::FarUnmaskSpread, "far_unmask_spread", "Spread",   "Far Reverb", 0.f, 1.f,  0.f, 1.f, ""),
     C(ParamId::Binaural,        "binaural",          "Binaural", "Space",      kBinauralNames, 2, 0),
+    F(ParamId::BrainTimbre,     "brain_timbre",      "Timbre",   "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
 }};
 } // namespace
 

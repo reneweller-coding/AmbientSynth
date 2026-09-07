@@ -24,6 +24,11 @@ struct VoiceParams {
     float level = 1.0f;         // level of the partial bank (Source 1)
     int   partials = 16;
     float tilt = 1.2f, brightness = 0.7f, oddEven = 0.0f, inharmonic = 0.0f;
+    // Match: partials placed on the degrees of the current scale rather than on the harmonic
+    // series (Sethares, the other direction of the timbre scale). The engine fills the table;
+    // at 0 the voice never reads it and its frequencies are what they always were, to the bit.
+    float match = 0.0f;
+    float partialRatio[kMaxPartials] = {};   // f_h / f0 with Match blended in, valid when match > 0
     float shimmer = 0.4f, shimmerRate = 0.15f;
     int   unison = 3;
     float detune = 8.0f, drift = 4.0f, driftRate = 0.08f, spread = 0.7f;

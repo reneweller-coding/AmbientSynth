@@ -334,6 +334,13 @@ struct BrainParams {
     // geometry, which for an exchange of one note is exactly the leap that voice makes. It has no
     // effect outside Chords mode, where the choice of which voice leaves is made differently.
     float smooth = 0.0f;
+    // Blend: how a chord arrives. Rasch (1979) measured the onset asynchrony of ensembles at
+    // thirty to fifty milliseconds, and Bregman's rule is that tones starting together are heard
+    // as one object while tones starting apart are heard as separate voices. The conductor
+    // brings its voices in one at a time, minutes apart, so every voice is its own object. With
+    // this up, the notes that fill an empty chord arrive TOGETHER -- within thirty milliseconds
+    // at the top, fused into one sound -- rather than one per tick.
+    float blend = 0.0f;
     // Key: how strongly the conductor prefers the stable degrees of the key it finds itself in.
     // Nothing sets that key -- it is measured from what has actually been sounding, weighted by
     // how long, which for an instrument whose notes last minutes is the only weighting that means
@@ -393,7 +400,7 @@ public:
         stepRequested_ = false;
         for (int& r : recent_) r = -1;
         recentHead_ = 0;
-        for (auto& s : slots_) { s.note = -1; s.remaining = 0.0; }
+        for (auto& s : slots_) { s.note = -1; s.remaining = 0.0; s.startIn = 0.0; }
         for (float& w : pcWeight_) w = 0.0f;
         root_ = rootNote;
         timer_ = 1.0;
@@ -429,6 +436,13 @@ public:
         }
         if (!wasOn_) { wasOn_ = true; timer_ = 0.5; }
         if (anchorNote >= 0) root_ = anchorNote;
+
+        // Notes chosen a moment ago and held back so that they arrive together (Blend).
+        for (auto& s : slots_) {
+            if (s.note < 0 || s.startIn <= 0.0) continue;
+            s.startIn -= dt;
+            if (s.startIn <= 0.0) { s.startIn = 0.0; emit(BrainEvent{ BrainEvent::Type::NoteOn, s.note, s.vel }); }
+        }
 
         // What has been sounding, and for how long. A note held for four minutes tells more about
         // where the music is than one that passed through in twenty seconds, and on this
@@ -556,10 +570,37 @@ public:
             emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, 0.5f + 0.4f * rng_.uniform() });
             break;
         }
+
+        // Blend: the rest of the chord comes with it. Each further note is chosen against the
+        // ones already committed -- the slot is taken at once, so the next choice sees it -- and
+        // released a few milliseconds later, all of them inside the window in which the ear
+        // fuses onsets into one event. Short-circuited at zero, so a conductor that has not been
+        // asked for this draws nothing extra from its random stream.
+        if (p.blend > 0.0f) {
+            const int missing = density - activeCount();
+            const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
+            const double window = 0.030 + 0.020 * (1.0 - static_cast<double>(p.blend));   // 50 ms at a little, 30 at full
+            for (int k = 0; k < extra; ++k) {
+                const int next = chooseNote(-1, low, high, p, freqOf);
+                if (next < 0) break;
+                bool placed = false;
+                for (auto& s : slots_) {
+                    if (s.note >= 0) continue;
+                    const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
+                    s.note = next;
+                    s.remaining = hmin + rng_.uniform() * (hmax - hmin);
+                    s.startIn = 0.001 + rng_.uniform() * window;
+                    s.vel = 0.5f + 0.4f * rng_.uniform();
+                    placed = true;
+                    break;
+                }
+                if (!placed) break;
+            }
+        }
     }
 
 private:
-    struct Slot { int note = -1; double remaining = 0.0; };
+    struct Slot { int note = -1; double remaining = 0.0; double startIn = 0.0; float vel = 0.7f; };   // startIn > 0: chosen, not yet sounding
 
     // ---------------------------------------------------------------- chords
     //
@@ -588,6 +629,25 @@ private:
             timer_ = std::max(0.5, static_cast<double>(p.rateSeconds));
             const int add = chooseNote(-1, low, high, p, freqOf);
             if (add >= 0) startIn(add, emit);
+            if (p.blend > 0.0f) {
+                const int missing = density - activeCount();
+                const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
+                const double window = 0.030 + 0.020 * (1.0 - static_cast<double>(p.blend));
+                for (int k = 0; k < extra; ++k) {
+                    const int next = chooseNote(-1, low, high, p, freqOf);
+                    if (next < 0) break;
+                    bool placed = false;
+                    for (auto& s : slots_) {
+                        if (s.note >= 0) continue;
+                        s.note = next; s.remaining = 0.0;
+                        s.startIn = 0.001 + rng_.uniform() * window;
+                        s.vel = 0.5f + 0.4f * rng_.uniform();
+                        placed = true;
+                        break;
+                    }
+                    if (!placed) break;
+                }
+            }
             return;
         }
         if (timer_ > 0.0 && !asked) return;

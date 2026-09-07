@@ -216,6 +216,13 @@ public:
     // The key the conductor has found itself in, measured from what has been sounding and
     // for how long. Read on the message thread for the panel; never set from outside.
     KeyEstimate brainKey() const { return brain_.estimatedKey(); }
+    // The beat rate the BEAT source is following, the arc's current lean on the harmony, and the
+    // factor the fluctuation guard is applying to the purity drift. For the panel and the tests.
+    float beatHz() const { return beatHz_; }
+    float arcLean() const { return arcLean_; }
+    float guardFactor() const { return guardFactor_; }
+    // What Match would make of partial h (1-based) against the current scale: the ratio to f0.
+    double matchedPartialRatio(int h) const;
     float arcValue() const    { return arcValue_.load(std::memory_order_relaxed); }
     void soundingNotes(bool (&out)[128]) const;
     // Distance (0 near .. 1 far) of the voice sounding `note`, or -1 if none.
@@ -369,6 +376,8 @@ private:
     BrainParams  bp_;
     Drifter      arc_;
     float        arcAmount_ = 0.0f, arcPeriodMin_ = 40.0f;
+    float        arcHarmony_ = 0.0f, arcLean_ = 0.0f;    // how far the arc is leaning the harmony right now
+    float        guardFactor_ = 1.0f;                     // what the fluctuation guard last did to the drift
     // Foundation sub voice
     double       subPhaseL_ = 0.0, subPhaseR_ = 0.0, subFreqCur_ = 0.0;
     float        subLevel_ = 0.0f, subLevelCur_ = 0.0f, subGlide_ = 8.0f, subBinaural_ = 0.0f, subTone_ = 0.2f;

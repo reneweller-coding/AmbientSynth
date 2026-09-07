@@ -328,6 +328,21 @@ void Engine::readParams()
     vp_.brightness  = g(ParamId::Brightness);
     vp_.oddEven     = g(ParamId::OddEven);
     vp_.inharmonic  = g(ParamId::Inharmonic);
+    // Match: the partials placed on the current scale instead of on the harmonic series. Sethares'
+    // other direction -- the timbre scale takes a spectrum and finds its scale; this takes a scale
+    // and bends the spectrum until that scale is the smooth one. Milne, Sethares and Plamondon
+    // (2009) call the pair dynamic tonality. Computed here once per block for the voice and for
+    // the conductor's ear alike, so both hear the same partials.
+    vp_.match = g(ParamId::TuneMatch);
+    if (vp_.match > 0.0f) {
+        const float B = vp_.inharmonic * vp_.inharmonic * 0.02f;
+        const double m = static_cast<double>(vp_.match);
+        for (int h = 1; h <= kMaxPartials; ++h) {
+            const double natural = h * (B > 0.0f ? std::sqrt(1.0 + B * static_cast<double>(h * h)) : 1.0);
+            const double matched = matchedPartialRatio(h);
+            vp_.partialRatio[h - 1] = static_cast<float>(std::exp(std::log(natural) + m * (std::log(matched) - std::log(natural))));
+        }
+    }
     vp_.shimmer     = g(ParamId::Shimmer);
     vp_.shimmerRate = g(ParamId::ShimmerRate);
     vp_.unison      = static_cast<int>(std::lround(g(ParamId::Unison)));
@@ -548,7 +563,8 @@ void Engine::readParams()
             if (vp_.oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0 + vp_.oddEven;
             if (static_cast<float>(h) > hc) { const float x = std::min((static_cast<float>(h) - hc) / 6.0f, 1.0f); a *= 0.5 * (1.0 + std::cos(kPi * x)); }
             brainSpec_.amp[h - 1] = a;
-            brainSpec_.ratio[h - 1] = h * (B > 0.0 ? std::sqrt(1.0 + B * h * h) : 1.0);
+            brainSpec_.ratio[h - 1] = vp_.match > 0.0f ? static_cast<double>(vp_.partialRatio[h - 1])
+                                                       : h * (B > 0.0 ? std::sqrt(1.0 + B * h * h) : 1.0);
         }
     }
     bp_.spectrum = &brainSpec_;
@@ -592,6 +608,27 @@ void Engine::readParams()
     // Hour-scale arc: a very slow drift that leans on density, brightness and depth.
     const float a = arc_.value() * arcAmount_;
     bp_.density = clampv(bp_.density + static_cast<int>(std::lround(a * 2.0f)), 1, ClusterBrain::kSlots);
+    // And on the harmony, if asked. Lerdahl and Krumhansl (2007) modelled tonal tension and tested
+    // it against listeners: tension rises with distance from the tonic in pitch space and with
+    // surface dissonance, and falls back as the music returns. This instrument's proxies for those
+    // are the three judgements the conductor already makes -- rootedness (Harmonic), stability in
+    // the key (Key), and consonance -- so the arc's rise loosens all three and its fall tightens
+    // them. The same lean, in the same direction, as the arc gives density and brightness: the
+    // climax of the night is denser, brighter, and further from home.
+    arcHarmony_ = g(ParamId::ArcHarmony);
+    arcLean_ = arc_.value() * arcHarmony_;
+    if (arcHarmony_ > 0.0f) {
+        const float lean = arcLean_;
+        auto leaned = [lean](float base) {
+            // Tense: down towards a fraction of itself. Relaxed: up towards one. Continuous
+            // through zero, where nothing happens.
+            return lean >= 0.0f ? base * (1.0f - 0.8f * lean) : base + (1.0f - base) * (0.6f * -lean);
+        };
+        bp_.harmonic = clampv(leaned(bp_.harmonic), 0.0f, 1.0f);
+        bp_.key = clampv(leaned(bp_.key), 0.0f, 1.0f);
+        bp_.consonance = clampv(leaned(bp_.consonance), 0.0f, 1.0f);
+        bp2_.harmonic = bp_.harmonic; bp2_.key = bp_.key;
+    }
     vp_.brightness = clampv(vp_.brightness * (1.0f + 0.25f * a), 0.0f, 1.0f);
     depth_ = clampv(depth_ * (1.0f + 0.3f * a), 0.0f, 1.0f);
 
@@ -699,7 +736,26 @@ void Engine::readParams()
     rootNote_ = 60 + rootPc;
     {
         const float purity = g(ParamId::TunePurity), drift = g(ParamId::TuneDrift);
-        const float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()
+        float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()
+        // The fluctuation guard. Fastl and Zwicker: the sensation of fluctuation peaks at a
+        // modulation rate of 4 Hz and is gone by about 20; roughness takes over at around 70.
+        // Between two and eight hertz a beating chord is heard as wobble, which in a sleep concert
+        // is the one thing it must not be. Purity Drift makes beats without knowing where they
+        // land; the BEAT source already measures where they landed. Above zero the guard reins
+        // the drift in while the beat sits in that band, so the beat slows out of it; below zero
+        // it does the opposite and seeks the wobble out. Zero leaves the drift exactly alone.
+        guardFactor_ = 1.0f;
+        {
+            const float guard = g(ParamId::TuneGuard);
+            if (guard != 0.0f && drift > 0.0f && beatHz_ > 0.05f) {
+                const float x = std::log2(beatHz_ / 4.0f);                 // 0 at 4 Hz, +-1 at 2 and 8
+                const float inBand = std::exp(-x * x * 1.25f);              // 1 at 4 Hz, 0.29 at the edges
+                if (guard > 0.0f) guardFactor_ = 1.0f - guard * inBand;
+                else guardFactor_ = 1.0f + (-guard) * (1.0f - inBand) * (beatHz_ < 4.0f ? 1.0f : -1.0f);
+                guardFactor_ = clampv(guardFactor_, 0.0f, 2.0f);
+                wander *= guardFactor_;
+            }
+        }
         purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
         retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt;
         stretchChanged_ = false;

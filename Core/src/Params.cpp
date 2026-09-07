@@ -574,6 +574,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::BrainKey,       "brain_key",       "Key",      "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::BrainEven,      "brain_even",      "Even",     "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::BrainSmooth,    "brain_smooth",    "Smooth",   "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::TuneGuard,      "purity_guard",    "Guard",    "Tuning",        -1.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::TuneMatch,      "match",           "Match",    "Tuning",        0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::BrainBlend,     "brain_blend",     "Blend",    "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::ArcHarmony,     "arc_harmony",     "Arc Harmony", "Space",      0.f, 1.f, 0.f, 1.f, ""),
 }};
 } // namespace
 

@@ -312,7 +312,10 @@ void Voice::control(int blockLen, const VoiceParams& p)
         int H = 0;
         const float lf0 = std::log2(static_cast<float>(f)) - kPresenceCentreLog2;
         for (int h = 1; h <= partials; ++h) {
-            const double fh = f * h * stretchCache_[h - 1];
+            // The branch, not a blend: (f * h) * s and f * (h * s) are not the same double, and
+            // the oracle would hear the last bit move on six thousand presets that never asked
+            // for Match at all.
+            const double fh = p.match > 0.0f ? f * static_cast<double>(p.partialRatio[h - 1]) : f * h * stretchCache_[h - 1];
             if (fh >= nyq) break;
             // Rotation per sample for this partial, and keep the phasor on the unit circle.
             const double inc = fh / sr_;

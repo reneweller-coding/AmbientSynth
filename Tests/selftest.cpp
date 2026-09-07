@@ -3619,6 +3619,165 @@ void testResearchBatch()
         }
     }
 
+    // ---- blend: how a chord arrives ---------------------------------------------------------
+    {
+        auto onsets = [](float blend) {
+            BrainParams p;
+            p.on = true; p.mode = BrainMode::Free; p.density = 5; p.rateSeconds = 2.0f;
+            p.holdMin = 60.0f; p.holdMax = 90.0f; p.low = 36; p.high = 79; p.blend = blend;
+            ClusterBrain brain;
+            brain.reset(0x1234567ull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            std::vector<double> t;
+            double now = 0.0;
+            for (int step = 0; step < 12000 && t.size() < 5; ++step) {          // twelve seconds at 1 ms
+                brain.update(0.001, p, -1, freqOf, [&](const BrainEvent& e) { if (e.type == BrainEvent::Type::NoteOn) t.push_back(now); });
+                now += 0.001;
+            }
+            return t;
+        };
+        const std::vector<double> apart = onsets(0.0f), together = onsets(1.0f);
+        const double spanApart = apart.size() >= 2 ? apart.back() - apart.front() : 0.0;
+        const double spanTogether = together.size() >= 2 ? together.back() - together.front() : 0.0;
+        std::printf("  [probe] first five onsets span %.3f s one by one, %.3f s with Blend\n", spanApart, spanTogether);
+        CHECK(apart.size() >= 3 && spanApart > 1.0, "one by one, the chord takes seconds to assemble");
+        CHECK(together.size() >= 5 && spanTogether < 0.06, "with Blend the whole chord arrives inside the fusion window");
+    }
+
+    // ---- match: partials on the scale ------------------------------------------------------
+    {
+        auto engineWith = [&](int scale, float match, float inharm) {
+            auto e = std::make_unique<Engine>();
+            e->prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e->setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e->setParam(ParamId::BrainOn, 0.0f);
+            e->setParam(ParamId::Scale, static_cast<float>(scale));
+            e->setParam(ParamId::TuneMatch, match);
+            e->setParam(ParamId::Inharmonic, inharm);
+            e->setParam(ParamId::Air, 0.0f);
+            e->reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 20; ++b) e->process(L.data(), R.data(), 256);
+            return e;
+        };
+        const double cents = 1200.0;
+        {   // 12-TET: the fifth and seventh partials move to the nearest semitone.
+            auto e = engineWith(0, 1.0f, 0.0f);
+            const double r3 = e->matchedPartialRatio(3), r5 = e->matchedPartialRatio(5), r7 = e->matchedPartialRatio(7);
+            std::printf("  [probe] 12-TET match: partial 3 -> %.1f ct, 5 -> %.1f ct, 7 -> %.1f ct\n",
+                        cents * std::log2(r3), cents * std::log2(r5), cents * std::log2(r7));
+            CHECK(std::fabs(cents * std::log2(r3) - 1900.0) < 0.01, "partial 3 lands on the tempered fifth");
+            CHECK(std::fabs(cents * std::log2(r5) - 2800.0) < 0.01, "partial 5 on the tempered third");
+            CHECK(std::fabs(cents * std::log2(r7) - 3400.0) < 0.01, "and partial 7 on the tempered minor seventh");
+        }
+        {   // A just scale already holds 3 and 5: nothing to move.
+            auto e = engineWith(1, 1.0f, 0.0f);
+            CHECK(std::fabs(e->matchedPartialRatio(3) - 3.0) < 1e-9 && std::fabs(e->matchedPartialRatio(5) - 5.0) < 1e-9,
+                  "in a just scale the third and fifth partials are already on degrees");
+        }
+        {   // Bohlen-Pierce: a tritave scale, and the second partial is not one of its degrees.
+            auto e = engineWith(9, 1.0f, 0.0f);
+            const double r2 = e->matchedPartialRatio(2), r3 = e->matchedPartialRatio(3);
+            std::printf("  [probe] Bohlen-Pierce match: partial 2 -> %.4f (was 2), partial 3 -> %.4f\n", r2, r3);
+            CHECK(std::fabs(r3 - 3.0) < 1e-9, "the tritave itself is a degree");
+            CHECK(std::fabs(r2 - 2.0) > 0.01 && std::fabs(r2 - 2.0) < 0.1, "and the octave partial moves onto the scale");
+        }
+        {   // The point of it, measured: the scale's own intervals get smoother.
+            auto roughOverScale = [&](const Engine& e, bool matched) {
+                BrainSpectrum sp;
+                sp.count = BrainSpectrum::kMax;
+                for (int h = 1; h <= sp.count; ++h) {
+                    sp.amp[h - 1] = std::pow(static_cast<double>(h), -1.0);
+                    sp.ratio[h - 1] = matched ? e.matchedPartialRatio(h) : static_cast<double>(h);
+                }
+                double sum = 0.0;
+                for (int d = 1; d < 12; ++d)
+                    sum += spectralRoughness(261.6, 261.6 * std::pow(2.0, d / 12.0), sp) - spectralRoughness(261.6, 261.6, sp);
+                return sum / 11.0;
+            };
+            auto e = engineWith(0, 1.0f, 0.0f);
+            const double natural = roughOverScale(*e, false), matched = roughOverScale(*e, true);
+            std::printf("  [probe] mean roughness of the eleven 12-TET intervals: %.4f natural, %.4f matched\n", natural, matched);
+            CHECK(matched < natural, "matched to 12-TET, the tempered intervals are smoother than with harmonic partials");
+        }
+        {   // And it reaches the sound: same note, Match 0 against 1, must not render alike; the
+            // fundamental must not move (Match places partials, not notes).
+            auto a = engineWith(0, 0.0f, 0.0f), b = engineWith(0, 1.0f, 0.0f);
+            CHECK(std::fabs(a->frequencyOf(60) - b->frequencyOf(60)) < 1e-9, "Match leaves the note where it is");
+            a->noteOn(60, 0.8f); b->noteOn(60, 0.8f);
+            std::vector<float> La(256), Ra(256), Lb(256), Rb(256);
+            double diff = 0.0;
+            for (int blk = 0; blk < 200; ++blk) {
+                a->process(La.data(), Ra.data(), 256); b->process(Lb.data(), Rb.data(), 256);
+                if (blk > 100) for (int i = 0; i < 256; ++i) diff += std::fabs(static_cast<double>(La[static_cast<size_t>(i)]) - Lb[static_cast<size_t>(i)]);
+            }
+            CHECK(diff > 1e-3, "and moves the partials the ear hears");
+        }
+    }
+
+    // ---- the arc leaning on the harmony ----------------------------------------------------
+    {
+        auto leanSeen = [&](float amount) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::ArcHarmony, amount);
+            e.setParam(ParamId::ArcPeriod, 2.0f);            // the shortest arc, two minutes
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            float biggest = 0.0f;
+            for (int b = 0; b < 8000; ++b) {                  // forty seconds
+                e.process(L.data(), R.data(), 256);
+                biggest = std::max(biggest, std::fabs(e.arcLean()));
+            }
+            return biggest;
+        };
+        const float off = leanSeen(0.0f), on = leanSeen(1.0f);
+        std::printf("  [probe] arc lean on the harmony over 40 s: %.3f at 0, %.3f at 1\n", off, on);
+        CHECK(off == 0.0f, "at 0 the arc does not touch the harmony");
+        CHECK(on > 0.05f, "at 1 it leans, and the lean is measurable");
+    }
+
+    // ---- the fluctuation guard -------------------------------------------------------------
+    {
+        // A tempered major third beats at about nine hertz an octave below middle C; at Purity
+        // 0.85 that is 1.3 Hz, under the band, and a full Purity Drift carries it up into it.
+        auto inBand = [&](float guard, float& lowestFactor) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Scale, 1.0f);                  // JI major, so purity has somewhere to go
+            e.setParam(ParamId::TunePurity, 0.85f);
+            e.setParam(ParamId::TuneDrift, 1.0f);
+            e.setParam(ParamId::TuneDriftRate, 0.1f);
+            e.setParam(ParamId::TuneGuard, guard);
+            e.setParam(ParamId::Release, 0.2f);
+            e.reset();
+            e.noteOn(57, 0.8f); e.noteOn(61, 0.8f);
+            std::vector<float> L(256), R(256);
+            int samples = 0, hits = 0;
+            lowestFactor = 1.0f;
+            for (int b = 0; b < 22000; ++b) {                  // about two minutes
+                e.process(L.data(), R.data(), 256);
+                if (b < 1000 || (b % 100) != 0) continue;
+                ++samples;
+                const float hz = e.beatHz();
+                if (hz > 2.0f && hz < 8.0f) ++hits;
+                lowestFactor = std::min(lowestFactor, e.guardFactor());
+            }
+            return samples > 0 ? static_cast<double>(hits) / samples : 0.0;
+        };
+        float f0 = 1.0f, fPlus = 1.0f, fMinus = 1.0f;
+        const double none = inBand(0.0f, f0), reined = inBand(1.0f, fPlus), sought = inBand(-1.0f, fMinus);
+        std::printf("  [probe] time with the beat between 2 and 8 Hz: %.0f%% guard off, %.0f%% reined in, %.0f%% sought out (factor down to %.2f)\n",
+                    none * 100.0, reined * 100.0, sought * 100.0, fPlus);
+        CHECK(f0 == 1.0f, "at 0 the guard does nothing to the drift");
+        CHECK(fPlus < 1.0f, "above 0 it reins the drift in when the beat is in the band");
+        CHECK(reined <= none, "and the beat spends no more time there than without it");
+    }
+
     // ---- the scale a timbre asks for ---------------------------------------------------------
     {
         // Sethares' claim, put to the instrument's own spectrum: the intervals at which a timbre

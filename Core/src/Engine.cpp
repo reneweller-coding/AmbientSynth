@@ -317,6 +317,30 @@ void Engine::clearTexture(int slot)
     textureActive_[slot].store(-1, std::memory_order_release);
 }
 
+// Where Match would put partial h: on the degree of the current scale nearest to it, counted in
+// periods of that scale from the fundamental. For a twelve-tone scale the seventh partial moves
+// from 3369 cents to 3400 and the fifth from 2786 to 2800 -- small moves, and after them a chord
+// in that scale does not beat. The timbre scale is excluded, because it is itself computed from
+// the spectrum: a scale that follows the partials and partials that follow the scale would chase
+// each other round in a circle, and neither would mean anything.
+double Engine::matchedPartialRatio(int h) const
+{
+    if (h < 1) return 1.0;
+    const FixedScale& s = *scale_;
+    if (scale_ == &scales_[kTimbreScaleIndex] || s.count <= 0 || !(s.period > 1.0)) return static_cast<double>(h);
+    const double logP = std::log(s.period);
+    const double x = std::log(static_cast<double>(h)) / logP;         // the partial, in periods above f0
+    const int n = static_cast<int>(std::floor(x));
+    const double within = std::pow(s.period, x - n);                     // 1 .. period
+    double best = s.ratios[0], bestErr = 1e9;
+    for (int d = 0; d <= s.count; ++d) {
+        const double r = d < s.count ? s.ratios[d] : s.period;
+        const double err = std::fabs(std::log(r / within));
+        if (err < bestErr) { bestErr = err; best = r; }
+    }
+    return std::pow(s.period, n) * best;
+}
+
 double Engine::frequencyOf(int note) const
 {
     // Purity blends between 12-TET (0) and the chosen scale (1) in the log domain: at 1 the

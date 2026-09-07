@@ -75,6 +75,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(viewport_);
     buildCells();
     colourCellsByGroup();
+    updateSourceCells();   // which cells the types use, before the first layout measures the page
     // The Master section lives in the header, so its cells belong to the editor, not the content.
     if (Section* ms = findSection("Master"))
         for (int ci : ms->cells) { addAndMakeVisible(*cells_[static_cast<size_t>(ci)].comp); addAndMakeVisible(*cells_[static_cast<size_t>(ci)].label); }
@@ -299,6 +300,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         int mode = proc_.layoutMode();
         if (juce::SystemStats::getEnvironmentVariable("AMBIENT_COMPACT", "").isNotEmpty()) mode = 1;
         if (juce::SystemStats::getEnvironmentVariable("AMBIENT_EXPANDED", "").isNotEmpty()) mode = 2;
+        const juce::String lm = juce::SystemStats::getEnvironmentVariable("AMBIENT_LAYOUT", "");   // 0, 1 or 2, over the recalled one
+        if (lm.isNotEmpty()) mode = juce::jlimit(0, 2, lm.getIntValue());
         if (mode != 0) applyLayoutMode(mode);
     }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);
@@ -649,10 +652,70 @@ AmbientSynthEditor::Section* AmbientSynthEditor::findSection(const juce::String&
 
 // ---------------------------------------------------------------- layout
 
+// The switches that close a section, and the cells it keeps while closed.
+namespace {
+struct Closer { const char* section; ambient::ParamId sw; std::vector<ambient::ParamId> keep; };
+const std::vector<Closer>& closers()
+{
+    using ambient::ParamId;
+    static const std::vector<Closer> k = {
+        { "Source 1",   ParamId::Src1Type,     { ParamId::Src1Type, ParamId::OscLevel } },
+        { "Source 2",   ParamId::Src2Type,     { ParamId::Src2Type, ParamId::Src2Level } },
+        { "Source 3",   ParamId::Src3Type,     { ParamId::Src3Type, ParamId::Src3Level } },
+        { "Source 4",   ParamId::Src4Type,     { ParamId::Src4Type, ParamId::Src4Level } },
+        { "Z-Plane",    ParamId::ZMode,        { ParamId::ZMode } },
+        { "Cosmos",     ParamId::CosmosSend,   { ParamId::CosmosSend, ParamId::CosmosReturn } },
+        { "Strike",     ParamId::StrikeLevel,  { ParamId::StrikeLevel, ParamId::StrikeType } },
+        { "Morph",      ParamId::MorphActive,  { ParamId::MorphActive, ParamId::MorphPos } },
+        { "Brain 2",    ParamId::Brain2On,     { ParamId::Brain2On } },
+        { "Early Room", ParamId::EarlyLevel,   { ParamId::EarlyLevel } },
+        { "Body",       ParamId::BodyLevel,    { ParamId::BodyLevel } },
+        { "Room",       ParamId::RoomLevel,    { ParamId::RoomLevel } },
+        { "Cloud",      ParamId::CloudSend,    { ParamId::CloudSend } },
+        { "Feedback",   ParamId::FeedbackBus,  { ParamId::FeedbackBus, ParamId::FeedbackFm } },
+        { "Patina",     ParamId::PatinaAmount, { ParamId::PatinaAmount } },
+    };
+    return k;
+}
+const Closer* closerFor(const juce::String& section)
+{
+    for (const auto& c : closers()) if (section == c.section) return &c;
+    return nullptr;
+}
+}
+
+bool AmbientSynthEditor::sectionCollapsed(const Section& s) const
+{
+    if (openAll_) return false;
+    const Closer* c = closerFor(s.name);
+    if (c == nullptr) return false;
+    auto off = [this](ParamId id) {
+        const ParamDesc& d = paramDesc(id);
+        const float v = proc_.engine().getParam(id);
+        if (d.kind == ParamKind::Choice) return std::lround(v) == 0;
+        if (d.kind == ParamKind::Bool) return v < 0.5f;
+        return v <= d.min + 1.0e-6f;
+    };
+    if (!off(c->sw)) return false;
+    if (s.name == "Feedback" && !off(ParamId::FeedbackFm)) return false;   // either path keeps the loop open
+    return true;
+}
+
+bool AmbientSynthEditor::cellShown(const Section& s, const Cell& c) const
+{
+    if (c.unused) return false;
+    if (!s.collapsed) return true;
+    const Closer* k = closerFor(s.name);
+    if (k == nullptr || c.param < 0) return false;
+    for (ParamId id : k->keep) if (static_cast<int>(id) == c.param) return true;
+    return false;
+}
+
 int AmbientSynthEditor::sectionWidth(const Section& s) const
 {
     int widest = 0, row = 0;
     for (int ci : s.cells) {
+        if (!cellShown(s, cells_[static_cast<size_t>(ci)])) continue;
         const int u = cells_[static_cast<size_t>(ci)].units;
         if (row + u > s.maxUnits) row = 0;
         row += u; widest = std::max(widest, row);
@@ -664,6 +727,7 @@ int AmbientSynthEditor::sectionHeight(const Section& s) const
 {
     int rows = 1, row = 0;
     for (int ci : s.cells) {
+        if (!cellShown(s, cells_[static_cast<size_t>(ci)])) continue;
         const int u = cells_[static_cast<size_t>(ci)].units;
         if (row + u > s.maxUnits) { ++rows; row = 0; }
         row += u;
@@ -677,6 +741,7 @@ void AmbientSynthEditor::layoutSection(Section& s, int x, int y)
     int cx = x + kPad, cy = y + kTitleH, row = 0;
     for (int ci : s.cells) {
         Cell& c = cells_[static_cast<size_t>(ci)];
+        if (!cellShown(s, c)) { c.comp->setVisible(false); c.label->setVisible(false); continue; }
         if (row + c.units > s.maxUnits) { row = 0; cx = x + kPad; cy += kCellH; }
         juce::Rectangle<int> cell(cx, cy, c.units * kCellW, kCellH);
         c.label->setBounds(cell.removeFromBottom(15));
@@ -785,8 +850,33 @@ void AmbientSynthEditor::rebuildLayout()
 
 void AmbientSynthEditor::layoutBody()
 {
+    // Expanded is laid out wide, not tall: three columns -- the voice; the room and the effects;
+    // the conductor with morph and macros -- so the page is about 2 : 1 and a 16 : 9 screen shows
+    // it at a readable size. The groups' own column numbers are the two-column page.
+    auto colOf = [this](const Group& g) {
+        if (!expanded_) return g.column;
+        if (g.name == "VOICE") return 0;                          // the tallest column; it needs no stretch
+        if (g.name == "CONDUCTOR" || g.name == "MORPH") return 2;   // the notes roll stretches this one
+        return 1;                                                 // the room, the effects, the Cosmos -- and the spectrum, which stretches it
+    };
+    std::vector<size_t> order;
+    for (size_t gi = 0; gi < groups_.size(); ++gi) order.push_back(gi);
+    if (expanded_) {   // the stretchy group (the notes roll) last in its column, so MORPH goes before CONDUCTOR
+        std::vector<size_t> o;
+        for (const char* nm : { "VOICE", "FOREGROUND", "BACKGROUND", "COSMOS", "ANALYSIS", "MORPH", "CONDUCTOR" })
+            for (size_t gi = 0; gi < groups_.size(); ++gi) if (groups_[gi].name == nm) o.push_back(gi);
+        for (size_t gi = 0; gi < groups_.size(); ++gi) if (std::find(o.begin(), o.end(), gi) == o.end()) o.push_back(gi);
+        order = o;
+    }
+    for (auto& s : sections_) s.collapsed = sectionCollapsed(s);
     int nCols = 1;
-    for (auto& g : groups_) nCols = std::max(nCols, g.column + 1);
+    for (auto& g : groups_) nCols = std::max(nCols, colOf(g) + 1);
+    // Expanded: the last group of every column stretches its display, so the three columns end
+    // level and no column has a hole under it. (In the two-column page the stretchy groups are
+    // named in the table; here the columns are made up on the spot, so they are found.)
+    std::vector<size_t> lastInCol(static_cast<size_t>(nCols), static_cast<size_t>(-1));
+    for (size_t gi : order) lastInCol[static_cast<size_t>(colOf(groups_[gi]))] = gi;
+    auto stretches = [&](size_t gi) { return groups_[gi].stretch || (expanded_ && lastInCol[static_cast<size_t>(colOf(groups_[gi]))] == gi); };
     std::vector<int> colWidth(static_cast<size_t>(nCols), 0), colX(static_cast<size_t>(nCols), 0), colY(static_cast<size_t>(nCols), kPad);
     auto pageWidth = [this](const std::vector<juce::String>& names) {
         int w = kPad;
@@ -809,7 +899,7 @@ void AmbientSynthEditor::layoutBody()
             } else {
                 w = pageWidth(g.rows[ri]) + (ri < g.displays.size() && g.displays[ri] != nullptr ? kDisplayMinW : 0);
             }
-            colWidth[static_cast<size_t>(g.column)] = std::max(colWidth[static_cast<size_t>(g.column)], w);
+            colWidth[static_cast<size_t>(colOf(g))] = std::max(colWidth[static_cast<size_t>(colOf(g))], w);
         }
     }
     colX[0] = kPad;
@@ -820,9 +910,9 @@ void AmbientSynthEditor::layoutBody()
     // and on Compact, and the hole belongs to whichever one it is.
     struct Stretch { juce::Component* disp = nullptr; Group* group = nullptr; };
     std::vector<Stretch> stretch(static_cast<size_t>(nCols));
-    for (size_t gi = 0; gi < groups_.size(); ++gi) {
+    for (size_t gi : order) {
         auto& g = groups_[gi];
-        const size_t col = static_cast<size_t>(g.column);
+        const size_t col = static_cast<size_t>(colOf(g));
         const int x0 = colX[col];
         int y = colY[col] + kGroupTitleH;
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
@@ -868,6 +958,10 @@ void AmbientSynthEditor::layoutBody()
                         for (auto& pgn : t->pages) rowH = std::max(rowH, pageHeight(pgn));
                     }
                     if (pgi < t->displays.size()) disp = t->displays[pgi];
+                    // A page whose only section is closed shows no display either: an Off slot
+                    // is a title and a type menu, not a title, a menu and an empty picture.
+                    if (disp != nullptr && names.size() == 1)
+                        if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { disp->setVisible(false); disp = nullptr; }
                     // The page's under-section wraps to the display column's width, and the row is
                     // tall enough to keep a real picture above it.
                     if (pgi < t->under.size() && t->under[pgi].isNotEmpty()) {
@@ -907,7 +1001,7 @@ void AmbientSynthEditor::layoutBody()
                     }
                     if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
                     else disp->setVisible(false);
-                    if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
+                    if (stretches(gi) && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
                 } else if (underSec != nullptr) {
                     setSectionVisible(*underSec, false);
                 }
@@ -943,9 +1037,23 @@ void AmbientSynthEditor::setSectionVisible(Section& s, bool v)
     s.visible = v;
     for (int ci : s.cells) {
         Cell& c = cells_[static_cast<size_t>(ci)];
-        if (c.comp) c.comp->setVisible(v);
-        if (c.label) c.label->setVisible(v);
+        const bool show = v && cellShown(s, c);
+        if (c.comp) c.comp->setVisible(show);
+        if (c.label) c.label->setVisible(show);
     }
+}
+
+// The layout's inputs from the parameters: which cells a slot's type uses, which sections are
+// closed. Called from the timer; when anything moved, the page is laid out again -- on the
+// player's own action (a type chosen, a switch thrown), never on the window's.
+bool AmbientSynthEditor::refreshLayoutState()
+{
+    bool changed = false;
+    for (auto& s : sections_) {
+        const bool c = sectionCollapsed(s);
+        if (c != s.collapsed) { s.collapsed = c; changed = true; }
+    }
+    return changed;
 }
 
 void AmbientSynthEditor::clickTabs(juce::Point<int> pos)
@@ -1434,7 +1542,10 @@ void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void(
     manual_ = std::make_unique<ManualJob>();
     ManualJob& job = *manual_;
     job.dir = dir;
-    job.done = std::move(onDone);
+    // Every section open for its picture, whatever its switch says, and back afterwards.
+    openAll_ = true;
+    rebuildLayout();
+    job.done = [this, cb = std::move(onDone)] { openAll_ = false; rebuildLayout(); if (cb) cb(); };
     const int last = ambient::numHelpTopics();    // the generated "All parameters" topic comes after
     job.images.resize(static_cast<size_t>(last + 1));
     job.tabs.resize(static_cast<size_t>(last + 1));
@@ -1966,6 +2077,7 @@ void AmbientSynthEditor::updateSourceCells()
     enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
+    bool cellsChanged = false;
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
@@ -2000,9 +2112,24 @@ void AmbientSynthEditor::updateSourceCells()
             const int ci = cellForParam(ids[off]);
             if (ci < 0) continue;
             Cell& c = cells_[static_cast<size_t>(ci)];
-            if (c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }
+            // Not greyed: gone. The strip is packed from the cells the type uses, so its height
+            // is the type's own and not the union of every type's.
+            if (c.unused != !on) { c.unused = !on; c.comp->setEnabled(on); cellsChanged = true; }
+        }
+        // The slot's file button belongs to the types that read a clip; the wavetable button to the table.
+        if (textureCell_[k] >= 0) {
+            Cell& tc = cells_[static_cast<size_t>(textureCell_[k])];
+            const bool on = type == Texture || type == Stretch || type == Spectral;
+            if (tc.unused != !on) { tc.unused = !on; cellsChanged = true; }
+        }
+        if (k == 1 && tableCell_ >= 0) {
+            Cell& wc = cells_[static_cast<size_t>(tableCell_)];
+            const bool on = type == Table;
+            if (wc.unused != !on) { wc.unused = !on; cellsChanged = true; }
         }
     }
+    if (refreshLayoutState()) cellsChanged = true;
+    if (cellsChanged && getWidth() > 0) rebuildLayout();   // at construction the size is not set yet; the first layout follows
     auto nameCell = [&](int ci, const juce::String& base, const juce::String& file) {
         if (ci < 0) return;
         Cell& c = cells_[static_cast<size_t>(ci)];
@@ -2346,6 +2473,11 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
         }
         // The loop, made visible where it closes: the feedback section says it is returning
         // into the sources, and Source 1 says it is being fed. A glyph, not an animation.
+        if (s.collapsed) {
+            g.setColour(kDim.withAlpha(0.8f));
+            g.setFont(juce::FontOptions(10.5f));
+            g.drawText("off -- switch on to open", s.bounds.getX() + 90, s.bounds.getY() + 1, s.bounds.getWidth() - 120, kTitleH, juce::Justification::centredLeft);
+        }
         if (s.name == "Feedback" || s.name == "Source 1") {
             const float bus = proc_.apvts.getRawParameterValue("fb_bus")->load();
             const float fm = proc_.apvts.getRawParameterValue("fb_fm")->load();

@@ -99,6 +99,9 @@ private:
     // tall page, and the four sources, the two filters and the conductor's six tables all in
     // sight at once -- for a tall screen, or for reading a preset through.
     bool expanded_ = false;
+    // The manual's pictures: every section open whatever its switch says, and the tabs.
+    bool openAll_ = false;
+    bool refreshLayoutState();   // updates unused/collapsed from the parameters; true if anything changed
     // The die in a section's title: one click randomises that section, shift-click nudges it.
     std::map<juce::String, juce::Rectangle<int>> diceOf_;
     void     randomiseSection(const juce::String& name, bool subtle);
@@ -177,6 +180,9 @@ private:
         juce::String baseLabel;
         int units = 1;
         int param = -1;    // ParamId or -1 for extra cells
+        // The slot's type does not use it: not drawn and not laid out, rather than greyed. A
+        // strip is as tall as the type it is set to, not as the union of every type.
+        bool unused = false;
     };
     struct Section {
         juce::String name;
@@ -186,6 +192,10 @@ private:
         int wideUnits = 0;          // the natural width, before Compact halves it
         int group = -1;
         bool visible = true;   // false while its tab is not the open one
+        // Its switch is off (a type of Off, a level at zero, an Active that is not): only the
+        // title and the switch's own cells are shown. Off means closed. Opening it is the
+        // player's own action on the switch, so the page never rearranges itself.
+        bool collapsed = false;
     };
     struct Group {
         juce::String name;
@@ -223,6 +233,10 @@ private:
     void    clickTabs(juce::Point<int> contentPos);
 
     Section* findSection(const juce::String& name);
+    // Which cells a section shows, and whether it is closed. Both are functions of the parameter
+    // state alone, never of the window, so the layout is reproducible and the manual can be.
+    bool cellShown(const Section&, const Cell&) const;
+    bool sectionCollapsed(const Section&) const;
     int      sectionWidth(const Section&) const;
     int      sectionHeight(const Section&) const;
     void     layoutSection(Section&, int x, int y);

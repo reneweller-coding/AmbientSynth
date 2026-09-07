@@ -2163,6 +2163,26 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   threshold is exactly the surprise calm technology forbids -- it stays a mode), component
   encapsulation for its own sake, and the three-zone phase, whose dock, drawer and soundstage
   are the strip, its tabs and the Perform page under other names.
+
+  The layout critique, after 1.5.0, was right about Expanded: at 2080 x 2604 it was 4 : 5, and a
+  page that scales as a whole lands at 41 % on a 1080-line screen. The height was the greyed
+  knobs -- every source strip the union of every type's cells, five rows for two or three
+  live ones, and Off slots, Off filters, inactive morphs all fully open. Three changes, all
+  under one principle, that the layout is a function of the parameter state and never of the
+  window: (1) a cell the slot's type does not use is `unused` -- not laid out, not drawn -- so a
+  strip is as tall as its type (`updateSourceCells` sets the flags and calls `rebuildLayout`
+  when they change; the Texture and Wavetable buttons follow their types); (2) a section whose
+  switch is off is `collapsed` to its title and the switch's own cells (`closers()`: the slots'
+  Type, Z-Plane's Mode, Cosmos Send, Strike level, Morph Active, Brain 2 Active, Early Room,
+  Body, Room, Cloud, Feedback's two paths, Patina), the manual export sets `openAll_` so its
+  pictures are of open sections, and a closed page hides its display; (3) Expanded is three
+  columns -- the voice; the room, the effects, the Cosmos and the spectrum; morph and the
+  conductor -- with the last group of each column stretched so the three end level. Measured:
+  Normal 2269 x 1260 (86 % at 1080 lines), Expanded 2269 x 1352 (80 %, from 41 %). A type
+  change or a switch thrown relays out the page and resizes the window to the new ratio, on
+  the player's own action -- never on the window's. `AMBIENT_LAYOUT=<0|1|2>` sets the mode for
+  a run over the recalled one (session recall keeps it, which is why the `AMBIENT_EXPANDED` run
+  left the next start expanded).
   Help (`Core/include/ambient/Help.h`): one or two sentences for every
   parameter (`paramHelp`, families share their text so the three slots and
   eight LFOs cannot drift apart; the self test insists every parameter has

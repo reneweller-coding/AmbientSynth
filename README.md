@@ -357,9 +357,14 @@ day. The header names the key the conductor has found and glows with each event
 its cascade breeds; the notes roll shows the deja-vu ring, the cascade's glow and
 the homeostat's needle; the attractors draw their orbits. Every section title carries a die (click to redraw that
 section, shift to nudge it); Undo, Redo and A|B work on whole snapshots; the header shows the
-output's spectrum. Three layouts, one button: Normal (one page, tabs), Compact (the widest
-rows wrap, for a narrower window) and Expanded (every page of every tab row under one another
--- no tabs, a tall page, everything in sight, for a tall screen or for reading a preset through).
+output's spectrum. The page is laid out from the parameters, never from the window: a source
+strip holds only the knobs its type uses, and a section whose switch is off -- a slot on Off, a
+level at zero, a Morph or a second conductor that is not active -- closes to its title and its
+switch; choose a type or throw the switch and it opens. Three layouts, one button: Normal (one
+page, tabs; 2269 x 1260 at design size), Compact (the widest rows wrap, for a narrower window)
+and Expanded (every page of every tab row open, in three columns -- the voice, the room and
+the effects, the conductor -- 2269 x 1352, about 1.7 : 1, so a 1080-line screen shows it at
+four fifths).
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

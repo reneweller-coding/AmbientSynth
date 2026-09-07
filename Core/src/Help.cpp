@@ -1174,6 +1174,70 @@ rule about time that knows nothing about where the chord would land. Smooth trie
 keeps the exchange that moves the chord least for what it gains: measured over a hundred and
 forty-five exchanges, 3.12 semitones against 2.68.
 
+THE SPECTRUM A SCALE ASKS FOR
+
+The timbre scale runs from spectrum to scale. Match runs the other way, and the pair is what
+Milne, Sethares and Plamondon (2009) call dynamic tonality: choose a scale, and bend the spectrum
+until that scale is the smooth one. Each partial is moved to the nearest degree, counted in periods
+of the scale from the fundamental,
+
+    n = floor(log_P h),   r_h = P^n * r_d,   d = argmin |log(r_d) - log(P^(log_P h - n))|
+
+and Match blends the natural position and the matched one in the log domain. For twelve-tone equal
+temperament the moves are small -- the third partial from 1902 cents to 1900, the fifth from 2786 to
+2800, the seventh from 3369 to 3400 -- and after them a tempered chord no longer beats: the mean
+roughness of the eleven tempered intervals falls from 0.1263 to 0.1191. For a just scale the third
+and fifth partials are already on degrees and do not move at all, which is the check that the
+direction is right. For Bohlen-Pierce, whose period is the tritave, the octave partial itself moves
+onto the scale, to 1.960; that is the spectrum the tritave was always waiting for. The voice's
+additive bank and the conductor's Timbre ear read the same table, so what the ear judges is what
+the bank plays. With the Timbre scale selected Match is inert, and has to be: a scale computed from
+the partials and partials computed from the scale would chase each other round a circle.
+
+THE ARC, LEANING ON THE HARMONY
+
+The hour-scale arc leaned on density, brightness and depth and left the harmony where the knobs
+put it. Lerdahl and Krumhansl (2007) modelled tonal tension -- distance from the tonic in pitch
+space plus surface dissonance -- and tested the model against listeners' ratings across whole
+pieces. This instrument's proxies for those two quantities are the judgements the conductor already
+makes, Harmonic and Key for the distance from home and Consonance for the dissonance, so Arc
+Harmony lets the arc loosen all three on its rise and tighten them on its fall:
+
+    tense (lean > 0):    x' = x (1 - 0.8 lean)
+    relaxed (lean < 0):  x' = x + (1 - x)(0.6 |lean|)
+
+continuous through zero. The climax of the night is then denser, brighter and further from home, and
+the return is heard as a return. Measured over forty seconds at the shortest arc, the lean reaches
+0.113; at zero it is exactly nothing.
+
+HOW A CHORD ARRIVES
+
+Rasch (1979) measured the onset asynchrony of performing ensembles at thirty to fifty milliseconds,
+and showed that a little of it helps the ear tell the voices apart; Bregman's rule is the converse,
+that tones starting together are heard as one object. The conductor brings its voices in one at a
+time, minutes apart, so each is its own object by construction. Blend fills an empty chord with all
+its notes at once, each chosen against the ones already committed and released inside a window of
+thirty milliseconds at the top -- inside the fusion limit -- and fifty a little lower down. Measured
+by driving the conductor directly: the first five onsets span 6.29 seconds one by one and 0.020 with
+Blend.
+
+THE FLUCTUATION GUARD
+
+Fastl and Zwicker's two curves say where a beat is heard as what. The sensation of fluctuation
+strength peaks at a modulation rate of 4 Hz and is gone by about 20; roughness takes over near 70.
+Between two and eight hertz a beating chord is wobble, and in a sleep concert wobble is the one
+thing it must not be. Purity Drift makes beats without knowing where they land, and the BEAT source
+already measures where they landed, so the guard closes the loop:
+
+    x = log2(f_beat / 4),   b = exp(-1.25 x^2),   drift' = drift (1 - Guard b)
+
+reining the drift in while the beat sits in the band so that it slows back out, and below zero
+doing the reverse and seeking the wobble out. It acts on the drift's excursion and not on Purity
+itself: a Purity that already puts the beat in the band is left where it was put. Measured with a
+tempered major third under a full drift: the beat spends 22 per cent of two minutes in the band
+without the guard, 18 with it, 27 with it reversed. A modest effect, and the number is stated so
+that nobody expects a larger one.
+
 COHERENCE
 
 Four slow oscillators coupled after Kuramoto (1984; Strogatz 2000 for the review) move brightness, depth, pan and the z-plane point. The Kuramoto model is the mathematics of fireflies falling into step, of pacemaker cells, of any population of rhythms that pull on each other:
@@ -1304,11 +1368,13 @@ Chords that move smoothly are the nearly even ones (Tymoczko 2006), and that is 
 
 And a scale is not a thing to choose but a thing a timbre asks for (Sethares). The thirteenth tuning computes the instrument's own dissonance curve while it plays and puts its minima where the degrees go: just intonation for a harmonic spectrum, to within two cents, and something quite else for a stiff string.
 
+A third pass took four smaller ones. A scale can ask for a spectrum as well as the other way round (Match); the hour-scale arc can lean on the harmony as it already leans on density (Arc Harmony, after Lerdahl and Krumhansl's tension model); a chord can arrive as one object rather than as voices (Blend, after Rasch and Bregman); and a beat can be kept out of the band where it is heard as wobble (the guard, after Fastl and Zwicker). After those, the research that can make this instrument audibly better while staying readable is, in the author's judgement, largely used up, and the chapters say so rather than promising a fourth pass.
+
 The ninth was a neural sound model in the audio path -- an autoencoder trained on a recording, played as an instrument, in the manner of RAVE. It was considered and deliberately not built: it would put a hundred megabytes of weights and a hard real-time constraint into a synthesiser whose core is framework-free and meant to run on a headset, and it would make the instrument's sound something nobody could read. Every other decision in these chapters can be checked by reading a formula. That one could not.
 
 WHAT IS NOT CLAIMED
 
-Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The loudness in sones is Zwicker's model built from third-octave levels, not a certified ISO 532-1 implementation, and its absolute scale is pinned at the definition of the unit rather than derived; what is not pinned, and what should be checked against, is that sixty decibels comes out at 4.21 sones where the standard says four. The Early Room places the whole near bus at one position, the level-weighted mean of where its voices are, not each voice at its own: six delay lines per voice would cost more than the rest of the instrument. The Spectral source's model is thirty-two bands and one partial per band, so a dense chord in one band comes back as its loudest member plus noise. The key profiles of Krumhansl and Kessler were measured on listeners raised on Western tonal music, and are quoted as what they are: a measurement of those listeners, not a fact about music -- the same caution the consonance section carries. Smooth does nothing outside Chords mode, because in the free mode which voice leaves is decided elsewhere; that is a limitation, not a subtlety. And the timbre scale is computed from the spectrum of the additive bank alone, so a patch whose sound comes mostly from a sample or a bowed string is being tuned for a timbre it is not really playing. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
+Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The loudness in sones is Zwicker's model built from third-octave levels, not a certified ISO 532-1 implementation, and its absolute scale is pinned at the definition of the unit rather than derived; what is not pinned, and what should be checked against, is that sixty decibels comes out at 4.21 sones where the standard says four. The Early Room places the whole near bus at one position, the level-weighted mean of where its voices are, not each voice at its own: six delay lines per voice would cost more than the rest of the instrument. The Spectral source's model is thirty-two bands and one partial per band, so a dense chord in one band comes back as its loudest member plus noise. The key profiles of Krumhansl and Kessler were measured on listeners raised on Western tonal music, and are quoted as what they are: a measurement of those listeners, not a fact about music -- the same caution the consonance section carries. Smooth does nothing outside Chords mode, because in the free mode which voice leaves is decided elsewhere; that is a limitation, not a subtlety. And the timbre scale is computed from the spectrum of the additive bank alone, so a patch whose sound comes mostly from a sample or a bowed string is being tuned for a timbre it is not really playing. Match, likewise, moves the partials of Source 1's additive bank and nothing else. Arc Harmony's mapping from tension to three knobs is a proxy for Lerdahl and Krumhansl's model, not the model. And the fluctuation guard's measured effect is four percentage points of time, which is honest and small. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
     { "Design VII: references",
 R"(The works the design chapters rest on, by area. Where a page or a chapter is named it is the part that was used.
 
@@ -1397,6 +1463,14 @@ Krumhansl, C. L.: Cognitive Foundations of Musical Pitch. Oxford University Pres
 Parncutt, R.: Harmony: A Psychoacoustical Approach. Springer, 1989. Root support and pitch salience: how strongly a set of tones implies one root.
 
 Tymoczko, D.: The geometry of musical chords. Science 313, 72-74, 2006; and A Geometry of Music. Oxford University Press, 2011. Voice-leading distance as a distance in an orbifold, and the result that the chords which move smoothly are the nearly even ones.
+
+Lerdahl, F. and Krumhansl, C. L.: Modeling tonal tension. Music Perception 24, 329-366, 2007. Tension as distance in tonal pitch space plus surface dissonance, tested against listeners' continuous ratings; the basis of Arc Harmony.
+
+Milne, A., Sethares, W. A. and Plamondon, J.: Tuning continua and keyboard layouts. Journal of Mathematics and Music 2, 1-19, 2008; and Sethares, W. A., Milne, A., Tiedje, S., Prechtl, A. and Plamondon, J.: Spectral tools for dynamic tonality and audio morphing. Computer Music Journal 33, 71-84, 2009. Matching a spectrum to a scale as well as a scale to a spectrum: Match.
+
+Rasch, R. A.: Synchronization in performed ensemble music. Acustica 43, 121-131, 1979. Onset asynchrony of thirty to fifty milliseconds in real ensembles, and its effect on hearing the voices apart: Blend.
+
+Fastl, H. and Zwicker, E.: Psychoacoustics. Facts and Models. Third edition, Springer, 2007, chapters 10 and 11. Fluctuation strength peaking at 4 Hz and roughness near 70: the fluctuation guard.
 
 Kuramoto, Y.: Chemical Oscillations, Waves, and Turbulence. Springer, 1984. The coupled-oscillator model behind the Coherence section.
 
@@ -1504,7 +1578,7 @@ const TabHelp kTabHelp[] = {
     { "BRAIN", "The conductor: chooses notes from the scale, places them on the planes between the ear and the background, holds them for minutes and lets them go, and can play a whole night by itself. Density is how many it keeps sounding, Rate how often it changes its mind, the Hold range how long a note lives, Register where it plays, Consonance how simple the ratios to the root have to be (1 is only fifths and octaves, 0 is clusters), Wander how far the root drifts. Off, only your keys play. Timbre gives it a second ear: instead of judging an interval by its ratio alone it can weigh the roughness the two tones' actual partials would make (after Sethares), so an inharmonic patch is conducted in the intervals it is consonant at. Its display is the stage: every sounding voice as a dot at its distance." },
     { "AUTOPLAY", "The brain's other mode: instead of holding a cluster it exchanges one voice at a time, in Free steps or in Chords drawn from the scale, at a Rate or on the clock, with a Tension that decides how far each step may go and a Step button to make it move now. The way a patient improviser plays a chord instrument: nothing ever changes all at once." },
     { "BRAIN 2", "A second conductor for the background alone. With it on, the far plane gets its own slow life -- its own hold range, its own Depth -- independent of the foreground's, so the two planes stop moving in step and the picture gains a second layer of time." },
-    { "TUNING", "What a note means. Scale chooses the tuning -- eleven just and historical tables, a Scala file of your own, and Timbre, which is no table at all but the instrument's own dissonance curve read while it plays -- Root its centre, Ref Pitch its A. Purity is how close the instrument sits to the pure ratios, Purity Drift how far it lets them slip and at what rate, so a chord breathes in and out of tune; Tide leans the whole pitch over minutes; Portamento glides between notes, slowing near consonant ratios by Gravity. Hold latches the keys." },
+    { "TUNING", "What a note means. Scale chooses the tuning -- eleven just and historical tables, a Scala file of your own, and Timbre, which is no table at all but the instrument's own dissonance curve read while it plays -- Root its centre, Ref Pitch its A. Purity is how close the instrument sits to the pure ratios, Purity Drift how far it lets them slip and at what rate, so a chord breathes in and out of tune, and Guard keeps the beats that makes out of the band where they read as wobble; Match bends the partials onto the scale's own degrees, so a tempered chord stops beating; Tide leans the whole pitch over minutes; Portamento glides between notes, slowing near consonant ratios by Gravity. Hold latches the keys." },
     { "COHERENCE", "Four slow oscillators coupled after the Kuramoto model of fireflies falling into step. At Coherence 0 they run free on their own periods; turned up they lock into one pulse and move brightness, depth, pan and the z-plane point together. The four are also sources in the matrix, so anything can be pulled into that shared breath. Sympathy is a different kind of coherence: the voices hear each other, a little of the whole foreground fed back into every voice through its own filter." },
     { "CLOCK", "Where the tempo comes from -- the internal Tempo and Run, the host, or MIDI clock -- and the beat every Sync choice in the instrument is measured against. Nothing here has to be used: the instrument's own rates are in seconds and minutes, and a synced LFO is a choice, not the default." },
     // ---- cosmos and strike

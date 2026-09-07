@@ -57,13 +57,17 @@ since 2013), a VST3 host if you want the plugin.
   roughness of the partials actually sounding, by whether the whole set implies
   **one root**, and by how evenly it is spread — and it **finds the key** it has
   drifted into from what has been sounding and for how long, rather than being
-  told one.
+  told one. **Blend** lets a chord arrive as one object inside the ear's fusion
+  window instead of voice by voice, **Guard** keeps drifting beats out of the
+  2–8 Hz band where they read as wobble, and **Arc Harmony** lets the hour-scale
+  arc loosen and tighten the harmony as it already does density and brightness.
 * **Thirteen tunings**: twelve just and historical tables, Scala files, and one
   that is not a table at all. **Timbre (Sethares)** sweeps the instrument's own
   roughness curve across the octave while it plays and puts a degree wherever
   the curve dips — just intonation for a harmonic spectrum, to within two cents,
   and something quite else once *Inharmonic* is up. Turn a knob and the tuning
-  follows the sound.
+  follows the sound. **Match** runs the other way: it bends the partials onto
+  the degrees of whatever scale is chosen, so a tempered chord stops beating.
 * **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
   macros, four coupled Kuramoto oscillators, aftertouch, wheel and slide, all
   through one matrix onto any knob -- including the modulators' own.

@@ -1650,6 +1650,18 @@ Four measurement traps, in the same spirit as the acoustic round's:
    flag was overwritten. The table test passed throughout; only a test that asks
    what a key actually *sounds at* catches it.
 
+## The third pass
+
+Four smaller ones, each measured: *Match* (Sethares' other direction — partials
+bent onto the chosen scale; 12-TET's eleven intervals go from roughness 0.1263
+to 0.1191), *Arc Harmony* (Lerdahl & Krumhansl's tension model as the arc's
+lean on Harmonic, Key and Consonance), *Blend* (Rasch and Bregman — the first
+five onsets span 6.29 s one by one, 0.020 s fused) and the fluctuation *Guard*
+(Fastl & Zwicker — beat time in the 2–8 Hz band 22 % → 18 %, an honest four
+points). One trap worth its own line: the matched partial in the voice is a
+*branch*, not a blend, because `(f*h)*s` and `f*(h*s)` differ in the last bit
+and the oracle would have heard it on every preset.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

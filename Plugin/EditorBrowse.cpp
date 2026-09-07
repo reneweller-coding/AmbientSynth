@@ -69,6 +69,26 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     hideDull.onClick = [this] { applyFilter(); };
     hideDull.setTooltip("Hides presets that measured as barely moving and barely wide -- the dull tail of a generated library");
     for (auto* b : { &load, &toA, &toB, &star }) addAndMakeVisible(*b);
+    // The map already knows which presets are alike: its neighbours are the ones that measured
+    // alike. This narrows the list to the selected preset's six nearest and zooms the map onto
+    // them; off again, the list is what the other filters make it.
+    similar.onClick = [this] {
+        similarSet.clear();
+        similarOf = -1;
+        if (similar.getToggleState() && selected >= 0 && selected < numPresetMeta()) {
+            const PresetMeta& m = presetMeta(selected);
+            const PresetMap::Blend b = PresetMap::neighbours(m.x, m.y, 0.12f);
+            similarSet.push_back(selected);
+            for (int k = 0; k < b.count; ++k) if (b.index[k] != selected) similarSet.push_back(b.index[k]);
+            similarOf = selected;
+            map.zoomTo(m.x, m.y, 8.0f);
+        } else if (!similar.getToggleState()) {
+            map.zoomTo(0.5f, 0.5f, 1.0f);
+        }
+        applyFilter();
+    };
+    similar.setTooltip("Narrow the list to the presets that measured most like the selected one, and zoom the map onto them");
+    addAndMakeVisible(similar);
     addAndMakeVisible(onlyFavourites);
     addAndMakeVisible(hideDull);
 
@@ -213,6 +233,7 @@ void AmbientSynthEditor::BrowseView::applyFilter()
         const PresetMeta& m = presetMeta(i);
         if (needle.isNotEmpty() && !juce::String(preset(i).name).toLowerCase().contains(needle)) continue;
         if (onlyFavourites.getToggleState() && !proc.isFavourite(i)) continue;
+        if (!similarSet.empty() && std::find(similarSet.begin(), similarSet.end(), i) == similarSet.end()) continue;
         // Dull, measured rather than judged: in the bottom fifth for movement and for width, and
         // not carrying the sparseness that would make that a deliberate character.
         if (hideDull.getToggleState() && m.motion < 0.2f && m.width < 0.2f && m.density < 0.5f) continue;
@@ -344,6 +365,7 @@ void AmbientSynthEditor::BrowseView::resized()
     if (mode == 1) { family.setBounds(top.removeFromLeft(150)); top.removeFromLeft(6); }
     sort.setBounds(top.removeFromLeft(150)); top.removeFromLeft(12);
     onlyFavourites.setBounds(top.removeFromLeft(130));
+    similar.setBounds(top.removeFromLeft(150));
     hideDull.setBounds(top.removeFromLeft(160));
     area.removeFromTop(8);
     auto buttons = area.removeFromBottom(26);
@@ -398,17 +420,54 @@ void AmbientSynthEditor::BrowseView::resized()
     }
 }
 
+// The window onto the plane: at zoom 1 and centre (0.5, 0.5) this is exactly the old fixed view.
 juce::Point<float> AmbientSynthEditor::BrowseView::MapView::toScreen(float x, float y) const
 {
     const auto r = getLocalBounds().toFloat().reduced(18.0f);
-    return { r.getX() + r.getWidth() * x, r.getBottom() - r.getHeight() * y };
+    return { r.getCentreX() + (x - centre.x) * zoom * r.getWidth(),
+             r.getCentreY() - (y - centre.y) * zoom * r.getHeight() };
+}
+
+juce::Point<float> AmbientSynthEditor::BrowseView::MapView::toMapRaw(juce::Point<float> s) const
+{
+    const auto r = getLocalBounds().toFloat().reduced(18.0f);
+    return { centre.x + (s.x - r.getCentreX()) / juce::jmax(1.0f, zoom * r.getWidth()),
+             centre.y + (r.getCentreY() - s.y) / juce::jmax(1.0f, zoom * r.getHeight()) };
 }
 
 juce::Point<float> AmbientSynthEditor::BrowseView::MapView::toMap(juce::Point<float> s) const
 {
+    const auto m = toMapRaw(s);
+    return { juce::jlimit(0.0f, 1.0f, m.x), juce::jlimit(0.0f, 1.0f, m.y) };
+}
+
+void AmbientSynthEditor::BrowseView::MapView::zoomTo(float x, float y, float z)
+{
+    zoom = juce::jlimit(1.0f, 40.0f, z);
+    centre = { x, y };
+    if (zoom <= 1.0f) centre = { 0.5f, 0.5f };
+    repaint();
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    // Zoom about the mouse: the point of the plane under the cursor stays under the cursor, so
+    // the eye can follow a cluster in while it opens up.
+    const auto pivot = toMapRaw(e.position);
+    const float factor = std::pow(1.25f, w.deltaY * 4.0f);
+    const float newZoom = juce::jlimit(1.0f, 40.0f, zoom * factor);
+    if (newZoom == zoom) return;
+    zoom = newZoom;
     const auto r = getLocalBounds().toFloat().reduced(18.0f);
-    return { juce::jlimit(0.0f, 1.0f, (s.x - r.getX()) / juce::jmax(1.0f, r.getWidth())),
-             juce::jlimit(0.0f, 1.0f, (r.getBottom() - s.y) / juce::jmax(1.0f, r.getHeight())) };
+    centre = { pivot.x - (e.position.x - r.getCentreX()) / (zoom * r.getWidth()),
+               pivot.y - (r.getCentreY() - e.position.y) / (zoom * r.getHeight()) };
+    if (zoom <= 1.0f) centre = { 0.5f, 0.5f };
+    repaint();
+}
+
+void AmbientSynthEditor::BrowseView::MapView::mouseDoubleClick(const juce::MouseEvent&)
+{
+    zoomTo(0.5f, 0.5f, 1.0f);
 }
 
 int AmbientSynthEditor::BrowseView::MapView::nearestPreset(juce::Point<float> p, float maxDist) const
@@ -439,7 +498,7 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     const auto cursor = toScreen(x, y);
     const auto r = getLocalBounds().toFloat().reduced(18.0f);
     if (blend) {   // the blend radius as a soft disc
-        const float rr = rad * r.getWidth();
+        const float rr = rad * r.getWidth() * zoom;
         g.setColour(kAccent.withAlpha(0.10f)); g.fillEllipse(cursor.x - rr, cursor.y - rr, 2 * rr, 2 * rr);
         g.setColour(kAccent.withAlpha(0.25f)); g.drawEllipse(cursor.x - rr, cursor.y - rr, 2 * rr, 2 * rr, 1.0f);
     }
@@ -450,13 +509,17 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     // With a preset library loaded there can be thousands of points: shrink the dots so the
     // plane stays readable, and draw the dimmed ones as squares, which is much cheaper to fill.
     const int shown = std::min(numPresetMeta(), numPresets());
-    const float dotScale = juce::jlimit(0.34f, 1.0f, std::sqrt(200.0f / juce::jmax(1, shown)));
+    // The dots grow a little with the zoom -- not with it, or a cluster opened up would be
+    // blobs -- and everything outside the window is skipped, which at forty times is most of it.
+    const float dotScale = juce::jlimit(0.34f, 1.0f, std::sqrt(200.0f / juce::jmax(1, shown))) * std::pow(zoom, 0.35f);
     const bool many = shown > 800;
+    const auto screen = getLocalBounds().toFloat().expanded(12.0f);
     for (int pass = 0; pass < 2; ++pass) {
         for (int i = 0; i < shown; ++i) {
             if (inFilter[static_cast<size_t>(i)] != (pass == 1)) continue;
             const PresetMeta& m = presetMeta(i);
             const auto s = toScreen(m.x, m.y);
+            if (!screen.contains(s)) continue;
             const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
             juce::Colour c = familyColour(m.family);
             if (pass == 0) c = c.withAlpha(0.18f);
@@ -465,6 +528,29 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
             else                   g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
             if (i == owner.selected || i == current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
         }
+    }
+    // Names, once there is room for them. Zoomed in past four, every preset in the filter whose
+    // label would not sit on another's gets its name; the check is a coarse grid of the label's
+    // own size, so a cluster shows the few names that fit and not a smear of all of them.
+    if (zoom >= 4.0f) {
+        g.setFont(juce::FontOptions(10.5f));
+        std::set<std::pair<int, int>> taken;
+        const int cw = 96, ch = 13;
+        for (int i : owner.filtered) {
+            if (i >= shown) continue;
+            const PresetMeta& m = presetMeta(i);
+            const auto s = toScreen(m.x, m.y);
+            if (!screen.contains(s)) continue;
+            const std::pair<int, int> cell { static_cast<int>(s.x) / cw, static_cast<int>(s.y) / ch };
+            if (!taken.insert(cell).second) continue;
+            g.setColour((i == owner.selected || i == current) ? kText : kDim);
+            g.drawText(preset(i).name, static_cast<int>(s.x) + 7, static_cast<int>(s.y) - 7, cw + 40, ch, juce::Justification::centredLeft);
+        }
+    }
+    if (zoom > 1.0f) {   // say where we are, and how to get back
+        g.setColour(kDim); g.setFont(juce::FontOptions(10.5f));
+        g.drawText(juce::String("zoom x") + juce::String(zoom, 1) + "   drag to pan, double-click to reset",
+                   getLocalBounds().reduced(10).removeFromTop(14), juce::Justification::topRight);
     }
     // the route: numbered points joined by a line, the segment being walked highlighted
     {
@@ -538,15 +624,33 @@ void AmbientSynthEditor::BrowseView::MapView::mouseMove(const juce::MouseEvent& 
 void AmbientSynthEditor::BrowseView::MapView::mouseDown(const juce::MouseEvent& e)
 {
     dragging = false;
+    panning = false;
+    // The right button, the middle button, or a drag on empty plane while the blend cursor is
+    // off: all of those pan. With the blend on, the left button is the cursor, as it always was.
+    if (e.mods.isRightButtonDown() || e.mods.isMiddleButtonDown()) {
+        panning = true; panFrom = e.position; centreFrom = centre; return;
+    }
     const int h = nearestPreset(e.position, 10.0f);
     if (h >= 0 && !owner.mapActive.getToggleState()) {   // plain click on a point loads it
         owner.selected = h; owner.proc.setCurrentProgram(h); owner.list.repaint(); repaint(); return;
     }
+    if (!owner.mapActive.getToggleState()) { panning = true; panFrom = e.position; centreFrom = centre; return; }
     mouseDrag(e);
 }
 
 void AmbientSynthEditor::BrowseView::MapView::mouseDrag(const juce::MouseEvent& e)
 {
+    if (panning) {
+        const auto r = getLocalBounds().toFloat().reduced(18.0f);
+        centre = { centreFrom.x - (e.position.x - panFrom.x) / (zoom * juce::jmax(1.0f, r.getWidth())),
+                   centreFrom.y + (e.position.y - panFrom.y) / (zoom * juce::jmax(1.0f, r.getHeight())) };
+        // Keep the plane on screen: the centre may not leave the unit square by more than the
+        // half-window, so the last row of presets stays reachable and nothing is lost off the edge.
+        const float half = 0.5f / zoom;
+        centre = { juce::jlimit(half, 1.0f - half, centre.x), juce::jlimit(half, 1.0f - half, centre.y) };
+        repaint();
+        return;
+    }
     dragging = true;
     if (!owner.mapActive.getToggleState()) return;
     const auto m = toMap(e.position);
@@ -555,7 +659,7 @@ void AmbientSynthEditor::BrowseView::MapView::mouseDrag(const juce::MouseEvent& 
     repaint();
 }
 
-void AmbientSynthEditor::BrowseView::MapView::mouseUp(const juce::MouseEvent&) { dragging = false; }
+void AmbientSynthEditor::BrowseView::MapView::mouseUp(const juce::MouseEvent&) { dragging = false; panning = false; }
 
 AmbientSynthEditor::PerformView::PerformView(AmbientSynthProcessor& p) : proc(p)
 {

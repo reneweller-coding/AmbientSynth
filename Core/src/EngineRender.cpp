@@ -5,6 +5,7 @@
 #include "ambient/PresetMap.h"
 #include "ambient/PresetMeta.h"
 #include <cmath>
+#include <ctime>     // the clock the arc can follow
 #include <cstring>
 #include <algorithm>
 
@@ -55,9 +56,38 @@ void Engine::process(float* L, float* R, int n)
         tableSeen_ = tv;
     }
     arc_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(arcPeriodMin_, 0.5f)), rng_);
+    // The arc, as the engine reads it. Off, it is the drifter's own value, assigned rather than
+    // followed, so that nothing about the existing presets moves by a bit. On, it is the clock's:
+    // the generative apps' idea (Eno's Reflection, Endel) that a piece which runs all night should
+    // know what time it is, so that its dawn and the real one coincide. The hour is asked for once
+    // a second, which is a hundred times more often than it changes anything. Switching between
+    // the two glides over twenty seconds instead of jumping, because the arc leans on density and
+    // brightness and a jump there is a jump in the sound.
+    {
+        const float dt = static_cast<float>(n / sr_);
+        if (arcClock_) {
+            if (++clockCheck_ >= static_cast<int>(sr_ / std::max(1, n))) {
+                clockCheck_ = 0;
+                const std::time_t t = std::time(nullptr);
+                std::tm lt {};
+#if defined(_WIN32)
+                localtime_s(&lt, &t);
+#else
+                localtime_r(&t, &lt);
+#endif
+                clockHour_ = lt.tm_hour + lt.tm_min / 60.0 + lt.tm_sec / 3600.0;
+            }
+        }
+        const float target = arcClock_ ? clockArcValue(clockHour_) : arc_.value();
+        if (arcClock_ != arcClockWas_) { arcClockWas_ = arcClock_; arcGlide_ = 20.0f; }
+        if (arcGlide_ > 0.0f) {
+            arcGlide_ = std::max(0.0f, arcGlide_ - dt);
+            arcOut_ += (target - arcOut_) * (1.0f - std::exp(-dt / 5.0f));
+        } else arcOut_ = target;
+    }
     if (tide_ > 0.0f) tideDrift_.update(static_cast<float>(n / sr_), 1.0f / (60.0f * std::max(tidePeriod_, 0.5f)), auxRng_);
     if (farRotate_ > 0.0f) rotDrift_.update(static_cast<float>(n / sr_), 0.008f, auxRng_);
-    arcValue_.store(arc_.value() * arcAmount_, std::memory_order_relaxed);
+    arcValue_.store(arcOut_ * arcAmount_, std::memory_order_relaxed);
     shiftDrift_.update(static_cast<float>(n / sr_), 0.03f, rng_);
     purityDrift_.update(static_cast<float>(n / sr_), getParam(ParamId::TuneDriftRate), rng_);
     lastBlockSeconds_ = static_cast<float>(n / sr_);

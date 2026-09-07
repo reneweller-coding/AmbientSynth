@@ -226,6 +226,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     master_->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 16);
     addAndMakeVisible(*master_);
     masterAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, "master_gain", *master_);
+    undoHook_.editor = this;
+    undoHook_.names[master_.get()] = "Master"; master_->addMouseListener(&undoHook_, false);
 
     mod_ = std::make_unique<ModView>(proc_, *this);
     addAndMakeVisible(*mod_);
@@ -403,6 +405,7 @@ void AmbientSynthEditor::buildCells()
             if (d.min < -1.0e-6f && d.max > 1.0e-6f) s->getProperties().set("bipolar", true);
             content_.addAndMakeVisible(*s);
             c.slider = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc_.apvts, d.key, *s);
+            undoHook_.names[s.get()] = d.name; s->addMouseListener(&undoHook_, false);
             c.comp = std::move(s);
             break;
         }
@@ -410,6 +413,7 @@ void AmbientSynthEditor::buildCells()
             auto b = std::make_unique<juce::ToggleButton>();
             content_.addAndMakeVisible(*b);
             c.button = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc_.apvts, d.key, *b);
+            undoHook_.names[b.get()] = d.name; b->addMouseListener(&undoHook_, false);
             c.comp = std::move(b);
             break;
         }
@@ -430,6 +434,7 @@ void AmbientSynthEditor::buildCells()
             }
             content_.addAndMakeVisible(*cb);
             c.combo = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc_.apvts, d.key, *cb);
+            undoHook_.names[cb.get()] = d.name; cb->addMouseListener(&undoHook_, false);
             c.comp = std::move(cb);
             c.units = 2;
             break;

@@ -528,6 +528,7 @@ void Engine::readParams()
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);
     arcAmount_   = g(ParamId::ArcAmount);
+    arcClock_    = g(ParamId::ArcClock) >= 0.5f;
     arcPeriodMin_ = g(ParamId::ArcPeriod);
     // Sync choices: when set, the division at the current tempo replaces the free knob.
     auto syncedSeconds = [this](ParamId sync, float free) {
@@ -618,7 +619,7 @@ void Engine::readParams()
     brain2Interval_  = static_cast<int>(std::lround(g(ParamId::Brain2Interval)));
 
     // Hour-scale arc: a very slow drift that leans on density, brightness and depth.
-    const float a = arc_.value() * arcAmount_;
+    const float a = arcOut_ * arcAmount_;
     bp_.density = clampv(bp_.density + static_cast<int>(std::lround(a * 2.0f)), 1, ClusterBrain::kSlots);
     // And on the harmony, if asked. Lerdahl and Krumhansl (2007) modelled tonal tension and tested
     // it against listeners: tension rises with distance from the tonic in pitch space and with
@@ -628,7 +629,7 @@ void Engine::readParams()
     // them. The same lean, in the same direction, as the arc gives density and brightness: the
     // climax of the night is denser, brighter, and further from home.
     arcHarmony_ = g(ParamId::ArcHarmony);
-    arcLean_ = arc_.value() * arcHarmony_;
+    arcLean_ = arcOut_ * arcHarmony_;
     if (arcHarmony_ > 0.0f) {
         const float lean = arcLean_;
         auto leaned = [lean](float base) {

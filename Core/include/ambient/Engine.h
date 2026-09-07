@@ -216,6 +216,14 @@ public:
     // The key the conductor has found itself in, measured from what has been sounding and
     // for how long. Read on the message thread for the panel; never set from outside.
     KeyEstimate brainKey() const { return brain_.estimatedKey(); }
+    // The arc's value when it follows the clock instead of its own drift: the night's bottom at
+    // four in the morning, its top at four in the afternoon, a cosine between. Pure, so the
+    // selftest can hold it to that.
+    static float clockArcValue(double hourOfDay)
+    {
+        return static_cast<float>(-std::cos(2.0 * 3.14159265358979323846 * (hourOfDay - 4.0) / 24.0));
+    }
+    float arcNow() const { return arcOut_; }
     // The beat rate the BEAT source is following, the arc's current lean on the harmony, and the
     // factor the fluctuation guard is applying to the purity drift. For the panel and the tests.
     float beatHz() const { return beatHz_; }
@@ -380,6 +388,12 @@ private:
     Drifter      arc_;
     float        arcAmount_ = 0.0f, arcPeriodMin_ = 40.0f;
     float        arcHarmony_ = 0.0f, arcLean_ = 0.0f;    // how far the arc is leaning the harmony right now
+    // The arc as the rest of the engine reads it: the drifter's value, or the clock's, and for
+    // twenty seconds after a switch between them a glide from one to the other.
+    bool         arcClock_ = false, arcClockWas_ = false;
+    float        arcOut_ = 0.0f, arcGlide_ = 0.0f;
+    double       clockHour_ = 12.0;
+    int          clockCheck_ = 0;
     float        guardFactor_ = 1.0f;                     // what the fluctuation guard last did to the drift
     // Foundation sub voice
     double       subPhaseL_ = 0.0, subPhaseR_ = 0.0, subFreqCur_ = 0.0;

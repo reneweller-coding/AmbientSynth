@@ -63,6 +63,30 @@ private:
     void     doRedo();
     void     swapAB();
     std::unique_ptr<juce::TextButton> undoButton_, redoButton_, abButton_, compactButton_, recallButton_;
+    // Undo covered presets, dice and envelopes but not the thing done most: a knob turned. One
+    // listener on every parameter control takes a snapshot on the press or the wheel that starts a
+    // change, named after the parameter, and throttles the wheel so a scroll is one step back, not
+    // forty.
+    struct UndoHook : juce::MouseListener {
+        AmbientSynthEditor* editor = nullptr;
+        std::map<juce::Component*, juce::String> names;
+        std::map<juce::Component*, double> lastWheel;
+        void mouseDown(const juce::MouseEvent& e) override
+        {
+            auto it = names.find(e.eventComponent);
+            if (it != names.end() && editor != nullptr) editor->pushUndo(it->second);
+        }
+        void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails&) override
+        {
+            auto it = names.find(e.eventComponent);
+            if (it == names.end() || editor == nullptr) return;
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            double& last = lastWheel[e.eventComponent];
+            if (now - last > 1000.0) editor->pushUndo(it->second);
+            last = now;
+        }
+    };
+    UndoHook undoHook_;
     // The two section layers that live inside their own sections rather than in the header:
     // 156 filters and 41 plucks are lists you go looking for, not things you keep on the toolbar.
     // Not owned: the cell owns the component, the editor only needs to read the selection back.
@@ -281,12 +305,23 @@ private:
             void mouseDrag(const juce::MouseEvent&) override;
             void mouseMove(const juce::MouseEvent&) override;
             void mouseUp(const juce::MouseEvent&) override;
+            void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+            void mouseDoubleClick(const juce::MouseEvent&) override;
             int  nearestPreset(juce::Point<float> p, float maxDist) const;
             juce::Point<float> toScreen(float x, float y) const;
-            juce::Point<float> toMap(juce::Point<float> s) const;
+            juce::Point<float> toMap(juce::Point<float> s) const;        // clamped to the plane
+            juce::Point<float> toMapRaw(juce::Point<float> s) const;     // not clamped: for the zoom's pivot
+            void zoomTo(float x, float y, float z);                      // centre the view on a point at a zoom
             BrowseView& owner;
             int hover = -1;
             bool dragging = false;
+            // Seven thousand dots on a few hundred pixels are heaps, not presets. The view zooms
+            // about the mouse and pans by dragging; the plane itself never changes, only the
+            // window onto it, so a cursor position means the same thing at every zoom.
+            float zoom = 1.0f;
+            juce::Point<float> centre { 0.5f, 0.5f };
+            bool panning = false;
+            juce::Point<float> panFrom, centreFrom;
         };
         // classic column browser (Omnisphere / Absynth style): each column narrows the list
         struct Column : juce::ListBoxModel {
@@ -338,6 +373,11 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> radiusAttach;
         std::vector<int> filtered;
         int selected = -1;
+        // "More like this": the list narrowed to the map's nearest neighbours of the selected
+        // preset, and the map zoomed onto them. The similarity is the one the map already has.
+        juce::ToggleButton similar { "more like this" };
+        std::vector<int> similarSet;
+        int similarOf = -1;
     };
     std::unique_ptr<BrowseView> browse_;
     // The modulation strip along the bottom of the main page, in the shape Pigments uses: a lane

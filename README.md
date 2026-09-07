@@ -79,8 +79,10 @@ since 2013), a VST3 host if you want the plugin.
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608
   wavetables and 240 impulse responses (forty of them struck objects cut from
   the field recordings, for convolving a pad with a piece of the world). A
-  browser that filters by measured character, a **preset map** whose empty
-  space between presets is playable, and routes that walk it by themselves.
+  browser that filters by measured character, a **preset map** that zooms and
+  pans -- names appear as you close in, and "more like this" narrows the list to
+  a preset's measured neighbours -- whose empty space between presets is
+  playable, and routes that walk it by themselves.
 * **No compressor anywhere.** A BS.1770 loudness meter instead, and a mono
   guard: everything here is built to widen, and it is measured to survive a
   mono sum.

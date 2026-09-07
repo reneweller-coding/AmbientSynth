@@ -194,6 +194,7 @@ enum class ParamId : int {
     BrainHarmonic, BrainKey, BrainEven, BrainSmooth,
     TuneGuard, TuneMatch, BrainBlend, ArcHarmony,
     ElevNear, ElevFar, DepthLaw, Envelop,
+    ArcClock,
     Count
 };
 

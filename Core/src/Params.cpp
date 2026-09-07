@@ -582,6 +582,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ElevFar,        "elev_far",        "Elev Far",    "Space",      -1.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::DepthLaw,       "depth_law",       "Depth Law",   "Space",      0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::Envelop,        "far_envelop",     "Envelop",     "Far Reverb", 0.f, 1.f, 0.f, 1.f, ""),
+    B(ParamId::ArcClock,       "arc_clock",       "Arc Clock",   "Space",      false),
 }};
 } // namespace
 

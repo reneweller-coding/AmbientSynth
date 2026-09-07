@@ -43,6 +43,7 @@
 #endif
 #include <cstdio>
 #include <cmath>
+#include <ctime>     // the clock-locked arc is checked against the real hour
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -3617,6 +3618,37 @@ void testResearchBatch()
             CHECK(hOn > hOff * 1.25, "and the chords it builds are measurably more harmonic than without it");
             CHECK(classesOn >= 3, "and it is still a chord, not one note in several octaves");
         }
+    }
+
+    // ---- the clock-locked arc --------------------------------------------------------------
+    {
+        // The mapping from the hour to the arc, held to what the help text promises.
+        CHECK(std::fabs(Engine::clockArcValue(4.0) + 1.0f) < 1e-5f, "at four in the morning the arc is at its bottom");
+        CHECK(std::fabs(Engine::clockArcValue(16.0) - 1.0f) < 1e-5f, "at four in the afternoon at its top");
+        CHECK(std::fabs(Engine::clockArcValue(10.0)) < 1e-5f && std::fabs(Engine::clockArcValue(22.0)) < 1e-5f, "and at ten and twenty-two it crosses zero");
+        CHECK(std::fabs(Engine::clockArcValue(0.0) - Engine::clockArcValue(24.0)) < 1e-6f, "midnight is midnight from either side");
+        float worst = 0.0f;
+        for (int i = 0; i < 24 * 60; ++i) worst = std::max(worst, std::fabs(Engine::clockArcValue(i / 60.0 + 1.0 / 60.0) - Engine::clockArcValue(i / 60.0)));
+        CHECK(worst < 0.005f, "and from one minute to the next it moves by less than half a per cent");
+        // Through the engine: on, the arc reads the clock's value (gliding towards it); off, the drift's.
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::ArcClock, 1.0f);
+        e.reset();
+        std::vector<float> L(256), R(256);
+        for (int b = 0; b < 12000; ++b) e.process(L.data(), R.data(), 256);   // a minute: past the glide
+        const std::time_t t = std::time(nullptr);
+        std::tm lt {};
+#if defined(_WIN32)
+        localtime_s(&lt, &t);
+#else
+        localtime_r(&t, &lt);
+#endif
+        const float want = Engine::clockArcValue(lt.tm_hour + lt.tm_min / 60.0 + lt.tm_sec / 3600.0);
+        std::printf("  [probe] arc clock: local hour %.2f, arc %.3f, engine reads %.3f\n", lt.tm_hour + lt.tm_min / 60.0, want, e.arcNow());
+        CHECK(std::fabs(e.arcNow() - want) < 0.02f, "with Arc Clock on the engine's arc is the hour's value");
     }
 
     // ---- the depth law --------------------------------------------------------------------

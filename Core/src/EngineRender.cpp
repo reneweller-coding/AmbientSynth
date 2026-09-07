@@ -380,6 +380,22 @@ void Engine::renderChunk(float* L, float* R, int n)
     // Unmasking: the background gives way to the foreground band by band, before the two planes
     // are summed (the near bus is the side chain, and it is finished by now).
     unmask_.process(nl, nr, fl, fr, n);
+    // Envelopment. Spaciousness is two things, and the reverb's width is only one of them: the
+    // apparent width of the source. The other is the sense of being inside the room, and Bradley
+    // and Soulodre (1995) found it in late lateral energy at LOW frequencies -- below about
+    // 500 Hz, where this instrument's background has little side, because the funnel narrows it
+    // and Bass Mono folds it. This lifts the far bus's side channel in the band between the two,
+    // by up to six decibels, and leaves the mid exactly alone.
+    if (envelop_ > 0.0f || smEnvelop_.value > 1.0e-4f) {
+        for (int i = 0; i < n; ++i) {
+            const float mid = 0.5f * (fl[i] + fr[i]);
+            float side = 0.5f * (fl[i] - fr[i]);
+            envLo_ += envCoefLo_ * (side - envLo_);
+            envHi_ += envCoefHi_ * (side - envHi_);
+            side += smEnvelop_.next(envelop_) * (envHi_ - envLo_);
+            fl[i] = mid + side; fr[i] = mid - side;
+        }
+    }
     // The Haas band, on the foreground only: the background has the reverb's own width and does
     // not need help. After the unmask, so what the side chain measured is the plane as it was.
     haas_.process(nl, nr, n);

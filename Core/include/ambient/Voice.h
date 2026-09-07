@@ -48,6 +48,17 @@ struct VoiceParams {
     float pressDistance = 0.0f, pressBright = 0.0f, pressLevel = 0.0f;
     float slideCutoff = 0.0f, slideZ = 0.0f;
     float externalise = 0.0f;   // pinna notch + shoulder reflection, for headphones
+    // Height. The ear hears up and down at the pinna: a notch between about six and ten kHz
+    // whose frequency rises with elevation (Hebrank and Wright 1974), and Blauert's directional
+    // band near 8 kHz that says "above". Two numbers, one per plane, so the background can be
+    // the sky while the foreground stays on the ground; a voice takes its height from where it
+    // stands between them. Zero is exactly the old flat field.
+    float elevNear = 0.0f, elevFar = 0.0f;   // -1 below .. 1 above
+    // Depth Law: the plane warped so that the KNOB is linear in heard distance rather than in
+    // the model's. Zahorik's pooled exponent for perceived against physical distance is about
+    // 0.54, so at 1 the plane is d^1.85: the far half of the knob then sounds as far again as
+    // the near half, instead of the near half doing most of the work.
+    float depthLaw = 0.0f;
     // Headphones binaural mode: the pan becomes an azimuth, the head's yaw turns the field the
     // other way, the interaural delay follows Woodworth's head and the shadow is at full
     // strength whatever Time Width says. Off, everything below is exactly as it was.
@@ -226,6 +237,9 @@ private:
     Svf      pinnaL_, pinnaR_;
     float    extAmt_ = 0.0f;
     int      shoulder_ = 0;
+    // Height: the notch above is shared with externalisation; the 8 kHz band is its own.
+    Svf      skyL_, skyR_;
+    float    pinnaAmt_ = 0.0f, skyGain_ = 0.0f;
     int      note_ = -1;
     int      owner_ = 0;
     int      lastUnison_ = 0;

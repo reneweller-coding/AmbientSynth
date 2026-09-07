@@ -78,6 +78,16 @@ void Voice::prepare(double sampleRate, uint64_t seed)
     note_ = -1;
 }
 
+// The plane as the ear would rank it. Heard distance grows with physical distance as roughly a
+// power of a half (Zahorik 2002, 2005: the pooled exponent is about 0.54), so a knob that is
+// linear in the model's distance spends most of its perceptual travel in its near half. Depth
+// Law bends it back: d^(1 + 0.85 law), which at 1 is d^1.85, the inverse of that exponent. The
+// ends stay where they are -- 0 is still the ear and 1 is still the horizon.
+static inline float perceivedDistance(float d, float law)
+{
+    return law > 0.0f ? std::pow(clampv(d, 0.0f, 1.0f), 1.0f + 0.85f * clampv(law, 0.0f, 1.0f)) : d;
+}
+
 void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p)
 {
     note_ = note;
@@ -85,10 +95,10 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
     distance_ = clampv(distance, 0.0f, 1.0f);
-    distEff_  = distance_;
-    gNear_  = std::cos(distance_ * 0.5f * kPi);
-    gFar_   = std::sin(distance_ * 0.5f * kPi);
-    gLevel_ = 1.0f - 0.5f * distance_;
+    distEff_  = perceivedDistance(distance_, p.depthLaw);
+    gNear_  = std::cos(distEff_ * 0.5f * kPi);
+    gFar_   = std::sin(distEff_ * 0.5f * kPi);
+    gLevel_ = 1.0f - 0.5f * distEff_;
     env_.setTimes(p.attack, p.decay, p.sustain, p.release);
     for (auto& s : slots_) s.noteOn(!env_.isActive());
     if (!env_.isActive()) {
@@ -230,7 +240,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // Pressure pulls the note towards the listener: the plane already decides brightness, level,
     // dryness and presence, so one finger moves all of them the way leaning into a note does.
     const float pressPull = p.pressDistance * press_;
-    distEff_ = clampv(distance_ * (1.0f - pressPull) + 0.35f * p.breath * bd, 0.0f, 1.0f);
+    distEff_ = perceivedDistance(clampv(distance_ * (1.0f - pressPull) + 0.35f * p.breath * bd, 0.0f, 1.0f), p.depthLaw);
     // Doppler: the breathing distance has a velocity; a voice coming closer rises a little, one
     // receding falls. One plane unit is taken as about twenty metres.
     if (p.doppler > 0.0f && dtReal > 0.0f) {
@@ -411,15 +421,29 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // 9 kHz as it moves to the side; the shoulder reflection arrives about a quarter of a
     // millisecond later. Together they are most of what tells the ear a sound is outside the head.
     extAmt_ = clampv(p.externalise, 0.0f, 1.0f);
-    if (extAmt_ > 0.0f) {
+    // Height, from where the voice stands between the two planes. It is heard through the same
+    // pinna notch as externalisation -- the notch IS the elevation cue -- so a raised voice brings
+    // that path in on its own, shoulder or no shoulder.
+    const float elev = clampv(p.elevNear + (p.elevFar - p.elevNear) * distEff_, -1.0f, 1.0f);
+    pinnaAmt_ = std::max(extAmt_, std::fabs(elev));
+    skyGain_ = 0.0f;
+    if (pinnaAmt_ > 0.0f) {
         const float lat = std::fabs(lateral);
         // Behind the head the pinna's notch sits lower (Brown and Duda 1998), which is most of
         // what tells front from back with no visual cue; only the binaural mode knows about
-        // behind, the plain mode's pan has no back.
-        const float notch = 7000.0f + 2000.0f * lat - (behind ? 1800.0f : 0.0f);
-        pinnaL_.setQ(clampv(notch, 2000.0f, 0.45f * static_cast<float>(sr_)), 2.2f, static_cast<float>(sr_));
+        // behind, the plain mode's pan has no back. And it rises with height (Hebrank and
+        // Wright 1974): about three kilohertz from the horizon to overhead.
+        const float notch = 7000.0f + 2000.0f * lat - (behind ? 1800.0f : 0.0f) + 3000.0f * elev;
+        pinnaL_.setQ(clampv(notch, 3000.0f, 0.45f * static_cast<float>(sr_)), 2.2f, static_cast<float>(sr_));
         pinnaR_.copyCoefficients(pinnaL_);
         shoulder_ = std::max(1, static_cast<int>(0.00026 * sr_));
+        // Blauert's directional band for "above" sits near 8 kHz: lifted for a source overhead,
+        // cut for one below. Guarded at zero so a flat field adds nothing, not even a zero.
+        if (elev != 0.0f) {
+            skyL_.setQ(8000.0f, 1.5f, static_cast<float>(sr_));
+            skyR_.copyCoefficients(skyL_);
+            skyGain_ = 0.6f * elev;
+        }
     }
 
     // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
@@ -650,16 +674,23 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
                 shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
             }
-            if (extAmt_ > 0.0f) {
+            if (pinnaAmt_ > 0.0f) {
                 // The shoulder's copy comes out of the same ring the interaural delay reads, one
                 // more tap further back; the pinna's notch is the state-variable filter's low plus
-                // high output, mixed in by the amount.
-                const int sL = static_cast<int>(itdL_) + shoulder_, sR = static_cast<int>(itdR_) + shoulder_;
-                outL += 0.32f * extAmt_ * itdBufL_[(itdW_ - sL) & (kItdBuffer - 1)];
-                outR += 0.32f * extAmt_ * itdBufR_[(itdW_ - sR) & (kItdBuffer - 1)];
+                // high output, mixed in by the amount. The shoulder belongs to externalisation
+                // alone; the notch is shared with height.
+                if (extAmt_ > 0.0f) {
+                    const int sL = static_cast<int>(itdL_) + shoulder_, sR = static_cast<int>(itdR_) + shoulder_;
+                    outL += 0.32f * extAmt_ * itdBufL_[(itdW_ - sL) & (kItdBuffer - 1)];
+                    outR += 0.32f * extAmt_ * itdBufR_[(itdW_ - sR) & (kItdBuffer - 1)];
+                }
                 float lp, bp, hp;
-                pinnaL_.tick(outL, lp, bp, hp); outL += extAmt_ * ((lp + hp) - outL) * 0.8f;
-                pinnaR_.tick(outR, lp, bp, hp); outR += extAmt_ * ((lp + hp) - outR) * 0.8f;
+                pinnaL_.tick(outL, lp, bp, hp); outL += pinnaAmt_ * ((lp + hp) - outL) * 0.8f;
+                pinnaR_.tick(outR, lp, bp, hp); outR += pinnaAmt_ * ((lp + hp) - outR) * 0.8f;
+                if (skyGain_ != 0.0f) {
+                    skyL_.tick(outL, lp, bp, hp); outL += skyGain_ * bp;
+                    skyR_.tick(outR, lp, bp, hp); outR += skyGain_ * bp;
+                }
             }
             if (phaseOn_) {   // first-order all-passes: y = c x + x1 - c y1, two per ear
                 float* c = apC_[0]; float* x1 = apX_[0]; float* y1 = apY_[0];

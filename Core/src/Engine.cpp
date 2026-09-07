@@ -48,7 +48,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
     PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
-    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_ })
+    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_, &smEnvelop_ })
         s->setTime(0.02f, sr_);
     smDelayMix_.snap(getParam(ParamId::DelayMix)); smDelayToFar_.snap(getParam(ParamId::DelayToFar));
     smDelay2Mix_.snap(getParam(ParamId::Delay2Mix)); smDelay2ToFar_.snap(getParam(ParamId::Delay2ToFar));

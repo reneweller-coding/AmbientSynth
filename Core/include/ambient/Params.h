@@ -193,6 +193,7 @@ enum class ParamId : int {
     Src1SpecRate, Src1SpecBreath, Src2SpecRate, Src2SpecBreath, Src3SpecRate, Src3SpecBreath, Src4SpecRate, Src4SpecBreath,
     BrainHarmonic, BrainKey, BrainEven, BrainSmooth,
     TuneGuard, TuneMatch, BrainBlend, ArcHarmony,
+    ElevNear, ElevFar, DepthLaw, Envelop,
     Count
 };
 

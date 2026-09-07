@@ -3619,6 +3619,118 @@ void testResearchBatch()
         }
     }
 
+    // ---- the depth law --------------------------------------------------------------------
+    {
+        auto placed = [&](float law, float depth) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::KeysDepth, depth);
+            e.setParam(ParamId::DepthLaw, law);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);   // parameters are read per block: let them be
+            e.noteOn(60, 0.8f);
+            for (int b = 0; b < 40; ++b) e.process(L.data(), R.data(), 256);
+            return e.noteDistance(60);
+        };
+        const float mid0 = placed(0.0f, 0.5f), mid1 = placed(1.0f, 0.5f);
+        const float far0 = placed(0.0f, 1.0f), far1 = placed(1.0f, 1.0f);
+        std::printf("  [probe] depth 0.5 is heard at %.3f flat, %.3f under the law; depth 1.0 at %.3f and %.3f\n", mid0, mid1, far0, far1);
+        CHECK(std::fabs(mid0 - 0.5f) < 0.02f, "with the law off, half depth is half the plane");
+        CHECK(std::fabs(mid1 - std::pow(0.5f, 1.85f)) < 0.02f, "with it on, half the knob is d^1.85 -- the inverse of Zahorik's exponent");
+        CHECK(std::fabs(far0 - far1) < 0.02f && far1 > 0.98f, "and the horizon does not move");
+    }
+
+    // ---- height ---------------------------------------------------------------------------
+    {
+        // A bright note with thirty-two partials reaches past ten kilohertz, which is where the
+        // pinna's notch lives. Measured: the energy in the 9.5-10.5 kHz band against the energy
+        // in 6.5-7.5 kHz. Overhead the notch sits near ten kilohertz and that ratio falls; below,
+        // it sits near four and the ratio rises.
+        auto ratio = [&](float elev) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 32.0f);
+            e.setParam(ParamId::Brightness, 1.0f);
+            e.setParam(ParamId::Tilt, 0.3f);
+            e.setParam(ParamId::Unison, 1.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f);
+            e.setParam(ParamId::ElevNear, elev); e.setParam(ParamId::ElevFar, elev);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.reset();
+            e.noteOn(67, 0.8f);                   // G4, 392 Hz: partial 32 is 12.5 kHz
+            std::vector<float> L(256), R(256), cap;
+            for (int b = 0; b < 240; ++b) { e.process(L.data(), R.data(), 256); if (b >= 100) cap.insert(cap.end(), L.begin(), L.end()); }
+            const int N = 16384;
+            std::vector<float> re(static_cast<size_t>(N), 0.0f), im(static_cast<size_t>(N), 0.0f);
+            for (int i = 0; i < N && i < static_cast<int>(cap.size()); ++i) {
+                const float w = 0.5f - 0.5f * std::cos(6.2831853f * static_cast<float>(i) / N);
+                re[static_cast<size_t>(i)] = cap[static_cast<size_t>(i)] * w;
+            }
+            Fft fft(N);
+            fft.transform(re.data(), im.data(), false);
+            auto band = [&](double lo, double hi) {
+                double s = 0.0;
+                for (int k = static_cast<int>(lo * N / sr); k <= static_cast<int>(hi * N / sr); ++k)
+                    s += static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)] + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)];
+                return s;
+            };
+            return band(9500.0, 10500.0) / (band(6500.0, 7500.0) + 1e-20);
+        };
+        const double below = ratio(-1.0f), flat = ratio(0.0f), above = ratio(1.0f);
+        std::printf("  [probe] 10 kHz against 7 kHz: %.3f below, %.3f flat, %.3f overhead\n", below, flat, above);
+        CHECK(above < flat, "overhead, the pinna's notch has moved up to ten kilohertz");
+        CHECK(below > above, "and below the ear it has moved down, away from it");
+    }
+
+    // ---- envelopment -----------------------------------------------------------------------
+    {
+        auto sideBand = [&](float envelop, double& midOut) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::KeysDepth, 1.0f);              // straight into the far reverb
+            e.setParam(ParamId::FarLevel, 1.0f);
+            e.setParam(ParamId::NearMix, 0.0f);
+            e.setParam(ParamId::Envelop, envelop);
+            e.setParam(ParamId::Air, 0.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);   // same: Keys Depth has to be read first
+            e.noteOn(45, 0.8f);                                 // A2: partials 2..4 sit in 220-440 Hz
+            // The same band the engine lifts, measured on the output's side and mid.
+            const float cLo = 1.0f - std::exp(-6.2831853f * 150.0f / sr), cHi = 1.0f - std::exp(-6.2831853f * 500.0f / sr);
+            float sLo = 0.0f, sHi = 0.0f, mLo = 0.0f, mHi = 0.0f;
+            double side = 0.0, mid = 0.0;
+            for (int b = 0; b < 800; ++b) {
+                e.process(L.data(), R.data(), 256);
+                if (b < 200) continue;
+                for (int i = 0; i < 256; ++i) {
+                    const float s = 0.5f * (L[static_cast<size_t>(i)] - R[static_cast<size_t>(i)]), m = 0.5f * (L[static_cast<size_t>(i)] + R[static_cast<size_t>(i)]);
+                    sLo += cLo * (s - sLo); sHi += cHi * (s - sHi); const float sb = sHi - sLo; side += static_cast<double>(sb) * sb;
+                    mLo += cLo * (m - mLo); mHi += cHi * (m - mHi); const float mb = mHi - mLo; mid += static_cast<double>(mb) * mb;
+                }
+            }
+            midOut = mid;
+            return side;
+        };
+        double mid0 = 0.0, mid1 = 0.0;
+        const double s0 = sideBand(0.0f, mid0), s1 = sideBand(1.0f, mid1);
+        const double liftDb = 10.0 * std::log10((s1 + 1e-20) / (s0 + 1e-20));
+        const double midDb = 10.0 * std::log10((mid1 + 1e-20) / (mid0 + 1e-20));
+        std::printf("  [probe] far side energy 150-500 Hz: %+.1f dB with Envelop, mid %+.2f dB\n", liftDb, midDb);
+        CHECK(liftDb > 3.0, "Envelop lifts the background's low-mid side by several decibels");
+        CHECK(std::fabs(midDb) < 0.5, "and leaves the mid where it was");
+    }
+
     // ---- blend: how a chord arrives ---------------------------------------------------------
     {
         auto onsets = [](float blend) {

@@ -1662,6 +1662,19 @@ points). One trap worth its own line: the matched partial in the voice is a
 *branch*, not a blend, because `(f*h)*s` and `f*(h*s)` differ in the last bit
 and the oracle would have heard it on every preset.
 
+## The last acoustic pass
+
+Three more, each measured. *Height* — the pinna's elevation notch (Hebrank &
+Wright 1974) and Blauert's 8 kHz "above" band, one height per plane; the
+10 kHz-to-7 kHz energy ratio goes 0.509 below, 0.227 flat, 0.028 overhead.
+*Envelop* — Bradley & Soulodre's low-frequency lateral energy, lifted on the far
+bus between Bass Mono's corner and 500 Hz; +3.0 dB side, 0.00 dB mid on the
+output. *Depth Law* — Zahorik's compressive exponent inverted, d^1.85 at full;
+half depth is heard at 0.277 instead of 0.500, the horizon unmoved. One trap:
+both engine-level tests placed their note before the first `process()`, when
+Keys Depth had not yet been read, and measured a note standing on the wrong
+plane — nought decibels of lift and nought distance, from code that worked.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

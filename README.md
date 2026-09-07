@@ -45,8 +45,12 @@ since 2013), a VST3 host if you want the plugin.
 * **A spatial model** in which every note has a distance: brightness, level,
   dryness and presence all follow from that one number, with a true interaural
   time difference, a breathing distance, Doppler, and externalisation for
-  headphones. Three reverb tiers -- near room, far reverb, convolution room --
-  with the background narrowed as it goes back.
+  headphones, and a **vertical axis**: each plane has a height, heard through
+  the pinna's elevation notch, so the background can be the sky. Three reverb
+  tiers -- near room, far reverb, convolution room -- with the background
+  narrowed as it goes back, an **Envelop** that lifts the low lateral energy
+  the sense of being inside a room is made of, and a **Depth Law** that makes
+  the depth knob linear in heard distance rather than computed distance.
 * **The Cosmos**: a parallel path of frequency shifter, tuned resonators, a
   vowel filter, a spectral nebula and a self-regulating shimmer loop.
 * **A conductor** that plays all night: the Cluster Brain chooses notes from

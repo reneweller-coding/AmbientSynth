@@ -348,6 +348,9 @@ private:
     Smoother      smBlur_;
     Drifter       tideDrift_, rotDrift_;
     float         tide_ = 0.0f, tidePeriod_ = 12.0f, farRotate_ = 0.0f, farWidth_ = 1.0f;
+    // Envelopment: the far bus's low-mid side channel, between Bass Mono and 500 Hz.
+    float         envelop_ = 0.0f, envCoefLo_ = 0.0f, envCoefHi_ = 0.0f, envLo_ = 0.0f, envHi_ = 0.0f;
+    Smoother      smEnvelop_;
     Rng           auxRng_;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;

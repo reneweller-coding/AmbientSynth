@@ -499,6 +499,9 @@ void Engine::readParams()
     vp_.phaseRate   = g(ParamId::PhaseRate);
     vp_.doppler     = g(ParamId::Doppler);
     vp_.externalise = g(ParamId::Externalise);
+    vp_.elevNear = g(ParamId::ElevNear);
+    vp_.elevFar = g(ParamId::ElevFar);
+    vp_.depthLaw = g(ParamId::DepthLaw);
     vp_.strikeLevel = g(ParamId::StrikeLevel);
     vp_.strikeType  = static_cast<int>(std::lround(g(ParamId::StrikeType)));
     vp_.strikeDecay = g(ParamId::StrikeDecay);
@@ -511,6 +514,15 @@ void Engine::readParams()
     blur_.set(g(ParamId::BlurSmear));
     farRotate_  = g(ParamId::FarRotate);
     farWidth_   = g(ParamId::FarWidth);
+    // Envelopment: the far bus's side channel lifted in the band that carries it. The band
+    // starts where Bass Mono ends, because everything under that corner is folded to mono at
+    // the master and lifting it here would be lifting something the guard then removes.
+    envelop_ = g(ParamId::Envelop);
+    {
+        const float lo = std::max(125.0f, getParam(ParamId::BassMono));
+        envCoefLo_ = 1.0f - std::exp(-kTwoPi * lo / static_cast<float>(sr_));
+        envCoefHi_ = 1.0f - std::exp(-kTwoPi * 500.0f / static_cast<float>(sr_));
+    }
     farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 2));
 
     depth_       = g(ParamId::Depth);

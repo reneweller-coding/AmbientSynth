@@ -1,0 +1,222 @@
+AmbientSynth 1.1.0
+-- Configuring juceaide
+-- Building juceaide
+-- Exporting juceaide
+-- Testing juceaide
+-- Finished setting up juceaide
+-- Configuring done (2.7s)
+-- Generating done (0.7s)
+-- Build files have been written to: G:/Tools/VRAudio/AmbientSynth/build-release
+MSBuild-Version 18.9.1+a81b43525 für .NET Framework
+
+  Checking File Globs
+  Generating AmbientSynth_artefacts/JuceLibraryCode/AmbientSynth_resources.rc
+  Building VST3 manifest helper for AmbientSynth
+  -- Configuring done (0.0s)
+  -- Generating done (0.1s)
+  -- Build files have been written to: G:/Tools/VRAudio/AmbientSynth/build-release/vst3_helpers/AmbientSynth
+  MSBuild-Version 18.9.1+a81b43525 f├╝r .NET Framework
+  
+    vst3_helper.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\vst3_helpers\AmbientSynth\vst3_helper.exe
+  AmbientSynth_rc_lib.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_rc_lib.dir\Release\AmbientSynth_rc_lib.lib
+  AmbientCore.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Core\Release\AmbientCore.lib
+  AmbientSynth.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\AmbientSynth_SharedCode.lib
+     Bibliothek "G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.lib" und Objekt "G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.exp" werden erstellt.
+  Code wird generiert.
+  Codegenerierung ist abgeschlossen.
+  AmbientSynth_VST3.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\VST3\AmbientSynth.vst3\Contents\x86_64-win\AmbientSynth.vst3
+  removing moduleinfo.json
+  creating G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.vst3/Contents/Resources/moduleinfo.json
+  ambient_hosttest.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tests\Release\ambient_hosttest.exe
+  ambient_render.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tools\render\Release\ambient_render.exe
+  ambient_selftest.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tests\Release\ambient_selftest.exe
+  Code wird generiert.
+  Codegenerierung ist abgeschlossen.
+  AmbientSynth_Standalone.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\Standalone\AmbientSynth.exe
+  beat source: octave 0.000 Hz, tempered fifth 0.469 Hz
+  delay duck: 15 % of the high end out of the echoes; tail 0.002 of the unducked one
+  z-plane bank: 155 shapes in 12 families, all stable, all alive
+  [probe] velvet corr 0.050 colour 1.32 dB | chorus corr 0.048 colour 5.41 dB
+  [probe] first arrival small 327 (6.8 ms) large 1706 (35.5 ms)
+  [probe] side balance left-source 1.60 dB right-source -1.60 dB
+  [probe] 1 kHz: 40 dB 1.00 sone, 50 dB 2.09, 60 dB 4.21 (doubling 2.09, 2.02)
+  [probe] same energy: one band 4.21 sone, ten bands 10.45 sone
+  [probe] meter: 1.14 sone now, 1.15 max, 1.14 N5, -120.0 LUFS short
+  [probe] model 184 frames, hop 21.3 ms, tone tonal 1.00 noisy 0.20
+  [probe] loudest band 5 centre 323 Hz, partial found at 299.9 Hz
+  [probe] spectral rms 0.0913 frozen 0.1117 | roughness tonal 0.981 breathy 2.303
+  [probe] frozen partials: note 62 146.8 Hz, note 74 292.7 Hz (ratio 1.99)
+  [probe] bow rms 0.1022 peak 0.232 hz 222.2 | wavetable rms 0.1029 -> -0.1 dB
+  [probe] bow at rest rms 0.000023 (72.9 dB below the bowed note)
+selftest: all checks passed
+hosttest: all checks passed
+  AmbientSynth.exe: 21 system DLLs, none of them a redistributable
+  AmbientSynth.vst3: 21 system DLLs, none of them a redistributable
+  portable zip: 15,3 MB
+Inno Setup 7 Command-Line Compiler
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+Portions Copyright (C) 2001-2004 Alex Yackimoff. All rights reserved.
+https://www.innosetup.com
+
+Compiler engine version: Inno Setup 7.1.0
+Non-commercial use only
+
+Preprocessing
+   Reading file: C:\Program Files\Inno Setup 7\ISPPBuiltins.iss
+   Line 126: Including file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+   Reading file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+   Line 161: Including file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-code.iss
+   Reading file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-code.iss
+Parsing [Setup] section, line 31
+Parsing [Setup] section, line 32
+Parsing [Setup] section, line 33
+Parsing [Setup] section, line 34
+Parsing [Setup] section, line 35
+Parsing [Setup] section, line 36
+Parsing [Setup] section, line 37
+Parsing [Setup] section, line 38
+Parsing [Setup] section, line 39
+Parsing [Setup] section, line 40
+Parsing [Setup] section, line 41
+Parsing [Setup] section, line 42
+Parsing [Setup] section, line 43
+Parsing [Setup] section, line 44
+Parsing [Setup] section, line 45
+Parsing [Setup] section, line 46
+Parsing [Setup] section, line 47
+Parsing [Setup] section, line 48
+Parsing [Setup] section, line 49
+Parsing [Setup] section, line 51
+Parsing [Setup] section, line 56
+Parsing [Setup] section, line 57
+Parsing [Setup] section, line 61
+Parsing [Setup] section, line 62
+Parsing [Setup] section, line 63
+Parsing [Setup] section, line 64
+Parsing [Setup] section, line 65
+Parsing [Setup] section, line 66
+Parsing [Setup] section, line 67
+Reading file (LicenseFile)
+Reading file (WizardImageFile)
+Reading file (WizardSmallImageFile)
+Reading file (WizardImageFileDynamicDark)
+Reading file (WizardSmallImageFileDynamicDark)
+Preparing Setup program executable
+   Verification successful
+   Updating icons and style (SetupCustomStyle.e32)
+   Updating version info (SetupCustomStyle.e32)
+Determining language code pages
+Parsing [Languages] section, line 70
+   Reading file: C:\Program Files\Inno Setup 7\Default.isl
+Parsing [Languages] section, line 71
+   Reading file: C:\Program Files\Inno Setup 7\Languages\German.isl
+   Messages in script file
+Reading default messages from Default.isl
+Parsing [Languages] section, line 70
+   Reading file: C:\Program Files\Inno Setup 7\Default.isl
+Parsing [Languages] section, line 71
+   Reading file: C:\Program Files\Inno Setup 7\Languages\German.isl
+Parsing [LangOptions], [Messages], and [CustomMessages] sections
+   Messages in script file
+Reading [Code] section
+Parsing [Types] section, line 90
+Parsing [Types] section, line 91
+Parsing [Components] section, line 94
+Parsing [Components] section, line 95
+Parsing [Components] section, line 96
+Parsing [Components] section, line 100
+Parsing [Tasks] section, line 104
+Parsing [Icons] section, line 130
+Parsing [Icons] section, line 131
+Parsing [Icons] section, line 132
+Parsing [Icons] section, line 133
+Parsing [UninstallDelete] section, line 142
+Parsing [UninstallDelete] section, line 143
+Parsing [UninstallDelete] section, line 144
+Parsing [UninstallDelete] section, line 145
+Parsing [UninstallDelete] section, line 146
+Parsing [UninstallDelete] section, line 147
+Parsing [UninstallDelete] section, line 148
+Parsing [UninstallDelete] section, line 149
+Parsing [UninstallDelete] section, line 150
+Parsing [UninstallDelete] section, line 151
+Parsing [UninstallDelete] section, line 152
+Parsing [Run] section, line 136
+Parsing [Files] section, line 107
+Parsing [Files] section, line 108
+Parsing [Files] section, line 109
+Parsing [Files] section, line 111
+Parsing [Files] section, line 113
+Parsing [Files] section, line 119
+Parsing [Files] section, line 3 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 5 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 7 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 9 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 11 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 13 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Reading file (is7z.dll)
+   Verification successful
+Compiling [Code] section
+Creating setup files
+   Verification successful
+   Updating icons (Setup.exe)
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.exe
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\LICENSE.txt
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\README.txt
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth-Manual.pdf
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\desktop.ini
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Plugin.ico
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Contents\Resources\moduleinfo.json
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Contents\x86_64-win\AmbientSynth.vst3
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Aldebaran.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Chamber-Grey.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Corridor.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Cryo-Chamber.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Deep-Earth.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Desert-Ember.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Field-Absence.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Field-Recordings.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Filter-Cubes.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Ghost-Signal.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Glass-Vitrine.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Held-Moment.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Hull-Rumble.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Loop-Studio.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Millstone.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Modular-Nocturne.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Northern-Dark.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Own-Tuning.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Painted-Field.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Permafrost.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Planetary.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Ritual-Machine.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Rosin-and-Wire.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Sleep-Concert.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Slow-Carousel.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Strings-at-Rest.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Struck-Bodies.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Sustain.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Tape-Saturation.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Temple-of-Air.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Three-Alike.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Turning-Harmony.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Vast-Chord.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Void-Station.ambientpack
+   Compressing Setup program executable
+   Updating version info (Setup.exe)
+   Updating manifest (Setup.exe)
+
+
+Successful compile (8,828 sec). Resulting Setup program filename is:
+G:\Tools\VRAudio\AmbientSynth\Deploy\out\AmbientSynth-1.1.0-Setup.exe
+  setup: 14,0 MB
+
+Name                            MB   LastWriteTime      
+----                            --   -------------      
+AmbientSynth-1.0.0-portable.zip 14,8 07.09.2026 00:05:13
+AmbientSynth-1.0.0-Setup.exe    13,6 07.09.2026 00:05:23
+AmbientSynth-1.1.0-portable.zip 15,3 07.09.2026 03:22:49
+AmbientSynth-1.1.0-Setup.exe    14,0 07.09.2026 03:22:58
+
+

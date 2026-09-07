@@ -36,6 +36,13 @@ $stage = Join-Path $root "Deploy\stage"
 $out = Join-Path $root "Deploy\out"
 
 if (-not $SkipBuild) {
+    # JUCE writes the Windows version resource once and does not notice afterwards that the
+    # project's version has changed. Version 1.1.0 was therefore built, packaged, installed and
+    # tested with 1.0.0 stamped inside the executable -- the setup was named right, the file
+    # properties were wrong, and nothing in the build said so. Deleting it forces the regenerate.
+    $rc = Join-Path $buildDir "Plugin\AmbientSynth_artefacts\JuceLibraryCode\AmbientSynth_resources.rc"
+    if (Test-Path $rc) { Remove-Item $rc -Force }
+
     # A build for other people is not worth having in a hurry: -j 2 leaves the machine usable.
     cmake -S . -B $buildDir -G "Visual Studio 18 2026" -A x64 `
         -DAMBIENT_STATIC_RUNTIME=ON -DAMBIENT_AVX2=ON -DAMBIENT_BUILD_TOOLS=ON `

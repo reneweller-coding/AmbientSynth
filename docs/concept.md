@@ -2178,7 +2178,14 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   pictures are of open sections, and a closed page hides its display; (3) Expanded is three
   columns -- the voice; the room, the effects, the Cosmos and the spectrum; morph and the
   conductor -- with the last group of each column stretched so the three end level. Measured:
-  Normal 2269 x 1260 (86 % at 1080 lines), Expanded 2269 x 1352 (80 %, from 41 %). A type
+  Normal 2269 x 1260 (86 % at 1080 lines), Expanded 2269 x 1352 (80 %, from 41 %) -- and then,
+  after Rene's next look ("the middle column has room"), Expanded became a page of its own
+  (`expandedGroups_`, no tabs): the shaping (Air + Filter, Envelope + Expression, Z-Plane +
+  Vector, each with its display) moved to the middle column; Feedback, Room, Early Room, Body,
+  Patina, Cosmos and Strike share one row, as do Morph, Macros and Brain 2; rows without a
+  display wrap at `kWrapW` = 1400 px, so a row of closed sections is one line and a row of open
+  ones is two, never a column a screen wide; the spectrum is the middle column's filler at 80 px.
+  Measured: 2269 x 958, about 2.4 : 1, 113 % at 1080 lines. A type
   change or a switch thrown relays out the page and resizes the window to the new ratio, on
   the player's own action -- never on the window's. `AMBIENT_LAYOUT=<0|1|2>` sets the mode for
   a run over the recalled one (session recall keeps it, which is why the `AMBIENT_EXPANDED` run

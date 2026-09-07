@@ -250,6 +250,11 @@ private:
     std::vector<Cell> cells_;
     std::vector<Section> sections_;
     std::vector<Group> groups_;
+    // The Expanded page: its own table of groups and rows, three columns, no tabs. Rows without
+    // a display wrap when their sections, open, would run past kWrapW, so a row of closed
+    // sections is one line and a row of open ones is two or three, never a column a screen wide.
+    std::vector<Group> expandedGroups_;
+    static constexpr int kWrapW = 1400;
     std::map<juce::Component*, int> cellOf_;
     std::unique_ptr<juce::Slider> master_;
 

@@ -362,9 +362,9 @@ strip holds only the knobs its type uses, and a section whose switch is off -- a
 level at zero, a Morph or a second conductor that is not active -- closes to its title and its
 switch; choose a type or throw the switch and it opens. Three layouts, one button: Normal (one
 page, tabs; 2269 x 1260 at design size), Compact (the widest rows wrap, for a narrower window)
-and Expanded (every page of every tab row open, in three columns -- the voice, the room and
-the effects, the conductor -- 2269 x 1352, about 1.7 : 1, so a 1080-line screen shows it at
-four fifths).
+and Expanded (a page of its own, no tabs, three columns -- the voice and its room; the
+shaping, the effects, the background and the small sections side by side; morph, macros and
+the conductor -- 2269 x 958, about 2.4 : 1, which a 1080-line screen shows larger than life).
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

@@ -275,6 +275,24 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     }
     if (groups_.size() > 6) groups_[6].displays = { spectrumView_.get() };   // ANALYSIS: the strip
     if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), tuningView_.get(), coherenceView_.get(), nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
+    // The Expanded page. Three columns: the voice's sources and its room on the left; its
+    // shaping (filters, envelope, expression, z-plane, vector) with the effects, the background
+    // and the small sections in the middle; morph, macros and the conductor on the right. The
+    // closed sections -- feedback, room, early room, body, patina, cosmos, strike -- share one
+    // row, which wraps if several of them are open; so do morph, macros and the second
+    // conductor. The spectrum is the middle column's filler, small.
+    expandedGroups_ = {
+        { "VOICE",      kVoice,     { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Space", "Foundation" } }, {}, 0,
+                                    { source1View_.get(), nullptr, source2View_.get(), source3View_.get(), source4View_.get(), stageView_.get() } },
+        { "SHAPE",      kVoice,     { { "Air", "Filter" }, { "Envelope", "Expression" }, { "Z-Plane", "Vector" } }, {}, 1,
+                                    { filterView_.get(), envView_.get(), vectorView_.get() } },
+        { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike" } }, {}, 1 },
+        { "ANALYSIS",   kVoice,     { {} }, {}, 1, { spectrumView_.get() }, 80, true },
+        { "MORPH",      kMorph,     { { "Morph", "Macros", "Brain 2" } }, {}, 2 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Autoplay" }, { "Tuning" }, { "Coherence" }, { "Clock" } }, {}, 2,
+                                    { brainView_.get(), brainView3_.get(), tuningView_.get(), coherenceView_.get(), nullptr }, 0, true },
+    };
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -850,33 +868,21 @@ void AmbientSynthEditor::rebuildLayout()
 
 void AmbientSynthEditor::layoutBody()
 {
-    // Expanded is laid out wide, not tall: three columns -- the voice; the room and the effects;
-    // the conductor with morph and macros -- so the page is about 2 : 1 and a 16 : 9 screen shows
-    // it at a readable size. The groups' own column numbers are the two-column page.
-    auto colOf = [this](const Group& g) {
-        if (!expanded_) return g.column;
-        if (g.name == "VOICE") return 0;                          // the tallest column; it needs no stretch
-        if (g.name == "CONDUCTOR" || g.name == "MORPH") return 2;   // the notes roll stretches this one
-        return 1;                                                 // the room, the effects, the Cosmos -- and the spectrum, which stretches it
-    };
-    std::vector<size_t> order;
-    for (size_t gi = 0; gi < groups_.size(); ++gi) order.push_back(gi);
-    if (expanded_) {   // the stretchy group (the notes roll) last in its column, so MORPH goes before CONDUCTOR
-        std::vector<size_t> o;
-        for (const char* nm : { "VOICE", "FOREGROUND", "BACKGROUND", "COSMOS", "ANALYSIS", "MORPH", "CONDUCTOR" })
-            for (size_t gi = 0; gi < groups_.size(); ++gi) if (groups_[gi].name == nm) o.push_back(gi);
-        for (size_t gi = 0; gi < groups_.size(); ++gi) if (std::find(o.begin(), o.end(), gi) == o.end()) o.push_back(gi);
-        order = o;
-    }
     for (auto& s : sections_) s.collapsed = sectionCollapsed(s);
+    // Which page: the tabbed two-column page, or the Expanded three-column one with no tabs.
+    std::vector<Group>& G = expanded_ ? expandedGroups_ : groups_;
+    if (expanded_) {
+        for (auto& t : tabRows_) { t.tabs.clear(); t.bar = {}; }
+        // Displays the tabbed page owns and this one does not use go out of sight.
+        std::set<juce::Component*> used;
+        for (auto& g : G) for (auto* d : g.displays) if (d != nullptr) used.insert(d);
+        for (auto& t : tabRows_) for (auto* d : t.displays) if (d != nullptr && used.count(d) == 0) d->setVisible(false);
+        for (auto& g : groups_) for (auto* d : g.displays) if (d != nullptr && used.count(d) == 0) d->setVisible(false);
+    } else {
+        for (auto& g : expandedGroups_) for (auto* d : g.displays) if (d != nullptr) d->setVisible(false);
+    }
     int nCols = 1;
-    for (auto& g : groups_) nCols = std::max(nCols, colOf(g) + 1);
-    // Expanded: the last group of every column stretches its display, so the three columns end
-    // level and no column has a hole under it. (In the two-column page the stretchy groups are
-    // named in the table; here the columns are made up on the spot, so they are found.)
-    std::vector<size_t> lastInCol(static_cast<size_t>(nCols), static_cast<size_t>(-1));
-    for (size_t gi : order) lastInCol[static_cast<size_t>(colOf(groups_[gi]))] = gi;
-    auto stretches = [&](size_t gi) { return groups_[gi].stretch || (expanded_ && lastInCol[static_cast<size_t>(colOf(groups_[gi]))] == gi); };
+    for (auto& g : G) nCols = std::max(nCols, g.column + 1);
     std::vector<int> colWidth(static_cast<size_t>(nCols), 0), colX(static_cast<size_t>(nCols), 0), colY(static_cast<size_t>(nCols), kPad);
     auto pageWidth = [this](const std::vector<juce::String>& names) {
         int w = kPad;
@@ -888,18 +894,38 @@ void AmbientSynthEditor::layoutBody()
         for (auto& n : names) if (Section* s = findSection(n)) h = std::max(h, sectionHeight(*s));
         return h;
     };
-    for (size_t gi = 0; gi < groups_.size(); ++gi) {
-        auto& g = groups_[gi];
+    // A row that wraps: sections left to right, a new line when the next would run past maxW.
+    // Measures without placing (place == false) or places (true); returns the width used and,
+    // through heightOut, the height of all its lines.
+    auto wrapped = [this](const std::vector<juce::String>& names, int x0, int y0, int maxW, bool place, int* heightOut) {
+        int x = x0 + kPad, y = y0, lineH = 0, widest = 0;
+        for (auto& n : names) {
+            Section* s = findSection(n);
+            if (s == nullptr) continue;
+            const int w = sectionWidth(*s), h = sectionHeight(*s);
+            if (x > x0 + kPad && x + w > x0 + maxW) { x = x0 + kPad; y += lineH + kPad; lineH = 0; }
+            if (place) { setSectionVisible(*s, true); layoutSection(*s, x, y); }
+            x += w + kPad; lineH = std::max(lineH, h); widest = std::max(widest, x - x0);
+        }
+        if (heightOut != nullptr) *heightOut = (y - y0) + lineH;
+        return widest;
+    };
+    for (size_t gi = 0; gi < G.size(); ++gi) {
+        auto& g = G[gi];
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
             // A page with a display asks for room to draw it in, or the picture would be squeezed out.
             int w = 0;
-            if (TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri))) {
+            TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
+            const bool hasDisp = ri < g.displays.size() && g.displays[ri] != nullptr;
+            if (t != nullptr) {
                 for (size_t pi = 0; pi < t->pages.size(); ++pi)
                     w = std::max(w, pageWidth(t->pages[pi]) + (pi < t->displays.size() && t->displays[pi] != nullptr ? kDisplayMinW : 0));
+            } else if (expanded_ && !hasDisp) {
+                w = wrapped(g.rows[ri], 0, 0, kWrapW, false, nullptr) + kPad;
             } else {
-                w = pageWidth(g.rows[ri]) + (ri < g.displays.size() && g.displays[ri] != nullptr ? kDisplayMinW : 0);
+                w = pageWidth(g.rows[ri]) + (hasDisp ? kDisplayMinW : 0);
             }
-            colWidth[static_cast<size_t>(colOf(g))] = std::max(colWidth[static_cast<size_t>(colOf(g))], w);
+            colWidth[static_cast<size_t>(g.column)] = std::max(colWidth[static_cast<size_t>(g.column)], w);
         }
     }
     colX[0] = kPad;
@@ -910,74 +936,62 @@ void AmbientSynthEditor::layoutBody()
     // and on Compact, and the hole belongs to whichever one it is.
     struct Stretch { juce::Component* disp = nullptr; Group* group = nullptr; };
     std::vector<Stretch> stretch(static_cast<size_t>(nCols));
-    for (size_t gi : order) {
-        auto& g = groups_[gi];
-        const size_t col = static_cast<size_t>(colOf(g));
+    for (size_t gi = 0; gi < G.size(); ++gi) {
+        auto& g = G[gi];
+        const size_t col = static_cast<size_t>(g.column);
         const int x0 = colX[col];
         int y = colY[col] + kGroupTitleH;
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
-            TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
-            // Which pages of the row are placed: the open one -- or, Expanded, every one of them,
-            // under one another, each with its own title where the tab bar was.
-            std::vector<int> pages;
-            if (t == nullptr) pages.push_back(-1);
-            else if (expanded_) for (size_t pi = 0; pi < t->pages.size(); ++pi) pages.push_back(static_cast<int>(pi));
-            else pages.push_back(t->active);
+            TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
+            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : g.rows[ri];
+            juce::Component* disp = nullptr;
+            Section* underSec = nullptr;      // a section placed under the display, if the page has one
+            int rowH = 0;
             if (t != nullptr) {
+                for (auto& pg : t->pages) rowH = std::max(rowH, pageHeight(pg));
+                t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
                 t->tabs.clear();
-                if (!expanded_) {
-                    t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
-                    int tx = t->bar.getX();
-                    for (auto& nm : t->names) {
-                        const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
-                        t->tabs.push_back({ tx, y, tw, kTabH - 4 });
-                        tx += tw + 4;
-                    }
-                    for (size_t pi = 0; pi < t->pages.size(); ++pi) {
-                        if (static_cast<int>(pi) == t->active) continue;
-                        for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
-                        if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
-                        if (pi < t->under.size() && t->under[pi].isNotEmpty())
-                            if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
-                    }
-                } else t->bar = {};
-            }
-            for (int pg : pages) {
-                const size_t pgi = static_cast<size_t>(std::max(pg, 0));
-                const std::vector<juce::String>& names = t != nullptr ? t->pages[pgi] : g.rows[ri];
-                juce::Component* disp = nullptr;
-                Section* underSec = nullptr;      // a section placed under the display, if the page has one
-                int rowH = 0;
-                if (t != nullptr) {
-                    if (expanded_) {
-                        // A title in the tab's place, one per page, and each page only as tall as itself.
-                        const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, t->names[pgi]) + 30;
-                        t->tabs.push_back({ x0 + kPad, y, tw, kTabH - 4 });
-                        rowH = pageHeight(names);
-                    } else {
-                        for (auto& pgn : t->pages) rowH = std::max(rowH, pageHeight(pgn));
-                    }
-                    if (pgi < t->displays.size()) disp = t->displays[pgi];
-                    // A page whose only section is closed shows no display either: an Off slot
-                    // is a title and a type menu, not a title, a menu and an empty picture.
-                    if (disp != nullptr && names.size() == 1)
-                        if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { disp->setVisible(false); disp = nullptr; }
-                    // The page's under-section wraps to the display column's width, and the row is
-                    // tall enough to keep a real picture above it.
-                    if (pgi < t->under.size() && t->under[pgi].isNotEmpty()) {
-                        if (Section* u = findSection(t->under[pgi])) {
-                            const int free = colWidth[col] - pageWidth(names) - kPad;
-                            u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
-                            underSec = u;
-                            rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
-                        }
-                    }
-                    y += kTabH;
-                } else {
-                    rowH = std::max(pageHeight(names), g.minRowH);
-                    if (ri < g.displays.size()) disp = g.displays[ri];
+                int tx = t->bar.getX();
+                for (auto& nm : t->names) {
+                    const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
+                    t->tabs.push_back({ tx, y, tw, kTabH - 4 });
+                    tx += tw + 4;
                 }
-                int x = x0 + kPad;
+                for (size_t pi = 0; pi < t->pages.size(); ++pi) {
+                    if (static_cast<int>(pi) == t->active) continue;
+                    for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
+                    if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
+                    if (pi < t->under.size() && t->under[pi].isNotEmpty())
+                        if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
+                }
+                const size_t pgi = static_cast<size_t>(t->active);
+                if (pgi < t->displays.size()) disp = t->displays[pgi];
+                // The page's under-section wraps to the display column's width, and the row is
+                // tall enough to keep a real picture above it.
+                if (pgi < t->under.size() && t->under[pgi].isNotEmpty()) {
+                    if (Section* u = findSection(t->under[pgi])) {
+                        const int free = colWidth[col] - pageWidth(names) - kPad;
+                        u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
+                        underSec = u;
+                        rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
+                    }
+                }
+                y += kTabH;
+            } else {
+                rowH = std::max(pageHeight(names), g.minRowH);
+                if (ri < g.displays.size()) disp = g.displays[ri];
+            }
+            // A page whose only section is closed shows no display either: an Off slot is a
+            // title and a type menu, not a title, a menu and an empty picture.
+            if (disp != nullptr && names.size() == 1)
+                if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { disp->setVisible(false); disp = nullptr; }
+            int x = x0 + kPad;
+            if (t == nullptr && expanded_ && disp == nullptr) {
+                // Expanded, no display: the row wraps, and is as tall as its lines.
+                int h = 0;
+                x += wrapped(names, x0, y, kWrapW, true, &h);
+                rowH = std::max(h, g.minRowH);
+            } else {
                 for (auto& n : names) {
                     Section* s = findSection(n);
                     if (s == nullptr) continue;
@@ -985,28 +999,28 @@ void AmbientSynthEditor::layoutBody()
                     layoutSection(*s, x, y);
                     x += s->bounds.getWidth() + kPad;
                 }
-                // Whatever the row leaves free goes to its display -- that room used to stay empty --
-                // and where the page has an under-section, the display keeps the top of that column
-                // and the section takes the bottom, wrapped to the column's width.
-                if (disp != nullptr) {
-                    const int right = x0 + colWidth[col] - kPad;
-                    int dispH = rowH;
-                    if (underSec != nullptr && right - x >= 120) {
-                        const int uh = sectionHeight(*underSec);
-                        if (rowH - uh - kPad >= 80) {
-                            dispH = rowH - uh - kPad;
-                            setSectionVisible(*underSec, true);
-                            layoutSection(*underSec, x, y + dispH + kPad);
-                        } else setSectionVisible(*underSec, false);
-                    }
-                    if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
-                    else disp->setVisible(false);
-                    if (stretches(gi) && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
-                } else if (underSec != nullptr) {
-                    setSectionVisible(*underSec, false);
-                }
-                y += rowH + kPad;
             }
+            // Whatever the row leaves free goes to its display -- that room used to stay empty --
+            // and where the page has an under-section, the display keeps the top of that column
+            // and the section takes the bottom, wrapped to the column's width.
+            if (disp != nullptr) {
+                const int right = x0 + colWidth[col] - kPad;
+                int dispH = rowH;
+                if (underSec != nullptr && right - x >= 120) {
+                    const int uh = sectionHeight(*underSec);
+                    if (rowH - uh - kPad >= 80) {
+                        dispH = rowH - uh - kPad;
+                        setSectionVisible(*underSec, true);
+                        layoutSection(*underSec, x, y + dispH + kPad);
+                    } else setSectionVisible(*underSec, false);
+                }
+                if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
+                else disp->setVisible(false);
+                if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
+            } else if (underSec != nullptr) {
+                setSectionVisible(*underSec, false);
+            }
+            y += rowH + kPad;
         }
         g.bounds = { x0, colY[col], colWidth[col], y - colY[col] };
         colY[col] = y + kPad;
@@ -2429,7 +2443,7 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
 void AmbientSynthEditor::paintContent(juce::Graphics& g)
 {
     g.fillAll(kBg);
-    for (const auto& grp : groups_) {
+    for (const auto& grp : (expanded_ ? expandedGroups_ : groups_)) {
         g.setColour(kGroupFill);
         g.fillRoundedRectangle(grp.bounds.toFloat(), 8.0f);
         g.setColour(grp.colour);
@@ -2438,9 +2452,10 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
         g.drawText(grp.name, grp.bounds.getX() + 12, grp.bounds.getY() + 2, grp.bounds.getWidth() - 20, kGroupTitleH, juce::Justification::centredLeft);
     }
     for (const auto& t : tabRows_) {
+        if (expanded_) break;   // no tabs on the Expanded page
         const juce::Colour col = groups_[static_cast<size_t>(t.group)].colour;
         for (size_t i = 0; i < t.tabs.size(); ++i) {
-            const bool on = expanded_ || static_cast<int>(i) == t.active;   // Expanded: every title is an open page
+            const bool on = static_cast<int>(i) == t.active;
             const auto r = t.tabs[i].toFloat();
             g.setColour(on ? col.withAlpha(0.26f) : kSectionFill.brighter(0.04f));
             g.fillRoundedRectangle(r, 5.0f);

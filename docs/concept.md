@@ -1568,6 +1568,44 @@ does not put the thing being measured in front of the microphone will
 happily report that everything is fine, or that everything is identical, and
 both answers are worthless.
 
+## The research round
+
+Late in the instrument's life the design was checked against the current
+literature rather than against the classic accounts it was built on. Nine
+things were found. Eight were built; each is neutral at its default, so every
+preset written before them renders to the bit as it did. The ninth, a neural
+sound model in the audio path, was read and deliberately not built: it would
+put a hundred megabytes of weights and a hard real-time constraint into a core
+that is meant to run on a headset, and it would make the instrument's sound
+something nobody could read. Every other decision here can be checked by
+reading a formula.
+
+* **Velvet noise** as a third Ensemble mode: sparse signed impulses instead of
+  a chorus. The same width, measured, with 1.32 dB of colouration against the
+  chorus's 5.41.
+* **A colourless far reverb**: the same network with its eight line lengths
+  searched by `Tools/optimise_fdn.py` rather than chosen. 0.314 dB of spectral
+  spread in the tail against the classic set's 0.474.
+* **The spherical head shadow** of Brown and Duda, in the binaural mode.
+* **Critical-band spacing** in the conductor: it can be told to avoid or to
+  seek notes that fall inside one critical band of a sounding one.
+* **The Early Room**, a scattering delay network with one node per wall — the
+  only stage in the instrument whose purpose is that the sound moves when the
+  source does.
+* **Bow**, a waveguide bowed string, the first physical model here.
+* **Spectral**, a clip measured into 32 bands and rebuilt from them, which
+  finally separates pitch from speed.
+* **Loudness in sones** beside LUFS, and
+  `Tools/library/texture_statistics.py`, which makes new texture from the
+  statistics of old.
+
+The long version, with the mathematics and the references, is the Design
+chapters of the manual — and, more usefully, the traps: a masking slope that
+made the loudness model four times too quiet while every relative test still
+passed, a friction curve that was silent rather than wrong, a scattering loop
+two samples long that destroyed the very thing it existed to carry, and a
+pitch estimator that reported a clean A3 as 440 Hz.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

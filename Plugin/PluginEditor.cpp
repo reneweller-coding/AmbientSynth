@@ -1393,8 +1393,8 @@ void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void(
     }
 
     // ---- the gallery of source types, on Source 2, one type per pair of steps. The clip for
-    // the Texture and Stretch types comes from AMBIENT_MANUAL_CLIP; without it those two show
-    // an empty display, which is at least honest.
+    // the Texture, Stretch and Spectral types comes from AMBIENT_MANUAL_CLIP; without it those
+    // three show an empty display, which is at least honest.
     {
         const int sourcesRow = 1;
         auto* typeParam = proc_.apvts.getParameter("src2_type");
@@ -1402,13 +1402,13 @@ void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void(
         job.steps.push_back([this, typeParam, &job] {
             job.originalType = typeParam != nullptr ? juce::String(typeParam->getValue()) : juce::String();
         });
-        for (const char* type : { "Additive", "Wavetable", "FM", "Texture", "Stretch", "Noise" }) {
+        for (const char* type : { "Additive", "Wavetable", "FM", "Texture", "Stretch", "Bow", "Spectral", "Noise" }) {
             const juce::String typeName(type);
             int index = -1;
             for (int i = 0; i < ambient::kNumSourceTypes; ++i) if (typeName == ambient::kSourceTypeNames[i]) index = i;
             if (index < 0 || typeParam == nullptr) continue;
             job.steps.push_back([this, typeParam, index, typeName, clip] {
-                if ((typeName == "Texture" || typeName == "Stretch") && clip.isNotEmpty())
+                if ((typeName == "Texture" || typeName == "Stretch" || typeName == "Spectral") && clip.isNotEmpty())
                     proc_.loadTextureFile(1, juce::File(clip));
                 typeParam->setValueNotifyingHost(typeParam->convertTo0to1(static_cast<float>(index)));
                 if (auto* lvl = proc_.apvts.getParameter("src2_level")) lvl->setValueNotifyingHost(lvl->convertTo0to1(0.5f));

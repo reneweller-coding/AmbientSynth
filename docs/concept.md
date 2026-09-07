@@ -2185,7 +2185,13 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   Patina, Cosmos and Strike share one row, as do Morph, Macros and Brain 2; rows without a
   display wrap at `kWrapW` = 1400 px, so a row of closed sections is one line and a row of open
   ones is two, never a column a screen wide; the spectrum is the middle column's filler at 80 px.
-  Measured: 2269 x 958, about 2.4 : 1, 113 % at 1080 lines. A type
+  Measured: 2269 x 958, about 2.4 : 1, 113 % at 1080 lines. Then, since the rows without a
+  display still left their right halves empty: rows of a group that have no display -- by
+  design, or because their only section is closed -- merge into one flow (`rowsOf`), so the
+  effects, the background with every closed section, and morph + macros + brain 2 + clock are
+  each one wrapping line, two Off slots share a line, the strand bank gets the bank's scope as
+  its display and the stage stretches to close the voice column. 2269 x 923, 2.5 : 1; on a
+  1920 x 1080 screen the width limits now, at 85 %. A type
   change or a switch thrown relays out the page and resizes the window to the new ratio, on
   the player's own action -- never on the window's. `AMBIENT_LAYOUT=<0|1|2>` sets the mode for
   a run over the recalled one (session recall keeps it, which is why the `AMBIENT_EXPANDED` run

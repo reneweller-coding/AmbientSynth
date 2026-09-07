@@ -364,7 +364,7 @@ switch; choose a type or throw the switch and it opens. Three layouts, one butto
 page, tabs; 2269 x 1260 at design size), Compact (the widest rows wrap, for a narrower window)
 and Expanded (a page of its own, no tabs, three columns -- the voice and its room; the
 shaping, the effects, the background and the small sections side by side; morph, macros and
-the conductor -- 2269 x 958, about 2.4 : 1, which a 1080-line screen shows larger than life).
+the conductor -- 2269 x 923, about 2.5 : 1; on a 1920 x 1080 screen the width is now what limits it, at 85 %).
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

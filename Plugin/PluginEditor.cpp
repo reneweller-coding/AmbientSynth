@@ -282,16 +282,20 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // row, which wraps if several of them are open; so do morph, macros and the second
     // conductor. The spectrum is the middle column's filler, small.
     expandedGroups_ = {
+        // Rows without a display are flows: their sections run left to right and wrap, so a row
+        // is as full as its sections allow and the closed ones sit beside the open ones. The
+        // strand bank gets the bank's own scope as its display, and the stage grows to close
+        // the column.
         { "VOICE",      kVoice,     { { "Source 1" }, { "Strands" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Space", "Foundation" } }, {}, 0,
-                                    { source1View_.get(), nullptr, source2View_.get(), source3View_.get(), source4View_.get(), stageView_.get() } },
+                                    { source1View_.get(), scope_.get(), source2View_.get(), source3View_.get(), source4View_.get(), stageView_.get() }, 0, true },
         { "SHAPE",      kVoice,     { { "Air", "Filter" }, { "Envelope", "Expression" }, { "Z-Plane", "Vector" } }, {}, 1,
                                     { filterView_.get(), envView_.get(), vectorView_.get() } },
-        { "FOREGROUND", kFore,      { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb" }, { "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike" } }, {}, 1 },
+        { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike" } }, {}, 1 },
         { "ANALYSIS",   kVoice,     { {} }, {}, 1, { spectrumView_.get() }, 80, true },
-        { "MORPH",      kMorph,     { { "Morph", "Macros", "Brain 2" } }, {}, 2 },
-        { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Autoplay" }, { "Tuning" }, { "Coherence" }, { "Clock" } }, {}, 2,
-                                    { brainView_.get(), brainView3_.get(), tuningView_.get(), coherenceView_.get(), nullptr }, 0, true },
+        { "MORPH",      kMorph,     { { "Morph", "Macros", "Brain 2", "Clock" } }, {}, 2 },
+        { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Autoplay" }, { "Tuning" }, { "Coherence" } }, {}, 2,
+                                    { brainView_.get(), brainView3_.get(), tuningView_.get(), coherenceView_.get() }, 0, true },
     };
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
@@ -910,20 +914,37 @@ void AmbientSynthEditor::layoutBody()
         if (heightOut != nullptr) *heightOut = (y - y0) + lineH;
         return widest;
     };
+    // The rows of a group as they stand: on the Expanded page a row whose only section is closed
+    // has no display, and rows without a display that follow one another merge into one flow --
+    // two Off slots share a line instead of each leaving an empty band beside it.
+    auto rowsOf = [&](Group& g) {
+        std::vector<std::pair<std::vector<juce::String>, juce::Component*>> out;
+        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+            juce::Component* d = ri < g.displays.size() ? g.displays[ri] : nullptr;
+            const auto& names = g.rows[ri];
+            if (expanded_ && d != nullptr && names.size() == 1)
+                if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { d->setVisible(false); d = nullptr; }
+            if (expanded_ && d == nullptr && !names.empty() && !out.empty() && out.back().second == nullptr && !out.back().first.empty())
+                out.back().first.insert(out.back().first.end(), names.begin(), names.end());
+            else out.push_back({ names, d });
+        }
+        return out;
+    };
     for (size_t gi = 0; gi < G.size(); ++gi) {
         auto& g = G[gi];
-        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+        const auto R = rowsOf(g);
+        for (size_t ri = 0; ri < R.size(); ++ri) {
             // A page with a display asks for room to draw it in, or the picture would be squeezed out.
             int w = 0;
             TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
-            const bool hasDisp = ri < g.displays.size() && g.displays[ri] != nullptr;
+            const bool hasDisp = R[ri].second != nullptr;
             if (t != nullptr) {
                 for (size_t pi = 0; pi < t->pages.size(); ++pi)
                     w = std::max(w, pageWidth(t->pages[pi]) + (pi < t->displays.size() && t->displays[pi] != nullptr ? kDisplayMinW : 0));
             } else if (expanded_ && !hasDisp) {
-                w = wrapped(g.rows[ri], 0, 0, kWrapW, false, nullptr) + kPad;
+                w = wrapped(R[ri].first, 0, 0, kWrapW, false, nullptr) + kPad;
             } else {
-                w = pageWidth(g.rows[ri]) + (hasDisp ? kDisplayMinW : 0);
+                w = pageWidth(R[ri].first) + (hasDisp ? kDisplayMinW : 0);
             }
             colWidth[static_cast<size_t>(g.column)] = std::max(colWidth[static_cast<size_t>(g.column)], w);
         }
@@ -941,9 +962,10 @@ void AmbientSynthEditor::layoutBody()
         const size_t col = static_cast<size_t>(g.column);
         const int x0 = colX[col];
         int y = colY[col] + kGroupTitleH;
-        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+        const auto R = rowsOf(g);
+        for (size_t ri = 0; ri < R.size(); ++ri) {
             TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
-            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : g.rows[ri];
+            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : R[ri].first;
             juce::Component* disp = nullptr;
             Section* underSec = nullptr;      // a section placed under the display, if the page has one
             int rowH = 0;
@@ -979,7 +1001,7 @@ void AmbientSynthEditor::layoutBody()
                 y += kTabH;
             } else {
                 rowH = std::max(pageHeight(names), g.minRowH);
-                if (ri < g.displays.size()) disp = g.displays[ri];
+                disp = R[ri].second;
             }
             // A page whose only section is closed shows no display either: an Off slot is a
             // title and a type menu, not a title, a menu and an empty picture.

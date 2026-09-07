@@ -269,6 +269,7 @@ const char* const kSourceNames[kNumModSources] = {
     "beat",
     "pressure", "wheel", "slide",
     "lenia1", "lenia2", "lenia3", "lenia4",
+    "lorenz_x", "lorenz_y", "lorenz_z", "rossler_x", "rossler_y", "rossler_z",
 };
 }
 

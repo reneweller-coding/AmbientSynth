@@ -35,6 +35,8 @@ const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
 const char* const kFarModeNames[4] = { "Classic", "Scattering", "Colourless", "Rotating" };
+const char* const kKeysFilterNames[2] = { "Classic", "One Euro" };
+const char* const kTransposeNames[7] = { "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down" };
 const char* const kBinauralNames[2] = { "Off", "Headphones" };
 const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
@@ -597,6 +599,14 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::FeedbackBias,   "fb_bias",         "Bias",        "Feedback",      0.f, 1.f, 0.f,  1.f, ""),
     F(ParamId::LeniaRate,      "lenia_rate",      "Lenia Rate",  "Coherence",     0.5f, 20.f, 4.f, 0.5f, "Hz"),
     F(ParamId::LeniaGrowth,    "lenia_growth",    "Lenia Growth","Coherence",     0.08f, 0.3f, 0.15f, 1.f, ""),
+    F(ParamId::BrainDejaVu,    "brain_dejavu",    "Deja Vu",     "Cluster Brain", 0.f, 1.f, 0.f,  1.f, ""),
+    F(ParamId::BrainLoop,      "brain_loop",      "Loop",        "Cluster Brain", 1.f, 16.f, 8.f, 1.f, ""),
+    F(ParamId::BrainSpread,    "brain_spread",    "Spread",      "Cluster Brain", 0.f, 1.f, 0.5f, 1.f, ""),
+    F(ParamId::BrainBias,      "brain_bias",      "Bias",        "Cluster Brain", -1.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::ChaosPeriod,    "chaos_period",    "Chaos Period","Coherence",     10.f, 1800.f, 120.f, 0.4f, "s"),
+    C(ParamId::KeysFilter,     "keys_filter",     "MPE Filter",  "Space",         kKeysFilterNames, 2, 0),
+    C(ParamId::Transpose,      "transpose",       "Transpose",   "Tuning",        kTransposeNames, 7, 0),
+    F(ParamId::PartialSpread,  "partial_spread",  "Partial Spread", "Strands",    0.f, 1.f, 0.f,  1.f, ""),
 }};
 } // namespace
 

@@ -199,6 +199,7 @@ enum class ParamId : int {
     FarComod, NearIld,
     Src1Transport, Src2Transport, Src3Transport, Src4Transport, SubPulse, FeedbackBias,
     LeniaRate, LeniaGrowth,
+    BrainDejaVu, BrainLoop, BrainSpread, BrainBias, ChaosPeriod, KeysFilter, Transpose, PartialSpread,
     Count
 };
 
@@ -264,6 +265,8 @@ extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost to
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)
+extern const char* const kKeysFilterNames[2];   // "Classic" (a fixed 30 ms), "One Euro" (cutoff follows the distance still to travel)
+extern const char* const kTransposeNames[7];    // "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down"
 extern const char* const kFarModeNames[4];      // "Classic", "Scattering" (all-passes in the loop), "Colourless" (also flat-searched lengths), "Rotating" (also a turning lossless matrix)
 extern const char* const kBinauralNames[2];     // "Off" or "Headphones"
 extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal

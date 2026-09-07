@@ -170,6 +170,12 @@ enum class ModSource : int {
     // readings are what they do near each corner. Off the clock and off the random stream:
     // motion that is caused by its own neighbours, which is what makes it read as alive.
     Lenia1, Lenia2, Lenia3, Lenia4,
+    // Two strange attractors, integrated in the background on a time scale of minutes: the
+    // Lorenz system (two lobes, switched between at irregular moments) and the Roessler system
+    // (a slow spiral with a sudden climb). Deterministic chaos: never the same path twice,
+    // never a cycle, and never a step -- what an LFO cannot be and filtered noise cannot be
+    // either, which is the reason for having them. Three coordinates each.
+    LorenzX, LorenzY, LorenzZ, RosslerX, RosslerY, RosslerZ,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

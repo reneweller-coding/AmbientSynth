@@ -155,6 +155,9 @@ public:
     int   leniaSteps() const { return leniaSteps_; }
     int   leniaReseeds() const { return leniaReseeds_; }
     float leniaOut(int k) const { return leniaOut_[k & 3]; }
+    // The attractors, for the tests: how many blocks they have been integrated, and a reading.
+    int   chaosSteps() const { return chaosSteps_; }
+    float chaosOut(int k) const { return chaosOut_[k % 6]; }
 
     // ---- clock (Clock.h). A host with a play head calls setHostClock() once per block, before
     // process(); MIDI clock messages arrive through midiClock*() (audio thread). Which of them
@@ -476,6 +479,13 @@ private:
     Rng               leniaRng_;
     void stepLenia(float dt);
     void seedLenia();
+    // The attractors' states in their own units, the six readings in -1..1, and the gate.
+    double            lorenz_[3] = { 1.0, 1.0, 20.0 }, rossler_[3] = { 1.0, 1.0, 0.0 };
+    float             chaosOut_[6] = {};
+    float             chaosPeriod_ = 120.0f;
+    int               chaosSteps_ = 0;
+    bool              chaosUsed_ = false;
+    void stepChaos(float dt);
     // The Beat modulation source: the instrument listening to its own tuning.
     float             beatPhase_ = 0.0f, beatHz_ = 0.0f;
     float             updateBeat(float dt);
@@ -507,6 +517,9 @@ private:
     float             adaptAmt_ = 0.0f;
     float             adaptCents_[128] = {};   // the offset each note was given when it started
     double            commaCents_ = 0.0, commaTarget_ = 0.0;
+    // Transpose: a pure interval on everything that sounds, in log2 units, glided at an octave
+    // per two seconds so that a press is a slide and never a jump (SOMA Terra's interval keys).
+    double            transposeTarget_ = 0.0, transposeCur_ = 0.0;
     // Sleep: after two seconds of silence (no voice, output below -90 dBFS) the effects sleep
     long              silentSamples_ = 0;
     bool              asleep_ = false;

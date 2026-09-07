@@ -59,7 +59,9 @@ struct VoiceParams {
     // 0.54, so at 1 the plane is d^1.85: the far half of the knob then sounds as far again as
     // the near half, instead of the near half doing most of the work.
     float depthLaw = 0.0f;
-    float nearIld = 0.0f;       // Near Field: the level difference a source within reach makes
+    float nearIld = 0.0f;
+    bool  oneEuro = false;       // MPE Filter: the expression smoothing whose cutoff follows the distance left to travel
+    float partialSpread = 0.0f;  // Partial Spread: the additive bank's partials spread across the stereo field one by one       // Near Field: the level difference a source within reach makes
     // Headphones binaural mode: the pan becomes an azimuth, the head's yaw turns the field the
     // other way, the interaural delay follows Woodworth's head and the shadow is at full
     // strength whatever Time Width says. Off, everything below is exactly as it was.
@@ -243,6 +245,10 @@ private:
     float    pinnaAmt_ = 0.0f, skyGain_ = 0.0f;
     // Near field: a low shelf on each ear, cut on the far one and lifted on the near one.
     float    ildAmt_ = 0.0f, ildCoef_ = 0.0f, ildL_ = 0.0f, ildR_ = 0.0f, ildLpL_ = 0.0f, ildLpR_ = 0.0f;
+    // Partial Spread: per-partial left/right weights (equal power, so the sum of each pair is
+    // exactly what the mono path gives), and the slow turn of their pattern.
+    float    spreadAmt_ = 0.0f, spreadL_[kMaxPartials] = {}, spreadR_[kMaxPartials] = {};
+    double   spreadPhase_ = 0.0;
     int      note_ = -1;
     int      owner_ = 0;
     int      lastUnison_ = 0;

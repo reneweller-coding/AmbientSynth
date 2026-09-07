@@ -152,9 +152,12 @@ void Engine::stepModulation(float dt)
         modSeen_ = mv;
         // Whether anything reads the Lenia field, so it is only computed when it is heard.
         leniaUsed_ = false;
+        chaosUsed_ = false;
         for (int i = 0; i < matrix_.count(); ++i) {
             const ModRoute& r = matrix_.route(i);
-            if (static_cast<int>(r.source) >= static_cast<int>(ModSource::Lenia1) || static_cast<int>(r.via) >= static_cast<int>(ModSource::Lenia1)) leniaUsed_ = true;
+            auto inRange = [](ModSource s, ModSource lo, ModSource hi) { return static_cast<int>(s) >= static_cast<int>(lo) && static_cast<int>(s) <= static_cast<int>(hi); };
+            if (inRange(r.source, ModSource::Lenia1, ModSource::Lenia4) || inRange(r.via, ModSource::Lenia1, ModSource::Lenia4)) leniaUsed_ = true;
+            if (inRange(r.source, ModSource::LorenzX, ModSource::RosslerZ) || inRange(r.via, ModSource::LorenzX, ModSource::RosslerZ)) chaosUsed_ = true;
         }
     }
 
@@ -244,6 +247,9 @@ void Engine::stepModulation(float dt)
     if (leniaUsed_) stepLenia(dt);
     for (int k = 0; k < 4; ++k)
         modSrc_[static_cast<int>(ModSource::Lenia1) + k] = uni(leniaOut_[k]);
+    if (chaosUsed_) stepChaos(dt);
+    for (int k = 0; k < 6; ++k)
+        modSrc_[static_cast<int>(ModSource::LorenzX) + k] = chaosOut_[k];
     modSrc_[static_cast<int>(ModSource::Note)] = uni(loud ? (loud->note() - 24) / 84.0f : 0.5f);
     modSrc_[static_cast<int>(ModSource::Velocity)] = uni(loud ? loud->level() : 0.0f);
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
@@ -330,6 +336,44 @@ void Engine::stepLenia(float dt)
     }
     const float c = 1.0f - std::exp(-dt * std::max(leniaRate_, 0.01f));
     for (int k = 0; k < 4; ++k) leniaOut_[k] += c * (leniaTarget_[k] - leniaOut_[k]);
+}
+
+// ---------------------------------------------------------------- the attractors
+//
+// Lorenz (sigma 10, rho 28, beta 8/3) and Roessler (a = b = 0.2, c = 5.7), stepped by fourth-order
+// Runge-Kutta in their own time, which is scaled so that Chaos Period is about the time between
+// the Lorenz system's lobe changes and about one turn of the Roessler spiral. The readings are
+// the coordinates scaled by the attractors' known extents and clamped -- the Roessler z climbs
+// higher now and then than the scale allows, and that is what its z is for. The time step in
+// natural units is kept below a hundredth by substepping, so the integration is the same
+// whatever the block size.
+void Engine::stepChaos(float dt)
+{
+    auto rk4 = [](double* s, double h, auto&& f) {
+        double k1[3], k2[3], k3[3], k4[3], t[3];
+        f(s, k1);
+        for (int i = 0; i < 3; ++i) t[i] = s[i] + 0.5 * h * k1[i];
+        f(t, k2);
+        for (int i = 0; i < 3; ++i) t[i] = s[i] + 0.5 * h * k2[i];
+        f(t, k3);
+        for (int i = 0; i < 3; ++i) t[i] = s[i] + h * k3[i];
+        f(t, k4);
+        for (int i = 0; i < 3; ++i) s[i] += h / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
+    };
+    auto lorenz = [](const double* s, double* d) { d[0] = 10.0 * (s[1] - s[0]); d[1] = s[0] * (28.0 - s[2]) - s[1]; d[2] = s[0] * s[1] - (8.0 / 3.0) * s[2]; };
+    auto rossler = [](const double* s, double* d) { d[0] = -s[1] - s[2]; d[1] = s[0] + 0.2 * s[1]; d[2] = 0.2 + s[2] * (s[0] - 5.7); };
+    const double period = std::max(static_cast<double>(chaosPeriod_), 1.0);
+    const double hL = static_cast<double>(dt) * 1.5 / period;    // lobe changes a few natural units apart
+    const double hR = static_cast<double>(dt) * 6.0 / period;    // one turn of the spiral is about six
+    for (double left = hL; left > 0.0; left -= 0.01) rk4(lorenz_, std::min(left, 0.01), lorenz);
+    for (double left = hR; left > 0.0; left -= 0.01) rk4(rossler_, std::min(left, 0.01), rossler);
+    chaosOut_[0] = clampv(static_cast<float>(lorenz_[0] / 20.0), -1.0f, 1.0f);
+    chaosOut_[1] = clampv(static_cast<float>(lorenz_[1] / 27.0), -1.0f, 1.0f);
+    chaosOut_[2] = clampv(static_cast<float>((lorenz_[2] - 25.0) / 22.0), -1.0f, 1.0f);
+    chaosOut_[3] = clampv(static_cast<float>(rossler_[0] / 12.0), -1.0f, 1.0f);
+    chaosOut_[4] = clampv(static_cast<float>(rossler_[1] / 12.0), -1.0f, 1.0f);
+    chaosOut_[5] = clampv(static_cast<float>((rossler_[2] - 8.0) / 12.0), -1.0f, 1.0f);
+    ++chaosSteps_;
 }
 
 // A few soft blobs on an empty torus. From the field's own random stream, so the sound's is not touched.
@@ -600,6 +644,8 @@ void Engine::readParams()
     vp_.elevFar = g(ParamId::ElevFar);
     vp_.depthLaw = g(ParamId::DepthLaw);
     vp_.nearIld = g(ParamId::NearIld);
+    vp_.oneEuro = std::lround(g(ParamId::KeysFilter)) == 1;
+    vp_.partialSpread = g(ParamId::PartialSpread);
     vp_.strikeLevel = g(ParamId::StrikeLevel);
     vp_.strikeType  = static_cast<int>(std::lround(g(ParamId::StrikeType)));
     vp_.strikeDecay = g(ParamId::StrikeDecay);
@@ -619,6 +665,7 @@ void Engine::readParams()
     comod_ = g(ParamId::FarComod);
     leniaRate_ = g(ParamId::LeniaRate);
     leniaMu_ = g(ParamId::LeniaGrowth);
+    chaosPeriod_ = g(ParamId::ChaosPeriod);
     {
         const float lo = std::max(125.0f, getParam(ParamId::BassMono));
         envCoefLo_ = 1.0f - std::exp(-kTwoPi * lo / static_cast<float>(sr_));
@@ -674,6 +721,14 @@ void Engine::readParams()
     bp2_.surprise = bp_.surprise;
     bp_.homeostat = g(ParamId::BrainHomeostat);
     bp2_.homeostat = bp_.homeostat;
+    bp_.dejavu = g(ParamId::BrainDejaVu);
+    bp2_.dejavu = bp_.dejavu;
+    bp_.loop = static_cast<int>(std::lround(g(ParamId::BrainLoop)));
+    bp2_.loop = bp_.loop;
+    bp_.spread = g(ParamId::BrainSpread);
+    bp2_.spread = bp_.spread;
+    bp_.bias = g(ParamId::BrainBias);
+    bp2_.bias = bp_.bias;
     // The spectrum is needed by the conductor's Timbre ear and by the timbre scale, and the
     // scale is read further down, so the question is asked here from the raw value.
     const bool wantTimbreScale = std::lround(getParam(ParamId::Scale)) == kTimbreScaleIndex;
@@ -884,7 +939,12 @@ void Engine::readParams()
         }
         purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
         adaptAmt_ = g(ParamId::TuneAdapt);
-        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt || adaptAmt_ > 0.0f || commaCents_ != 0.0;
+        {
+            static const double kTranspose[7] = { 0.0, 0.41503749927884381, 0.58496250072115619, 1.0, -0.41503749927884381, -0.58496250072115619, -1.0 };
+            transposeTarget_ = kTranspose[clampv(static_cast<int>(std::lround(g(ParamId::Transpose))), 0, 6)];
+        }
+        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt || adaptAmt_ > 0.0f || commaCents_ != 0.0
+               || transposeCur_ != transposeTarget_ || transposeCur_ != 0.0;
         stretchChanged_ = false;
     }
     vp_.freeze = g(ParamId::Freeze) >= 0.5f;

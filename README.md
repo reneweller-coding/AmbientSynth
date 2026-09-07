@@ -40,7 +40,9 @@ since 2013), a VST3 host if you want the plugin.
   stretch that turns a field recording into weather, ten noise colours -- and
   a **Vector** that reads the four as the corners of one square. Wavetables
   morph by **optimal transport** when asked: a formant slides through the
-  partials instead of fading across them.
+  partials instead of fading across them, and the additive bank's partials can
+  be **spread across the field one by one**. A pure fourth, fifth or octave can
+  be put on everything at once, gliding, never jumping (**Transpose**).
 * **Two filters**: ten models with a wavefolder, and a **Z-plane** morphing
   filter after the E-mu Morpheus with 155 shapes in twelve families, a cube
   rather than a square, and a modal mode that turns it into a struck body.
@@ -76,7 +78,10 @@ since 2013), a VST3 host if you want the plugin.
   clusters and silences instead of a steady average -- **Surprise** and
   **Homeostat** hold the entropy of its choices to a target, and **Adaptive**
   tunes each arriving note pure against what is sounding while a shared comma
-  offset walks the ensemble home at three cents a minute.
+  offset walks the ensemble home at three cents a minute. A **Deja Vu** ring
+  brings figures back and lets them mutate (after Marbles), and **Spread** and
+  **Bias** shape the conductor's draws from grey average to soft-or-loud,
+  short-or-long.
 * **Thirteen tunings**: twelve just and historical tables, Scala files, and one
   that is not a table at all. **Timbre (Sethares)** sweeps the instrument's own
   roughness curve across the octave while it plays and puts a degree wherever
@@ -87,7 +92,9 @@ since 2013), a VST3 host if you want the plugin.
 * **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
   macros, four coupled Kuramoto oscillators, a **Lenia** field -- a continuous
   cellular automaton whose blobs drift, split and die by their neighbours'
-  doing, read at four points -- aftertouch, wheel and slide, all through one
+  doing, read at four points -- the **Lorenz** and **Roessler** attractors on a
+  scale of minutes (chaos: a shape and a memory, never a cycle), aftertouch,
+  wheel and slide, smoothed if you like by the **one-euro filter**, all through one
   matrix onto any knob -- including the modulators' own.
 * **6800 presets in 34 packs**, each written in the spirit of an artist of
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608

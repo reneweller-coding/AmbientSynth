@@ -227,14 +227,44 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float rw = rateWander_.update(dt, 0.01f, rng_);
     const float rateMul = p.rateWander > 0.0f ? std::pow(2.0f, rw * p.rateWander) : 1.0f;
     rateMul_ = rateMul;
+    // Partial Spread: each partial of the bank gets its own place between the ears, on a
+    // pattern that turns once every fifty seconds (the golden angle between neighbours, so no
+    // two harmonically related partials sit together). Equal power per partial: the pair of
+    // weights squares to two, which is what the mono path's identical left and right add up to.
+    spreadAmt_ = clampv(p.partialSpread, 0.0f, 1.0f);
+    if (spreadAmt_ > 0.0f) {
+        spreadPhase_ += static_cast<double>(dt) * 0.02;
+        if (spreadPhase_ >= 1.0) spreadPhase_ -= 1.0;
+        for (int h = 0; h < kMaxPartials; ++h) {
+            const float w = spreadAmt_ * std::sin(static_cast<float>(h) * 2.39996f + static_cast<float>(spreadPhase_) * kTwoPi);
+            const float g = 1.0f / std::sqrt(1.0f + w * w);
+            spreadL_[h] = (1.0f + w) * g;
+            spreadR_[h] = (1.0f - w) * g;
+        }
+    }
     const float driftRate = p.driftRate * rateMul, shimmerRate = p.shimmerRate * rateMul;
 
     // Expression, smoothed towards what the controller last said (about 30 ms).
-    {
+    if (!p.oneEuro) {
         const float c = clampv(dtReal / 0.03f, 0.0f, 1.0f);
         press_ += (pressTarget_ - press_) * c;
         slide_ += (slideTarget_ - slide_) * c;
         bend_  += (bendTarget_ - bend_) * c;
+    } else {
+        // The one-euro filter (Casiez, Roussel and Vogel 2012): a one-pole whose cutoff rises
+        // with the speed of what it is filtering, so a hand at rest is smoothed hard -- one
+        // hertz or so, which takes the sensor's jitter out of a held note -- and a hand that moves
+        // is followed at once. Controllers speak in steps, not streams, so the speed is taken
+        // from how far the value still has to travel rather than from a derivative of the
+        // input, which between two messages would be zero and leave a fast gesture crawling.
+        auto euro = [dtReal](float& y, float x, float unitsPerSecond) {
+            const float fc = 0.6f + 30.0f * std::fabs(x - y) / unitsPerSecond;
+            const float a = 1.0f - std::exp(-kTwoPi * fc * dtReal);
+            y += a * (x - y);
+        };
+        euro(press_, pressTarget_, 1.0f);
+        euro(slide_, slideTarget_, 1.0f);
+        euro(bend_, bendTarget_, 12.0f);
     }
     const float bd = breath_.update(dt, p.breathRate * rateMul, rng_);
     // Pressure pulls the note towards the listener: the plane already decides brightness, level,
@@ -626,6 +656,12 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                         pc[h] = c2 * fix; ps[h] = s2 * fix;
                         amp[h] += step[h];
                     }
+                } else if (spreadAmt_ > 0.0f) {
+                    float sumL, sumR;
+                    phasorBankStepStereo(pc, ps, rc, rs, amp, step, act, spreadL_, spreadR_, sumL, sumR);
+                    accL += sumL * s.gainL;
+                    accR += sumR * s.gainR;
+                    continue;
                 } else {
                     sum = phasorBankStep(pc, ps, rc, rs, amp, step, act);
                 }

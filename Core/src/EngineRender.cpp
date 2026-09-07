@@ -130,6 +130,11 @@ void Engine::process(float* L, float* R, int n)
     stepClock(n / sr_);
     stepModulation(static_cast<float>(n / sr_));
     readParams();
+    // Transpose glides: an octave in two seconds, whichever way, and stops exactly on the ratio.
+    if (transposeCur_ != transposeTarget_) {
+        const double step = 0.5 * (n / sr_);
+        transposeCur_ += clampv(transposeTarget_ - transposeCur_, -step, step);
+    }
     // The comma's way home: the shared offset moves towards minus the mean of the sounding
     // notes' own offsets, three cents a minute, so the ensemble's centre returns to the
     // reference while every interval inside it stays pure. With nothing sounding, or the

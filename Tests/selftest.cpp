@@ -4075,6 +4075,226 @@ void testResearchBatch()
         CHECK(worstStep < 0.05f, "and never jumps: the largest move from one block to the next is a few per cent");
     }
 
+    // ---- deja vu: figures that come back --------------------------------------------------
+    {
+        auto notes = [](float dejavu) {
+            BrainParams p;
+            p.on = true; p.mode = BrainMode::Free; p.density = 3; p.rateSeconds = 1.5f;
+            p.holdMin = 0.6f; p.holdMax = 1.0f; p.low = 48; p.high = 72;
+            p.dejavu = dejavu; p.loop = 4;
+            ClusterBrain brain;
+            brain.reset(0x0DEull, 60);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            std::vector<int> out;
+            for (int step = 0; step < 60000 && out.size() < 60; ++step)
+                brain.update(0.01, p, -1, freqOf, [&](const BrainEvent& e) { if (e.type == BrainEvent::Type::NoteOn) out.push_back(e.note); });
+            return out;
+        };
+        auto repeatRate = [](const std::vector<int>& v) {
+            int same = 0, count = 0;
+            for (size_t i = 8; i < v.size(); ++i) { ++count; if (v[i] == v[i - 4]) ++same; }
+            return count > 0 ? static_cast<double>(same) / count : 0.0;
+        };
+        const std::vector<int> fresh = notes(0.0f), looped = notes(1.0f);
+        const double rFresh = repeatRate(fresh), rLoop = repeatRate(looped);
+        std::printf("  [probe] deja vu, loop of four: a note equals the one four back %.0f%% of the time fresh, %.0f%% looped\n", 100.0 * rFresh, 100.0 * rLoop);
+        CHECK(fresh.size() >= 40 && looped.size() >= 40, "the conductor produced enough notes to judge");
+        CHECK(rLoop > 0.7, "at full Deja Vu the figure of four comes round again and again");
+        CHECK(rFresh < 0.35, "and without it, it seldom does");
+    }
+
+    // ---- spread and bias: the shape of the draw ----------------------------------------------
+    {
+        auto velocities = [](float spread, float bias) {
+            BrainParams p;
+            p.on = true; p.mode = BrainMode::Free; p.density = 6; p.rateSeconds = 0.6f;
+            p.holdMin = 0.6f; p.holdMax = 1.0f; p.low = 36; p.high = 84;
+            p.spread = spread; p.bias = bias;
+            ClusterBrain brain;
+            brain.reset(0x5EEDull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            std::vector<float> v;
+            for (int step = 0; step < 200000 && v.size() < 400; ++step)
+                brain.update(0.01, p, -1, freqOf, [&](const BrainEvent& e) { if (e.type == BrainEvent::Type::NoteOn) v.push_back(e.velocity); });
+            return v;
+        };
+        auto stats = [](const std::vector<float>& v, double& mean, double& sd, double& extremes) {
+            mean = 0.0; for (float x : v) mean += x; mean /= static_cast<double>(v.size());
+            sd = 0.0; for (float x : v) sd += (x - mean) * (x - mean); sd = std::sqrt(sd / static_cast<double>(v.size()));
+            int ext = 0; for (float x : v) if (std::fabs(x - 0.7f) > 0.15f) ++ext;
+            extremes = static_cast<double>(ext) / static_cast<double>(v.size());
+        };
+        double m0, s0, e0, mN, sN, eN, mW, sW, eW, mB, sB, eB;
+        stats(velocities(0.5f, 0.0f), m0, s0, e0);
+        stats(velocities(0.0f, 0.0f), mN, sN, eN);
+        stats(velocities(1.0f, 0.0f), mW, sW, eW);
+        stats(velocities(0.5f, 0.8f), mB, sB, eB);
+        std::printf("  [probe] velocity draws: uniform mean %.3f sd %.3f; narrow sd %.3f; wide %.0f%% at the extremes; biased mean %.3f\n", m0, s0, sN, 100.0 * eW, mB);
+        CHECK(std::fabs(m0 - 0.7) < 0.03 && s0 > 0.09, "at the defaults the draw is the uniform one it always was");
+        CHECK(sN < 0.65 * s0, "Spread at 0 gathers the draw round the middle");
+        CHECK(eW > 0.6 && eW > 2.0 * e0, "Spread at 1 pushes most draws to the extremes");
+        CHECK(mB > m0 + 0.06, "and Bias moves the centre up");
+    }
+
+    // ---- the attractors ---------------------------------------------------------------------
+    {
+        auto run = [&](const char* matrix, double seconds, int which, std::vector<float>* trace) {
+            auto e = std::make_unique<Engine>();
+            e->prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e->setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e->setParam(ParamId::BrainOn, 0.0f);
+            e->setParam(ParamId::ChaosPeriod, 10.0f);
+            e->setModMatrixText(matrix);
+            e->reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < static_cast<int>(seconds * sr / 256); ++b) {
+                e->process(L.data(), R.data(), 256);
+                if (trace != nullptr) trace->push_back(e->chaosOut(which));
+            }
+            return e;
+        };
+        auto idle = run("lfo1>cutoff:0.2", 3.0, 0, nullptr);
+        CHECK(idle->chaosSteps() == 0, "a patch that reads no attractor never integrates one");
+        for (int which : { 0, 5 }) {
+            std::vector<float> tr;
+            auto live = run(which == 0 ? "lorenz_x>cutoff:0.3" : "rossler_z>far_level:0.2", 120.0, which, &tr);
+            float mean = 0.0f, worst = 0.0f, peak = 0.0f; int crossings = 0;
+            for (float v : tr) mean += v; mean /= static_cast<float>(tr.size());
+            for (size_t i = 0; i < tr.size(); ++i) { peak = std::max(peak, std::fabs(tr[i])); if (i > 0) { worst = std::max(worst, std::fabs(tr[i] - tr[i - 1])); if ((tr[i] - mean) * (tr[i - 1] - mean) < 0.0f) ++crossings; } }
+            float var = 0.0f; for (float v : tr) var += (v - mean) * (v - mean); const float sd = std::sqrt(var / static_cast<float>(tr.size()));
+            // No cycle: the best match of the second minute against any earlier shift of it.
+            const int blocksPerSec = static_cast<int>(sr / 256);
+            double bestCorr = -1.0;
+            for (int lag = 5 * blocksPerSec; lag <= 55 * blocksPerSec; lag += blocksPerSec / 2) {
+                double xy = 0.0, xx = 0.0, yy = 0.0;
+                for (size_t i = static_cast<size_t>(60 * blocksPerSec); i < tr.size(); ++i) {
+                    const double a = tr[i] - mean, b = tr[i - static_cast<size_t>(lag)] - mean;
+                    xy += a * b; xx += a * a; yy += b * b;
+                }
+                bestCorr = std::max(bestCorr, xy / std::sqrt(xx * yy + 1e-30));
+            }
+            std::printf("  [probe] %s over two minutes: peak %.2f, sd %.2f, %d crossings, largest move per block %.4f, best self-match at any lag %.2f\n",
+                        which == 0 ? "lorenz_x" : "rossler_z", peak, sd, crossings, worst, bestCorr);
+            CHECK(live->chaosSteps() > 1000 && peak <= 1.0f, "the attractor runs and its reading stays inside -1..1");
+            CHECK(sd > 0.15f && crossings >= 3, "it moves, and crosses its centre several times in two minutes");
+            CHECK(worst < 0.02f, "and never jumps");
+            // Measured honestly: the Lorenz system does not come back (0.40 at its best lag); the
+            // Roessler spiral very nearly does -- x and y circle at almost one rate and only the
+            // climb varies, 0.95 at its best lag -- and that is what it is: a spiral with a
+            // chaotic climb, not a second Lorenz. The help says so.
+            CHECK(bestCorr < (which == 0 ? 0.9 : 0.99), "and does not repeat itself exactly at any lag between five and fifty-five seconds");
+        }
+    }
+
+    // ---- the one-euro filter -------------------------------------------------------------------
+    {
+        auto pressure = [&](int filter, bool jitter, std::vector<float>* trace) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::KeysFilter, static_cast<float>(filter));
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            e.noteOn(60, 0.8f);
+            Rng jr; jr.seed(0x1E6ull);
+            for (int b = 0; b < static_cast<int>(3.0 * sr / 256); ++b) {
+                const float target = jitter ? 0.5f + 0.02f * jr.bipolar() : (b >= 40 ? 1.0f : 0.0f);
+                e.setPressure(60, target);
+                e.process(L.data(), R.data(), 256);
+                if (trace != nullptr) trace->push_back(0.5f * (e.modSource(static_cast<int>(ModSource::Pressure)) + 1.0f));   // back from bipolar
+            }
+        };
+        auto restJitter = [&](int filter) {
+            std::vector<float> tr; pressure(filter, true, &tr);
+            // The last third only: the one-euro filter settles at its rest cutoff, a quarter of a
+            // second's time constant, and its tail into the middle of the run read as jitter.
+            const size_t from = 2 * tr.size() / 3, n = tr.size() - from;
+            double mean = 0.0; for (size_t i = from; i < tr.size(); ++i) mean += tr[i]; mean /= static_cast<double>(n);
+            double var = 0.0; for (size_t i = from; i < tr.size(); ++i) var += (tr[i] - mean) * (tr[i] - mean);
+            return std::sqrt(var / static_cast<double>(n));
+        };
+        auto halfTime = [&](int filter) {
+            std::vector<float> tr; pressure(filter, false, &tr);
+            for (size_t i = 40; i < tr.size(); ++i) if (tr[i] >= 0.5f) return (static_cast<double>(i) - 40.0) * 256.0 / sr;
+            return 9.0;
+        };
+        const double jClassic = restJitter(0), jEuro = restJitter(1);
+        const double tClassic = halfTime(0), tEuro = halfTime(1);
+        std::printf("  [probe] one euro: jitter left in a held note %.4f classic, %.4f one-euro; half way to a full press in %.0f ms classic, %.0f ms one-euro\n", jClassic, jEuro, 1000.0 * tClassic, 1000.0 * tEuro);
+        CHECK(jEuro < 0.5 * jClassic, "One Euro takes most of the sensor's jitter out of a held note");
+        CHECK(tEuro < 0.06 && tClassic < 0.06, "and both follow a full press half way inside sixty milliseconds");
+    }
+
+    // ---- transposition -------------------------------------------------------------------------
+    {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.reset();
+        std::vector<float> L(256), R(256);
+        for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+        e.noteOn(60, 0.8f);
+        for (int b = 0; b < 40; ++b) e.process(L.data(), R.data(), 256);
+        const double before = e.frequencyOf(60);
+        e.setParam(ParamId::Transpose, 2.0f);   // a fifth up
+        double worstStep = 0.0, last = before;
+        for (int b = 0; b < static_cast<int>(8.0 * sr / 256); ++b) {   // the table is there in 1.2 s; the voice's own glide takes its time
+            e.process(L.data(), R.data(), 256);
+            const double f = e.frequencyOf(60);
+            worstStep = std::max(worstStep, std::fabs(1200.0 * std::log2(f / last)));
+            last = f;
+        }
+        const double cents = 1200.0 * std::log2(e.frequencyOf(60) / before / 1.5);
+        const double voiceCents = 1200.0 * std::log2(e.displayFrequency() / before / 1.5);
+        std::printf("  [probe] transpose, a fifth up: the table lands %+.2f cents from 3:2, the sounding voice %+.2f; largest step per block %.2f cents\n", cents, voiceCents, worstStep);
+        CHECK(std::fabs(cents) < 0.01, "after eight seconds the tuning sits exactly on 3:2");
+        CHECK(std::fabs(voiceCents) < 3.0, "and the sounding voice has followed it there");
+        CHECK(worstStep < 5.0, "in steps of a few cents per block, never a jump");
+    }
+
+    // ---- partial spread ------------------------------------------------------------------------
+    {
+        auto picture = [&](float spread, double& energy) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 32.0f); e.setParam(ParamId::Brightness, 1.0f); e.setParam(ParamId::Tilt, 0.3f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Spread, 0.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::Haas, 0.0f);
+            // Time Width off: at its default it gives even a centred single strand an interaural
+            // delay (measured with the render tool: width 0.88 with it, 0.04 without), which
+            // would hide what this test is about.
+            e.setParam(ParamId::Itd, 0.0f);
+            e.setParam(ParamId::PartialSpread, spread);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            e.noteOn(48, 0.8f);
+            double ll = 0.0, rr = 0.0, lr = 0.0;
+            for (int b = 0; b < 240; ++b) {
+                e.process(L.data(), R.data(), 256);
+                if (b < 100) continue;
+                for (int i = 0; i < 256; ++i) { ll += static_cast<double>(L[i]) * L[i]; rr += static_cast<double>(R[i]) * R[i]; lr += static_cast<double>(L[i]) * R[i]; }
+            }
+            energy = ll + rr;
+            return lr / std::sqrt(ll * rr + 1e-30);
+        };
+        double e0, e1;
+        const double c0 = picture(0.0f, e0), c1 = picture(1.0f, e1);
+        std::printf("  [probe] partial spread: left/right correlation %.3f -> %.3f, energy %+.2f dB\n", c0, c1, 10.0 * std::log10(e1 / e0));
+        CHECK(c0 > 0.9, "a single strand without spread is nearly the same on both sides");
+        CHECK(c1 < 0.7, "with Partial Spread the two sides decorrelate: width inside the note");
+        CHECK(std::fabs(10.0 * std::log10(e1 / e0)) < 1.0, "and the energy stays within a decibel");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

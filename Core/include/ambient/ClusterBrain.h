@@ -361,6 +361,34 @@ struct BrainParams {
     // best-fitting notes. At Homeostat 0 nothing leans and the conductor is as it always was.
     float surprise = 0.5f;
     float homeostat = 0.0f;
+    // Deja Vu and Loop: Mutable Instruments' Marbles, in the conductor. A ring of Loop places
+    // holds the last notes chosen; each new choice moves one place round it, and with
+    // probability Deja Vu the note already there is played again instead of the fresh one --
+    // which then does not overwrite it. At 1 the loop plays round and round; below it, new
+    // notes seep into the loop at a rate the knob sets, so a figure comes back and slowly
+    // mutates. A note the ring offers that is still sounding is passed over for the fresh one.
+    // 0 draws nothing from the random stream: the conductor is as it always was.
+    float dejavu = 0.0f;
+    int   loop = 8;
+    // Spread and Bias: the shape of the conductor's random draws (velocity, how long a note
+    // holds), after Marbles again. Spread at 0.5 leaves the draw uniform; towards 0 it gathers
+    // round the middle, towards 1 it is pushed to the extremes -- a bimodal draw, so notes are
+    // soft or loud and short or long, seldom in between. Bias moves the centre: positive draws
+    // higher, negative lower. Both are identities at their defaults.
+    float spread = 0.5f;
+    float bias = 0.0f;
+    // The draw, shaped. Written so that the default returns u untouched, bit for bit.
+    float shaped(float u) const
+    {
+        if (spread == 0.5f && bias == 0.0f) return u;
+        float v = u - 0.5f;
+        const float a = std::fabs(2.0f * v);
+        const float k = spread < 0.5f ? 1.0f + (0.5f - spread) * 6.0f : 1.0f / (1.0f + (spread - 0.5f) * 6.0f);
+        v = (v < 0.0f ? -0.5f : 0.5f) * std::pow(a, k);
+        float w = clampv(v + 0.5f, 0.0f, 1.0f);
+        if (bias != 0.0f) w = std::pow(w, std::pow(2.0f, -2.0f * bias));
+        return clampv(w, 0.0f, 1.0f);
+    }
     // Key: how strongly the conductor prefers the stable degrees of the key it finds itself in.
     // Nothing sets that key -- it is measured from what has actually been sounding, weighted by
     // how long, which for an instrument whose notes last minutes is the only weighting that means
@@ -427,6 +455,8 @@ public:
         wasOn_ = false;
         excite_ = 0.0;
         lastNote_ = -1;
+        for (int& r : ring_) r = -1;
+        ringPos_ = 0;
         lastLean_ = 0.0f;
         for (float& w : ic_) w = 0.0f;
     }
@@ -605,13 +635,14 @@ public:
         for (int c = low; c <= high && c < 128; ++c) { r -= weights[c]; if (r <= 0.0f && weights[c] > 0.0f) { chosen = c; break; } }
         if (chosen < 0) for (int c = high; c >= low; --c) if (weights[c] > 0.0f) { chosen = c; break; }
         if (chosen < 0) return;
+        chosen = viaDejaVu(chosen, p, -1);
 
         for (auto& s : slots_) {
             if (s.note >= 0) continue;
             const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
             s.note = chosen;
-            s.remaining = hmin + rng_.uniform() * (hmax - hmin);
-            emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, 0.5f + 0.4f * rng_.uniform() });
+            s.remaining = hmin + p.shaped(rng_.uniform()) * (hmax - hmin);
+            emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
             kick(p);
             remember(chosen);
             break;
@@ -635,9 +666,9 @@ public:
                     if (s.note >= 0) continue;
                     const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
                     s.note = next;
-                    s.remaining = hmin + rng_.uniform() * (hmax - hmin);
+                    s.remaining = hmin + p.shaped(rng_.uniform()) * (hmax - hmin);
                     s.startIn = 0.001 + rng_.uniform() * window;
-                    s.vel = 0.5f + 0.4f * rng_.uniform();
+                    s.vel = 0.5f + 0.4f * p.shaped(rng_.uniform());
                     placed = true;
                     break;
                 }
@@ -676,7 +707,7 @@ private:
             stepRequested_ = false;
             timer_ = std::max(0.5, static_cast<double>(p.rateSeconds));
             const int add = chooseNote(-1, low, high, p, freqOf);
-            if (add >= 0) { kick(p); remember(add); startIn(add, emit); }
+            if (add >= 0) { kick(p); remember(add); startIn(add, p, emit); }
             if (p.blend > 0.0f) {
                 const int missing = density - activeCount();
                 const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
@@ -690,7 +721,7 @@ private:
                         if (s.note >= 0) continue;
                         s.note = next; s.remaining = 0.0;
                         s.startIn = 0.001 + rng_.uniform() * window;
-                        s.vel = 0.5f + 0.4f * rng_.uniform();
+                        s.vel = 0.5f + 0.4f * p.shaped(rng_.uniform());
                         placed = true;
                         break;
                     }
@@ -741,6 +772,7 @@ private:
             slots_[oldest].note = was;
         }
         const int leaving = slots_[moving].note;
+        arriving = viaDejaVu(arriving, p, leaving);
         const int oldestKeep = oldest;
         (void)oldestKeep;
         if (arriving < 0 || arriving == leaving) return;
@@ -751,15 +783,15 @@ private:
         slots_[moving].remaining = 0.0;
         kick(p);
         remember(arriving);
-        emit(BrainEvent{ BrainEvent::Type::NoteOn, arriving, 0.5f + 0.4f * rng_.uniform() });
+        emit(BrainEvent{ BrainEvent::Type::NoteOn, arriving, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
     }
 
     template <class EmitFn>
-    void startIn(int note, EmitFn&& emit)
+    void startIn(int note, const BrainParams& p, EmitFn&& emit)
     {
         for (auto& s : slots_) if (s.note < 0) {
             s.note = note; s.remaining = 0.0;
-            emit(BrainEvent{ BrainEvent::Type::NoteOn, note, 0.5f + 0.4f * rng_.uniform() });
+            emit(BrainEvent{ BrainEvent::Type::NoteOn, note, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
             return;
         }
     }
@@ -928,8 +960,27 @@ private:
         return clampv(static_cast<float>((p.surprise - h) * 2.0), -1.0f, 1.0f) * p.homeostat;
     }
 
+    // The deja-vu ring. Moves one place per choice; offers what it holds with probability
+    // Deja Vu, and keeps it when it was taken. Nothing is drawn at zero.
+    int viaDejaVu(int fresh, const BrainParams& p, int avoid)
+    {
+        if (p.dejavu <= 0.0f || fresh < 0) return fresh;
+        const int len = clampv(p.loop, 1, kRing);
+        ringPos_ = (ringPos_ + 1) % len;
+        int out = fresh;
+        if (ring_[ringPos_] >= 0 && rng_.uniform() < p.dejavu) {
+            const int old = ring_[ringPos_];
+            if (old != avoid && !sounding(old)) out = old;
+        }
+        ring_[ringPos_] = out;
+        return out;
+    }
+
     Slot   slots_[kSlots];
     mutable Rng rng_;
+    static constexpr int kRing = 16;
+    int    ring_[kRing] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    int    ringPos_ = 0;
     double excite_ = 0.0;         // Cascade: the rate's excitation, in multiples of the base rate
     float  ic_[12] = {};          // Homeostat: fading histogram of chosen interval classes
     int    lastNote_ = -1;

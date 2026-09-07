@@ -22,6 +22,26 @@
 
 namespace ambient {
 
+// The same step with a left and a right weight per partial: two sums instead of one, for the
+// bank whose partials are spread across the field one by one. Scalar; the spread is a choice,
+// and the vectorised path above stays exactly as it was for everything that does not make it.
+inline void phasorBankStepStereo(float* pc, float* ps, const float* rc, const float* rs,
+                                 float* amp, const float* step, int n,
+                                 const float* wL, const float* wR, float& outL, float& outR)
+{
+    float sumL = 0.0f, sumR = 0.0f;
+    for (int h = 0; h < n; ++h) {
+        const float v = amp[h] * ps[h];
+        sumL += v * wL[h];
+        sumR += v * wR[h];
+        const float nc = pc[h] * rc[h] - ps[h] * rs[h];
+        ps[h] = ps[h] * rc[h] + pc[h] * rs[h];
+        pc[h] = nc;
+        amp[h] += step[h];
+    }
+    outL = sumL; outR = sumR;
+}
+
 // One sample of a phasor bank: turns every phasor by its own rotation, sums amp*sin, and steps
 // the amplitudes. Returns the sum. `n` may be anything from 0 to the array length.
 inline float phasorBankStep(float* pc, float* ps, const float* rc, const float* rs,

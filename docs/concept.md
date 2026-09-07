@@ -1727,6 +1727,41 @@ near-field test is about; the engine sleeps without a voice, so a Foundation
 test needs a silent note to stay awake; the feedback loop throttles itself off
 above a mean level of 0.1, so a loop test must play quietly.
 
+## The seventh round
+
+A second survey, of instruments rather than papers (Osmose/EaganMatrix, SOMA
+Terra, Waldorf Iridium, Madrona Sumu, Borderlands, Surge XT, Mutable Marbles,
+RAVE, FluCoMa, Ambisonics). Six things built, each with a selftest; the rest
+either already existed under another name (bandwidth-enhanced partials = the
+Spectral source; MPE; Scala/KBM; gesture recording = Sets; a 2D surface = the
+map; per-voice microfluctuation; `inertia`) or was declined (Lua in the audio
+thread, a 16-channel HOA bus on a headphone instrument, corpus navigation as a
+project of its own, and the neural/port-Hamiltonian proposals again).
+
+*Deja Vu / Loop* -- Marbles' ring in the conductor (`viaDejaVu`): each choice
+moves one place; with probability Deja Vu the note already there is replayed
+and kept, else the fresh one overwrites it; a ring note still sounding is passed
+over. Loop of four at full: a note equals the one four back 100 % of the time
+(29 % without). *Spread / Bias* -- `BrainParams::shaped()` on every velocity
+and hold draw: |2v|^k with k from 4 (gather) to 1/4 (push to the extremes),
+then a power for bias; identity at the defaults, bit for bit. At full Spread
+62 % of velocities sit more than 0.15 from the centre; Bias 0.8 moves the mean
+0.70 -> 0.80. *lorenz_x/y/z, rossler_x/y/z* -- RK4 in natural time scaled by
+`chaos_period`, substeps of 0.01, integrated only while a route reads one
+(`chaosUsed_`), readings clamped to the attractors' extents. Over two minutes at
+period 10 s: Lorenz best self-match at any 5-55 s lag 0.40, Roessler 0.95 --
+the spiral is nearly a cycle, only its climb varies; documented as such.
+*MPE Filter: One Euro* -- cutoff 0.6 + 30 |x - y| Hz per unit of range; the
+speed is read from the distance left to travel because controllers send steps
+and a derivative between messages is zero. *Transpose* -- a pure 4:3, 3:2 or
+2:1 either way in `frequencyOf`, glided in log2 at an octave per two seconds,
+`retune_` set while it moves; lands within 0.01 cent, the voice follows at its
+own glide (8 s to within 3 cents). *Partial Spread* -- `phasorBankStepStereo`:
+per-partial equal-power weights on a golden-angle pattern turning at 0.02 Hz;
+a single strand's L/R correlation drops from ~0.96 to below 0.7 at unchanged
+energy (+0.06 dB). Found on the way: Time Width at its default gives even a
+centred single strand an interaural delay (render tool: width 0.88 vs 0.04).
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

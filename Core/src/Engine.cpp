@@ -357,6 +357,8 @@ double Engine::frequencyOf(int note) const
     // scaled by the amount so that the knob glides everything home rather than switching it.
     if (adaptAmt_ > 0.0f && note >= 0 && note < 128)
         f *= std::pow(2.0, static_cast<double>(adaptAmt_) * (static_cast<double>(adaptCents_[note]) + commaCents_) / 1200.0);
+    // Transpose: the pure interval, applied to everything at once so every ratio inside is kept.
+    if (transposeCur_ != 0.0) f *= std::pow(2.0, transposeCur_);
     // The stretched octave. Listeners prefer octaves a little wider than 2:1 -- ten to twenty
     // cents at the extremes of the range (Ward 1954; Terhardt) -- and a piano is tuned that
     // way (the Railsback curve). Every octave away from the reference pitch is widened by

@@ -503,8 +503,13 @@ int main(int argc, char** argv)
         // The engine's own meter, which has seen every sample of the render rather than a window
         // of it. Its own line, so nothing that parses the measure line has to learn a new field.
         const LoudnessReading ld = engine.loudness();
-        std::printf("loudness: lufs_i=%.2f lufs_s=%.2f lufs_m=%.2f lra=%.2f truepeak=%.2f crest=%.2f seconds=%.1f\n",
-                    ld.integrated, ld.shortTerm, ld.momentary, ld.range, ld.truePeak, ld.crest, ld.seconds);
+        // Sones as well as LUFS. The two disagree whenever the spectrum changes, which for an
+        // instrument that makes beds rather than tracks is most of the time, and the sone figure
+        // is the one that says whether a preset will feel loud after an hour of it.
+        std::printf("loudness: lufs_i=%.2f lufs_s=%.2f lufs_m=%.2f lra=%.2f truepeak=%.2f crest=%.2f"
+                    " sone=%.2f sone_n5=%.2f sone_max=%.2f seconds=%.1f\n",
+                    ld.integrated, ld.shortTerm, ld.momentary, ld.range, ld.truePeak, ld.crest,
+                    ld.sones, ld.sonesN5, ld.sonesMax, ld.seconds);
     }
     if (measure) {   // descriptors straight from the buffer: no temporary file at all
         std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);

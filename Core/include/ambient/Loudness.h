@@ -18,6 +18,16 @@
 namespace ambient {
 
 struct LoudnessReading {
+    // Loudness in sones, which is a different question from LUFS and the one an ambient bed is
+    // actually asked. LUFS is energy through one fixed weighting curve; sones are how loud the
+    // ear says it is, and the two part company as soon as the spectrum changes. Loudness grows
+    // with BANDWIDTH once the sound is wider than a critical band, so a broadband bed and a
+    // narrow low drone at the same LUFS can differ by a factor of two in sones -- and for a piece
+    // that has to sit at a comfortable level for an hour, the sone figure is the one that says
+    // whether it will.
+    float sones      = 0.0f;      // now, after Zwicker
+    float sonesN5    = 0.0f;      // exceeded five per cent of the time, since the last reset
+    float sonesMax   = 0.0f;      // the loudest it has been
     float momentary  = -120.0f;   // LUFS over the last 400 ms
     float shortTerm  = -120.0f;   // LUFS over the last 3 s
     float integrated = -120.0f;   // LUFS, gated, since the last reset
@@ -51,6 +61,56 @@ private:
     Biquad shelf_, hp_;
 };
 
+// Loudness in sones, after Zwicker (Zwicker and Fastl, Psychoacoustics, 3rd ed.; the model
+// standardised as ISO 532-1).
+//
+// The chain is the one the standard describes. A third-octave analysis gives the level in each
+// band; each band's energy is spread along the critical-band rate with the two slopes of a
+// masking pattern -- steep towards lower frequencies, and towards higher ones a slope that gets
+// shallower the louder the sound is, which is why a loud low tone masks upwards so far; the
+// spread energies are summed to an excitation pattern; each point of that pattern is turned into
+// a specific loudness by Zwicker's compressive law against the threshold in quiet; and the
+// specific loudness is integrated over the whole twenty-four Bark.
+//
+// The threshold in quiet is computed rather than tabulated, from Terhardt's approximation, so it
+// is right at every band centre instead of only at the ones a table happens to list.
+//
+// One convention has to be fixed and named, because sones are absolute and a digital signal is
+// not: full scale here is 100 dB SPL. A piece measuring -23 LUFS is then heard at 77 dB, which is
+// about a loud living room, and that is the level the figures below describe.
+class ZwickerLoudness {
+public:
+    static constexpr int kBands = 28;      // third octaves, 25 Hz to 12.5 kHz
+    static constexpr int kSteps = 240;     // 0.1 Bark apart, 0 to 24
+    static constexpr float kFullScaleSpl = 100.0f;
+
+    void prepare(double sampleRate);
+    void reset();
+    void process(const float* L, const float* R, int n);
+    float sones() const { return now_; }
+    float sonesMax() const { return max_; }
+    float sonesN5() const;                 // exceeded five per cent of the time
+
+    // The model on its own, for tests and for offline use: third-octave levels in dB SPL in,
+    // loudness in sones out.
+    static float fromBandLevels(const float* levelsDb);
+    static float thresholdInQuiet(float hz);
+    // Before the scale is pinned to the sone's own definition. Public only so that the pinning
+    // below can be read and checked rather than believed.
+    static float rawLoudness(const float* levelsDb);
+
+private:
+    void frame();
+
+    double sr_ = 48000.0;
+    static constexpr int kN = 8192, kHop = 2048;
+    std::vector<float> ring_, re_, im_, window_;
+    int   pos_ = 0, filled_ = 0;
+    int   binLo_[kBands] = {}, binHi_[kBands] = {};
+    float now_ = 0.0f, max_ = 0.0f;
+    std::vector<float> history_;           // one value per frame, for the fifth centile
+};
+
 class LoudnessMeter {
 public:
     void prepare(double sampleRate);
@@ -63,6 +123,7 @@ private:
 
     double sr_ = 48000.0;
     KFilter kL_, kR_;
+    ZwickerLoudness zwicker_;
     // One 400 ms block, taken every 100 ms: the 75 % overlap the standard's gating is defined on.
     int    blockLen_ = 19200, hopLen_ = 4800, hopPos_ = 0;
     std::vector<double> sumL_, sumR_;   // ring of per-hop mean squares, four hops to a block

@@ -3518,6 +3518,74 @@ void testResearchBatch()
         CHECK(!quiet.active(), "at level 0 the room is not computed at all");
     }
 
+    // ---- loudness in sones ------------------------------------------------------------------
+    {
+        // The model is checked against the anchors that DEFINE the sone, not against itself. A
+        // one-kilohertz tone at 40 dB SPL is one sone by definition; ten decibels more is twice as
+        // loud, so 50 dB is two sones and 60 dB is four. And loudness grows with bandwidth once a
+        // sound is wider than a critical band, which is the whole reason this figure is worth
+        // having beside LUFS: noise spread over many bands is louder than a tone of the same
+        // energy, and no energy meter will ever say so.
+        auto tone = [](float hz, float spl) {
+            float bands[ZwickerLoudness::kBands];
+            const float centres[ZwickerLoudness::kBands] = {
+                25.0f, 31.5f, 40.0f, 50.0f, 63.0f, 80.0f, 100.0f, 125.0f, 160.0f, 200.0f,
+                250.0f, 315.0f, 400.0f, 500.0f, 630.0f, 800.0f, 1000.0f, 1250.0f, 1600.0f, 2000.0f,
+                2500.0f, 3150.0f, 4000.0f, 5000.0f, 6300.0f, 8000.0f, 10000.0f, 12500.0f };
+            int best = 0; float d = 1e9f;
+            for (int b = 0; b < ZwickerLoudness::kBands; ++b)
+                if (std::fabs(centres[b] - hz) < d) { d = std::fabs(centres[b] - hz); best = b; }
+            for (int b = 0; b < ZwickerLoudness::kBands; ++b) bands[b] = -100.0f;
+            bands[best] = spl;
+            return ZwickerLoudness::fromBandLevels(bands);
+        };
+        const float s40 = tone(1000.0f, 40.0f), s50 = tone(1000.0f, 50.0f), s60 = tone(1000.0f, 60.0f);
+        std::printf("  [probe] 1 kHz: 40 dB %.2f sone, 50 dB %.2f, 60 dB %.2f (doubling %.2f, %.2f)\n",
+                    s40, s50, s60, s50 / std::max(1e-6f, s40), s60 / std::max(1e-6f, s50));
+        // The 40 dB point is pinned there -- it is the definition of the unit -- so this check
+        // only proves the pinning is wired up. Everything after it is the model's own answer.
+        CHECK(std::fabs(s40 - 1.0f) < 0.02f, "a kilohertz tone at 40 dB is one sone by definition");
+        CHECK(s50 / s40 > 1.8f && s50 / s40 < 2.3f, "and ten decibels more is twice as loud");
+        CHECK(s60 / s50 > 1.8f && s60 / s50 < 2.3f, "and ten more again");
+        CHECK(s60 > 3.4f && s60 < 4.8f, "which puts 60 dB at the four sones the standard says");
+        // Under the threshold in quiet nothing is heard at all.
+        CHECK(tone(1000.0f, -10.0f) < 0.01f, "nothing under the threshold in quiet is heard");
+        // Bandwidth: the same total energy in one band and spread over ten.
+        {
+            float narrow[ZwickerLoudness::kBands], wide[ZwickerLoudness::kBands];
+            for (int b = 0; b < ZwickerLoudness::kBands; ++b) { narrow[b] = -100.0f; wide[b] = -100.0f; }
+            narrow[16] = 60.0f;                                  // all of it at 1 kHz
+            for (int b = 12; b < 22; ++b) wide[b] = 50.0f;        // the same energy over ten bands
+            const float sn = ZwickerLoudness::fromBandLevels(narrow), sw = ZwickerLoudness::fromBandLevels(wide);
+            std::printf("  [probe] same energy: one band %.2f sone, ten bands %.2f sone\n", sn, sw);
+            CHECK(sw > sn * 1.3f, "the same energy spread over many bands is louder than in one");
+        }
+        // And through the meter itself, on a rendered signal rather than on a table of levels.
+        {
+            LoudnessMeter m;
+            const int sr2 = 48000;
+            m.prepare(sr2);
+            std::vector<float> L(sr2), R(sr2);
+            // A kilohertz sine at -60 dBFS, which against a full scale of 100 dB SPL is 40 dB.
+            const float amp = std::pow(10.0f, -60.0f / 20.0f) * std::sqrt(2.0f);
+            for (int i = 0; i < sr2; ++i)
+                L[static_cast<size_t>(i)] = R[static_cast<size_t>(i)] = amp * std::sin(6.2831853f * 1000.0f * static_cast<float>(i) / sr2);
+            for (int off = 0; off + 256 <= sr2; off += 256) m.process(L.data() + off, R.data() + off, 256);
+            const LoudnessReading r = m.read();
+            std::printf("  [probe] meter: %.2f sone now, %.2f max, %.2f N5, %.1f LUFS short\n",
+                        r.sones, r.sonesMax, r.sonesN5, r.shortTerm);
+            CHECK(r.sones > 0.7f && r.sones < 1.5f, "the meter itself reads one sone for that tone");
+            CHECK(r.sonesMax >= r.sones - 0.01f, "the maximum is not below the current value");
+        }
+        {   // Silence is nothing, and a reset clears it.
+            LoudnessMeter m;
+            m.prepare(48000.0);
+            std::vector<float> z(48000, 0.0f);
+            for (int off = 0; off + 256 <= 48000; off += 256) m.process(z.data() + off, z.data() + off, 256);
+            CHECK(m.read().sones < 0.001f, "silence is nothing at all");
+        }
+    }
+
     // ---- the spectral model -----------------------------------------------------------------
     {
         // A clip with a tonal half and a noisy half, so the analysis has both to find: two seconds

@@ -626,10 +626,14 @@ void AmbientSynthEditor::LoudnessView::paint(juce::Graphics& g)
 
     g.setFont(ui::body(9.5f));
     auto num = [](float v) { return v > -119.0f ? juce::String(v, 1) : juce::String("--"); };
+    // The sone figure sits with the rest of them because it answers a different question: LUFS is
+    // energy, sones are how loud the ear calls it, and a wide bed and a narrow drone at the same
+    // LUFS can be a factor of two apart.
     const juce::String text = "I " + num(ld.integrated) + "   S " + num(ld.shortTerm)
                             + "   LRA " + juce::String(ld.range, 1)
                             + "   TP " + num(ld.truePeak)
-                            + "   crest " + juce::String(ld.crest, 1);
+                            + "   crest " + juce::String(ld.crest, 1)
+                            + "   " + juce::String(ld.sones, 1) + " sone";
     // Red when the true peak is over the -1 dBTP a lossy codec needs as headroom, amber when the
     // crest factor has fallen under the 14 dB that says the dynamics are still there.
     const bool tpHot = ld.truePeak > -1.0f;

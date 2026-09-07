@@ -19,14 +19,15 @@ against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 ## Download
 
-**[AmbientSynth-1.0.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-1.0.0-Setup.exe)**
-(13 MB) -- installs the standalone, the VST3, the preset library and, with your
+**[AmbientSynth-1.1.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.1.0/AmbientSynth-1.1.0-Setup.exe)**
+(14 MB) -- installs the standalone, the VST3, the preset library and, with your
 consent, downloads the 6 GB sample library. Nothing else has to be installed:
-the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-1.0.0-portable.zip)**
-(14 MB) for anyone who would rather not run an installer, and the
-**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.0.0/AmbientSynth-Manual.pdf)**
-(PDF, 97 pages) -- every tab of the panel as a picture, with what it does and
-what its knobs mean. Everything is on the
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.1.0/AmbientSynth-1.1.0-portable.zip)**
+(15 MB) for anyone who would rather not run an installer, and the
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.1.0/AmbientSynth-Manual.pdf)**
+(PDF, 138 pages) -- every tab of the panel as a picture, with what it does and
+what its knobs mean, and seven Design chapters on why the instrument is built
+the way it is. Everything is on the
 [releases page](https://github.com/reneweller-coding/AmbientSynth/releases).
 
 Requirements: Windows 10 or 11, a 64-bit processor with AVX2 (every x86-64
@@ -108,7 +109,7 @@ powershell -File Deploy\build_release.ps1
 ```
 
 Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<version>-Setup.exe`**
-(13 MB) and a portable **`.zip`** (14 MB) for anyone who would rather not run an installer.
+(14 MB) and a portable **`.zip`** (15 MB) for anyone who would rather not run an installer.
 
 Nothing has to be installed first. The runtime is linked in
 (`-DAMBIENT_STATIC_RUNTIME=ON`), so there is no Visual C++ redistributable to chase — the script

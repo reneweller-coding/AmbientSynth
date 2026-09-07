@@ -547,8 +547,10 @@ private:
     struct CoherenceView : juce::Component, juce::Timer {
         explicit CoherenceView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(10); }
         void paint(juce::Graphics&) override;
-        void timerCallback() override { if (isShowing()) repaint(); }
+        void timerCallback() override;
         AmbientSynthProcessor& proc;
+        // Where the two attractors have been: the last forty seconds of their x/y, drawn as orbits.
+        std::vector<juce::Point<float>> lorenzTrail, rosslerTrail;
     };
     std::unique_ptr<CoherenceView> coherenceView_;
     // The Cosmos return's spectrum: what the shifter, the resonator, the vowel and the nebula are

@@ -2152,7 +2152,17 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   the first draft cut "40 min" to "40 mi"). Declined from that report, with reasons in the
   manual: the three-zone rebuild, the isometric stage with grabbable voices, a 3D filter cube,
   a second preset explorer. `AMBIENT_SHOT=<png>` writes a picture of the whole editor after ten
-  seconds of a chord, for looking at the panel without a screen grab.
+  seconds of a chord, for looking at the panel without a screen grab (a screen grab takes
+  whatever else is on the screen, and did). From the reply to that reply, four more small
+  things: the header names the conductor's key and confidence and glows with the cascade's
+  excitation; the notes roll shows the deja-vu ring (place lit), the cascade as a glow at its
+  newest edge and the homeostat's lean as a needle; the Coherence display draws the attractors'
+  x/y orbits from the last forty seconds; and with Arc Clock on the Arc knob's halo becomes a
+  24-hour dial with marks at 4, 10, 16 and 22 (`clockHour` property). Declined from it: tying
+  the Expanded layout to a pixel height (the editor scales as a whole, and a reflow at a
+  threshold is exactly the surprise calm technology forbids -- it stays a mode), component
+  encapsulation for its own sake, and the three-zone phase, whose dock, drawer and soundstage
+  are the strip, its tabs and the Perform page under other names.
   Help (`Core/include/ambient/Help.h`): one or two sentences for every
   parameter (`paramHelp`, families share their text so the three slots and
   eight LFOs cannot drift apart; the self test insists every parameter has

@@ -133,6 +133,26 @@ void AmbientLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
     }
     // A slow process's own state -- where the arc or the tide stands in its swing -- as a dot on
     // the outer ring, from one end of the knob's travel (-1) to the other (+1).
+    if (s.getProperties().contains("clockHour")) {
+        // The day as a dial round the knob: midnight at the top, the hour as a dot, and faint
+        // marks at four, ten, sixteen and twenty-two -- the bottom, the crossings and the top of
+        // the arc that follows the clock.
+        const float outer = ringR + thick * 0.5f + 2.0f;
+        const float hour = static_cast<float>(s.getProperties().getWithDefault("clockHour", 0.0));
+        g.setColour(ui::track.withAlpha(0.8f));
+        g.drawEllipse(c.x - outer, c.y - outer, 2.0f * outer, 2.0f * outer, 1.0f);
+        for (float h : { 4.0f, 10.0f, 16.0f, 22.0f }) {
+            const float a = juce::MathConstants<float>::twoPi * h / 24.0f;
+            const juce::Point<float> p0(c.x + (outer - 2.5f) * std::sin(a), c.y - (outer - 2.5f) * std::cos(a));
+            const juce::Point<float> p1(c.x + (outer + 2.5f) * std::sin(a), c.y - (outer + 2.5f) * std::cos(a));
+            g.setColour(ui::live.withAlpha(h == 4.0f || h == 16.0f ? 0.8f : 0.4f));
+            g.drawLine(p0.x, p0.y, p1.x, p1.y, 1.2f);
+        }
+        const float a = juce::MathConstants<float>::twoPi * hour / 24.0f;
+        const juce::Point<float> p(c.x + outer * std::sin(a), c.y - outer * std::cos(a));
+        g.setColour(ui::live.withAlpha(0.35f)); g.fillEllipse(p.x - 4.0f, p.y - 4.0f, 8.0f, 8.0f);
+        g.setColour(ui::live); g.fillEllipse(p.x - 2.0f, p.y - 2.0f, 4.0f, 4.0f);
+    }
     if (s.getProperties().contains("halo")) {
         const float h = juce::jlimit(-1.0f, 1.0f, static_cast<float>(s.getProperties().getWithDefault("halo", 0.0)));
         const float a = startAngle + (0.5f + 0.5f * h) * (endAngle - startAngle);

@@ -335,6 +335,20 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                 exportManual(juce::File(man), [] { juce::JUCEApplicationBase::quit(); });
             });
         }
+        // AMBIENT_SET=key=value;key=value and AMBIENT_MATRIX=<routes>: parameters and routes for a
+        // run, on top of the preset -- so a picture can show a state no preset has.
+        {
+            for (const auto& kv : juce::StringArray::fromTokens(juce::SystemStats::getEnvironmentVariable("AMBIENT_SET", ""), ";", "")) {
+                const int eq = kv.indexOfChar('=');
+                if (eq <= 0) continue;
+                if (auto* p = proc_.apvts.getParameter(kv.substring(0, eq).trim())) {
+                    if (auto* d = ambient::findParam(kv.substring(0, eq).trim().toRawUTF8()))
+                        p->setValueNotifyingHost(p->convertTo0to1(ambient::paramValueFromText(*d, kv.substring(eq + 1).trim().toRawUTF8())));
+                }
+            }
+            const juce::String mx = juce::SystemStats::getEnvironmentVariable("AMBIENT_MATRIX", "");
+            if (mx.isNotEmpty()) proc_.engine().setModMatrixText(mx.toRawUTF8());
+        }
         // AMBIENT_SHOT=<file.png>: a picture of the whole editor as it stands -- the layout mode,
         // the open tabs, the live displays -- ten seconds after a chord, then quit. The dev aid for
         // looking at the panel without a screen grab, which takes whatever else is on the screen.
@@ -1889,7 +1903,12 @@ void AmbientSynthEditor::timerCallback()
                 remP("modColour"); remP("modOffset");
                 if (std::fabs(off) > 1.0e-4f) setP("liveOffset", static_cast<double>(off)); else remP("liveOffset");
             }
-            if (id == ParamId::ArcAmount) setP("halo", static_cast<double>(proc_.engine().arcNow()));
+            if (id == ParamId::ArcAmount) {
+                // Following the clock, the knob wears a dial: the hour on a full circle, with the
+                // turning points of the day marked. Drifting, a dot for where the swing stands.
+                if (proc_.engine().arcClockOn()) { setP("clockHour", proc_.engine().clockHour()); remP("halo"); }
+                else { setP("halo", static_cast<double>(proc_.engine().arcNow())); remP("clockHour"); }
+            }
             else if (id == ParamId::Tide) setP("halo", static_cast<double>(juce::jlimit(-1.0f, 1.0f, proc_.engine().tideNow() / juce::jmax(1.0f, raw))));
             if (changed) sl->repaint();
         }
@@ -2227,10 +2246,16 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
         g.fillRect(kx + 0.5f, static_cast<float>(keys_.getY()), keyW - 1.0f, static_cast<float>(keys_.getHeight()));
     }
     const int voices = proc_.engine().activeVoices();
+    juce::String keyText;
+    {   // what the conductor has found itself in, when it has found anything
+        const ambient::KeyEstimate key = proc_.engine().brainKey();
+        if (key.key >= 0 && key.confidence > 0.0f)
+            keyText = "   key " + juce::MidiMessage::getMidiNoteName(key.tonic(), true, false, 0) + (key.minor() ? " minor" : " major") + " r " + juce::String(key.confidence, 2);
+    }
     juce::String info = juce::String(voices) + " voice" + (voices == 1 ? "" : "s")
         + "   root " + juce::MidiMessage::getMidiNoteName(root, true, true, 4)
         + "   " + juce::String(proc_.engine().scale().name)
-        + "   arc " + juce::String(proc_.engine().arcValue(), 2)
+        + "   arc " + juce::String(proc_.engine().arcValue(), 2) + keyText
         + "   " + juce::String(proc_.engine().tempo(), 1) + " bpm  bar " + juce::String(1 + static_cast<int>(std::floor(proc_.engine().beatPosition() / 4.0)))
         + (proc_.engine().clockRunning() ? "" : " (stopped)");
     if (proc_.userScaleName().isNotEmpty()) info += "   (user: " + proc_.userScaleName() + ")";
@@ -2245,6 +2270,18 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     g.setColour(kDim);
     g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain)));   // figures that do not jump
     g.drawText(info, 14, header_.getBottom() - 16, designW_ - 420, 14, juce::Justification::centredLeft);
+    {   // The cascade's aura: a soft glow after the line that brightens with each event the
+        // conductor's clock breeds and fades as the excitation does -- the Hawkes process, seen.
+        const float ex = proc_.engine().brainExcitation();
+        if (ex > 0.02f) {
+            const float a = juce::jlimit(0.0f, 1.0f, ex / 1.6f);
+            const int x = 14 + juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), info) + 12;
+            const float cy = static_cast<float>(header_.getBottom() - 9);
+            g.setColour(ui::live.withAlpha(0.25f * a)); g.fillEllipse(x - 8.0f, cy - 8.0f, 16.0f, 16.0f);
+            g.setColour(ui::live.withAlpha(0.9f * a)); g.fillEllipse(x - 3.0f, cy - 3.0f, 6.0f, 6.0f);
+            g.setColour(kDim.withAlpha(0.5f + 0.5f * a)); g.drawText("cascade", x + 12, header_.getBottom() - 16, 60, 14, juce::Justification::centredLeft);
+        }
+    }
 
     if (proc_.isRecording()) {
         g.setColour(juce::Colour(0xffe05050));

@@ -252,6 +252,8 @@ public:
     int    brainRingNote(int i) const { return brain_.ringNote(i); }
     int    brainRingPos() const { return brain_.ringPos(); }
     float  brainExcitation() const { return static_cast<float>(brain_.excitation()); }
+    bool   arcClockOn() const { return arcClock_; }
+    double clockHour() const { return clockHour_; }
     // The offset, in cents, that tunes `note` pure against what is sounding now (0 if nothing is).
     float  adaptiveOffset(int note) const;
     // What Match would make of partial h (1-based) against the current scale: the ratio to f0.

@@ -352,7 +352,10 @@ remove routes, and the LFO / ENVELOPES / MATRIX tabs edit the sources. A knob
 shows what is moving it: the matrix as a ring in its source's colour, the
 morph or the map's blend as a neutral arc from the knob's value to the live
 one, and the arc and the tide as a dot on the outer ring that says where in
-their slow swing they are. Every section title carries a die (click to redraw that
+their slow swing they are -- with Arc Clock on, the Arc knob wears a dial of the
+day. The header names the key the conductor has found and glows with each event
+its cascade breeds; the notes roll shows the deja-vu ring, the cascade's glow and
+the homeostat's needle; the attractors draw their orbits. Every section title carries a die (click to redraw that
 section, shift to nudge it); Undo, Redo and A|B work on whole snapshots; the header shows the
 output's spectrum. Three layouts, one button: Normal (one page, tabs), Compact (the widest
 rows wrap, for a narrower window) and Expanded (every page of every tab row under one another

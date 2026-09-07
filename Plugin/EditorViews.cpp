@@ -52,6 +52,49 @@ void AmbientSynthEditor::BrainView::paint(juce::Graphics& g)
     g.setFont(ui::body(9.5f));
     g.drawText(juce::MidiMessage::getMidiNoteName(lo, true, true, 4), plot.getX(), plot.getBottom() - 12.0f, 40.0f, 12.0f, juce::Justification::left);
     g.drawText(juce::MidiMessage::getMidiNoteName(lo + span, true, true, 4), plot.getX(), plot.getY(), 40.0f, 12.0f, juce::Justification::left);
+    // The cascade's aura at the newest edge: the excitation the clock is running on, as a glow
+    // that each event lifts and the seconds let down.
+    {
+        const float ex = juce::jlimit(0.0f, 1.0f, proc.engine().brainExcitation() / 1.6f);
+        if (ex > 0.02f) {
+            juce::ColourGradient glow(ui::live.withAlpha(0.0f), plot.getRight() - 60.0f, 0.0f, ui::live.withAlpha(0.35f * ex), plot.getRight(), 0.0f, false);
+            g.setGradientFill(glow);
+            g.fillRect(plot.withLeft(plot.getRight() - 60.0f));
+        }
+    }
+    // The deja-vu ring, when it is in use: the loop's places as note names, the place the ring
+    // stands on lit. A figure that is coming back can be read off before it is heard.
+    if (rawParam(proc, "brain_dejavu") > 0.0f) {
+        const int len = juce::jlimit(1, 16, static_cast<int>(std::lround(rawParam(proc, "brain_loop"))));
+        const int pos = proc.engine().brainRingPos();
+        const float cw = 26.0f;
+        float x = r.getRight() - 8.0f - cw * len;
+        g.setFont(ui::body(9.0f));
+        g.setColour(ui::dim);
+        g.drawText("deja vu", x - 46.0f, r.getY() + 4.0f, 44.0f, 12.0f, juce::Justification::centredRight);
+        for (int i = 0; i < len; ++i, x += cw) {
+            const int n = proc.engine().brainRingNote(i);
+            const bool here = i == pos;
+            g.setColour(here ? ui::live.withAlpha(0.35f) : ui::card.brighter(0.08f));
+            g.fillRoundedRectangle(x, r.getY() + 3.0f, cw - 3.0f, 14.0f, 3.0f);
+            g.setColour(here ? ui::text : ui::dim);
+            g.drawText(n >= 0 ? juce::MidiMessage::getMidiNoteName(n, true, true, 4) : juce::String(juce::CharPointer_UTF8("\xc2\xb7")),
+                       juce::roundToInt(x), juce::roundToInt(r.getY()) + 3, juce::roundToInt(cw) - 3, 14, juce::Justification::centred, false);
+        }
+    }
+    // The homeostat's needle, when it is steering: where the lean stands between "more
+    // predictable" and "more surprising" than the aim.
+    if (rawParam(proc, "brain_homeostat") > 0.0f) {
+        const float lean = juce::jlimit(-1.0f, 1.0f, proc.engine().brainLean());
+        const float w = 90.0f, x0 = plot.getRight() - w - 52.0f, y = plot.getBottom() - 8.0f;   // room for the right label
+        g.setColour(ui::track); g.drawLine(x0, y, x0 + w, y, 1.0f);
+        g.setColour(ui::faint); g.drawLine(x0 + w * 0.5f, y - 3.0f, x0 + w * 0.5f, y + 3.0f, 1.0f);
+        const float nx = x0 + w * 0.5f * (1.0f + lean);
+        g.setColour(ui::live); g.fillEllipse(nx - 2.5f, y - 2.5f, 5.0f, 5.0f);
+        g.setColour(ui::dim); g.setFont(ui::body(8.5f));
+        g.drawText("steady", x0 - 40.0f, y - 6.0f, 38.0f, 12.0f, juce::Justification::centredRight, false);
+        g.drawText("surprise", x0 + w + 2.0f, y - 6.0f, 44.0f, 12.0f, juce::Justification::centredLeft, false);
+    }
 }
 
 // ---------------------------------------------------------------- stage
@@ -244,6 +287,18 @@ void AmbientSynthEditor::TuningView::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------- coherence
 
+void AmbientSynthEditor::CoherenceView::timerCallback()
+{
+    if (!isShowing()) return;
+    if (proc.engine().chaosSteps() > 0) {
+        lorenzTrail.push_back({ proc.engine().chaosOut(0), proc.engine().chaosOut(1) });
+        rosslerTrail.push_back({ proc.engine().chaosOut(3), proc.engine().chaosOut(4) });
+        if (lorenzTrail.size() > 400) lorenzTrail.erase(lorenzTrail.begin());
+        if (rosslerTrail.size() > 400) rosslerTrail.erase(rosslerTrail.begin());
+    }
+    repaint();
+}
+
 void AmbientSynthEditor::CoherenceView::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds();
@@ -287,13 +342,37 @@ void AmbientSynthEditor::CoherenceView::paint(juce::Graphics& g)
         g.setColour(ui::dim); g.setFont(ui::body(9.5f));
         g.drawText("lenia " + juce::String(n) + " x " + juce::String(n), box.withHeight(11.0f), juce::Justification::centredTop, false);
     }
-    // Right: the attractors, six readings as bars from the centre.
+    // Right: the attractors -- their orbits in x and y, the butterfly and the spiral, from where
+    // they have been in the last forty seconds; and the six readings as bars beneath.
     {
         const auto box = plot.withX(plot.getX() + 2.0f * third).withWidth(third).reduced(6.0f);
         const bool awake = proc.engine().chaosSteps() > 0;
+        const float orbitH = juce::jmax(0.0f, box.getHeight() * 0.55f - 12.0f);
+        const float side = juce::jmin(orbitH, box.getWidth() * 0.46f);
+        auto orbit = [&](const std::vector<juce::Point<float>>& trail, float x0, juce::Colour col) {
+            const juce::Rectangle<float> sq(x0, box.getY() + 12.0f, side, side);
+            g.setColour(ui::track.withAlpha(0.6f)); g.drawRect(sq, 1.0f);
+            if (trail.size() < 2) return;
+            juce::Path p;
+            for (size_t i = 0; i < trail.size(); ++i) {
+                const float x = sq.getX() + (0.5f + 0.5f * trail[i].x) * sq.getWidth();
+                const float y = sq.getBottom() - (0.5f + 0.5f * trail[i].y) * sq.getHeight();
+                if (i == 0) p.startNewSubPath(x, y); else p.lineTo(x, y);
+            }
+            g.setColour(col.withAlpha(0.7f));
+            g.strokePath(p, juce::PathStrokeType(1.0f));
+            const auto& last = trail.back();
+            const float x = sq.getX() + (0.5f + 0.5f * last.x) * sq.getWidth(), y = sq.getBottom() - (0.5f + 0.5f * last.y) * sq.getHeight();
+            g.setColour(col); g.fillEllipse(x - 2.5f, y - 2.5f, 5.0f, 5.0f);
+        };
+        if (side > 20.0f) {
+            orbit(lorenzTrail, box.getX(), ui::cosmosCol);
+            orbit(rosslerTrail, box.getRight() - side, ui::morphCol);
+        }
         static const char* kNames[6] = { "lx", "ly", "lz", "rx", "ry", "rz" };
         const float bw = (box.getWidth() - 10.0f) / 6.0f;
-        const float mid = box.getY() + 12.0f + (box.getHeight() - 24.0f) * 0.5f, half = (box.getHeight() - 24.0f) * 0.5f;
+        const float top = box.getY() + 12.0f + (side > 20.0f ? side + 8.0f : 0.0f);
+        const float mid = top + (box.getBottom() - 12.0f - top) * 0.5f, half = (box.getBottom() - 12.0f - top) * 0.5f;
         g.setColour(ui::track); g.drawHorizontalLine(juce::roundToInt(mid), box.getX(), box.getRight());
         for (int k = 0; k < 6; ++k) {
             const float v = awake ? proc.engine().chaosOut(k) : 0.0f;
@@ -304,7 +383,7 @@ void AmbientSynthEditor::CoherenceView::paint(juce::Graphics& g)
             g.drawText(kNames[k], juce::roundToInt(x), juce::roundToInt(box.getBottom()) - 11, juce::roundToInt(bw), 11, juce::Justification::centred, false);
         }
         g.setColour(ui::dim); g.setFont(ui::body(9.5f));
-        g.drawText(awake ? "lorenz / roessler" : "attractors asleep: route one", box.withHeight(11.0f), juce::Justification::centredTop, false);
+        g.drawText(awake ? "lorenz            roessler" : "attractors asleep: route one", box.withHeight(11.0f), juce::Justification::centredTop, false);
     }
 }
 

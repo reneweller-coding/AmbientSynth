@@ -3617,6 +3617,129 @@ void testResearchBatch()
         }
     }
 
+    // ---- evenness, and the distance a chord travels ----------------------------------------
+    {
+        // Evenness: one for notes that divide the octave equally, zero for notes all in one place.
+        auto E = [](std::initializer_list<double> semis) {
+            std::vector<double> f;
+            for (double s : semis) f.push_back(261.6255653005986 * std::pow(2.0, s / 12.0));
+            return chordEvenness(f.data(), static_cast<int>(f.size()));
+        };
+        const double eAug = E({ 0, 4, 8 });          // the augmented triad divides the octave in three
+        const double eMaj = E({ 0, 4, 7 });
+        const double eCluster = E({ 0, 1, 2 });
+        const double eDim7 = E({ 0, 3, 6, 9 });      // and the diminished seventh in four
+        const double eOct = E({ 0, 12, 24 });        // three octaves are one pitch class
+        std::printf("  [probe] evenness: augmented %.3f, dim7 %.3f, major triad %.3f, cluster %.3f, octaves %.3f\n",
+                    eAug, eDim7, eMaj, eCluster, eOct);
+        CHECK(eAug > 0.99 && eDim7 > 0.99, "chords that divide the octave equally are perfectly even");
+        CHECK(eMaj > 0.8 && eMaj < eAug, "a major triad is nearly even, but not quite");
+        CHECK(eCluster < 0.3, "a cluster is not");
+        CHECK(eOct < 0.05, "and three octaves of one note are as uneven as a chord can be");
+
+        // The distance a chord travels when one note is exchanged. Tymoczko's measure is the
+        // smallest total movement over every way of pairing the old chord with the new one; for
+        // an exchange of one note that is exactly the leap the one voice makes, which is why the
+        // number already in the conductor needed no correcting. Checked here rather than argued.
+        {
+            Rng rng; rng.seed(0xA5A5u);
+            double worst = 0.0;
+            for (int trial = 0; trial < 400; ++trial) {
+                std::vector<int> chord;
+                const int n = 2 + static_cast<int>(rng.uniform() * 4.0);
+                while (static_cast<int>(chord.size()) < n) {
+                    const int c = 36 + static_cast<int>(rng.uniform() * 44.0);
+                    if (std::find(chord.begin(), chord.end(), c) == chord.end()) chord.push_back(c);
+                }
+                std::sort(chord.begin(), chord.end());
+                const int leaving = chord[static_cast<size_t>(rng.uniform() * n) % chord.size()];
+                int arriving = 36 + static_cast<int>(rng.uniform() * 44.0);
+                if (std::find(chord.begin(), chord.end(), arriving) != chord.end()) continue;
+                std::vector<int> after;
+                for (int c : chord) if (c != leaving) after.push_back(c);
+                after.push_back(arriving);
+                std::sort(after.begin(), after.end());
+                // The sorted pairing is the cheapest one for absolute distances on a line.
+                double sorted = 0.0;
+                for (size_t i = 0; i < chord.size(); ++i) sorted += std::fabs(static_cast<double>(chord[i] - after[i]));
+                worst = std::max(worst, std::fabs(sorted - std::fabs(static_cast<double>(arriving - leaving))));
+            }
+            std::printf("  [probe] chord distance against the single leap, worst of 400: %.3f semitones\n", worst);
+            CHECK(worst < 1e-9, "the leap one voice makes IS the distance the whole chord travels");
+        }
+
+        // And in the conductor, in the mode where the question arises: with Smooth up, the chord
+        // has to travel less per exchange than when the voice that moves is chosen by the clock.
+        //
+        // Driven directly, not through the engine. Measured through the audio this said the chord
+        // travelled nought semitones with Smooth off -- because what it was really pairing was a
+        // voice whose envelope dipped under the threshold and came back, a departure and an
+        // arrival of the same note. The conductor emits its exchange as a note off immediately
+        // followed by a note on, and reading that is exact and needs no envelopes at all.
+        auto travel = [](float smooth, double& mean, int& moves) {
+            BrainParams p;
+            p.on = true;
+            p.mode = BrainMode::Chords;
+            p.density = 5;
+            p.rateSeconds = 2.0f;
+            p.low = 36; p.high = 79;
+            p.smooth = smooth;
+            ClusterBrain brain;
+            brain.reset(0x9E3779B9ull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            int pending = -1;
+            double sum = 0.0;
+            moves = 0;
+            for (int step = 0; step < 3000; ++step)
+                brain.update(0.1, p, -1, freqOf, [&](const BrainEvent& e) {
+                    if (e.type == BrainEvent::Type::NoteOff) { pending = e.note; return; }
+                    if (pending >= 0) { sum += std::fabs(static_cast<double>(e.note - pending)); ++moves; pending = -1; }
+                });
+            mean = moves > 0 ? sum / moves : 0.0;
+        };
+        double tOff = 0.0, tOn = 0.0; int mOff = 0, mOn = 0;
+        travel(0.0f, tOff, mOff);
+        travel(1.0f, tOn, mOn);
+        std::printf("  [probe] chords mode: mean travel %.2f semitones over %d exchanges, %.2f over %d with Smooth\n",
+                    tOff, mOff, tOn, mOn);
+        CHECK(mOn >= 20 && mOff >= 20, "the conductor exchanges voices in both settings");
+        CHECK(tOn < tOff, "and with Smooth up the chord travels less to get where it goes");
+
+        // And Even, on the chords the conductor actually settles on.
+        auto spread = [](float even, float harmonic) {
+            BrainParams p;
+            p.on = true;
+            p.mode = BrainMode::Free;
+            p.density = 5;
+            p.rateSeconds = 3.0f;
+            p.holdMin = 20.0f; p.holdMax = 60.0f;
+            p.low = 36; p.high = 79;
+            p.even = even;
+            p.harmonic = harmonic;
+            ClusterBrain brain;
+            brain.reset(0xC2B2AE35ull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            double sum = 0.0; int taken = 0;
+            for (int step = 0; step < 3000; ++step) {
+                brain.update(0.1, p, -1, freqOf, [](const BrainEvent&) {});
+                if (step % 100 != 0 || step < 300) continue;
+                int m = 0;
+                double f[16];
+                for (int n = 0; n < 128 && m < 16; ++n) if (brain.sounding(n)) f[m++] = freqOf(n);
+                if (m >= 2) { sum += chordEvenness(f, m); ++taken; }
+            }
+            return taken > 0 ? sum / taken : 0.0;
+        };
+        const double evenOff = spread(0.0f, 0.0f), evenOn = spread(1.0f, 0.0f), evenHarm = spread(0.0f, 1.0f);
+        std::printf("  [probe] mean evenness of the chords built: %.3f plain, %.3f with Even, %.3f with Harmonic\n",
+                    evenOff, evenOn, evenHarm);
+        // Measured: 0.664 plain, 0.768 with Even, 0.445 with Harmonic. The exponent was chosen by
+        // measurement too -- at 2.5 the effect was 0.680, barely there; at 9 it was 0.776, which is
+        // most of the way to what a twelve-tone scale can offer and no longer a preference.
+        CHECK(evenOn > evenOff * 1.08, "with Even up the conductor spreads the chord round the octave");
+        CHECK(evenHarm < evenOn, "and Harmonic pulls the other way, as it is meant to");
+    }
+
     // ---- the tonal hierarchy, and finding the key -------------------------------------------
     {
         // The finder first, on distributions whose answer is known. C major's own scale must come

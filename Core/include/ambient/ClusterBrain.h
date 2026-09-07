@@ -67,6 +67,60 @@ inline double spectralConsonance(double f1, double f2, const BrainSpectrum& sp)
     return c < 0.05 ? 0.05 : c;
 }
 
+// How strongly a set of tones implies ONE virtual root: harmonicity, in the sense of Terhardt's
+// virtual pitch (1974, 1979) and Parncutt's root support. This is a different question from
+// whether the tones are pairwise consonant, and the difference is not academic.
+//
+// The conductor scores a chord as the MEAN CONSONANCE OVER ALL PAIRS, and measured on the
+// instrument's own function that rule prefers a stack of fifths (4:6:9, mean 0.233) to a just
+// major triad (4:5:6, 0.212) -- and puts a plain segment of the harmonic series (8:9:10:11:12,
+// 0.165) last of all. Adjacent members of one series make complicated ratios pairwise (9/8,
+// 11/10) however perfectly the set as a whole fits together. For a dyad the two measures agree,
+// which is why this went unnoticed; for five voices they invert.
+//
+// The measure: try every fundamental that could hold the set -- the lowest tone divided by one
+// to sixteen -- assign each tone to its nearest harmonic, and score how cleanly it sits there,
+// weighted so that a tone on a low harmonic supports the root far more than one high up.
+//
+// Two rules keep the trivial answers out, and both were put there because the first version gave
+// them. A tone may not share a harmonic number with another: several tones crammed onto one
+// harmonic is a cluster, not a fit. And a candidate root supported by fewer than two tones does
+// not count at all, because every tone is the first harmonic of itself -- without that rule a
+// semitone cluster scored as high as a just major triad, and a bare tritone scored higher than
+// both.
+inline double chordHarmonicity(const double* freqs, int n)
+{
+    if (n < 2) return 0.0;
+    constexpr double kCents = 25.0;      // how far off a harmonic a tone may sit and still support the root
+    constexpr int kMaxHarmonic = 32, kMaxSub = 16;
+    double fmin = freqs[0];
+    for (int i = 1; i < n; ++i) if (freqs[i] < fmin) fmin = freqs[i];
+    if (!(fmin > 0.0)) return 0.0;
+    double best = 0.0;
+    for (int k = 1; k <= kMaxSub; ++k) {
+        const double f0 = fmin / k;
+        double s = 0.0;
+        int landed = 0;
+        unsigned int used = 0;           // a bit per harmonic number, 1..32
+        for (int i = 0; i < n; ++i) {
+            const int h = static_cast<int>(std::lround(freqs[i] / f0));
+            if (h < 1 || h > kMaxHarmonic) continue;
+            const unsigned int bit = 1u << (h - 1);
+            if (used & bit) continue;
+            const double cents = std::fabs(1200.0 * std::log2(freqs[i] / (h * f0)));
+            const double fit = std::exp(-(cents / kCents) * (cents / kCents));
+            if (fit < 0.05) continue;
+            used |= bit;
+            ++landed;
+            s += fit / std::log2(1.0 + h);
+        }
+        if (landed < 2) continue;
+        s /= n;
+        if (s > best) best = s;
+    }
+    return best;
+}
+
 struct BrainParams {
     bool  on = true;
     BrainMode mode = BrainMode::Free;
@@ -82,6 +136,12 @@ struct BrainParams {
     // Timbre: how much of the consonance is judged from the actual spectrum (Sethares) rather
     // than from the ratio alone. 0 is the ratio score the conductor always had.
     float timbre = 0.0f;
+    // Harmonic: how much the choice is judged by how well the WHOLE resulting chord fits one
+    // harmonic series, rather than only by how its pairs sound. Listeners' preferences track
+    // harmonicity at least as strongly as they track the absence of beating (McDermott, Lehr and
+    // Oxenham 2010), and the two models are combined in the current accounts (Harrison and Pearce
+    // 2020). 0 is the pairwise judgement the conductor always had.
+    float harmonic = 0.0f;
     // Spacing: how strongly the conductor avoids putting a note within a critical band of one
     // that is already sounding. Two tones closer than about an equivalent rectangular bandwidth
     // excite overlapping regions of the cochlea, and the ear fuses them into one rough sound
@@ -176,10 +236,29 @@ public:
         const int density = clampv(p.density, 1, kSlots);
 
         if (activeCount() >= density) {
-            // Room is full: half of the time retire the note that would end soonest, else wait.
+            // Room is full: half of the time retire a note, else wait.
             if (rng_.uniform() >= 0.5f) return;
-            int best = -1; double rem = 1e12;
-            for (int i = 0; i < kSlots; ++i) if (slots_[i].note >= 0 && slots_[i].remaining < rem) { rem = slots_[i].remaining; best = i; }
+            int best = -1;
+            // Which one leaves is half the question. By the clock alone -- the note that would end
+            // soonest -- whatever the additions gained in harmonicity is given back one voice at a
+            // time, and the chord never settles anywhere. With Harmonic up, the voice that goes is
+            // the one whose leaving does the rest of the chord the most good. The draw is
+            // short-circuited at zero, so a conductor that has not been asked for this behaves
+            // exactly as it always did, down to the random stream.
+            if (p.harmonic > 0.0f && rng_.uniform() < p.harmonic) {
+                double bestH = -1.0;
+                for (int i = 0; i < kSlots; ++i) {
+                    if (slots_[i].note < 0) continue;
+                    double rest[kSlots];
+                    int m = 0;
+                    for (int j = 0; j < kSlots; ++j) if (j != i && slots_[j].note >= 0 && m < kSlots) rest[m++] = freqOf(slots_[j].note);
+                    const double h = m >= 2 ? chordHarmonicity(rest, m) : 0.0;
+                    if (h > bestH) { bestH = h; best = i; }
+                }
+            } else {
+                double rem = 1e12;
+                for (int i = 0; i < kSlots; ++i) if (slots_[i].note >= 0 && slots_[i].remaining < rem) { rem = slots_[i].remaining; best = i; }
+            }
             if (best < 0) return;
             emit(BrainEvent{ BrainEvent::Type::NoteOff, slots_[best].note, 0.0f });
             slots_[best].note = -1;
@@ -203,9 +282,30 @@ public:
             const double cons = p.consonanceOf(fc, rootFreq);
             float w = static_cast<float>(std::pow(cons, p.consonance * 3.0f));
             w *= 0.6f + 0.4f * static_cast<float>(1.0 - std::fabs(c - mid) / half);
-            for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) w *= 0.15f;  // octave doubling is rare
+            // Octave doubling is rare -- but the two rules disagree here, and the disagreement is
+            // real rather than a wrinkle to be smoothed over. "A doubling is not a new colour" is a
+            // matter of taste; harmonicity says an octave is the strongest relation two tones can
+            // have, harmonics one and two of the same series. Harmonic is what settles it: at zero
+            // the old taste rule stands untouched, and as it rises the veto softens to a
+            // preference.
+            {
+                const float doubling = 0.15f + 0.6f * clampv(p.harmonic, 0.0f, 1.0f);
+                for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) w *= doubling;
+            }
             if (p.spacing != 0.0f)
                 for (auto& s : slots_) if (s.note >= 0) w *= p.crowding(fc, freqOf(s.note));
+            // Free mode weighs a candidate against the ROOT alone, which is a weaker test than
+            // the chord mode's: a note can sit well on the root and still pull the chord away
+            // from having one. Harmonic is where that is caught, and it belongs here at least as
+            // much as it belongs there -- this is the mode nearly every preset uses.
+            if (p.harmonic > 0.0f) {
+                double set[kSlots + 1];
+                int m = 0;
+                for (const auto& s : slots_) if (s.note >= 0 && m < kSlots) set[m++] = freqOf(s.note);
+                set[m++] = fc;
+                if (m >= 2)
+                    w *= static_cast<float>(std::pow(std::max(chordHarmonicity(set, m), 1.0e-4), 5.0 * static_cast<double>(p.harmonic)));
+            }
             if (pitchClassEqual(fc, rootFreq)) w *= rootSounding ? 0.25f : 3.0f;                       // keep a foundation
             weights[c] = w;
             total += w;
@@ -333,6 +433,17 @@ private:
             for (int i = 0; i < kRecent; ++i) if (recent_[i] == c) {
                 const int age = (recentHead_ - 1 - i + 2 * kRecent) % kRecent;   // 0 = just left
                 score *= 0.12 + 0.11 * static_cast<double>(age);
+            }
+            // And how the WHOLE chord would sit, if the conductor has been told to listen for it.
+            // The pairwise score above cannot hear this: it asks how each pair sounds, never
+            // whether the set has one root.
+            if (p.harmonic > 0.0f) {
+                double set[kSlots + 1];
+                int m = 0;
+                for (const auto& s : slots_) if (s.note >= 0 && m < kSlots) set[m++] = freqOf(s.note);
+                set[m++] = fc;
+                const double h = chordHarmonicity(set, m);
+                score *= std::pow(std::max(h, 1.0e-4), 5.0 * static_cast<double>(p.harmonic));
             }
             // An octave of something already sounding is a doubling, not a new colour.
             for (const auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) score *= 0.2;

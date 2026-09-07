@@ -569,6 +569,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src3SpecBreath, "src3_spec_breath", "Breath", "Source 3", -1.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::Src4SpecRate,   "src4_spec_rate",   "Rate",   "Source 4", 0.f, 4.f, 1.f, 0.6f, "x"),
     F(ParamId::Src4SpecBreath, "src4_spec_breath", "Breath", "Source 4", -1.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::BrainHarmonic,  "brain_harmonic",  "Harmonic", "Cluster Brain", 0.f, 1.f, 0.f, 1.f, ""),
 }};
 } // namespace
 

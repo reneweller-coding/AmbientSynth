@@ -526,6 +526,8 @@ void Engine::readParams()
     bp_.timbre = g(ParamId::BrainTimbre);
     bp_.spacing = g(ParamId::BrainSpacing);
     bp2_.spacing = bp_.spacing;
+    bp_.harmonic = g(ParamId::BrainHarmonic);
+    bp2_.harmonic = bp_.harmonic;
     if (bp_.timbre > 0.0f) {
         const int count = std::min(BrainSpectrum::kMax, std::max(1, vp_.partials));
         const float hc = 1.0f + vp_.brightness * vp_.brightness * 31.0f;

@@ -3518,6 +3518,105 @@ void testResearchBatch()
         CHECK(!quiet.active(), "at level 0 the room is not computed at all");
     }
 
+    // ---- harmonicity, and the bias it exists to correct ----------------------------------
+    {
+        // First the bias itself, so it is on the record rather than in a commit message. The
+        // conductor scores a chord as the mean consonance over all its pairs. Measured on the
+        // instrument's own intervalConsonance, that rule prefers a stack of fifths to a just
+        // major triad and puts a plain segment of the harmonic series last of all.
+        auto meanPairwise = [](std::initializer_list<double> rs) {
+            std::vector<double> v(rs);
+            double s = 0.0; int n = 0;
+            for (size_t i = 0; i < v.size(); ++i)
+                for (size_t j = 0; j < i; ++j) { s += intervalConsonance(v[i] / v[j]); ++n; }
+            return n > 0 ? s / n : 0.0;
+        };
+        const double pJust = meanPairwise({ 4, 5, 6 });
+        const double pFifths = meanPairwise({ 4, 6, 9 });
+        const double pSeries = meanPairwise({ 8, 9, 10, 11, 12 });
+        std::printf("  [probe] mean pairwise: just triad %.3f, stacked fifths %.3f, harmonic series %.3f\n",
+                    pJust, pFifths, pSeries);
+        CHECK(pFifths > pJust, "pairwise, a stack of fifths beats a just major triad -- the bias this corrects");
+        CHECK(pSeries < pJust, "and a segment of the harmonic series scores worst of all");
+
+        // And the measure that hears what the pairs cannot.
+        auto H = [](std::initializer_list<double> rs) {
+            std::vector<double> v(rs);
+            for (double& x : v) x *= 100.0;              // ratios into hertz; the measure is scale free
+            return chordHarmonicity(v.data(), static_cast<int>(v.size()));
+        };
+        const double hJust = H({ 4, 5, 6 }), hFifths = H({ 4, 6, 9 });
+        const double hCluster = H({ 1.0, 1.059463, 1.122462 });      // three semitones
+        const double hDim = H({ 1.0, 1.189207, 1.414214, 1.681793 }); // 12-TET diminished seventh
+        const double h12 = H({ 1.0, 1.259921, 1.498307 });            // 12-TET major triad
+        std::printf("  [probe] harmonicity: just %.3f, fifths %.3f, 12-TET triad %.3f, cluster %.3f, dim7 %.3f\n",
+                    hJust, hFifths, h12, hCluster, hDim);
+        CHECK(hJust > hFifths, "by harmonicity the just triad is ahead of the stack of fifths again");
+        CHECK(hJust > h12, "and a just triad is more harmonic than the tempered one, which is 14 cents out");
+        CHECK(hCluster < 0.75 * hJust && hDim < 0.65 * hJust, "a cluster and a diminished seventh are far behind");
+        // The two rules that keep the trivial answers out. Without them a single tone -- which is
+        // always the first harmonic of itself -- carried the whole score.
+        CHECK(chordHarmonicity(nullptr, 0) == 0.0, "nothing has no root");
+        {
+            const double one[1] = { 220.0 };
+            CHECK(chordHarmonicity(one, 1) == 0.0, "and one tone does not imply a root either");
+        }
+        CHECK(hCluster < H({ 4, 5, 6, 7 }), "a cluster is behind a seventh chord, not level with a triad");
+
+        // In the conductor: with Harmonic up, the note it adds to a bare fifth must be one that
+        // completes a chord with a root, not one that merely sounds well against each voice.
+        {
+            auto chosen = [&](float harmonic, int density) {
+                Engine en;
+                en.prepare(sr, 256);
+                for (int i = 0; i < kNumParams; ++i) en.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+                en.setParam(ParamId::BrainHarmonic, harmonic);
+                en.setParam(ParamId::BrainOn, 1.0f);
+                en.setParam(ParamId::BrainRate, 2.0f);
+                en.setParam(ParamId::BrainDensity, static_cast<float>(density));
+                en.reset();
+                std::vector<float> L(256), R(256);
+                for (int b = 0; b < 2000; ++b) en.process(L.data(), R.data(), 256);
+                bool on[128] = {};
+                en.soundingNotes(on);
+                std::vector<double> f;
+                for (int i = 0; i < 128; ++i) if (on[i]) f.push_back(en.frequencyOf(i));
+                return f;
+            };
+            // Over several chord sizes, not one: a single run is a single throw of the dice, and
+            // in this mode the conductor draws its notes at random from a weighted list.
+            double sumOff = 0.0, sumOn = 0.0;
+            int rounds = 0, notesOn = 0;
+            for (int density = 3; density <= 6; ++density) {
+                const std::vector<double> off = chosen(0.0f, density), on = chosen(1.0f, density);
+                if (off.size() < 2 || on.size() < 2) continue;
+                sumOff += chordHarmonicity(off.data(), static_cast<int>(off.size()));
+                sumOn += chordHarmonicity(on.data(), static_cast<int>(on.size()));
+                notesOn += static_cast<int>(on.size());
+                ++rounds;
+            }
+            const double hOff = rounds > 0 ? sumOff / rounds : 0.0, hOn = rounds > 0 ? sumOn / rounds : 0.0;
+            // The failure mode of a softened doubling rule is a chord that collapses into octaves
+            // of one note: maximally harmonic, and no longer a chord. Counted, not assumed.
+            int classesOn = 0;
+            {
+                const std::vector<double> six = chosen(1.0f, 6);
+                bool seen[12] = {};
+                for (double f : six) {
+                    const int pc = ((static_cast<int>(std::lround(12.0 * std::log2(f / 261.6256))) % 12) + 12) % 12;
+                    if (!seen[pc]) { seen[pc] = true; ++classesOn; }
+                }
+            }
+            std::printf("  [probe] conductor over %d chord sizes: mean harmonicity %.3f off, %.3f on (%d notes, %d pitch classes)\n",
+                        rounds, hOff, hOn, notesOn, classesOn);
+            CHECK(rounds >= 3, "the conductor still fills the chord with Harmonic on");
+            // Measured: 0.317 without, 0.493 with. Most of that came from letting Harmonic soften the
+            // veto on octave doubling, which had been quietly working against it.
+            CHECK(hOn > hOff * 1.25, "and the chords it builds are measurably more harmonic than without it");
+            CHECK(classesOn >= 3, "and it is still a chord, not one note in several octaves");
+        }
+    }
+
     // ---- loudness in sones ------------------------------------------------------------------
     {
         // The model is checked against the anchors that DEFINE the sone, not against itself. A

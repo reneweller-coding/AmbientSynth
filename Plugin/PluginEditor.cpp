@@ -1160,6 +1160,27 @@ juce::Image AmbientSynthEditor::snapshotBrowseMap()
     return img;
 }
 
+// The map as it looks once it has been zoomed in: the current preset in the middle at eight
+// times, its neighbours around it, and names on everything that has room for one.
+juce::Image AmbientSynthEditor::snapshotBrowseMapZoomed()
+{
+    if (!browse_) return {};
+    const bool vis = browse_->isVisible();
+    const int was = browse_->modeMap.getToggleState() ? 1 : 0;
+    browse_->setVisible(true);
+    browse_->setMode(1);
+    browse_->resized();
+    const int cur = proc_.getCurrentProgram();
+    float cx = 0.5f, cy = 0.5f;
+    if (cur >= 0 && cur < ambient::numPresetMeta()) { cx = ambient::presetMeta(cur).x; cy = ambient::presetMeta(cur).y; }
+    browse_->map.zoomTo(cx, cy, 8.0f);
+    juce::Image img = browse_->createComponentSnapshot(browse_->getLocalBounds(), true, 1.0f);
+    browse_->map.zoomTo(0.5f, 0.5f, 1.0f);
+    browse_->setMode(was);
+    browse_->setVisible(vis);
+    return img;
+}
+
 juce::Image AmbientSynthEditor::snapshotHeader()
 {
     // The master's corner of the header: the mid/side section, the loudness meter and the
@@ -1644,6 +1665,8 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
                "The Browse page in its list view: the columns that narrow the library (family, character, motion, features), the search, and the list of every preset the instrument knows.", {});
         addTab(owner.snapshotBrowseMap(), "MAP",
                "The Browse page in its map view: every preset as a point, clustered by what it sounds like; the cursor and its radius, and the Map blend switch that makes the space between presets playable.", { "Map" });
+        addTab(owner.snapshotBrowseMapZoomed(), "MAP, ZOOMED IN",
+               "The same map closed in on the current preset at eight times, with the wheel or with \"more like this\": the cluster it sits in opens into single presets, and the ones with room for a name show it. Drag to move about, double-click to see the whole plane again.", { "Map" });
     }
     resized();
     repaint();

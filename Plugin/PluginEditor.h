@@ -148,6 +148,7 @@ private:
     juce::Image snapshotPerform();
     juce::Image snapshotHeader();
     juce::Image snapshotBrowseMap();
+    juce::Image snapshotBrowseMapZoomed();   // the same view closed in on the current preset, names showing
     juce::Image snapshotStripTab(int tab, bool detail = false);
     juce::StringArray tabSectionNames(int rowIndex, int page) const;
     juce::String tabName(int rowIndex, int page) const;
@@ -375,7 +376,7 @@ private:
         int selected = -1;
         // "More like this": the list narrowed to the map's nearest neighbours of the selected
         // preset, and the map zoomed onto them. The similarity is the one the map already has.
-        juce::ToggleButton similar { "more like this" };
+        juce::ToggleButton similar { "similar" };
         std::vector<int> similarSet;
         int similarOf = -1;
     };

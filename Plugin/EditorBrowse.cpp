@@ -535,7 +535,7 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     if (zoom >= 4.0f) {
         g.setFont(juce::FontOptions(10.5f));
         std::set<std::pair<int, int>> taken;
-        const int cw = 96, ch = 13;
+        const int cw = 130, ch = 13;   // a label's width, so two names never share a line
         for (int i : owner.filtered) {
             if (i >= shown) continue;
             const PresetMeta& m = presetMeta(i);

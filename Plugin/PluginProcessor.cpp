@@ -486,7 +486,7 @@ bool AmbientSynthProcessor::loadScalaText(const juce::String& text, const juce::
     scalaText_ = text;
     userScaleName_ = displayName.isNotEmpty() ? displayName : juce::String(s.name);
     if (auto* p = apvts.getParameter("scale")) {
-        const float norm = p->convertTo0to1(static_cast<float>(kNumScaleChoices - 1));
+        const float norm = p->convertTo0to1(static_cast<float>(kUserScaleIndex));
         p->beginChangeGesture();
         p->setValueNotifyingHost(norm);
         p->endChangeGesture();

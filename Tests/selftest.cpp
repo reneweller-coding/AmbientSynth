@@ -94,7 +94,9 @@ void testParams()
 
 void testTuning()
 {
-    for (int i = 0; i < kNumScaleChoices - 1; ++i) {
+    // Only the tables. The last two choices are not tables: one is whatever Scala file was
+    // loaded, one is computed from the spectrum while the instrument plays.
+    for (int i = 0; i < kUserScaleIndex; ++i) {
         FixedScale s;
         CHECK(makeBuiltinScale(i, s), "builtin scale missing");
         CHECK(s.ratios[0] == 1.0, "scale must start at 1/1");
@@ -234,7 +236,7 @@ void testUserScale()
     FixedScale s;
     CHECK(parseScala("Fifths only\n 2\n 3/2\n 2/1\n", s), "parse 2-degree scale");
     e.setUserScale(s);
-    e.setParam(ParamId::Scale, static_cast<float>(kNumScaleChoices - 1));
+    e.setParam(ParamId::Scale, static_cast<float>(kUserScaleIndex));
     e.setParam(ParamId::KeyMap, 1.0f);   // consecutive degrees
     e.setParam(ParamId::RootNote, 0.0f);
     render(e, 0.05);   // applies pending scale + params
@@ -3614,6 +3616,110 @@ void testResearchBatch()
             // veto on octave doubling, which had been quietly working against it.
             CHECK(hOn > hOff * 1.25, "and the chords it builds are measurably more harmonic than without it");
             CHECK(classesOn >= 3, "and it is still a chord, not one note in several octaves");
+        }
+    }
+
+    // ---- the scale a timbre asks for ---------------------------------------------------------
+    {
+        // Sethares' claim, put to the instrument's own spectrum: the intervals at which a timbre
+        // is least rough against a transposed copy of itself ARE its scale, and for a harmonic
+        // spectrum they are just intonation. If that comes out it is not because anybody typed
+        // the ratios in -- there is no table anywhere in this path.
+        auto build = [](float tilt, float bright, float oddEven, float inharm, FixedScale& out) {
+            BrainSpectrum sp;
+            const int count = BrainSpectrum::kMax;
+            const float hc = 1.0f + bright * bright * 31.0f;
+            const double B = static_cast<double>(inharm) * inharm * 0.02;
+            sp.count = count;
+            for (int h = 1; h <= count; ++h) {
+                double a = std::pow(static_cast<double>(h), -static_cast<double>(tilt));
+                if (oddEven > 0.0f && (h % 2) == 0) a *= 1.0 - oddEven;
+                if (oddEven < 0.0f && (h % 2) == 1 && h > 1) a *= 1.0 + oddEven;
+                if (static_cast<float>(h) > hc) { const float x = std::min((static_cast<float>(h) - hc) / 6.0f, 1.0f); a *= 0.5 * (1.0 + std::cos(3.14159265358979 * x)); }
+                sp.amp[h - 1] = a;
+                sp.ratio[h - 1] = h * (B > 0.0 ? std::sqrt(1.0 + B * h * h) : 1.0);
+            }
+            return makeTimbreScale(sp, out);
+        };
+        auto nearest = [](const FixedScale& s, double cents) {
+            double best = 1e9;
+            for (int i = 0; i < s.count; ++i) {
+                const double c = 1200.0 * std::log2(s.ratios[i]);
+                if (std::fabs(c - cents) < std::fabs(best)) best = c - cents;
+            }
+            return best;
+        };
+        FixedScale harm, stiff;
+        CHECK(build(1.0f, 0.7f, 0.0f, 0.0f, harm), "a harmonic spectrum asks for a scale");
+        CHECK(build(1.0f, 0.7f, 0.0f, 1.0f, stiff), "and so does a stiff string");
+        std::printf("  [probe] timbre scale, harmonic (%d degrees):", harm.count);
+        for (int i = 0; i < harm.count; ++i) std::printf(" %.0f", 1200.0 * std::log2(harm.ratios[i]));
+        std::printf("\n");
+        std::printf("  [probe] timbre scale, stiff string (%d degrees):", stiff.count);
+        for (int i = 0; i < stiff.count; ++i) std::printf(" %.0f", 1200.0 * std::log2(stiff.ratios[i]));
+        std::printf("\n");
+        // The just intervals, in cents: 5/4, 4/3, 3/2, 8/5, 5/3, 7/4.
+        const double just[6] = { 386.31, 498.04, 701.96, 813.69, 884.36, 968.83 };
+        double worst = 0.0;
+        for (double c : just) worst = std::max(worst, std::fabs(nearest(harm, c)));
+        std::printf("  [probe] furthest of the six just intervals from a degree of the harmonic scale: %.1f cents\n", worst);
+        CHECK(worst < 4.0, "for a harmonic spectrum the dissonance minima ARE just intonation");
+        CHECK(harm.ratios[0] == 1.0, "and the scale starts at the unison");
+        for (int i = 1; i < harm.count; ++i)
+            CHECK(harm.ratios[i] > harm.ratios[i - 1] && harm.ratios[i] < harm.period, "ascending, inside the octave");
+        // A stiff string is a different instrument and asks for a different scale.
+        int moved = 0;
+        for (double c : just) if (std::fabs(nearest(stiff, c)) > 15.0) ++moved;
+        std::printf("  [probe] of those six, %d have no degree within 15 cents in the stiff-string scale\n", moved);
+        CHECK(moved >= 4, "and an inharmonic spectrum asks for something else entirely");
+
+        // And through the engine: choosing the scale has to actually retune the instrument, and
+        // changing the spectrum has to change the tuning with it. A scale that is computed while
+        // the sound runs is worth nothing if the thing that computes it never gets asked.
+        {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::Scale, static_cast<float>(kTimbreScaleIndex));
+            e.setParam(ParamId::Inharmonic, 0.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 200; ++b) e.process(L.data(), R.data(), 256);
+            const FixedScale plain = e.scale();
+            e.setParam(ParamId::Inharmonic, 1.0f);
+            for (int b = 0; b < 200; ++b) e.process(L.data(), R.data(), 256);
+            const FixedScale stretched = e.scale();
+            std::printf("  [probe] engine timbre scale: %d degrees plain, %d with Inharmonic up\n",
+                        plain.count, stretched.count);
+            double moved2 = 0.0;
+            const int n = std::min(plain.count, stretched.count);
+            for (int i = 0; i < n; ++i)
+                moved2 = std::max(moved2, std::fabs(1200.0 * std::log2(plain.ratios[i] / stretched.ratios[i])));
+            std::printf("  [probe] furthest degree moved when the spectrum changed: %.0f cents\n", moved2);
+            CHECK(plain.count >= 5, "the engine builds the timbre scale when it is chosen");
+            CHECK(std::fabs(1200.0 * std::log2(plain.ratios[std::min(5, plain.count - 1)]) - 702.0) < 6.0
+                  || moved2 > 20.0, "and it is the spectrum's own scale, not the fallback");
+            CHECK(moved2 > 20.0, "turning Inharmonic up retunes the instrument");
+
+            // And what a key actually sounds at, which is a different question from what the
+            // table says. It has to be asked separately: the first version of this rebuilt the
+            // table correctly and set the flag that retunes the sounding notes, and three lines
+            // further down that flag was assigned over -- so the scale changed underneath the
+            // notes and not one of them heard about it. The table test passed throughout.
+            Engine tet;
+            tet.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) tet.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            tet.setParam(ParamId::Scale, 0.0f);
+            tet.reset();
+            std::vector<float> tl(256), tr(256);
+            for (int b = 0; b < 200; ++b) tet.process(tl.data(), tr.data(), 256);
+            double biggest = 0.0;
+            for (int note = 55; note <= 72; ++note) {
+                const double a = tet.frequencyOf(note), b2 = e.frequencyOf(note);
+                if (a > 0.0 && b2 > 0.0) biggest = std::max(biggest, std::fabs(1200.0 * std::log2(b2 / a)));
+            }
+            std::printf("  [probe] a key sounds up to %.0f cents from where 12-TET puts it\n", biggest);
+            CHECK(biggest > 20.0, "and the keys actually sound at the scale the timbre asked for");
         }
     }
 

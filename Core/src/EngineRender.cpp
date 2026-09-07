@@ -43,7 +43,7 @@ void Engine::process(float* L, float* R, int n)
     const int uv = userVersion_.load(std::memory_order_acquire);
     if (uv != userSeen_) {
         userBusy_.store(true, std::memory_order_release);
-        scales_[kNumScaleChoices - 1] = userPending_;
+        scales_[kUserScaleIndex] = userPending_;
         userBusy_.store(false, std::memory_order_release);
         userSeen_ = uv;
     }

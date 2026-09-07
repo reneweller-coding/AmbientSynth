@@ -380,6 +380,8 @@ private:
 
     FixedScale        scales_[kNumScaleChoices];
     FixedScale        userPending_;
+    double            timbreScaleSig_ = 0.0;   // what the spectrum was when the scale was last built
+    int               timbreScaleWait_ = 96;
     std::atomic<int>  userVersion_{ 0 };
     std::atomic<bool> userBusy_{ false };
     int               userSeen_ = 0;

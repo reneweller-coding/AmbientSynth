@@ -40,7 +40,7 @@ const BuiltinDef kBuiltins[] = {
     def("Otonality 1-11", 2.0, kOtonal),
 };
 constexpr int kNumBuiltins = static_cast<int>(sizeof(kBuiltins) / sizeof(kBuiltins[0]));
-static_assert(kNumBuiltins == kNumScaleChoices - 1, "scale name table and built-in table out of sync");
+static_assert(kNumBuiltins == kUserScaleIndex, "scale name table and built-in table out of sync");
 
 void copyName(FixedScale& s, const char* name)
 {

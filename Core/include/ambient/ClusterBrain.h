@@ -6,6 +6,7 @@
 #include "Dsp.h"
 #include "Tuning.h"
 #include <cmath>
+#include <cstdio>    // the timbre scale names itself
 
 namespace ambient {
 
@@ -50,6 +51,80 @@ inline double spectralRoughness(double f1, double f2, const BrainSpectrum& sp)
         }
     }
     return d;
+}
+
+// The scale a timbre asks for.
+//
+// This is the central claim of Sethares (Tuning, Timbre, Spectrum, Scale, 2005), and it runs the
+// other way round from how an instrument is normally built. A scale is not a thing you choose and
+// then find a sound for; to a given spectrum there BELONGS a set of intervals at which that
+// spectrum, sounded against a transposed copy of itself, is least rough. Play those intervals and
+// the partials line up; play others and they beat. For a harmonic spectrum those intervals are
+// just intonation -- which is why just intonation exists at all, rather than because the numbers
+// are small. For an inharmonic one they are somewhere else entirely, and the ordinary scales are
+// as arbitrary there as a gamelan's would be on a piano.
+//
+// The curve is the roughness of the timbre against itself transposed, swept across the octave;
+// the scale is where it dips. Nothing here is a table: change the Tilt or the Inharmonic knob and
+// the tuning follows the sound.
+//
+// Measured on this instrument's own spectrum: for the plain harmonic setting the minima land on
+// 5/4, 4/3, 3/2, 8/5, 5/3 and 7/4 to within a cent, and on 7/5 and 10/7 in the tritone. Turn
+// Inharmonic up and only 4/3 survives.
+inline bool makeTimbreScale(const BrainSpectrum& sp, FixedScale& out, int want = 12,
+                            double baseHz = 261.6255653005986)
+{
+    if (sp.count <= 0) return false;
+    // Three cents is close enough for finding a dip and cheap enough to do while the sound runs;
+    // where a dip is found, three points around it fit a parabola and give the bottom to well
+    // under a cent.
+    constexpr int kStep = 3, kPoints = 1200 / kStep;
+    double d[kPoints + 2];
+    for (int k = 0; k <= kPoints; ++k)
+        d[k] = spectralRoughness(baseHz, baseHz * std::pow(2.0, (k * kStep) / 1200.0), sp);
+
+    struct Dip { double cents, depth; };
+    Dip dips[kPoints];
+    int n = 0;
+    for (int k = 1; k < kPoints; ++k) {
+        if (!(d[k] < d[k - 1] && d[k] <= d[k + 1])) continue;
+        const double a = d[k - 1], b = d[k], c = d[k + 1];
+        const double den = a - 2.0 * b + c;
+        const double off = std::fabs(den) > 1.0e-18 ? clampv(0.5 * (a - c) / den, -0.5, 0.5) : 0.0;
+        dips[n].cents = (k + off) * kStep;
+        dips[n].depth = b;
+        ++n;
+    }
+    if (n < 2) return false;                     // a spectrum with almost no minima has no scale
+    // The least rough dips are the ones worth having. Insertion sort: n is at most a few dozen.
+    for (int i = 1; i < n; ++i) {
+        const Dip v = dips[i];
+        int j = i - 1;
+        while (j >= 0 && dips[j].depth > v.depth) { dips[j + 1] = dips[j]; --j; }
+        dips[j + 1] = v;
+    }
+    int keep = n < want ? n : want;
+    if (keep > FixedScale::kMax - 1) keep = FixedScale::kMax - 1;
+    double cents[FixedScale::kMax];
+    for (int i = 0; i < keep; ++i) cents[i] = dips[i].cents;
+    for (int i = 1; i < keep; ++i) {             // back into pitch order
+        const double v = cents[i];
+        int j = i - 1;
+        while (j >= 0 && cents[j] > v) { cents[j + 1] = cents[j]; --j; }
+        cents[j + 1] = v;
+    }
+    out = FixedScale{};
+    out.period = 2.0;
+    out.ratios[0] = 1.0;
+    int m = 1;
+    for (int i = 0; i < keep && m < FixedScale::kMax; ++i) {
+        if (cents[i] < 8.0 || cents[i] > 1192.0) continue;                 // the unison and the octave are already there
+        if (m > 0 && cents[i] - (1200.0 * std::log2(out.ratios[m - 1])) < 8.0) continue;   // and no two degrees a hair apart
+        out.ratios[m++] = std::pow(2.0, cents[i] / 1200.0);
+    }
+    out.count = m;
+    std::snprintf(out.name, sizeof(out.name), "Timbre (%d)", m);
+    return m >= 2;
 }
 
 // The roughness turned into a consonance in 0..1 that sits on the same scale as

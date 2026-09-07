@@ -23,6 +23,7 @@ const char* const kScaleNames[kNumScaleChoices] = {
     "Bohlen-Pierce (JI)",
     "Otonality 1-11",
     "User (Scala)",
+    "Timbre (Sethares)",
 };
 
 const char* const kRootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };

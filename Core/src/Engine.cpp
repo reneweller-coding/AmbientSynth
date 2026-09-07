@@ -31,9 +31,12 @@ Engine::Engine()
         slotA_[i].store(def, std::memory_order_relaxed);
         slotB_[i].store(def, std::memory_order_relaxed);
     }
-    for (int i = 0; i < kNumScaleChoices - 1; ++i) makeBuiltinScale(i, scales_[i]);
-    makeBuiltinScale(0, scales_[kNumScaleChoices - 1]);
-    std::strncpy(scales_[kNumScaleChoices - 1].name, "User (Scala)", sizeof(FixedScale::name) - 1);
+    for (int i = 0; i < kUserScaleIndex; ++i) makeBuiltinScale(i, scales_[i]);
+    makeBuiltinScale(0, scales_[kUserScaleIndex]);
+    std::strncpy(scales_[kUserScaleIndex].name, "User (Scala)", sizeof(FixedScale::name) - 1);
+    // The timbre scale starts as twelve equal steps and is replaced the moment it is asked for.
+    makeBuiltinScale(0, scales_[kTimbreScaleIndex]);
+    std::strncpy(scales_[kTimbreScaleIndex].name, "Timbre (Sethares)", sizeof(FixedScale::name) - 1);
     scale_ = &scales_[3];
     masterSmooth_.snap(dbToGain(-6.0f));
     for (auto& d : noteDistance_) d.store(-1.0f, std::memory_order_relaxed);

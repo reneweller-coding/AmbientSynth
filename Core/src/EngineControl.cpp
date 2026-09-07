@@ -534,7 +534,10 @@ void Engine::readParams()
     bp2_.even = bp_.even;
     bp_.smooth = g(ParamId::BrainSmooth);
     bp2_.smooth = bp_.smooth;
-    if (bp_.timbre > 0.0f) {
+    // The spectrum is needed by the conductor's Timbre ear and by the timbre scale, and the
+    // scale is read further down, so the question is asked here from the raw value.
+    const bool wantTimbreScale = std::lround(getParam(ParamId::Scale)) == kTimbreScaleIndex;
+    if (bp_.timbre > 0.0f || wantTimbreScale) {
         const int count = std::min(BrainSpectrum::kMax, std::max(1, vp_.partials));
         const float hc = 1.0f + vp_.brightness * vp_.brightness * 31.0f;
         const double B = static_cast<double>(vp_.inharmonic) * vp_.inharmonic * 0.02;
@@ -669,6 +672,22 @@ void Engine::readParams()
 
     // Tuning
     const int scaleIdx = clampv(static_cast<int>(std::lround(g(ParamId::Scale))), 0, kNumScaleChoices - 1);
+    // The scale that is computed rather than tabulated. It is rebuilt only when the spectrum it
+    // is made of has actually moved, and at most a few times a second: sweeping the dissonance
+    // curve is a third of a millisecond, which is nothing now and then and too much every block.
+    // A knob turn therefore retunes the instrument in small steps rather than continuously, which
+    // is also kinder to a chord that is already sounding.
+    bool scaleRebuilt = false;
+    if (scaleIdx == kTimbreScaleIndex && brainSpec_.count > 0) {
+        double sig = brainSpec_.count;
+        for (int i = 0; i < brainSpec_.count; ++i) sig += brainSpec_.ratio[i] * 7.0 + brainSpec_.amp[i] * 131.0;
+        if (++timbreScaleWait_ >= 96 && std::fabs(sig - timbreScaleSig_) > 1.0e-9) {
+            timbreScaleWait_ = 0;
+            timbreScaleSig_ = sig;
+            FixedScale built;
+            if (makeTimbreScale(brainSpec_, built)) { scales_[kTimbreScaleIndex] = built; scaleRebuilt = true; }
+        }
+    }
     scale_ = &scales_[scaleIdx];
     refPitch_ = g(ParamId::RefPitch);
     {   // The stretched octave. A change while notes are held retunes them like a purity change.
@@ -682,7 +701,7 @@ void Engine::readParams()
         const float purity = g(ParamId::TunePurity), drift = g(ParamId::TuneDrift);
         const float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()
         purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
-        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_;
+        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt;
         stretchChanged_ = false;
     }
     vp_.freeze = g(ParamId::Freeze) >= 0.5f;

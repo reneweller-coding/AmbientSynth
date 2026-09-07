@@ -243,7 +243,12 @@ enum class ParamSection : int {
 ParamSection sectionOf(const char* sectionName);
 inline ParamSection sectionOf(ParamId id) { return sectionOf(paramDesc(id).section); }
 
-constexpr int kNumScaleChoices = 12;
+constexpr int kNumScaleChoices = 13;
+// The last two are not tables. One is whatever Scala file was loaded; one is computed from
+// the instrument's own spectrum while it plays. Named, because five places used to spell the
+// user slot as "the last one" and appending anything after it would have quietly moved it.
+constexpr int kUserScaleIndex   = 11;
+constexpr int kTimbreScaleIndex = 12;
 extern const char* const kScaleNames[kNumScaleChoices];
 extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees

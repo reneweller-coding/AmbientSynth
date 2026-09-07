@@ -1,0 +1,487 @@
+AmbientSynth 1.2.0
+-- Configuring juceaide
+-- Building juceaide
+-- Exporting juceaide
+-- Testing juceaide
+-- Finished setting up juceaide
+-- Configuring done (4.6s)
+-- Generating done (1.4s)
+-- Build files have been written to: G:/Tools/VRAudio/AmbientSynth/build-release
+MSBuild-Version 18.9.1+a81b43525 für .NET Framework
+
+  Checking File Globs
+  Generating AmbientSynth_artefacts/JuceLibraryCode/AmbientSynth_resources.rc
+  Building VST3 manifest helper for AmbientSynth
+  -- Configuring done (0.0s)
+  -- Generating done (0.1s)
+  -- Build files have been written to: G:/Tools/VRAudio/AmbientSynth/build-release/vst3_helpers/AmbientSynth
+  AmbientSynth_rc_lib.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_rc_lib.dir\Release\AmbientSynth_rc_lib.lib
+  MSBuild-Version 18.9.1+a81b43525 f├╝r .NET Framework
+  
+    juce_VST3ManifestHelper.cpp
+    vst3_helper.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\vst3_helpers\AmbientSynth\vst3_helper.exe
+  Engine.cpp
+  EngineControl.cpp
+  EngineRender.cpp
+  Gesture.cpp
+  Help.cpp
+  Modulation.cpp
+  Osc.cpp
+  Params.cpp
+  PresetMap.cpp
+  PresetMeta.cpp
+  PresetPacks.cpp
+  Presets.cpp
+  Route.cpp
+  Score.cpp
+  Sources.cpp
+  Timeline.cpp
+  Tuning.cpp
+  Voice.cpp
+G:\Tools\VRAudio\AmbientSynth\Core\src\EngineRender.cpp(204,69): warning C4456: Deklaration von "fr" blendet vorherige lokale Deklaration aus [G:\Tools\VRAudio\AmbientSynth\build-release\Core\AmbientCore.vcxproj]
+      G:\Tools\VRAudio\AmbientSynth\Core\src\EngineRender.cpp(155,39):
+      Siehe Deklaration von "fr"
+  
+  AmbientCore.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Core\Release\AmbientCore.lib
+  PluginProcessor.cpp
+  PluginEditor.cpp
+  EditorViews.cpp
+  EditorSpectrum.cpp
+  EditorMatrix.cpp
+  EditorModStrip.cpp
+  EditorBrowse.cpp
+  AmbientLookAndFeel.cpp
+  juce_audio_processors.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_gui_basics_2.cpp
+  juce_gui_basics_3.cpp
+  juce_gui_basics_4.cpp
+  juce_gui_basics_5.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_events.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_data_structures.cpp
+  juce_audio_processors_headless.cpp
+  juce_audio_processors_headless_ara.cpp
+  juce_audio_processors_headless_lv2_libs.cpp
+  juce_audio_basics.cpp
+  juce_audio_utils.cpp
+  juce_audio_formats.cpp
+  juce_audio_devices.cpp
+G:\Tools\VRAudio\AmbientSynth\build\_deps\juce-src\modules\juce_gui_basics\juce_gui_basics.cpp(61): warning : This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\PluginEditor.cpp(287,37): warning C4996: 'juce::Displays::Display::userArea': Use userBounds [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorBrowse.cpp(439,16): warning C4458: Deklaration von "cursor" blendet Klassenmember aus [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+      G:\Tools\VRAudio\AmbientSynth\build\_deps\juce-src\modules\juce_gui_basics\components\juce_Component.h(2663,17):
+      Siehe Deklaration von "juce::Component::cursor"
+  
+G:\Tools\VRAudio\AmbientSynth\Plugin\PluginProcessor.cpp(345,57): warning C4996: 'juce::AudioFormat::createWriterFor': Use the function taking an AudioFormatWriterOptions instead. [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,117): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,110): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,101): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,101): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,101): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,101): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,101): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,80): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,80): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,80): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,80): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(53,80): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,111): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,104): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,100): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,100): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,100): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,100): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,100): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,87): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,87): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,87): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,87): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(54,87): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,63): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,56): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,48): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,48): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,48): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,48): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,48): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(111,22): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(118,41): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(118,33): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,92): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,92): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,92): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,92): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,92): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,68): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,68): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,68): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,68): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorSpectrum.cpp(117,68): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,74): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,67): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,58): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,58): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,58): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,58): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,58): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,35): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,35): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,35): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,35): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(515,35): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,79): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,72): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,63): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,63): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,63): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,63): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,63): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,39): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,39): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,39): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,39): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(516,39): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,68): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,61): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,53): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,53): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,53): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,53): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,53): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,35): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,35): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,35): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,35): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(517,35): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,73): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,66): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,58): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,58): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,58): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,58): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,58): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,39): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,39): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,39): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,39): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(518,39): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(564,52): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(564,45): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(564,41): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(564,35): warning C4244: "Argument": Konvertierung von "const float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(573,81): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(573,74): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(573,70): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(573,62): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,102): warning C4244: "Argument": Konvertierung von "float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,96): warning C4244: "Argument": Konvertierung von "const float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,81): warning C4244: "Argument": Konvertierung von "ValueType" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,81): warning C4244:         with [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,81): warning C4244:         [ [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,81): warning C4244:             ValueType=float [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,81): warning C4244:         ] [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Plugin\EditorViews.cpp(576,59): warning C4244: "Argument": Konvertierung von "const float" in "int", möglicher Datenverlust [G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth.vcxproj]
+  juce_graphics_Sheenbidi.c
+  juce_graphics_libjpg_1.c
+  juce_graphics_libjpg_2.c
+  juce_graphics_libjpg_3.c
+  juce_graphics_libpng.c
+  juce_graphics_lunasvg.c
+  juce_core_zlib.c
+  juce_audio_formats_flac_1.c
+  juce_audio_formats_flac_2.c
+  AmbientSynth.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\AmbientSynth_SharedCode.lib
+  juce_audio_plugin_client_AAX.cpp
+  juce_audio_plugin_client_AAX_utils.cpp
+  juce_audio_plugin_client_ARA.cpp
+  juce_audio_plugin_client_LV2.cpp
+  juce_audio_plugin_client_Standalone.cpp
+  juce_audio_plugin_client_Unity.cpp
+  juce_audio_plugin_client_VST2.cpp
+  juce_audio_plugin_client_VST3.cpp
+     Bibliothek "G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.lib" und Objekt "G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.exp" werden erstellt.
+  Code wird generiert.
+  Codegenerierung ist abgeschlossen.
+  AmbientSynth_VST3.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\VST3\AmbientSynth.vst3\Contents\x86_64-win\AmbientSynth.vst3
+  removing moduleinfo.json
+  creating G:/Tools/VRAudio/AmbientSynth/build-release/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.vst3/Contents/Resources/moduleinfo.json
+  juce_audio_plugin_client_AAX.cpp
+  juce_audio_plugin_client_AAX_utils.cpp
+  juce_audio_plugin_client_ARA.cpp
+  juce_audio_plugin_client_LV2.cpp
+  juce_audio_plugin_client_Standalone.cpp
+  hosttest.cpp
+  juce_audio_utils.cpp
+  juce_audio_plugin_client_Unity.cpp
+  juce_audio_processors.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_audio_plugin_client_VST2.cpp
+  juce_audio_plugin_client_VST3.cpp
+  juce_gui_basics_2.cpp
+  juce_gui_basics_3.cpp
+  juce_gui_basics_4.cpp
+  juce_gui_basics_5.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_events.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_data_structures.cpp
+  juce_audio_processors_headless.cpp
+  juce_audio_processors_headless_ara.cpp
+  juce_audio_processors_headless_lv2_libs.cpp
+  juce_audio_basics.cpp
+  juce_audio_formats.cpp
+  juce_audio_devices.cpp
+  main.cpp
+G:\Tools\VRAudio\AmbientSynth\build\_deps\juce-src\modules\juce_gui_basics\juce_gui_basics.cpp(61): warning : This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored [G:\Tools\VRAudio\AmbientSynth\build-release\Tests\ambient_hosttest.vcxproj]
+G:\Tools\VRAudio\AmbientSynth\Tests\hosttest.cpp(205,31): warning C4996: 'juce::AudioProcessor::createEditorIfNeeded': Prefer createEditorAndMakeActive() [G:\Tools\VRAudio\AmbientSynth\build-release\Tests\ambient_hosttest.vcxproj]
+  ambient_render.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tools\render\Release\ambient_render.exe
+  selftest.cpp
+  Code wird generiert.
+G:\Tools\VRAudio\AmbientSynth\Tests\selftest.cpp(1805,20): warning C4456: Deklaration von "e" blendet vorherige lokale Deklaration aus [G:\Tools\VRAudio\AmbientSynth\build-release\Tests\ambient_selftest.vcxproj]
+      G:\Tools\VRAudio\AmbientSynth\Tests\selftest.cpp(1792,16):
+      Siehe Deklaration von "e"
+  
+G:\Tools\VRAudio\AmbientSynth\Tests\selftest.cpp(3483,36): warning C4189: "e3": Lokale Variable ist initialisiert aber nicht referenziert [G:\Tools\VRAudio\AmbientSynth\build-release\Tests\ambient_selftest.vcxproj]
+  ambient_selftest.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tests\Release\ambient_selftest.exe
+  juce_graphics_Sheenbidi.c
+  juce_graphics_libjpg_1.c
+  juce_graphics_libjpg_2.c
+  juce_graphics_libjpg_3.c
+  juce_graphics_libpng.c
+  juce_graphics_lunasvg.c
+  juce_core_zlib.c
+  juce_audio_formats_flac_1.c
+  juce_audio_formats_flac_2.c
+  Code wird generiert.
+  Codegenerierung ist abgeschlossen.
+  AmbientSynth_Standalone.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Plugin\AmbientSynth_artefacts\Release\Standalone\AmbientSynth.exe
+  Codegenerierung ist abgeschlossen.
+  ambient_hosttest.vcxproj -> G:\Tools\VRAudio\AmbientSynth\build-release\Tests\Release\ambient_hosttest.exe
+  beat source: octave 0.000 Hz, tempered fifth 0.469 Hz
+  delay duck: 15 % of the high end out of the echoes; tail 0.002 of the unducked one
+  z-plane bank: 155 shapes in 12 families, all stable, all alive
+  [probe] velvet corr 0.050 colour 1.32 dB | chorus corr 0.048 colour 5.41 dB
+  [probe] first arrival small 327 (6.8 ms) large 1706 (35.5 ms)
+  [probe] side balance left-source 1.60 dB right-source -1.60 dB
+  [probe] mean pairwise: just triad 0.212, stacked fifths 0.232, harmonic series 0.165
+  [probe] harmonicity: just 0.391, fifths 0.377, 12-TET triad 0.376, cluster 0.235, dim7 0.208
+  [probe] conductor over 4 chord sizes: mean harmonicity 0.317 off, 0.493 on (22 notes, 3 pitch classes)
+  [probe] depth 0.5 is heard at 0.500 flat, 0.277 under the law; depth 1.0 at 1.000 and 1.000
+  [probe] 10 kHz against 7 kHz: 0.509 below, 0.227 flat, 0.028 overhead
+  [probe] far side energy 150-500 Hz: +3.0 dB with Envelop, mid -0.00 dB
+  [probe] first five onsets span 6.294 s one by one, 0.020 s with Blend
+  [probe] 12-TET match: partial 3 -> 1900.0 ct, 5 -> 2800.0 ct, 7 -> 3400.0 ct
+  [probe] Bohlen-Pierce match: partial 2 -> 1.9600 (was 2), partial 3 -> 3.0000
+  [probe] mean roughness of the eleven 12-TET intervals: 0.1263 natural, 0.1191 matched
+  [probe] arc lean on the harmony over 40 s: 0.000 at 0, 0.113 at 1
+  [probe] time with the beat between 2 and 8 Hz: 22% guard off, 18% reined in, 27% sought out (factor down to 0.44)
+  [probe] timbre scale, harmonic (11 degrees): 0 388 498 583 619 702 783 814 884 968 998
+  [probe] timbre scale, stiff string (12 degrees): 0 436 498 595 678 779 821 930 992 1064 1091 1177
+  [probe] furthest of the six just intervals from a degree of the harmonic scale: 1.7 cents
+  [probe] of those six, 4 have no degree within 15 cents in the stiff-string scale
+  [probe] engine timbre scale: 8 degrees plain, 9 with Inharmonic up
+  [probe] furthest degree moved when the spectrum changed: 91 cents
+  [probe] a key sounds up to 200 cents from where 12-TET puts it
+  [probe] evenness: augmented 1.000, dim7 1.000, major triad 0.875, cluster 0.250, octaves 0.000
+  [probe] chord distance against the single leap, worst of 400: 0.000 semitones
+  [probe] chords mode: mean travel 3.12 semitones over 145 exchanges, 2.68 over 145 with Smooth
+  [probe] mean evenness of the chords built: 0.664 plain, 0.768 with Even, 0.445 with Harmonic
+  [probe] key of a C major scale: C major (r 0.76)
+  [probe] key with A and E held: A minor (r 0.80)
+  [probe] key of a full chromatic: none (r 0.00)
+  [probe] key of a five-semitone cluster: C# minor (r 0.37)
+  [probe] conductor after 3 min: key confidence 0.73 off (9 pitch classes), 0.90 on (9 classes)
+  [probe] 1 kHz: 40 dB 1.00 sone, 50 dB 2.09, 60 dB 4.21 (doubling 2.09, 2.02)
+  [probe] same energy: one band 4.21 sone, ten bands 10.45 sone
+  [probe] meter: 1.14 sone now, 1.15 max, 1.14 N5, -120.0 LUFS short
+  [probe] model 184 frames, hop 21.3 ms, tone tonal 1.00 noisy 0.20
+  [probe] loudest band 5 centre 323 Hz, partial found at 299.9 Hz
+  [probe] spectral rms 0.0913 frozen 0.1117 | roughness tonal 0.981 breathy 2.303
+  [probe] frozen partials: note 62 146.8 Hz, note 74 292.7 Hz (ratio 1.99)
+  [probe] bow rms 0.1022 peak 0.232 hz 222.2 | wavetable rms 0.1029 -> -0.1 dB
+  [probe] bow at rest rms 0.000023 (72.9 dB below the bowed note)
+selftest: all checks passed
+hosttest: all checks passed
+  AmbientSynth.exe: 21 system DLLs, none of them a redistributable
+  AmbientSynth.vst3: 21 system DLLs, none of them a redistributable
+wrote G:\Tools\VRAudio\AmbientSynth\Deploy\manual-work\AmbientSynth-Manual.html (412 KB)
+wrote G:\Tools\VRAudio\AmbientSynth\Deploy\manual-work\AmbientSynth-Manual.pdf (4.4 MB)
+  portable zip: 15,4 MB
+Inno Setup 7 Command-Line Compiler
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+Portions Copyright (C) 2001-2004 Alex Yackimoff. All rights reserved.
+https://www.innosetup.com
+
+Compiler engine version: Inno Setup 7.1.0
+Non-commercial use only
+
+Preprocessing
+   Reading file: C:\Program Files\Inno Setup 7\ISPPBuiltins.iss
+   Line 126: Including file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+   Reading file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+   Line 161: Including file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-code.iss
+   Reading file: G:\Tools\VRAudio\AmbientSynth\Deploy\content-code.iss
+Parsing [Setup] section, line 31
+Parsing [Setup] section, line 32
+Parsing [Setup] section, line 33
+Parsing [Setup] section, line 34
+Parsing [Setup] section, line 35
+Parsing [Setup] section, line 36
+Parsing [Setup] section, line 37
+Parsing [Setup] section, line 38
+Parsing [Setup] section, line 39
+Parsing [Setup] section, line 40
+Parsing [Setup] section, line 41
+Parsing [Setup] section, line 42
+Parsing [Setup] section, line 43
+Parsing [Setup] section, line 44
+Parsing [Setup] section, line 45
+Parsing [Setup] section, line 46
+Parsing [Setup] section, line 47
+Parsing [Setup] section, line 48
+Parsing [Setup] section, line 49
+Parsing [Setup] section, line 51
+Parsing [Setup] section, line 56
+Parsing [Setup] section, line 57
+Parsing [Setup] section, line 61
+Parsing [Setup] section, line 62
+Parsing [Setup] section, line 63
+Parsing [Setup] section, line 64
+Parsing [Setup] section, line 65
+Parsing [Setup] section, line 66
+Parsing [Setup] section, line 67
+Reading file (LicenseFile)
+Reading file (WizardImageFile)
+Reading file (WizardSmallImageFile)
+Reading file (WizardImageFileDynamicDark)
+Reading file (WizardSmallImageFileDynamicDark)
+Preparing Setup program executable
+   Verification successful
+   Updating icons and style (SetupCustomStyle.e32)
+   Updating version info (SetupCustomStyle.e32)
+Determining language code pages
+Parsing [Languages] section, line 70
+   Reading file: C:\Program Files\Inno Setup 7\Default.isl
+Parsing [Languages] section, line 71
+   Reading file: C:\Program Files\Inno Setup 7\Languages\German.isl
+   Messages in script file
+Reading default messages from Default.isl
+Parsing [Languages] section, line 70
+   Reading file: C:\Program Files\Inno Setup 7\Default.isl
+Parsing [Languages] section, line 71
+   Reading file: C:\Program Files\Inno Setup 7\Languages\German.isl
+Parsing [LangOptions], [Messages], and [CustomMessages] sections
+   Messages in script file
+Reading [Code] section
+Parsing [Types] section, line 90
+Parsing [Types] section, line 91
+Parsing [Components] section, line 94
+Parsing [Components] section, line 95
+Parsing [Components] section, line 96
+Parsing [Components] section, line 100
+Parsing [Tasks] section, line 104
+Parsing [Icons] section, line 130
+Parsing [Icons] section, line 131
+Parsing [Icons] section, line 132
+Parsing [Icons] section, line 133
+Parsing [UninstallDelete] section, line 142
+Parsing [UninstallDelete] section, line 143
+Parsing [UninstallDelete] section, line 144
+Parsing [UninstallDelete] section, line 145
+Parsing [UninstallDelete] section, line 146
+Parsing [UninstallDelete] section, line 147
+Parsing [UninstallDelete] section, line 148
+Parsing [UninstallDelete] section, line 149
+Parsing [UninstallDelete] section, line 150
+Parsing [UninstallDelete] section, line 151
+Parsing [UninstallDelete] section, line 152
+Parsing [Run] section, line 136
+Parsing [Files] section, line 107
+Parsing [Files] section, line 108
+Parsing [Files] section, line 109
+Parsing [Files] section, line 111
+Parsing [Files] section, line 113
+Parsing [Files] section, line 119
+Parsing [Files] section, line 3 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 5 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 7 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 9 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 11 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Parsing [Files] section, line 13 of G:\Tools\VRAudio\AmbientSynth\Deploy\content-files.iss
+Reading file (is7z.dll)
+   Verification successful
+Compiling [Code] section
+Creating setup files
+   Verification successful
+   Updating icons (Setup.exe)
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.exe
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\LICENSE.txt
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\README.txt
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth-Manual.pdf
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\desktop.ini
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Plugin.ico
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Contents\Resources\moduleinfo.json
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\AmbientSynth.vst3\Contents\x86_64-win\AmbientSynth.vst3
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Aldebaran.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Chamber-Grey.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Corridor.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Cryo-Chamber.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Deep-Earth.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Desert-Ember.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Field-Absence.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Field-Recordings.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Filter-Cubes.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Ghost-Signal.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Glass-Vitrine.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Held-Moment.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Hull-Rumble.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Loop-Studio.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Millstone.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Modular-Nocturne.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Northern-Dark.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Own-Tuning.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Painted-Field.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Permafrost.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Planetary.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Ritual-Machine.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Rosin-and-Wire.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Sleep-Concert.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Slow-Carousel.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Strings-at-Rest.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Struck-Bodies.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Sustain.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Tape-Saturation.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Temple-of-Air.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Three-Alike.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Turning-Harmony.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Vast-Chord.ambientpack
+   Compressing: \\?\G:\Tools\VRAudio\AmbientSynth\Deploy\stage\Packs\Void-Station.ambientpack
+   Compressing Setup program executable
+   Updating version info (Setup.exe)
+   Updating manifest (Setup.exe)
+
+
+Successful compile (11,375 sec). Resulting Setup program filename is:
+G:\Tools\VRAudio\AmbientSynth\Deploy\out\AmbientSynth-1.2.0-Setup.exe
+  setup: 14,1 MB
+
+Name                            MB   LastWriteTime      
+----                            --   -------------      
+AmbientSynth-1.0.0-portable.zip 14,8 07.09.2026 00:05:13
+AmbientSynth-1.0.0-Setup.exe    13,6 07.09.2026 00:05:23
+AmbientSynth-1.1.0-portable.zip 15,3 07.09.2026 03:22:49
+AmbientSynth-1.1.0-Setup.exe    14,0 07.09.2026 03:22:58
+AmbientSynth-1.2.0-portable.zip 15,4 07.09.2026 12:24:36
+AmbientSynth-1.2.0-Setup.exe    14,1 07.09.2026 12:24:48
+AmbientSynth-Manual.pdf         4,1  07.09.2026 03:35:16
+
+

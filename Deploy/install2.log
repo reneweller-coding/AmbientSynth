@@ -1,0 +1,270 @@
+﻿2026-09-07 12:25:49.000   Log opened. (Time zone: UTC+02:00)
+2026-09-07 12:25:49.000   Setup version: Inno Setup version 7.1.0 (32-bit)
+2026-09-07 12:25:49.000   Original Setup EXE: G:\Tools\VRAudio\AmbientSynth\Deploy\out\AmbientSynth-1.2.0-Setup.exe
+2026-09-07 12:25:49.000   Setup command line: /SL5="$83136DE,12785015,872960,G:\Tools\VRAudio\AmbientSynth\Deploy\out\AmbientSynth-1.2.0-Setup.exe" /SPAWNWND=$91B3942 /FIRSTWND=$14411382 /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TYPE=custom /COMPONENTS=standalone,vst3,packs /LOG=Deploy\install2.log 
+2026-09-07 12:25:49.000   Compatibility mode: Yes (DetectorsAppHealth)
+2026-09-07 12:25:49.000   Windows version: 10.0.26100
+2026-09-07 12:25:49.000   Windows architecture: x64 (64-bit)
+2026-09-07 12:25:49.001   Machine types supported by system: x86 x64
+2026-09-07 12:25:49.001   User privileges: Administrative
+2026-09-07 12:25:49.034   Administrative install mode: Yes
+2026-09-07 12:25:49.034   Install mode root key: HKEY_LOCAL_MACHINE
+2026-09-07 12:25:49.034   64-bit install mode: Yes
+2026-09-07 12:25:49.034   RedirectionGuard status for current process: Enabled in enforcing mode
+2026-09-07 12:25:49.036   Created protected temporary directory: C:\Users\Rene\AppData\Local\Temp\is-U2IQ2T2S4C.tmp
+2026-09-07 12:25:49.114   -- DLL function import --
+2026-09-07 12:25:49.114   Function and DLL name: IsProcessorFeaturePresent@kernel32.dll
+2026-09-07 12:25:49.114   Importing the DLL function. Dest DLL name: kernel32.dll
+2026-09-07 12:25:49.114   Successfully imported the DLL function. Delay loaded? No
+2026-09-07 12:25:54.500   Found 1 files to register with RestartManager.
+2026-09-07 12:25:54.500   Calling RestartManager's RmGetList.
+2026-09-07 12:25:54.514   RmGetList finished successfully.
+2026-09-07 12:25:54.514   RestartManager found no applications using one of our files.
+2026-09-07 12:25:54.520   Starting the installation process.
+2026-09-07 12:25:54.537   Creating directory: \\?\C:\Program Files\AmbientSynth
+2026-09-07 12:25:54.539   Directory for uninstall files: C:\Program Files\AmbientSynth
+2026-09-07 12:25:54.539   Creating new uninstall log: C:\Program Files\AmbientSynth\unins000.dat
+2026-09-07 12:25:54.541   -- File entry --
+2026-09-07 12:25:54.543   Dest filename: C:\Program Files\AmbientSynth\unins000.exe
+2026-09-07 12:25:54.543   Non-default bitness: 32-bit
+2026-09-07 12:25:54.544   Time stamp of our file: 2026-09-07T10:25:48.649Z
+2026-09-07 12:25:54.544   Installing the file.
+2026-09-07 12:25:54.724   Successfully installed the file.
+2026-09-07 12:25:54.726   -- File entry --
+2026-09-07 12:25:54.726   Dest filename: \\?\C:\Program Files\AmbientSynth\AmbientSynth.exe
+2026-09-07 12:25:54.726   Time stamp of our file: 2026-09-07T10:22:28.000Z
+2026-09-07 12:25:54.726   Installing the file.
+2026-09-07 12:25:55.019   Successfully installed the file.
+2026-09-07 12:25:55.019   -- File entry --
+2026-09-07 12:25:55.019   Dest filename: \\?\C:\Program Files\AmbientSynth\LICENSE.txt
+2026-09-07 12:25:55.019   Time stamp of our file: 2026-09-04T09:58:10.000Z
+2026-09-07 12:25:55.019   Installing the file.
+2026-09-07 12:25:55.022   Successfully installed the file.
+2026-09-07 12:25:55.022   -- File entry --
+2026-09-07 12:25:55.022   Dest filename: \\?\C:\Program Files\AmbientSynth\README.txt
+2026-09-07 12:25:55.023   Time stamp of our file: 2026-09-07T10:24:32.000Z
+2026-09-07 12:25:55.023   Installing the file.
+2026-09-07 12:25:55.025   Successfully installed the file.
+2026-09-07 12:25:55.025   -- File entry --
+2026-09-07 12:25:55.025   Dest filename: \\?\C:\Program Files\AmbientSynth\AmbientSynth-Manual.pdf
+2026-09-07 12:25:55.025   Time stamp of our file: 2026-09-07T10:24:32.000Z
+2026-09-07 12:25:55.025   Installing the file.
+2026-09-07 12:25:55.240   Successfully installed the file.
+2026-09-07 12:25:55.240   -- File entry --
+2026-09-07 12:25:55.240   Dest filename: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\desktop.ini
+2026-09-07 12:25:55.240   Time stamp of our file: 2026-09-05T19:47:52.000Z
+2026-09-07 12:25:55.240   Installing the file.
+2026-09-07 12:25:55.240   Creating directory: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3
+2026-09-07 12:25:55.243   Successfully installed the file.
+2026-09-07 12:25:55.243   -- File entry --
+2026-09-07 12:25:55.243   Dest filename: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Plugin.ico
+2026-09-07 12:25:55.244   Time stamp of our file: 2026-09-07T10:21:42.000Z
+2026-09-07 12:25:55.244   Installing the file.
+2026-09-07 12:25:55.245   Successfully installed the file.
+2026-09-07 12:25:55.245   -- File entry --
+2026-09-07 12:25:55.245   Dest filename: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Contents\Resources\moduleinfo.json
+2026-09-07 12:25:55.245   Time stamp of our file: 2026-09-07T10:21:42.000Z
+2026-09-07 12:25:55.245   Installing the file.
+2026-09-07 12:25:55.245   Creating directory: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Contents
+2026-09-07 12:25:55.245   Creating directory: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Contents\Resources
+2026-09-07 12:25:55.247   Successfully installed the file.
+2026-09-07 12:25:55.247   -- File entry --
+2026-09-07 12:25:55.249   Dest filename: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Contents\x86_64-win\AmbientSynth.vst3
+2026-09-07 12:25:55.249   Time stamp of our file: 2026-09-07T10:21:42.000Z
+2026-09-07 12:25:55.249   Installing the file.
+2026-09-07 12:25:55.249   Creating directory: \\?\C:\Program Files\Common Files\VST3\AmbientSynth.vst3\Contents\x86_64-win
+2026-09-07 12:25:55.512   Successfully installed the file.
+2026-09-07 12:25:55.512   -- File entry --
+2026-09-07 12:25:55.512   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Aldebaran.ambientpack
+2026-09-07 12:25:55.512   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.512   Installing the file.
+2026-09-07 12:25:55.512   Creating directory: \\?\C:\ProgramData\AmbientSynth
+2026-09-07 12:25:55.512   Creating directory: \\?\C:\ProgramData\AmbientSynth\Packs
+2026-09-07 12:25:55.522   Successfully installed the file.
+2026-09-07 12:25:55.522   -- File entry --
+2026-09-07 12:25:55.522   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Chamber-Grey.ambientpack
+2026-09-07 12:25:55.523   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.523   Installing the file.
+2026-09-07 12:25:55.532   Successfully installed the file.
+2026-09-07 12:25:55.532   -- File entry --
+2026-09-07 12:25:55.532   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Corridor.ambientpack
+2026-09-07 12:25:55.533   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.533   Installing the file.
+2026-09-07 12:25:55.544   Successfully installed the file.
+2026-09-07 12:25:55.545   -- File entry --
+2026-09-07 12:25:55.545   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Cryo-Chamber.ambientpack
+2026-09-07 12:25:55.545   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.545   Installing the file.
+2026-09-07 12:25:55.559   Successfully installed the file.
+2026-09-07 12:25:55.559   -- File entry --
+2026-09-07 12:25:55.560   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Deep-Earth.ambientpack
+2026-09-07 12:25:55.560   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.560   Installing the file.
+2026-09-07 12:25:55.573   Successfully installed the file.
+2026-09-07 12:25:55.573   -- File entry --
+2026-09-07 12:25:55.573   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Desert-Ember.ambientpack
+2026-09-07 12:25:55.573   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.573   Installing the file.
+2026-09-07 12:25:55.584   Successfully installed the file.
+2026-09-07 12:25:55.584   -- File entry --
+2026-09-07 12:25:55.584   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Field-Absence.ambientpack
+2026-09-07 12:25:55.584   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.584   Installing the file.
+2026-09-07 12:25:55.597   Successfully installed the file.
+2026-09-07 12:25:55.598   -- File entry --
+2026-09-07 12:25:55.598   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Field-Recordings.ambientpack
+2026-09-07 12:25:55.599   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.599   Installing the file.
+2026-09-07 12:25:55.612   Successfully installed the file.
+2026-09-07 12:25:55.612   -- File entry --
+2026-09-07 12:25:55.613   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Filter-Cubes.ambientpack
+2026-09-07 12:25:55.613   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.613   Installing the file.
+2026-09-07 12:25:55.626   Successfully installed the file.
+2026-09-07 12:25:55.626   -- File entry --
+2026-09-07 12:25:55.626   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Ghost-Signal.ambientpack
+2026-09-07 12:25:55.627   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.627   Installing the file.
+2026-09-07 12:25:55.640   Successfully installed the file.
+2026-09-07 12:25:55.640   -- File entry --
+2026-09-07 12:25:55.640   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Glass-Vitrine.ambientpack
+2026-09-07 12:25:55.640   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.640   Installing the file.
+2026-09-07 12:25:55.652   Successfully installed the file.
+2026-09-07 12:25:55.652   -- File entry --
+2026-09-07 12:25:55.652   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Held-Moment.ambientpack
+2026-09-07 12:25:55.652   Time stamp of our file: 2026-09-07T01:01:46.000Z
+2026-09-07 12:25:55.652   Installing the file.
+2026-09-07 12:25:55.667   Successfully installed the file.
+2026-09-07 12:25:55.667   -- File entry --
+2026-09-07 12:25:55.667   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Hull-Rumble.ambientpack
+2026-09-07 12:25:55.667   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.667   Installing the file.
+2026-09-07 12:25:55.677   Successfully installed the file.
+2026-09-07 12:25:55.677   -- File entry --
+2026-09-07 12:25:55.677   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Loop-Studio.ambientpack
+2026-09-07 12:25:55.677   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.677   Installing the file.
+2026-09-07 12:25:55.687   Successfully installed the file.
+2026-09-07 12:25:55.687   -- File entry --
+2026-09-07 12:25:55.688   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Millstone.ambientpack
+2026-09-07 12:25:55.688   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.688   Installing the file.
+2026-09-07 12:25:55.698   Successfully installed the file.
+2026-09-07 12:25:55.698   -- File entry --
+2026-09-07 12:25:55.699   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Modular-Nocturne.ambientpack
+2026-09-07 12:25:55.699   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.699   Installing the file.
+2026-09-07 12:25:55.712   Successfully installed the file.
+2026-09-07 12:25:55.712   -- File entry --
+2026-09-07 12:25:55.713   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Northern-Dark.ambientpack
+2026-09-07 12:25:55.713   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.713   Installing the file.
+2026-09-07 12:25:55.727   Successfully installed the file.
+2026-09-07 12:25:55.727   -- File entry --
+2026-09-07 12:25:55.728   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Own-Tuning.ambientpack
+2026-09-07 12:25:55.728   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.728   Installing the file.
+2026-09-07 12:25:55.740   Successfully installed the file.
+2026-09-07 12:25:55.740   -- File entry --
+2026-09-07 12:25:55.740   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Painted-Field.ambientpack
+2026-09-07 12:25:55.741   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.741   Installing the file.
+2026-09-07 12:25:55.750   Successfully installed the file.
+2026-09-07 12:25:55.750   -- File entry --
+2026-09-07 12:25:55.752   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Permafrost.ambientpack
+2026-09-07 12:25:55.752   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.752   Installing the file.
+2026-09-07 12:25:55.761   Successfully installed the file.
+2026-09-07 12:25:55.761   -- File entry --
+2026-09-07 12:25:55.761   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Planetary.ambientpack
+2026-09-07 12:25:55.762   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.762   Installing the file.
+2026-09-07 12:25:55.774   Successfully installed the file.
+2026-09-07 12:25:55.774   -- File entry --
+2026-09-07 12:25:55.774   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Ritual-Machine.ambientpack
+2026-09-07 12:25:55.775   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.775   Installing the file.
+2026-09-07 12:25:55.785   Successfully installed the file.
+2026-09-07 12:25:55.785   -- File entry --
+2026-09-07 12:25:55.787   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Rosin-and-Wire.ambientpack
+2026-09-07 12:25:55.787   Time stamp of our file: 2026-09-07T01:01:46.000Z
+2026-09-07 12:25:55.787   Installing the file.
+2026-09-07 12:25:55.798   Successfully installed the file.
+2026-09-07 12:25:55.798   -- File entry --
+2026-09-07 12:25:55.798   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Sleep-Concert.ambientpack
+2026-09-07 12:25:55.799   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.799   Installing the file.
+2026-09-07 12:25:55.809   Successfully installed the file.
+2026-09-07 12:25:55.809   -- File entry --
+2026-09-07 12:25:55.809   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Slow-Carousel.ambientpack
+2026-09-07 12:25:55.810   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.810   Installing the file.
+2026-09-07 12:25:55.820   Successfully installed the file.
+2026-09-07 12:25:55.820   -- File entry --
+2026-09-07 12:25:55.821   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Strings-at-Rest.ambientpack
+2026-09-07 12:25:55.821   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.821   Installing the file.
+2026-09-07 12:25:55.831   Successfully installed the file.
+2026-09-07 12:25:55.831   -- File entry --
+2026-09-07 12:25:55.831   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Struck-Bodies.ambientpack
+2026-09-07 12:25:55.831   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.831   Installing the file.
+2026-09-07 12:25:55.840   Successfully installed the file.
+2026-09-07 12:25:55.840   -- File entry --
+2026-09-07 12:25:55.840   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Sustain.ambientpack
+2026-09-07 12:25:55.840   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.840   Installing the file.
+2026-09-07 12:25:55.850   Successfully installed the file.
+2026-09-07 12:25:55.850   -- File entry --
+2026-09-07 12:25:55.850   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Tape-Saturation.ambientpack
+2026-09-07 12:25:55.850   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.850   Installing the file.
+2026-09-07 12:25:55.861   Successfully installed the file.
+2026-09-07 12:25:55.862   -- File entry --
+2026-09-07 12:25:55.862   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Temple-of-Air.ambientpack
+2026-09-07 12:25:55.862   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.862   Installing the file.
+2026-09-07 12:25:55.872   Successfully installed the file.
+2026-09-07 12:25:55.872   -- File entry --
+2026-09-07 12:25:55.873   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Three-Alike.ambientpack
+2026-09-07 12:25:55.873   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.873   Installing the file.
+2026-09-07 12:25:55.883   Successfully installed the file.
+2026-09-07 12:25:55.884   -- File entry --
+2026-09-07 12:25:55.884   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Turning-Harmony.ambientpack
+2026-09-07 12:25:55.884   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.884   Installing the file.
+2026-09-07 12:25:55.893   Successfully installed the file.
+2026-09-07 12:25:55.893   -- File entry --
+2026-09-07 12:25:55.893   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Vast-Chord.ambientpack
+2026-09-07 12:25:55.893   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.893   Installing the file.
+2026-09-07 12:25:55.902   Successfully installed the file.
+2026-09-07 12:25:55.903   -- File entry --
+2026-09-07 12:25:55.903   Dest filename: \\?\C:\ProgramData\AmbientSynth\Packs\Void-Station.ambientpack
+2026-09-07 12:25:55.903   Time stamp of our file: 2026-09-07T00:44:54.000Z
+2026-09-07 12:25:55.903   Installing the file.
+2026-09-07 12:25:55.913   Successfully installed the file.
+2026-09-07 12:25:55.913   -- Icon entry --
+2026-09-07 12:25:55.914   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AmbientSynth\AmbientSynth.lnk
+2026-09-07 12:25:55.914   Creating directory: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AmbientSynth
+2026-09-07 12:25:56.772   Creating the icon.
+2026-09-07 12:25:56.837   Successfully created the icon.
+2026-09-07 12:25:56.905   -- Icon entry --
+2026-09-07 12:25:56.905   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AmbientSynth\Manual.lnk
+2026-09-07 12:25:56.905   Creating the icon.
+2026-09-07 12:25:56.907   Successfully created the icon.
+2026-09-07 12:25:57.161   -- Icon entry --
+2026-09-07 12:25:57.161   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\AmbientSynth\AmbientSynth entfernen.lnk
+2026-09-07 12:25:57.162   Creating the icon.
+2026-09-07 12:25:57.247   Successfully created the icon.
+2026-09-07 12:25:57.350   Saving uninstall information.
+2026-09-07 12:25:57.350   Creating new uninstall key: HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{7C3B9E14-5A2D-4C88-9E1F-2B6A0D5F3A41}_is1
+2026-09-07 12:25:57.350   Writing uninstall key values.
+2026-09-07 12:25:57.351   Detected previous non administrative install? No
+2026-09-07 12:25:57.351   Detected previous administrative 32-bit install? No
+2026-09-07 12:25:57.353   Installation process succeeded.
+2026-09-07 12:25:57.353   Need to restart Windows? No
+2026-09-07 12:25:57.359   Deinitializing Setup.
+2026-09-07 12:25:57.375   Log closed.

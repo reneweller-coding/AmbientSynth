@@ -333,6 +333,10 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
             recordedSamples_.fetch_add(n, std::memory_order_relaxed);
         }
     }
+    // Muted: everything above has run -- the engine, its meters and taps, the recorder -- and
+    // only what reaches the device is silenced. For the manual export, which plays a chord for
+    // its pictures, and for any start meant as a test rather than as music (AMBIENT_MUTE=1).
+    if (muteOutput_) buffer.clear();
 }
 
 bool AmbientSynthProcessor::startRecording(const juce::File& file)

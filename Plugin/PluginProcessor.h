@@ -140,6 +140,10 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     ambient::Engine engine_;
+    // Output muted at the device: set by AMBIENT_MUTE=1, and implied by AMBIENT_MANUAL (the
+    // export plays a chord for its pictures; nobody asked to hear it). Read once, at start.
+    const bool muteOutput_ = juce::SystemStats::getEnvironmentVariable("AMBIENT_MUTE", "").isNotEmpty()
+                          || juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL", "").isNotEmpty();
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;

@@ -25,7 +25,7 @@ consent, downloads the 6 GB sample library. Nothing else has to be installed:
 the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-1.10.0-portable.zip)**
 (15 MB) for anyone who would rather not run an installer, and the
 **[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-Manual.pdf)**
-(PDF, 156 pages) -- every tab of the panel as a picture, with what it does and
+(PDF, 157 pages) -- every tab of the panel as a picture, with what it does and
 what its knobs mean, and seven Design chapters on why the instrument is built
 the way it is, with the mathematics and the references. Everything is on the
 [releases page](https://github.com/reneweller-coding/AmbientSynth/releases).

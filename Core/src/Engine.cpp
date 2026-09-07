@@ -353,6 +353,10 @@ double Engine::frequencyOf(int note) const
         const double et = refPitch_ * std::pow(2.0, (note - 69) / 12.0);
         f = std::exp(std::log(et) + (std::log(pure) - std::log(et)) * clampv(p, 0.0, 1.0));
     }
+    // Adaptive intonation: the note's own offset and the shared comma offset, both in cents,
+    // scaled by the amount so that the knob glides everything home rather than switching it.
+    if (adaptAmt_ > 0.0f && note >= 0 && note < 128)
+        f *= std::pow(2.0, static_cast<double>(adaptAmt_) * (static_cast<double>(adaptCents_[note]) + commaCents_) / 1200.0);
     // The stretched octave. Listeners prefer octaves a little wider than 2:1 -- ten to twenty
     // cents at the extremes of the range (Ward 1954; Terhardt) -- and a piano is tuned that
     // way (the Railsback curve). Every octave away from the reference pitch is widened by
@@ -361,6 +365,49 @@ double Engine::frequencyOf(int note) const
     if (stretchCents_ > 0.0f && f > 0.0 && refPitch_ > 0.0)
         f = refPitch_ * std::pow(f / refPitch_, 1.0 + stretchCents_ / 1200.0);
     return f;
+}
+
+// The pure offset for a note arriving into a chord. Against every sounding voice the interval
+// is reduced to an octave and matched to the nearest small-integer ratio (5-limit and the
+// septimal tritone); the offset that would make that interval exact is weighted by the ratio's
+// simplicity -- the fifth speaks louder than the minor seventh -- and the weighted mean is the
+// answer, capped at thirty cents so a note that fits nothing is not thrown across a quarter tone.
+// The sounding voices' frequencies come through frequencyOf, so they carry their own offsets
+// and the shared comma, and a note tuned against them lands pure in the world as it is now.
+float Engine::adaptiveOffset(int note) const
+{
+    if (note < 0 || note > 127) return 0.0f;
+    static const struct { int num, den; } kRatios[] = {
+        { 1, 1 }, { 16, 15 }, { 9, 8 }, { 6, 5 }, { 5, 4 }, { 4, 3 }, { 7, 5 }, { 3, 2 }, { 8, 5 }, { 5, 3 }, { 9, 5 }, { 15, 8 } };
+    // The plain frequency: what the note gets with no offset of its own (the comma still applies,
+    // and cancels in every ratio below because the sounding voices carry it too).
+    double plain = frequencyOf(note);
+    if (adaptAmt_ > 0.0f) plain /= std::pow(2.0, static_cast<double>(adaptAmt_) * static_cast<double>(adaptCents_[note]) / 1200.0);
+    double sum = 0.0, weight = 0.0;
+    for (const auto& v : voices_) {
+        if (!v.isActive() || v.note() == note) continue;
+        const double g = frequencyOf(v.note());
+        if (!(g > 0.0) || !(plain > 0.0)) continue;
+        double r = plain / g;
+        int oct = 0;
+        while (r >= 2.0) { r *= 0.5; ++oct; }
+        while (r < 1.0)  { r *= 2.0; --oct; }
+        double bestCents = 1e9; int bestNum = 1, bestDen = 1;
+        for (const auto& q : kRatios) {
+            const double c = 1200.0 * std::log2(static_cast<double>(q.num) / q.den / r);   // + : the pure ratio is above
+            if (std::fabs(c) < std::fabs(bestCents)) { bestCents = c; bestNum = q.num; bestDen = q.den; }
+        }
+        {   // the octave above the last entry is the next unison
+            const double c = 1200.0 * std::log2(2.0 / r);
+            if (std::fabs(c) < std::fabs(bestCents)) { bestCents = c; bestNum = 1; bestDen = 1; }
+        }
+        if (std::fabs(bestCents) > 35.0) continue;   // fits nothing: this voice has no say
+        const double w = 1.0 / std::max(1.0, std::log2(static_cast<double>(bestNum * bestDen)));
+        sum += w * bestCents;
+        weight += w;
+    }
+    if (weight <= 0.0) return 0.0f;
+    return static_cast<float>(clampv(sum / weight, -30.0, 30.0));   // raw: frequencyOf scales it by the amount
 }
 
 const char* Engine::stemName(int i)
@@ -468,6 +515,13 @@ void Engine::startNote(int note, float velocity, int owner, float distance)
     randomPerNote_ = rng_.bipolar();
     Voice* v = allocate(note, owner);
     v->order = ++order_;
+    // Adaptive intonation: the offset is decided once, as the note arrives, against what is
+    // sounding then; a note already sounding in another voice keeps the offset it has.
+    if (adaptAmt_ > 0.0f) {
+        bool already = false;
+        for (const auto& x : voices_) if (&x != v && x.isActive() && x.note() == note) already = true;
+        if (!already) adaptCents_[note] = adaptiveOffset(note);
+    } else adaptCents_[note] = 0.0f;
     const double hz = frequencyOf(note);
     v->noteOn(note, hz, velocity, owner, distance, vp_);
     if (owner == OwnerMidi) {   // portamento: a key slides in from the previous key

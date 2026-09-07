@@ -3620,6 +3620,124 @@ void testResearchBatch()
         }
     }
 
+    // ---- cascade: a Hawkes clock -----------------------------------------------------------
+    {
+        auto onsets = [](float cascade) {
+            BrainParams p;
+            p.on = true; p.mode = BrainMode::Free; p.density = 12; p.rateSeconds = 3.0f;
+            p.holdMin = 1.0f; p.holdMax = 2.0f; p.low = 36; p.high = 79; p.cascade = cascade;
+            ClusterBrain brain;
+            brain.reset(0x51ull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            std::vector<double> t;
+            double now = 0.0;
+            for (int step = 0; step < 300000; ++step) {           // fifty minutes at 10 ms
+                brain.update(0.01, p, -1, freqOf, [&](const BrainEvent& e) { if (e.type == BrainEvent::Type::NoteOn) t.push_back(now); });
+                now += 0.01;
+            }
+            return t;
+        };
+        auto cv = [](const std::vector<double>& t) {
+            if (t.size() < 3) return 0.0;
+            double mean = 0.0; for (size_t i = 1; i < t.size(); ++i) mean += t[i] - t[i - 1];
+            mean /= static_cast<double>(t.size() - 1);
+            double var = 0.0; for (size_t i = 1; i < t.size(); ++i) { const double d = t[i] - t[i - 1] - mean; var += d * d; }
+            return std::sqrt(var / static_cast<double>(t.size() - 1)) / mean;
+        };
+        const std::vector<double> plain = onsets(0.0f), cascaded = onsets(1.0f);
+        const double cv0 = cv(plain), cv1 = cv(cascaded);
+        std::printf("  [probe] cascade: %zu events (CV %.2f) plain, %zu (CV %.2f) at full\n", plain.size(), cv0, cascaded.size(), cv1);
+        CHECK(plain.size() > 500, "the plain clock fires about a thousand times in fifty minutes");
+        CHECK(cv1 > cv0 + 0.25, "with Cascade the gaps are far more uneven: clusters and silences");
+        CHECK(cascaded.size() > plain.size() * 1.5 && cascaded.size() < plain.size() * 4.5, "and the clock fires two to four times as often, not without end");
+    }
+
+    // ---- surprise and homeostat: the entropy of the choices ---------------------------------
+    {
+        auto entropyOf = [](float surprise, float homeostat, float* leanOut) {
+            BrainParams p;
+            p.on = true; p.mode = BrainMode::Free; p.density = 5; p.rateSeconds = 1.0f;
+            p.holdMin = 20.0f; p.holdMax = 40.0f; p.low = 36; p.high = 79;
+            p.surprise = surprise; p.homeostat = homeostat;
+            ClusterBrain brain;
+            brain.reset(0x77ull, 48);
+            auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+            std::vector<int> notes;
+            for (int step = 0; step < 200000; ++step)             // thirty-three minutes at 10 ms
+                brain.update(0.01, p, -1, freqOf, [&](const BrainEvent& e) { if (e.type == BrainEvent::Type::NoteOn) notes.push_back(e.note); });
+            double hist[12] = {};
+            for (size_t i = 1; i < notes.size(); ++i) hist[((notes[i] - notes[i - 1]) % 12 + 12) % 12] += 1.0;
+            double total = 0.0; for (double h : hist) total += h;
+            double H = 0.0; for (double h : hist) if (h > 0.0) { const double pr = h / total; H -= pr * std::log2(pr); }
+            if (leanOut != nullptr) *leanOut = brain.lean();
+            return H;
+        };
+        float leanLow = 0.0f, leanHigh = 0.0f;
+        const double hOff = entropyOf(0.5f, 0.0f, nullptr);
+        const double hLow = entropyOf(0.05f, 1.0f, &leanLow), hHigh = entropyOf(0.95f, 1.0f, &leanHigh);
+        std::printf("  [probe] interval entropy: %.2f bits untouched, %.2f aiming low (lean %+.2f), %.2f aiming high (lean %+.2f)\n", hOff, hLow, leanLow, hHigh, leanHigh);
+        CHECK(hHigh > hLow + 0.4, "aiming high makes the choices measurably less predictable than aiming low");
+        CHECK(hLow < hOff && hHigh > hOff - 0.05, "the untouched conductor sits between the two");
+        CHECK(leanLow < 0.0f && leanHigh > 0.0f, "and the lean has the sign of the gap it is closing");
+    }
+
+    // ---- adaptive intonation and the comma --------------------------------------------------
+    {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::TunePurity, 0.0f);       // equal temperament underneath
+        e.setParam(ParamId::TuneAdapt, 1.0f);
+        e.reset();
+        std::vector<float> L(256), R(256);
+        auto run = [&](int blocks) { for (int b = 0; b < blocks; ++b) e.process(L.data(), R.data(), 256); };
+        run(4);
+        e.noteOn(48, 0.8f); run(4);
+        e.noteOn(52, 0.8f); run(4);
+        e.noteOn(55, 0.8f); run(4);
+        auto cents = [](double r) { return 1200.0 * std::log2(r); };
+        const double third = cents(e.frequencyOf(52) / e.frequencyOf(48) / 1.25);
+        const double fifth = cents(e.frequencyOf(55) / e.frequencyOf(48) / 1.5);
+        auto meanDeviation = [&]() {
+            double sum = 0.0;
+            for (int n : { 48, 52, 55 }) sum += cents(e.frequencyOf(n) / (440.0 * std::pow(2.0, (n - 69) / 12.0)));
+            return sum / 3.0;
+        };
+        const double devBefore = meanDeviation();
+        std::printf("  [probe] adaptive: third off pure by %+.2f cents, fifth by %+.2f; the chord sits %+.2f cents from ET\n", third, fifth, devBefore);
+        CHECK(std::fabs(third) < 1.0, "the third that arrives over the root is a pure 5:4");
+        CHECK(std::fabs(fifth) < 1.0, "and the fifth over both is a pure 3:2");
+        CHECK(devBefore < -3.0, "which has walked the chord's centre several cents flat of equal temperament");
+        run(static_cast<int>(60.0 * sr / 256));               // a minute
+        const double devAfter = meanDeviation();
+        const double thirdAfter = cents(e.frequencyOf(52) / e.frequencyOf(48) / 1.25);
+        std::printf("  [probe] after a minute the centre is %+.2f cents from ET (comma %+.2f), the third still %+.2f off pure\n", devAfter, e.commaCents(), thirdAfter);
+        CHECK(devAfter > devBefore + 2.0 && devAfter < 0.0, "a minute later the comma has paid back about three cents of it");
+        CHECK(std::fabs(thirdAfter) < 1.0, "and the third is as pure as it was, because every voice moved together");
+    }
+
+    // ---- blend, through the engine this time ------------------------------------------------
+    {
+        auto voicesAfter = [&](float blend) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 1.0f);
+            e.setParam(ParamId::BrainDensity, 5.0f);
+            e.setParam(ParamId::BrainRate, 2.0f);
+            e.setParam(ParamId::BrainBlend, blend);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < static_cast<int>(1.5 * sr / 256); ++b) e.process(L.data(), R.data(), 256);
+            return e.activeVoices();
+        };
+        const int apart = voicesAfter(0.0f), together = voicesAfter(1.0f);
+        std::printf("  [probe] blend through the engine: %d voices after 1.5 s one by one, %d with Blend\n", apart, together);
+        CHECK(apart <= 3, "one by one, a second and a half brings at most three notes");
+        CHECK(together >= 4, "with Blend the knob reaches the conductor and the chord is there at once");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

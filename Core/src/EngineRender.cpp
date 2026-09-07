@@ -130,6 +130,19 @@ void Engine::process(float* L, float* R, int n)
     stepClock(n / sr_);
     stepModulation(static_cast<float>(n / sr_));
     readParams();
+    // The comma's way home: the shared offset moves towards minus the mean of the sounding
+    // notes' own offsets, three cents a minute, so the ensemble's centre returns to the
+    // reference while every interval inside it stays pure. With nothing sounding, or the
+    // knob at zero, it returns to zero the same slow way.
+    if (adaptAmt_ > 0.0f || commaCents_ != 0.0) {
+        double sum = 0.0; int count = 0;
+        if (adaptAmt_ > 0.0f)
+            for (const auto& v : voices_) if (v.isActive()) { sum += adaptCents_[v.note()]; ++count; }
+        commaTarget_ = count > 0 ? -sum / count : 0.0;
+        const double step = (3.0 / 60.0) * (n / sr_);
+        commaCents_ += clampv(commaTarget_ - commaCents_, -step, step);
+        if (std::fabs(commaCents_) < 1.0e-6 && commaTarget_ == 0.0) commaCents_ = 0.0;
+    }
     if (retune_)   // tuning purity / drift: every sounding voice glides to its current frequency
         for (auto& v : voices_) if (v.isActive()) v.setTargetFrequency(frequencyOf(v.note()));
 

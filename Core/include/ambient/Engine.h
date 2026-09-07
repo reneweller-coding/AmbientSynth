@@ -229,6 +229,13 @@ public:
     float beatHz() const { return beatHz_; }
     float arcLean() const { return arcLean_; }
     float guardFactor() const { return guardFactor_; }
+    // The conductor's homeostat lean and its measured interval entropy, and the adaptive
+    // intonation's common offset in cents. For the panel and the tests.
+    float  brainLean() const { return brain_.lean(); }
+    float  brainEntropyBits() const { return brain_.entropyBits(); }
+    double commaCents() const { return commaCents_; }
+    // The offset, in cents, that tunes `note` pure against what is sounding now (0 if nothing is).
+    float  adaptiveOffset(int note) const;
     // What Match would make of partial h (1-based) against the current scale: the ratio to f0.
     double matchedPartialRatio(int h) const;
     float arcValue() const    { return arcValue_.load(std::memory_order_relaxed); }
@@ -441,6 +448,16 @@ private:
     double            purityCur_ = 1.0;   // Purity plus its drift, evaluated per block
     Drifter           purityDrift_;
     bool              retune_ = false;    // purity below 1 or drifting: sounding voices follow
+    // Adaptive: a note that starts is tuned pure against the notes already sounding, not against
+    // the root, and the offset it was given is kept for as long as it sounds. Those offsets
+    // accumulate -- a progression through pure fifths and thirds walks the pitch away by a
+    // syntonic comma (81/80, 21.5 cents) per cycle -- so a common offset shared by every voice
+    // pays the drift back at three cents a minute, which is far below the ear's threshold for a
+    // pitch change and leaves every interval exactly as pure as it was, because all the voices
+    // move together.
+    float             adaptAmt_ = 0.0f;
+    float             adaptCents_[128] = {};   // the offset each note was given when it started
+    double            commaCents_ = 0.0, commaTarget_ = 0.0;
     // Sleep: after two seconds of silence (no voice, output below -90 dBFS) the effects sleep
     long              silentSamples_ = 0;
     bool              asleep_ = false;

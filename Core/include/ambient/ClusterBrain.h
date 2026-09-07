@@ -341,6 +341,26 @@ struct BrainParams {
     // this up, the notes that fill an empty chord arrive TOGETHER -- within thirty milliseconds
     // at the top, fused into one sound -- rather than one per tick.
     float blend = 0.0f;
+    // Cascade: events that cause events. The conductor's clock is a Poisson process -- every
+    // gap drawn afresh, nothing remembered -- which is the most even a random clock can be, and
+    // nothing in nature is that even: a gust brings gusts, a crack in cooling wood brings more.
+    // A Hawkes process (Hawkes 1971) is the model of that: each event lifts the rate by a jump
+    // that decays away, so events come in clusters that are caused, not scheduled. The jump is
+    // sized so that at full an event breeds 0.65 further events on average (the branching
+    // ratio; above 1 the process explodes), which makes the clock fire about three times as
+    // often as its base rate. 0 is the clock as it always was.
+    float cascade = 0.0f;
+    // Surprise and Homeostat: how predictable the music is allowed to become. Predictive-coding
+    // accounts of music (Vuust, Koelsch) put listening between two failures: when nothing is
+    // ever surprising the ear stops attending, and when everything is it gives up. The
+    // conductor keeps a fading histogram of the intervals it has chosen and measures its
+    // entropy in bits; Surprise is the entropy it aims for (0 a machine repeating itself, 1 as
+    // unpredictable as twelve pitch classes can be), and Homeostat is how hard it leans towards
+    // that aim -- when the music has become too predictable the draw is flattened so unlikely
+    // notes get their turn, when it has become too random the draw is sharpened towards the
+    // best-fitting notes. At Homeostat 0 nothing leans and the conductor is as it always was.
+    float surprise = 0.5f;
+    float homeostat = 0.0f;
     // Key: how strongly the conductor prefers the stable degrees of the key it finds itself in.
     // Nothing sets that key -- it is measured from what has actually been sounding, weighted by
     // how long, which for an instrument whose notes last minutes is the only weighting that means
@@ -405,6 +425,10 @@ public:
         root_ = rootNote;
         timer_ = 1.0;
         wasOn_ = false;
+        excite_ = 0.0;
+        lastNote_ = -1;
+        lastLean_ = 0.0f;
+        for (float& w : ic_) w = 0.0f;
     }
 
     // What key the conductor finds itself in, and how sure it is. Measured, never set: the
@@ -421,6 +445,20 @@ public:
     // panel, a mapped controller, a footswitch. Read and cleared inside update().
     void requestStep() { stepRequested_ = true; }
     bool stepPending() const { return stepRequested_; }
+    // How much the homeostat is leaning right now (+ towards more surprise, - towards less), the
+    // entropy of the recent interval choices in bits, and the cascade's excitation in multiples
+    // of the base rate. For the panel and the tests.
+    float lean() const { return lastLean_; }
+    float entropyBits() const
+    {
+        float total = 0.0f;
+        for (float w : ic_) total += w;
+        if (total <= 0.0f) return 0.0f;
+        double h = 0.0;
+        for (float w : ic_) if (w > 0.0f) { const double pr = w / total; h -= pr * std::log2(pr); }
+        return static_cast<float>(h);
+    }
+    double excitation() const { return excite_; }
 
     // Advance `dt` seconds. `freqOf(int note) -> double`, `emit(const BrainEvent&)`.
     // `anchorNote` (>= 0) pins the root to a note the player holds on the keyboard.
@@ -463,9 +501,10 @@ public:
             if (s.remaining <= 0.0) { emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f }); s.note = -1; }
         }
 
-        timer_ -= dt;
-        if (timer_ > 0.0) return;
         const double mean = std::max(0.5, static_cast<double>(p.rateSeconds));
+        lastLean_ = leanOf(p);
+        advanceTimer(dt, p, mean);
+        if (timer_ > 0.0) return;
         timer_ = clampv(-std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * mean, 0.5, mean * 4.0);
 
         const int low = std::min(p.low, p.high), high = std::max(p.low, p.high);
@@ -508,6 +547,7 @@ public:
         bool rootSounding = false;
         for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), rootFreq)) rootSounding = true;
         const double mid = 0.5 * (low + high), half = std::max(1.0, 0.5 * (high - low));
+        const float lean = lastLean_;
         float weights[128] = {};
         float total = 0.0f;
         for (int c = low; c <= high && c < 128; ++c) {
@@ -552,6 +592,10 @@ public:
                 w *= static_cast<float>(std::pow(std::max(chordEvenness(set, m), 1.0e-3), 5.0 * static_cast<double>(p.even)));
             }
             if (pitchClassEqual(fc, rootFreq)) w *= rootSounding ? 0.25f : 3.0f;                       // keep a foundation
+            // Sharpening needs far more than flattening: the untouched draw is already within
+            // two per cent of the maximum entropy twelve interval classes allow (measured:
+            // 3.52 of 3.58 bits), so there is almost nowhere to go upwards and a long way down.
+            if (lean != 0.0f) w = std::pow(w, lean > 0.0f ? 1.0f / (1.0f + 2.0f * lean) : 1.0f - 6.0f * lean);
             weights[c] = w;
             total += w;
         }
@@ -568,6 +612,8 @@ public:
             s.note = chosen;
             s.remaining = hmin + rng_.uniform() * (hmax - hmin);
             emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, 0.5f + 0.4f * rng_.uniform() });
+            kick(p);
+            remember(chosen);
             break;
         }
 
@@ -583,6 +629,7 @@ public:
             for (int k = 0; k < extra; ++k) {
                 const int next = chooseNote(-1, low, high, p, freqOf);
                 if (next < 0) break;
+                remember(next);
                 bool placed = false;
                 for (auto& s : slots_) {
                     if (s.note >= 0) continue;
@@ -621,14 +668,15 @@ private:
 
         // Fill an empty chord one note per tick, so the first bars are an entrance and not a chord.
         int sounding = activeCount();
-        timer_ -= dt;
+        lastLean_ = leanOf(p);
+        advanceTimer(dt, p, std::max(0.5, static_cast<double>(p.rateSeconds)));
         const bool asked = stepRequested_;
         if (sounding < density) {
             if (timer_ > 0.0 && !asked && sounding > 0) return;
             stepRequested_ = false;
             timer_ = std::max(0.5, static_cast<double>(p.rateSeconds));
             const int add = chooseNote(-1, low, high, p, freqOf);
-            if (add >= 0) startIn(add, emit);
+            if (add >= 0) { kick(p); remember(add); startIn(add, emit); }
             if (p.blend > 0.0f) {
                 const int missing = density - activeCount();
                 const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
@@ -636,6 +684,7 @@ private:
                 for (int k = 0; k < extra; ++k) {
                     const int next = chooseNote(-1, low, high, p, freqOf);
                     if (next < 0) break;
+                    remember(next);
                     bool placed = false;
                     for (auto& s : slots_) {
                         if (s.note >= 0) continue;
@@ -700,6 +749,8 @@ private:
         recentHead_ = (recentHead_ + 1) % kRecent;
         slots_[moving].note = arriving;
         slots_[moving].remaining = 0.0;
+        kick(p);
+        remember(arriving);
         emit(BrainEvent{ BrainEvent::Type::NoteOn, arriving, 0.5f + 0.4f * rng_.uniform() });
     }
 
@@ -722,6 +773,7 @@ private:
         const double rootFreq = freqOf(root_);
         const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
         const float lead = std::max(p.voiceLead, 0.5f);
+        const float lean = leanOf(p);
         int best = -1; double bestScore = -1e9;
         for (int c = low; c <= high && c < 128; ++c) {
             if (sounding(c)) continue;
@@ -778,7 +830,9 @@ private:
             // An octave of something already sounding is a doubling, not a new colour.
             for (const auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) score *= 0.2;
             if (pitchClassEqual(fc, rootFreq)) score *= 0.5;
-            score *= 0.85 + 0.3 * rng_.uniform();          // a little life, so it is not a machine
+            if (lean < 0.0f) score = std::pow(score, 1.0 - 6.0 * static_cast<double>(lean));
+            score *= lean > 0.0f ? (0.85 - 0.7 * static_cast<double>(lean)) + (0.3 + 1.4 * static_cast<double>(lean)) * rng_.uniform()
+                                 : 0.85 + 0.3 * rng_.uniform();          // a little life, so it is not a machine
             if (score > bestScore) { bestScore = score; best = c; }
         }
         if (outScore != nullptr) *outScore = best >= 0 ? bestScore : 0.0;
@@ -835,8 +889,51 @@ private:
         if (bestScore < 0.5 + 3.0) root_ = best;
     }
 
+    // The Hawkes clock. Time runs faster for the timer while the excitation is up: an
+    // inhomogeneous Poisson process is a homogeneous one in rescaled time, so the gap is drawn
+    // exactly as before and only consumed faster. The excitation decays with a time constant of
+    // half the mean gap, and each event adds enough that at full Cascade one event breeds 0.65
+    // further ones on average (kick = branching * mean / tau = 0.65 * 2). Short-circuited at
+    // zero and at rest, so a conductor without Cascade subtracts dt as it always did.
+    void advanceTimer(double dt, const BrainParams& p, double mean)
+    {
+        if (p.cascade > 0.0f || excite_ > 0.0) {
+            excite_ *= std::exp(-dt / (0.5 * mean));
+            if (excite_ < 1.0e-4) excite_ = 0.0;
+            timer_ -= dt * (1.0 + excite_);
+        } else timer_ -= dt;
+    }
+    void kick(const BrainParams& p) { if (p.cascade > 0.0f) excite_ += 1.3 * static_cast<double>(p.cascade); }
+
+    // The interval histogram the homeostat reads: which of the twelve interval classes the
+    // last choice made against the one before it. It fades by 0.92 per event, so it remembers
+    // the last dozen or so.
+    void remember(int note)
+    {
+        if (lastNote_ >= 0) {
+            for (float& w : ic_) w *= 0.92f;
+            ic_[((note - lastNote_) % 12 + 12) % 12] += 1.0f;
+        }
+        lastNote_ = note;
+    }
+    // Where the homeostat leans: + when the music is more predictable than Surprise asks for,
+    // - when it is less, scaled by Homeostat. Needs a few events of history to say anything.
+    float leanOf(const BrainParams& p) const
+    {
+        if (p.homeostat <= 0.0f) return 0.0f;
+        float total = 0.0f;
+        for (float w : ic_) total += w;
+        if (total < 3.0f) return 0.0f;
+        const double h = entropyBits() / std::log2(12.0);
+        return clampv(static_cast<float>((p.surprise - h) * 2.0), -1.0f, 1.0f) * p.homeostat;
+    }
+
     Slot   slots_[kSlots];
     mutable Rng rng_;
+    double excite_ = 0.0;         // Cascade: the rate's excitation, in multiples of the base rate
+    float  ic_[12] = {};          // Homeostat: fading histogram of chosen interval classes
+    int    lastNote_ = -1;
+    float  lastLean_ = 0.0f;
     double timer_ = 1.0;
     int    root_ = 48;
     bool   wasOn_ = false;

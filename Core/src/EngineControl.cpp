@@ -562,6 +562,17 @@ void Engine::readParams()
     bp2_.even = bp_.even;
     bp_.smooth = g(ParamId::BrainSmooth);
     bp2_.smooth = bp_.smooth;
+    // Blend was declared, documented and tested in the third research round -- and never read
+    // into the conductor. The test drove the conductor directly, so it passed; through the
+    // engine the knob did nothing. Found while adding the lines below it.
+    bp_.blend = g(ParamId::BrainBlend);
+    bp2_.blend = bp_.blend;
+    bp_.cascade = g(ParamId::BrainCascade);
+    bp2_.cascade = bp_.cascade;
+    bp_.surprise = g(ParamId::BrainSurprise);
+    bp2_.surprise = bp_.surprise;
+    bp_.homeostat = g(ParamId::BrainHomeostat);
+    bp2_.homeostat = bp_.homeostat;
     // The spectrum is needed by the conductor's Timbre ear and by the timbre scale, and the
     // scale is read further down, so the question is asked here from the raw value.
     const bool wantTimbreScale = std::lround(getParam(ParamId::Scale)) == kTimbreScaleIndex;
@@ -770,7 +781,8 @@ void Engine::readParams()
             }
         }
         purityCur_ = clampv(purity + wander, 0.0f, 1.0f);
-        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt;
+        adaptAmt_ = g(ParamId::TuneAdapt);
+        retune_ = purityCur_ < 0.9999 || drift > 0.0f || stretchChanged_ || scaleRebuilt || adaptAmt_ > 0.0f || commaCents_ != 0.0;
         stretchChanged_ = false;
     }
     vp_.freeze = g(ParamId::Freeze) >= 0.5f;

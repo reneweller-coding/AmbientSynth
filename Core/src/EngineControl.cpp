@@ -255,6 +255,17 @@ void Engine::stepModulation(float dt)
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
     modSrc_[static_cast<int>(ModSource::RandomPerNote)] = randomPerNote_;
     modSrc_[static_cast<int>(ModSource::Beat)] = updateBeat(dt);
+    // The cascade's excitation, smoothed: the Hawkes kick is a step, and a step on a send is a
+    // click. One pole at two seconds turns it into a swell that still rises with the cluster.
+    {
+        const float target = static_cast<float>(brain_.excitation() / (1.0 + brain_.excitation()));
+        const float a = 1.0f - std::exp(-dt / 2.0f);
+        cascadeNow_ += a * (target - cascadeNow_);
+        // Its own slow average, so anything reading it can ask "busier than usual?" rather than
+        // "busy?" -- what keeps a piece without a cascade exactly where it was.
+        cascadeAvg_ += (1.0f - std::exp(-dt / 90.0f)) * (cascadeNow_ - cascadeAvg_);
+        modSrc_[static_cast<int>(ModSource::Cascade)] = uni(cascadeNow_);
+    }
     // The hands. Pressure and slide are per note and read from the loudest voice -- it is the one
     // being leaned on; the wheel belongs to the instrument. All three rest at zero, which through
     // uni() is -1, so a route wanting "nothing until I move it" carries the 0..1 flag.
@@ -653,6 +664,7 @@ void Engine::readParams()
     vp_.strikeBrain = std::lround(g(ParamId::StrikeWho)) == 1;
     strikeChance_   = g(ParamId::StrikeChance);
     strikeCluster_  = g(ParamId::StrikeCluster);
+    cosmosSwell_    = g(ParamId::CosmosSwell);
     tide_       = g(ParamId::Tide);
     tidePeriod_ = g(ParamId::TidePeriod);
     vp_.pitchMul = tide_ > 0.0f ? std::pow(2.0f, tide_ * tideDrift_.value() / 1200.0f) : 1.0f;

@@ -329,9 +329,18 @@ void Engine::renderChunk(float* L, float* R, int n)
     }
 
     // Cosmos: a parallel send off the near bus, returned to both planes; the dry path is untouched.
-    if (cosmosSend_ > 0.0f || smCosmosSend_.value > 1e-4f) {
+    // Swell: the send follows the conductor's cascade, above its own average and below it, so the
+    // Cosmos gathers where the events gather and thins out in the long gaps instead of sitting
+    // there at one level all night. Measured against the average and not the excitation itself,
+    // which is what leaves a piece without a cascade (excitation 0, average 0) exactly as it was.
+    // The deviation is taken relative to that average, not as an absolute number: a piece whose
+    // cascade only ever reaches a fifth swells as much as one that runs hot, and one with no
+    // cascade at all (both zero) is left exactly alone. The floor of 0.15 keeps the division sane.
+    const float cosmosSendNow = cosmosSend_
+        * std::clamp(1.0f + 3.0f * cosmosSwell_ * (cascadeNow_ - cascadeAvg_) / std::max(cascadeAvg_, 0.15f), 0.0f, 2.0f);
+    if (cosmosSendNow > 0.0f || smCosmosSend_.value > 1e-4f) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
-        for (int i = 0; i < n; ++i) { const float s = smCosmosSend_.next(cosmosSend_); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
+        for (int i = 0; i < n; ++i) { const float s = smCosmosSend_.next(cosmosSendNow); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
         shifter_.process(cl, cr, n);
         resonator_.process(cl, cr, n);
         vowel_.process(cl, cr, n);

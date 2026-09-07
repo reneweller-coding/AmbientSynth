@@ -611,6 +611,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     // Chance 1 is what the instrument always did: every note that may strike, strikes.
     F(ParamId::StrikeChance,   "strike_chance",   "Chance",      "Strike",        0.f, 1.f, 1.f,  1.f, ""),
     F(ParamId::StrikeCluster,  "strike_cluster",  "Cluster",     "Strike",        0.f, 1.f, 0.f,  1.f, ""),
+    // The Cosmos breathing with the conductor's cascade. On by default: without a cascade the
+    // excitation is zero and this changes nothing at all, and where there is one it is what the
+    // section wanted anyway -- a parallel world that comes and goes rather than a constant hum.
+    F(ParamId::CosmosSwell,    "cosmos_swell",    "Swell",       "Cosmos",        0.f, 1.f, 0.5f, 1.f, ""),
 }};
 } // namespace
 

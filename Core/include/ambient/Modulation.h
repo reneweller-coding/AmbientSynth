@@ -176,6 +176,12 @@ enum class ModSource : int {
     // never a cycle, and never a step -- what an LFO cannot be and filtered noise cannot be
     // either, which is the reason for having them. Three coordinates each.
     LorenzX, LorenzY, LorenzZ, RosslerX, RosslerY, RosslerZ,
+    // The conductor's own excitement. With Cascade up its clock is a Hawkes process -- an event
+    // breeds events -- and this is that excitation, as exc / (1 + exc), so it rests at 0 between
+    // the clusters and climbs towards 1 inside one. It is the only source that comes from what
+    // the piece is doing rather than from a clock, a shape or a field of its own, so a route
+    // from it makes the instrument swell where it is busy and rest where it is not.
+    Cascade,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

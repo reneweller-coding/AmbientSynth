@@ -86,6 +86,7 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
     card(MS::Distance, "DIST", 2, 0);
     card(MS::RandomPerNote, "RAND", 2, 0);
     card(MS::Beat, "BEAT", 2, 0);   // the chord listening to how far out of tune it is
+    card(MS::Cascade, "CASC", 2, 0);   // the conductor's excitation: drag it at anything that should swell where the piece is busy
 
     for (auto* b : { &tabLfo, &tabEnv, &tabMatrix }) {
         b->setClickingTogglesState(true);

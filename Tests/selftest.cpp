@@ -4360,6 +4360,74 @@ void testResearchBatch()
               "and roughly as many of them: Cluster moves the strikes, Chance decides how many");
     }
 
+    // ---- the Cosmos swelling with the cascade ----------------------------------------------
+    // The Cosmos is a send, not an event: it hums along with whatever sounds and never rests.
+    // Swell lets it follow the conductor's excitation -- measured against that piece's own
+    // average, which is what leaves an instrument without a cascade exactly where it was.
+    {
+        auto run = [&](float swell, float cascade, double& cv, double& corr, std::vector<float>* tail) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 1.0f);
+            e.setParam(ParamId::BrainRate, 2.0f);
+            e.setParam(ParamId::BrainHoldMin, 5.0f);
+            e.setParam(ParamId::BrainHoldMax, 12.0f);
+            e.setParam(ParamId::BrainCascade, cascade);
+            e.setParam(ParamId::CosmosSend, 0.5f);
+            e.setParam(ParamId::CosmosReturn, 0.6f);
+            e.setParam(ParamId::CosmosRes, 0.4f);
+            e.setParam(ParamId::CosmosSwell, swell);
+            e.reset();
+            std::vector<float> L(256), R(256), tap(256);
+            std::vector<double> lev, exc;
+            double excSm = 0.0;
+            const int blocks = static_cast<int>(180.0 * sr / 256.0);   // three minutes
+            for (int b = 0; b < blocks; ++b) {
+                e.process(L.data(), R.data(), 256);
+                if (tail != nullptr && b >= blocks - 8) tail->insert(tail->end(), L.begin(), L.end());
+                e.cosmosTap(tap.data(), 256);
+                double s = 0.0;
+                for (int i = 0; i < 256; ++i) s += static_cast<double>(tap[i]) * tap[i];
+                lev.push_back(std::sqrt(s / 256.0));
+                // The send follows the excitation smoothed over two seconds, so that is what the
+                // level is compared with; against the raw kick the smoothing alone would look
+                // like a poor correlation.
+                const double target = e.brainExcitation() / (1.0 + e.brainExcitation());
+                const double a = 1.0 - std::exp(-(256.0 / sr) / 2.0);
+                excSm += a * (target - excSm);
+                exc.push_back(excSm);
+            }
+            double m = 0.0, me = 0.0;
+            for (size_t i = 0; i < lev.size(); ++i) { m += lev[i]; me += exc[i]; }
+            m /= static_cast<double>(lev.size()); me /= static_cast<double>(exc.size());
+            double v = 0.0, ve = 0.0, c = 0.0;
+            for (size_t i = 0; i < lev.size(); ++i) {
+                const double dl = lev[i] - m, de = exc[i] - me;
+                v += dl * dl; ve += de * de; c += dl * de;
+            }
+            cv = m > 1e-12 ? std::sqrt(v / static_cast<double>(lev.size())) / m : 0.0;
+            corr = (v > 0.0 && ve > 0.0) ? c / std::sqrt(v * ve) : 0.0;
+        };
+        // Without a cascade there is nothing to follow, and the Swell must be inaudible: the same
+        // samples, not merely a similar level.
+        std::vector<float> off, on;
+        double cvA, corrA, cvB, corrB;
+        run(0.0f, 0.0f, cvA, corrA, &off);
+        run(1.0f, 0.0f, cvB, corrB, &on);
+        double worst = 0.0;
+        for (size_t i = 0; i < std::min(off.size(), on.size()); ++i) worst = std::max(worst, std::fabs(static_cast<double>(off[i] - on[i])));
+        std::printf("  [probe] cosmos swell without a cascade: largest sample difference %.3g\n", worst);
+        CHECK(worst < 1.0e-9, "with no cascade running, Swell changes nothing at all");
+        // With one, the send opens in the clusters and closes in the gaps.
+        run(0.0f, 1.0f, cvA, corrA, nullptr);
+        run(1.0f, 1.0f, cvB, corrB, nullptr);
+        std::printf("  [probe] cosmos swell with a cascade: level variation %.3f -> %.3f, correlation with the excitation %+.3f -> %+.3f\n",
+                    cvA, cvB, corrA, corrB);
+        CHECK(cvB > cvA * 1.15, "with a cascade the Cosmos comes and goes instead of sitting at one level");
+        CHECK(corrB > corrA + 0.05, "and what it follows is the conductor's excitation");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

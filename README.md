@@ -61,7 +61,10 @@ since 2013), a VST3 host if you want the plugin.
   reverb whose lossless feedback matrix turns while every delay line stands
   still.
 * **The Cosmos**: a parallel path of frequency shifter, tuned resonators, a
-  vowel filter, a spectral nebula and a self-regulating shimmer loop.
+  vowel filter, a spectral nebula and a self-regulating shimmer loop. Its
+  **Swell** lets the send follow the conductor's cascade, so the parallel world
+  gathers where the events gather and thins out in the long gaps instead of
+  humming at one level all night.
 * **A conductor** that plays all night: the Cluster Brain chooses notes from
   the scale, places them on the planes and holds them for minutes; an autoplay
   that exchanges one voice at a time; a second conductor for the background;
@@ -94,8 +97,10 @@ since 2013), a VST3 host if you want the plugin.
   cellular automaton whose blobs drift, split and die by their neighbours'
   doing, read at four points -- the **Lorenz** and **Roessler** attractors on a
   scale of minutes (chaos: a shape and a memory, never a cycle), aftertouch,
-  wheel and slide, smoothed if you like by the **one-euro filter**, all through one
-  matrix onto any knob -- including the modulators' own.
+  wheel and slide, smoothed if you like by the **one-euro filter**, and the
+  conductor's own **cascade** excitation -- the one source that comes from what
+  the piece is doing rather than from a clock -- all through one matrix onto any
+  knob, including the modulators' own.
 * **6800 presets in 34 packs**, each written in the spirit of an artist of
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608
   wavetables and 240 impulse responses (forty of them struck objects cut from

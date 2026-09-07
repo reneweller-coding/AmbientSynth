@@ -200,7 +200,7 @@ enum class ParamId : int {
     Src1Transport, Src2Transport, Src3Transport, Src4Transport, SubPulse, FeedbackBias,
     LeniaRate, LeniaGrowth,
     BrainDejaVu, BrainLoop, BrainSpread, BrainBias, ChaosPeriod, KeysFilter, Transpose, PartialSpread,
-    StrikeChance, StrikeCluster,
+    StrikeChance, StrikeCluster, CosmosSwell,
     Count
 };
 

@@ -410,6 +410,10 @@ private:
     // below it rarer, and the count over an hour still follows Chance. Without this the lift
     // saturated -- at any excitation worth having, every note struck, which is what Chance is for.
     double        strikeExcAvg_ = 0.0;
+    // The same excitation as a smoothed signal (the modulation source `cascade`) and its slow
+    // average: the Cosmos swells with it by default, and anything else can be routed from it.
+    float         cascadeNow_ = 0.0f, cascadeAvg_ = 0.0f;
+    float         cosmosSwell_ = 0.5f;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;
     Drifter       vecDriftX_, vecDriftY_;   // the Vector's point wandering on its own

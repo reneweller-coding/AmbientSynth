@@ -879,6 +879,23 @@ and after); each was measured effective on its own.
   drawn only below Chance 1, so older presets render bit for bit (oracle 41/41). In the library
   1343 of 6800 presets have a strike at all, 567 of them on Keys + Brain -- so 776 carry a
   strike that never sounded unless somebody played.
+* **The Cosmos swelling with the cascade** (`cosmos_swell`, 1.10.0, on at 0.5 by default). Rene's
+  next question was what the Cosmos does when the drone runs by itself. Nothing had to be fixed
+  about triggering -- it is a send, not an event -- but the stems said the other thing: over five
+  minutes with the conductor alone, the Cosmos bus was at -34.4 dBFS with exactly one second of
+  300 below 2 % of its peak. It never rests. Swell makes the send follow the conductor's
+  excitation, relative to the average that piece has been running at:
+  `send * clamp(1 + 3*swell*(now - avg)/max(avg, 0.15), 0, 2)`, with `now` the excitation
+  smoothed over two seconds (the Hawkes kick is a step, and a step on a send is a click) and
+  `avg` over ninety. Relative and not absolute, so a piece whose cascade only ever reaches a
+  fifth swells as much as one that runs hot -- and so that no cascade at all means no change at
+  all. Default-on was safe to give it because **not one of the 6800 library presets sets
+  brain_cascade**: with no cascade the excitation is zero, the deviation is zero, and the self
+  test holds it to the sample (largest difference 0). With a cascade at 1: the level's
+  coefficient of variation goes 0.41 -> 0.60 and its correlation with the (smoothed) excitation
+  +0.13 -> +0.51. The same excitation is also a modulation source of its own now (`cascade`,
+  `exc/(1+exc)`, a CASC card on the strip), the only source that comes from what the piece is
+  doing rather than from a clock or a field of its own.
 * **Drift** per source (Source 1..3): an independent slow pitch drift in cents. Three sources
   on just ratios each drifting on their own curve beat like an ensemble in a room whose
   temperature moves; nothing is symmetric, nothing cancels for long.

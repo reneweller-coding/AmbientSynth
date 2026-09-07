@@ -19,13 +19,13 @@ against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 ## Download
 
-**[AmbientSynth-1.4.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.4.0/AmbientSynth-1.4.0-Setup.exe)**
+**[AmbientSynth-1.5.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.5.0/AmbientSynth-1.5.0-Setup.exe)**
 (14 MB) -- installs the standalone, the VST3, the preset library and, with your
 consent, downloads the 6 GB sample library. Nothing else has to be installed:
-the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.4.0/AmbientSynth-1.4.0-portable.zip)**
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.5.0/AmbientSynth-1.5.0-portable.zip)**
 (15 MB) for anyone who would rather not run an installer, and the
-**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.4.0/AmbientSynth-Manual.pdf)**
-(PDF, 158 pages) -- every tab of the panel as a picture, with what it does and
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.5.0/AmbientSynth-Manual.pdf)**
+(PDF, 163 pages) -- every tab of the panel as a picture, with what it does and
 what its knobs mean, and seven Design chapters on why the instrument is built
 the way it is, with the mathematics and the references. Everything is on the
 [releases page](https://github.com/reneweller-coding/AmbientSynth/releases).

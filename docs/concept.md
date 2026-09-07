@@ -866,6 +866,19 @@ and after); each was measured effective on its own.
   String at the note, Wood two octaves up with heavy damping and a short decay, Metal with an
   all-pass in the loop -- on the near plane whatever the voice's distance. Fires for keys, or
   for the brain's notes too. The intimate impulse that makes the background behind it vast.
+  Since 1.10.0 it also has a *Chance* and a *Cluster* (Rene: "wird ein Strike eigentlich ab und
+  zu mal ausgelöst wenn man die Drone automatisch laufen lässt?"). It was all or nothing: on
+  Keys nothing ever struck while the instrument played by itself -- measured, a fifteen-minute
+  render with the strike at 0.8 and one with it at 0 differed by exactly zero -- and on
+  Keys + Brain every conductor note struck, roughly one every 14 to 39 s depending on the
+  preset. Chance is the middle: the conductor's notes strike with that probability, the keys
+  always. Cluster weighs the coin by the cascade's excitation *against the average it has been
+  running at*, `p = clamp(chance * (1 + 2*cluster*(exc - excAvg)), 0, 1)`, so the strikes gather
+  where the events gather and the count still follows Chance; weighing by the excitation itself
+  saturated the probability at one and struck everything. The coin has an Rng of its own and is
+  drawn only below Chance 1, so older presets render bit for bit (oracle 41/41). In the library
+  1343 of 6800 presets have a strike at all, 567 of them on Keys + Brain -- so 776 carry a
+  strike that never sounded unless somebody played.
 * **Drift** per source (Source 1..3): an independent slow pitch drift in cents. Three sources
   on just ratios each drifting on their own curve beat like an ensemble in a room whose
   temperature moves; nothing is symmetric, nothing cancels for long.

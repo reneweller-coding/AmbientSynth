@@ -113,6 +113,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     patina_.prepare(sr_, 0x9A7104ull);
     blur_.prepare(sr_, 0x5EED5EEDull);
     auxRng_.seed(0xA5A5A5A5ull);
+    strikeRng_.seed(0x57A1CEull);
     tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
     vecDriftX_.init(auxRng_); vecDriftY_.init(auxRng_);
     dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
@@ -128,6 +129,8 @@ void Engine::reset()
     for (auto& v : voices_) v.kill();
     for (auto& h : midiHeld_) h = false;
     brain_.reset(rng_.fork(), rootNote_ - 12);
+    strikeRng_.seed(0x57A1CEull);   // its own stream, so a reset gives the same piece back
+    strikeExcAvg_ = 0.0;
 }
 
 bool Engine::applyPreset(int index)
@@ -525,7 +528,19 @@ void Engine::startNote(int note, float velocity, int owner, float distance)
         if (!already) adaptCents_[note] = adaptiveOffset(note);
     } else adaptCents_[note] = 0.0f;
     const double hz = frequencyOf(note);
-    v->noteOn(note, hz, velocity, owner, distance, vp_);
+    // Does this note strike? Yours always does -- you played it. The conductor's is a coin at
+    // Chance, and with Cluster up the coin is weighted by the cascade's excitation, so the
+    // strikes arrive where the events already crowd together and the long gaps stay empty.
+    // At Chance 1 no coin is thrown at all, which is what keeps every older preset bit for bit.
+    bool allowStrike = true;
+    if (owner != OwnerMidi && vp_.strikeLevel > 0.0f && vp_.strikeBrain && strikeChance_ < 0.999f) {
+        const double exc = (owner == OwnerBrain2 ? brain2_ : brain_).excitation();
+        strikeExcAvg_ += 0.1 * (exc - strikeExcAvg_);   // what this piece's cascade usually runs at
+        const double lift = 1.0 + 2.0 * strikeCluster_ * (exc - strikeExcAvg_);
+        const double p = std::clamp(static_cast<double>(strikeChance_) * lift, 0.0, 1.0);
+        allowStrike = strikeRng_.uniform() < p;
+    }
+    v->noteOn(note, hz, velocity, owner, distance, vp_, allowStrike);
     if (owner == OwnerMidi) {   // portamento: a key slides in from the previous key
         if (portamento_ > 0.0f && lastKeyHz_ > 0.0 && std::fabs(lastKeyHz_ - hz) > 1e-6) v->glideFrom(lastKeyHz_, portamento_, portaGravity_);
         lastKeyHz_ = hz;

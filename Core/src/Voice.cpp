@@ -88,7 +88,7 @@ static inline float perceivedDistance(float d, float law)
     return law > 0.0f ? std::pow(clampv(d, 0.0f, 1.0f), 1.0f + 0.85f * clampv(law, 0.0f, 1.0f)) : d;
 }
 
-void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p)
+void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p, bool allowStrike)
 {
     note_ = note;
     freq_ = freqTarget_ = freqHz;
@@ -119,7 +119,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     }
     press_ = pressTarget_; slide_ = slideTarget_; bend_ = bendTarget_;   // a new note starts where its controller is
     env_.noteOn();
-    if (p.strikeLevel > 0.0f && (owner == 0 || p.strikeBrain)) strikeStart(freqHz, p);
+    if (p.strikeLevel > 0.0f && allowStrike && (owner == 0 || p.strikeBrain)) { strikeStart(freqHz, p); ++strikes_; }
 }
 
 // The strike: a burst of noise into a delay loop with a damping low pass (Karplus-Strong). String

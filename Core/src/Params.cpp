@@ -607,6 +607,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::KeysFilter,     "keys_filter",     "MPE Filter",  "Space",         kKeysFilterNames, 2, 0),
     C(ParamId::Transpose,      "transpose",       "Transpose",   "Tuning",        kTransposeNames, 7, 0),
     F(ParamId::PartialSpread,  "partial_spread",  "Partial Spread", "Strands",    0.f, 1.f, 0.f,  1.f, ""),
+    // How often the conductor's notes strike, and whether those strikes cluster with its cascade.
+    // Chance 1 is what the instrument always did: every note that may strike, strikes.
+    F(ParamId::StrikeChance,   "strike_chance",   "Chance",      "Strike",        0.f, 1.f, 1.f,  1.f, ""),
+    F(ParamId::StrikeCluster,  "strike_cluster",  "Cluster",     "Strike",        0.f, 1.f, 0.f,  1.f, ""),
 }};
 } // namespace
 

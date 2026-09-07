@@ -19,12 +19,12 @@ against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 ## Download
 
-**[AmbientSynth-1.9.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-1.9.0-Setup.exe)**
+**[AmbientSynth-1.10.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-1.10.0-Setup.exe)**
 (14 MB) -- installs the standalone, the VST3, the preset library and, with your
 consent, downloads the 6 GB sample library. Nothing else has to be installed:
-the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-1.9.0-portable.zip)**
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-1.10.0-portable.zip)**
 (15 MB) for anyone who would rather not run an installer, and the
-**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-Manual.pdf)**
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-Manual.pdf)**
 (PDF, 156 pages) -- every tab of the panel as a picture, with what it does and
 what its knobs mean, and seven Design chapters on why the instrument is built
 the way it is, with the mathematics and the references. Everything is on the
@@ -707,7 +707,10 @@ Sections of the GUI (all parameters are automatable in a DAW):
 * **Strike** — the Karplus-Strong pluck at note-on, with 41 presets of its
   own in four families. *Fires* decides whether it answers the keys only or
   the conductor as well; the latter turns it from something you play into
-  something the piece does on its own.
+  something the piece does on its own. *Chance* says how many of the
+  conductor's notes are struck (one in five at 0.2; your keys always are) and
+  *Cluster* lets those strikes follow the conductor's cascade, so they arrive
+  in handfuls with long silences between rather than on every note.
 * **BEAT** — a modulation source that is the instrument listening to its own
   tuning: it turns at the beat between the two lowest voices and the nearest
   just ratio, so it stands still when the chord is in tune and quickens as

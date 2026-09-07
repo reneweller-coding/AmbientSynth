@@ -222,6 +222,8 @@ public:
 
     // Observers for the GUI (approximate, lock-free).
     int  activeVoices() const { return activeVoices_.load(std::memory_order_relaxed); }
+    // Every strike the instrument has played since it was prepared, keys and conductor together.
+    unsigned strikesFired() const { unsigned n = 0; for (const auto& v : voices_) n += v.strikes(); return n; }
     int  brainRoot() const    { return brainRoot_.load(std::memory_order_relaxed); }
     // The key the conductor has found itself in, measured from what has been sounding and
     // for how long. Read on the message thread for the panel; never set from outside.
@@ -398,6 +400,16 @@ private:
     Rng           comodRng_;
     bool          comodInit_ = false;
     Rng           auxRng_;
+    // The strike's own coin, on its own stream: drawn only when a chance below one asks for it,
+    // so an instrument that strikes on every note renders exactly as it did before there was a
+    // chance at all. (A draw taken from a shared stream would move every preset that follows.)
+    Rng           strikeRng_;
+    float         strikeChance_ = 1.0f, strikeCluster_ = 0.0f;
+    // The excitation the cascade has been running at lately, so Cluster can weigh a note against
+    // the piece's own average rather than an absolute number: above it the strike grows likelier,
+    // below it rarer, and the count over an hour still follows Chance. Without this the lift
+    // saturated -- at any excitation worth having, every note struck, which is what Chance is for.
+    double        strikeExcAvg_ = 0.0;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;
     Drifter       vecDriftX_, vecDriftY_;   // the Vector's point wandering on its own

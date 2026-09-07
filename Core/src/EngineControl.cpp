@@ -651,6 +651,8 @@ void Engine::readParams()
     vp_.strikeDecay = g(ParamId::StrikeDecay);
     vp_.strikeDamp  = g(ParamId::StrikeDamp);
     vp_.strikeBrain = std::lround(g(ParamId::StrikeWho)) == 1;
+    strikeChance_   = g(ParamId::StrikeChance);
+    strikeCluster_  = g(ParamId::StrikeCluster);
     tide_       = g(ParamId::Tide);
     tidePeriod_ = g(ParamId::TidePeriod);
     vp_.pitchMul = tide_ > 0.0f ? std::pow(2.0f, tide_ * tideDrift_.value() / 1200.0f) : 1.0f;

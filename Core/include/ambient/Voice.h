@@ -101,10 +101,16 @@ class Voice {
 public:
     void prepare(double sampleRate, uint64_t seed);
     // distance 0..1 = plane (see above); fixed for the life of the note.
-    void noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p);
+    // allowStrike false: this note does not strike even where the section says it would. The
+    // engine decides it, because whether a conductor's note strikes is a property of the piece
+    // (its chance, its cascade), not of the voice that happens to be free.
+    void noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p, bool allowStrike = true);
     void noteOff();
     void kill();
 
+    // How many times this voice has struck since it was prepared: the engine sums them, the self
+    // test counts them, and it is the only honest answer to "does it ever strike?".
+    unsigned strikes() const { return strikes_; }
     bool isActive() const    { return env_.isActive(); }
     bool isReleasing() const { return env_.isReleasing(); }
     float level() const      { return env_.level(); }
@@ -251,6 +257,7 @@ private:
     double   spreadPhase_ = 0.0;
     int      note_ = -1;
     int      owner_ = 0;
+    unsigned strikes_ = 0;   // how often this voice has struck
     int      lastUnison_ = 0;
 };
 

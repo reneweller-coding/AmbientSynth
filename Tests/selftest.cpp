@@ -4295,6 +4295,71 @@ void testResearchBatch()
         CHECK(std::fabs(10.0 * std::log10(e1 / e0)) < 1.0, "and the energy stays within a decibel");
     }
 
+    // ---- the strike's chance, and its clustering ------------------------------------------
+    // "Does a strike ever fire when the drone runs by itself?" It did not, unless Fires was on
+    // Keys + Brain, and then it fired on every single note. Chance thins that, Cluster lets the
+    // survivors follow the cascade. The brain's clock is its own -- no route reads the output --
+    // so the note times are the same in every run here and the counts compare directly.
+    {
+        struct Run { int strikes; double cv; double meanExcAtStrike; };
+        auto run = [&](float chance, float cluster, float cascade) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 1.0f);
+            e.setParam(ParamId::BrainRate, 2.0f);          // a note every two seconds: enough of them to count
+            e.setParam(ParamId::BrainHoldMin, 5.0f);
+            e.setParam(ParamId::BrainHoldMax, 12.0f);
+            e.setParam(ParamId::BrainCascade, cascade);
+            e.setParam(ParamId::StrikeLevel, 0.6f);
+            e.setParam(ParamId::StrikeWho, 1.0f);          // Keys + Brain
+            e.setParam(ParamId::StrikeChance, chance);
+            e.setParam(ParamId::StrikeCluster, cluster);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            std::vector<double> at;
+            double excSum = 0.0;
+            unsigned last = 0;
+            const int blocks = static_cast<int>(300.0 * sr / 256.0);   // five minutes
+            for (int b = 0; b < blocks; ++b) {
+                e.process(L.data(), R.data(), 256);
+                const unsigned now = e.strikesFired();
+                if (now > last) { at.push_back(b * 256.0 / sr); excSum += e.brainExcitation(); last = now; }
+            }
+            Run r { static_cast<int>(last), 0.0, at.empty() ? 0.0 : excSum / static_cast<double>(at.size()) };
+            if (at.size() > 2) {
+                double m = 0.0;
+                for (size_t i = 1; i < at.size(); ++i) m += at[i] - at[i - 1];
+                m /= static_cast<double>(at.size() - 1);
+                double v = 0.0;
+                for (size_t i = 1; i < at.size(); ++i) { const double d = (at[i] - at[i - 1]) - m; v += d * d; }
+                r.cv = std::sqrt(v / static_cast<double>(at.size() - 1)) / std::max(m, 1e-9);
+            }
+            return r;
+        };
+        const Run all = run(1.0f, 0.0f, 0.0f);      // every note strikes: the count IS the note count
+        const Run none = run(0.0f, 0.0f, 0.0f);
+        const Run third = run(0.33f, 0.0f, 0.0f);
+        std::printf("  [probe] strike chance: %d notes in five minutes, chance 1 -> %d strikes, 0.33 -> %d (%.2f), 0 -> %d\n",
+                    all.strikes, all.strikes, third.strikes,
+                    all.strikes > 0 ? static_cast<double>(third.strikes) / all.strikes : 0.0, none.strikes);
+        CHECK(all.strikes > 40, "with the conductor running there are notes enough to count");
+        CHECK(none.strikes == 0, "at Chance 0 the conductor's notes never strike");
+        CHECK(std::fabs(static_cast<double>(third.strikes) / std::max(1, all.strikes) - 0.33) < 0.12,
+              "at Chance 0.33 about a third of them do");
+        // Clustering: the same chance, but the coin weighted by the cascade's excitation. The
+        // strikes then arrive where the events crowd, so the gaps between them vary more.
+        const Run even = run(0.3f, 0.0f, 1.0f);
+        const Run bunched = run(0.3f, 1.0f, 1.0f);
+        std::printf("  [probe] strike cluster: even %d strikes cv %.2f (excitation at the strike %.2f), clustered %d strikes cv %.2f (%.2f)\n",
+                    even.strikes, even.cv, even.meanExcAtStrike, bunched.strikes, bunched.cv, bunched.meanExcAtStrike);
+        CHECK(bunched.meanExcAtStrike > even.meanExcAtStrike * 1.15,
+              "with Cluster the strikes sit where the cascade is excited, not where an even coin would put them");
+        CHECK(bunched.cv > even.cv * 1.1, "so the gaps between them vary more: handfuls and silences");
+        CHECK(std::fabs(static_cast<double>(bunched.strikes - even.strikes)) < 0.6 * even.strikes,
+              "and roughly as many of them: Cluster moves the strikes, Chance decides how many");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

@@ -382,7 +382,12 @@ def add_hands(p, style, rng, matrix):
     return ";".join(rows)
 
 
-def make_preset(style, rng, textures, wavetables, impulses, shade):
+def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
+    # `extra` is a second random stream, used only by the source types added after the library
+    # was first generated. It exists so that asking "does this style want a bowed string?" costs
+    # nothing from `rng`: a style that does not want one never touches `extra` either, and its
+    # pack comes out exactly as it always did.
+    extra = extra if extra is not None else random.Random(0)
     p = {}
     for key, spec in style["params"].items():
         if key not in PARAMS:
@@ -427,7 +432,16 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
         # Stretch: the style's clips read as a continuum. A style asks for it with a "stretch"
         # module weight; the field-recording style asks for it in every slot it fills.
         want_stretch = on("stretch") and textures
-        if want_stretch:
+        # Short-circuited on the weight, so a style with none of these draws nothing at all.
+        wb = mod.get("bow", 0.0)
+        ws = mod.get("spectral", 0.0)
+        want_bow = wb > 0.0 and extra.random() < wb
+        want_spec = ws > 0.0 and bool(textures) and extra.random() < ws
+        if want_bow:
+            kind = "Bow"
+        elif want_spec:
+            kind = "Spectral"
+        elif want_stretch:
             kind = "Stretch"
         elif want_tex and (not want_tab or rng.random() < 0.5):
             kind = "Texture"
@@ -476,6 +490,39 @@ def make_preset(style, rng, textures, wavetables, impulses, shade):
             p[pre + "shimmer"] = u(rng, 0.2, 0.6)
             p[pre + "shimmer_rate"] = logu(rng, 0.03, 0.4)
             p[pre + "drift"] = logu(rng, 1.0, 8.0)
+        elif kind == "Bow":
+            # The gesture is Force against Speed, and the two are worth setting against each other
+            # rather than both up: light and fast is breath, heavy and slow is tone. Position is
+            # where the bow sits along the string, Bright the loop filter that decides how long
+            # the upper partials last.
+            heavy = extra.random() < 0.5
+            p[pre + "bow_force"] = u(extra, 0.45, 0.9) if heavy else u(extra, 0.1, 0.45)
+            p[pre + "bow_speed"] = u(extra, 0.12, 0.4) if heavy else u(extra, 0.35, 0.85)
+            p[pre + "pos"] = u(extra, 0.1, 0.8)
+            p[pre + "bright"] = u(extra, 0.35, 0.9)
+            p[pre + "level"] = u(extra, 0.2, 0.5)
+            if extra.random() < 0.6:
+                p[pre + "drift"] = logu(extra, 1.0, 7.0)
+        elif kind == "Spectral":
+            # A recording rebuilt rather than replayed. Rate is mostly slow and sometimes stopped
+            # dead -- at zero the clip becomes one held chord, which is the thing this type can do
+            # and nothing else in the instrument can. Breath leans towards the noisy half more
+            # often than the tonal one: a bed wants air in it.
+            r = extra.random()
+            p[pre + "spec_rate"] = 0.0 if r < 0.22 else (u(extra, 0.05, 0.6) if r < 0.75 else u(extra, 0.6, 2.5))
+            p[pre + "spec_breath"] = u(extra, -0.8, 0.8)
+            p[pre + "pos"] = u(extra, 0.0, 1.0)
+            p[pre + "pos_drift"] = u(extra, 0.05, 0.5)
+            p[pre + "bright"] = u(extra, 0.3, 0.85)
+            p[pre + "level"] = u(extra, 0.25, 0.6)
+            own = textures[extra.randrange(len(textures))]
+            slot_textures[n] = own
+            if not texture_file:
+                texture_file = own
+            pitched = bool(PITCHED.search(own))
+            p[pre + "follow"] = "Note" if (pitched or extra.random() < 0.5) else "Free"
+            if extra.random() < 0.5:
+                p[pre + "drift"] = logu(extra, 0.5, 4.0)
         elif kind == "Stretch":
             # The clip as a continuum. The window (Grain) sits where Paulstretch is smooth, the
             # factor is log-spread from "slowed" to "geological", and each Stretch slot draws its
@@ -968,7 +1015,8 @@ def main():
         rows = []
         for k in range(a.per_style):
             p, tex, tab, imp, matrix, envs = make_preset(st, rng, textures, tables, impulses,
-                                                        SHADES[k % len(SHADES)])
+                                                        SHADES[k % len(SHADES)],
+                                                        random.Random(a.seed * 15485863 + si * 7919 + k))
             rows.append({"name": name_for(st, rng, used_names), "params": p, "shade": SHADES[k % len(SHADES)][0],
                          "settings": settings_string(p),
                          # one path, or up to four ';'-separated (one per slot): each non-empty

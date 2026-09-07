@@ -1,6 +1,6 @@
 # The AmbientSynth preset library
 
-Six thousand four hundred presets in thirty-two packs, with the samples and wavetables they play.
+Six thousand eight hundred presets in thirty-four packs, with the samples and wavetables they play.
 
 The packs are text and live in the repository. The audio does not: 1200 texture clips are
 about 8 GB and 608 wavetables about 80 MB, so both are generated locally and are ignored by
@@ -9,7 +9,7 @@ names -- which is why a pack can name a sample that has not been rendered yet.
 
 ```
 Library/
-  Packs/*.ambientpack     32 files, 200 presets each   (in git)
+  Packs/*.ambientpack     34 files, 200 presets each   (in git)
   Textures/*.wav          1700 clips: 1200 textures and 500 field recordings   (generated)
   Wavetables/*.wav        608 wavetables               (generated)
   Impulses/*.wav          240 impulse responses        (generated)
@@ -71,6 +71,29 @@ python Tools/library/make_field_recordings.py --jobs
 python Tools/library/make_field_recordings.py --run --max-minutes 180
 python Tools/library/make_field_recordings.py --finish
 ```
+
+### Texture from statistics
+
+A recording can also be used as a description rather than as material. McDermott and Simoncelli
+showed that sound texture -- rain, wind, fire, a crowd -- is recognised from a small set of
+time-averaged statistics of the auditory periphery, not from the waveform: measure those on one
+recording, impose them on noise, and a listener hears the same texture without hearing the same
+sound. That is an endless bed with the character of the original and none of its repetition, which
+is what an ambient instrument wants from a field recording.
+
+```
+python Tools/library/texture_statistics.py --selftest
+python Tools/library/texture_statistics.py --in-dir Library/Textures --out-dir Library/Textures \
+    --count 40 --seconds 30 --report stats.csv
+```
+
+Every run reports how close it got, as a relative error against the source's own statistics, and
+how much of the source is literally in the result. On eight library recordings: the moments and the
+cross-band correlations land within a few per cent, and the largest cross-correlation with any
+source is 0.066, so nothing is copied. The modulation power is the loose figure and it separates
+the material honestly -- heavy rain 0.12, a dust storm 0.25, a glacier 0.42, but a resonant bronze
+bowl 0.92. That is the model's own boundary: a bell struck once is not a texture. Use it on beds;
+the number will tell you when you have not.
 
 Then the packs, which reference the files by name:
 
@@ -165,6 +188,8 @@ And one for the mixing desk the instrument grew last:
 | Pack | In the spirit of | Character |
 | --- | --- | --- |
 | Cryo Chamber | Atrium Carceri | the background narrowed as it goes back, the foreground opened by the Haas band, the Ensemble as a microshift, the wavefolder, and the Room loaded with a struck object rather than a hall |
+| Rosin and Wire | the bowed-string tradition, from Tony Conrad to Ellen Fullman | the Bow type in most slots -- a real waveguide string under a real bow -- with the Early Room on, because a string is an object in a place |
+| Held Moment | Eliane Radigue, Thomas Koener | the Spectral type nearly everywhere, and mostly with its read head stopped: one second of a recording, rebuilt from its bands and held for as long as the note lasts |
 
 ## Fitting new features into old presets
 

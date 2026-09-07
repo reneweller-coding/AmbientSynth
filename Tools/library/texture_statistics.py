@@ -25,12 +25,22 @@ histograms. Each step undoes a little of the last, and the loop converges. The p
 gradient descent on the statistics; the projection loop is cheaper, needs no derivatives, and this
 tool reports how far it got, so the difference is visible rather than assumed.
 
-What it reports, on a wind recording at fourteen iterations, as a relative error against the
-source's own statistics: mean 0.008, variance 0.042, skew 0.074, kurtosis 0.066, correlation 0.025
-absolute, modulation power 0.34. The modulation figure is the loose one, and the reason is stated:
-below half a hertz nothing is imposed, and a recording with a slow swell keeps a good deal of its
-envelope down there. The largest cross-correlation between source and result is around 0.04, so
-nothing has been copied.
+WHAT IT ACTUALLY DOES, MEASURED
+
+Eight recordings from the library, twenty seconds out at fourteen iterations, as relative errors
+against each source's own statistics. Mean 0.001 to 0.019, variance 0.016 to 0.121, skew 0.018 to
+0.492, kurtosis 0.013 to 0.229, cross-band correlation 0.002 to 0.027 absolute. The largest
+cross-correlation between any source and its result is 0.066, so nothing has been copied.
+
+The modulation power is the loose one and it separates the material cleanly, which is the finding
+worth having. On things that are textures it is close -- heavy rain 0.12, a warm string mass 0.18,
+a dust storm 0.25, a glacier 0.42. On things that are not, it is not: a resonant bronze bowl 0.92,
+a slow melting chord 0.71. That is the model's own boundary, stated in the paper: a texture is a
+sound whose character survives being described by time averages, and a bell struck once is not
+one. Nothing below half a hertz is imposed either, so a recording with a slow swell keeps a good
+deal of its envelope somewhere this tool does not reach.
+
+Use it on beds. It will run on a held chord and give something back, but the number will say so.
 
     python Tools/library/texture_statistics.py --in Textures/rain_sao_003.wav --out new_rain.wav
     python Tools/library/texture_statistics.py --in-dir Textures --out-dir Textures/synth \

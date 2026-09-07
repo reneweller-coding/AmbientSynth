@@ -117,6 +117,11 @@ MODULES_BASE = {
     # And the hands: aftertouch, the wheel and the slide as routes in the matrix. Cheap and
     # neutral until they are moved, so most styles carry at least one.
     "hands": 0.55,
+    # The two newest source types. Zero here on purpose, and read through a SEPARATE random
+    # stream in make_presets, so that every pack made before they existed comes out of the
+    # generator byte for byte as it did -- six thousand four hundred presets are keyed on the
+    # sequence of draws, and one extra rng.random() anywhere in the path moves all of them.
+    "bow": 0.0, "spectral": 0.0,
 }
 
 # Word pools the preset names are built from: "<first> <second>".
@@ -844,4 +849,63 @@ STYLES = [
       granular={"spread": (0.02, 0.25), "grains": 1.0},
       impulses=['struck', 'room_bunker', 'room_cavern', 'modal'],
       noise=['Brown', 'Pink', 'Grey']),
+
+    # ---- the two packs built on the newest source types -----------------------------------
+    #
+    # These two are here because a source type nobody has heard is a source type nobody uses.
+    # Everything else in the library was voiced before the bowed string and the spectral model
+    # existed, and none of it was touched: these are the thirty-third and thirty-fourth packs,
+    # and the other thirty-two come out of the generator byte for byte as they did.
+
+    S("Rosin and Wire", "the bowed-string tradition, from Tony Conrad to Ellen Fullman",
+      {"attack": ("log", 2.0, 9.0), "release": ("log", 6.0, 22.0),
+       "cutoff": ("log", 700.0, 5000.0), "resonance": (0.05, 0.35),
+       "detune": (3.0, 14.0), "drift": (0.2, 0.7), "drift_rate": ("log", 0.02, 0.12),
+       "near_mix": (0.15, 0.45), "near_size": (0.3, 0.7),
+       "far_level": (0.3, 0.7), "far_decay": ("log", 5.0, 24.0), "far_predelay": (20.0, 90.0),
+       "far_highcut": ("log", 2400.0, 9000.0),
+       "early_level": (0.15, 0.5), "early_size": (5.0, 16.0), "early_absorb": (0.2, 0.55),
+       "ens_mix": (0.1, 0.4), "delay_mix": (0.0, 0.25),
+       "sub_level": (0.1, 0.35), "air": (0.02, 0.16),
+       "master_gain": (-9.0, -5.0), "stretch": (0.0, 4.0)},
+      # Bow in most slots, and the early room on: a string is an object in a place.
+      {"bow": 0.7, "src2": 0.9, "src3": 0.6, "src4": 0.25, "texture": 0.1, "stretch": 0.0,
+       "room": 0.5, "zplane": 0.3, "sub": 0.5, "strike": 0.2, "hands": 0.9,
+       "phase": 0.5, "microshift": 0.35, "narrow": 0.35, "coherence": 0.3, "absorb": 0.4},
+      words=(["Rosin", "Horsehair", "Sul", "Tasto", "Ponticello", "Arco", "Gut", "Wire",
+              "Bridge", "Nut", "Bowed", "Long", "Drawn", "Sustained"],
+             COMMON_SECOND + ["String", "Wire", "Bow", "Bridge", "Drone"]),
+      prompts=["a bowed double bass held for a minute, rosin audible",
+               "a bowed metal wire stretched across a hall",
+               "two bowed strings a fifth apart, beating slowly"],
+      tables=["Tilt walk", "Odd breathing"],
+      impulses=['room_hall', 'room_chamber', 'modal', 'struck'],
+      noise=['Pink', 'Brown', 'Wind']),
+
+    S("Held Moment", "the frozen spectrum, after Eliane Radigue and Thomas Koner",
+      {"attack": ("log", 4.0, 14.0), "release": ("log", 10.0, 30.0),
+       "cutoff": ("log", 400.0, 4000.0), "resonance": (0.0, 0.25),
+       "detune": (2.0, 9.0), "drift": (0.15, 0.6),
+       "near_mix": (0.05, 0.3),
+       "far_level": (0.4, 0.85), "far_decay": ("log", 12.0, 55.0), "far_predelay": (30.0, 140.0),
+       "far_highcut": ("log", 1400.0, 6000.0), "far_width": (0.35, 0.9),
+       "far_unmask": (0.1, 0.5), "far_unmask_spread": (0.2, 0.8),
+       "early_level": (0.0, 0.3), "early_size": (8.0, 26.0),
+       "ens_mix": (0.15, 0.5), "ens_mode": ["Velvet", "Velvet", "Microshift"],
+       "delay_mix": (0.05, 0.3), "sub_level": (0.15, 0.45),
+       "air": (0.0, 0.1), "master_gain": (-10.0, -5.0)},
+      # Spectral in nearly every slot: the whole point of the pack is a recording held still.
+      {"spectral": 0.85, "src2": 0.95, "src3": 0.75, "src4": 0.4,
+       "texture": 0.05, "stretch": 0.0, "usertable": 0.05,
+       "room": 0.6, "zplane": 0.45, "sub": 0.6, "cosmos": 0.3, "cloud": 0.2,
+       "hands": 0.85, "phase": 0.6, "narrow": 0.55, "blur": 0.25, "tide": 0.4, "absorb": 0.6},
+      words=(["Held", "Suspended", "Arrested", "Still", "Standing", "Frozen", "Motionless",
+              "Hovering", "Fixed", "Poised", "Lingering", "Dwelling", "Endless", "Unmoving"],
+             COMMON_SECOND + ["Moment", "Instant", "Second", "Frame", "Breath"]),
+      prompts=["a single second of a cathedral held for an hour",
+               "the spectrum of rain, stopped and sustained",
+               "one frame of a choir, frozen and transposed"],
+      tables=["Tilt walk", "Random walk"],
+      impulses=['room_hall', 'room_cavern', 'spectral'],
+      noise=['Pink', 'Brown', 'Grey', 'Wind']),
 ]

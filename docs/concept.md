@@ -1365,7 +1365,7 @@ again:
   rather than one function: a parameter set from the message thread reaches
   the display on the next timer tick, not in the same call.
 * **The presets chapter explains the groups**: the twelve families of the
-  built-in presets and all thirty-two packs, each in a sentence -- who it is
+  built-in presets and all thirty-four packs, each in a sentence -- who it is
   written in the spirit of and what corner of the repertoire it covers --
   rather than the list of numbers it was.
 
@@ -1602,7 +1602,7 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 6400 presets in 32 packs, with 1700
+`Library/` holds a generated library of 6800 presets in 34 packs, with 1700
 clips (1200 textures and 500 seamless field recordings), 608 wavetables and
 200 impulse responses (see
 `Library/README.md` and `Tools/library/`). Its descriptors and map positions
@@ -1885,7 +1885,7 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 6400 presets in
+* **The sample library** (`Tools/make_content_pack.py`). The 6800 presets in
   the packs name 1584 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced

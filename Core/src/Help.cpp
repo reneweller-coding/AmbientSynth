@@ -552,7 +552,7 @@ Originals: the first patches, one idea each, kept as they were. Sleep / night: l
 
 PACKS
 
-Plain text files (*.ambientpack, one preset per line) that may name a sample, a wavetable, an impulse response, a modulation matrix and envelope shapes of their own. Put them in Documents/AmbientSynth/Packs or point AMBIENT_PACKS at a folder (the installer's own folders are read too, and a pack found in two of them loads once); they appear everywhere the built-in presets do, each pack as a family. The library that ships alongside has 6400 presets in 32 packs, 1700 samples, 608 wavetables and 240 impulse responses.
+Plain text files (*.ambientpack, one preset per line) that may name a sample, a wavetable, an impulse response, a modulation matrix and envelope shapes of their own. Put them in Documents/AmbientSynth/Packs or point AMBIENT_PACKS at a folder (the installer's own folders are read too, and a pack found in two of them loads once); they appear everywhere the built-in presets do, each pack as a family. The library that ships alongside has 6800 presets in 34 packs, 1700 samples, 608 wavetables and 240 impulse responses.
 
 Every pack is one corner of the drone repertoire, written in the spirit of an artist who works there -- nothing is sampled from or affiliated with any of them; the packs are ranges over this synth's own parameters, chosen by ear, then rendered, measured and gain-matched. Two hundred presets each, half of them still, half astir. A pack is a family in the browser, and its name is the first thing to search for.
 
@@ -619,6 +619,10 @@ OWN TUNING (Catherine Christer Hennix). Purity drift, difference tones and the B
 FIELD RECORDINGS (Chris Watson). Places, not instruments: five hundred seamless recordings -- rain on twelve kinds of roof, caves, harbours in fog, power stations through a wall -- read as a continuum by the Stretch type, up to four of them on the Vector's four corners, a quiet additive centre underneath.
 
 CRYO CHAMBER (Atrium Carceri). Written for the mixing desk the instrument grew last: the background narrowed as it goes back, the foreground opened by the Haas band, the Ensemble as a microshift, the wavefolder where a saturation used to be, and the convolution room loaded with a struck object rather than a hall -- concrete, chain, iron -- so the pad is played on a piece of the world.
+
+ROSIN AND WIRE (the bowed-string tradition, from Tony Conrad to Ellen Fullman). The first pack built on the Bow type: a real waveguide string under a real bow, in most of the slots, with Force set against Speed rather than both up -- light and fast where the pack wants breath, heavy and slow where it wants tone. The Early Room is on throughout, because a bowed string is an object standing somewhere, and the first reflections are what say where.
+
+HELD MOMENT (Eliane Radigue, Thomas Koener). The Spectral type nearly everywhere, and in a fifth of the presets with its read head stopped dead: one second of a recording, taken apart into thirty-two bands and rebuilt from them, held for as long as the note lasts and transposed wherever it is played. Breath leans towards the noisy half more often than the tonal one, because a bed wants air in it. The Ensemble is mostly in its Velvet mode here, which widens without the comb a chorus leaves behind.
 
 BROWSE (header button): Columns narrows the list by Family, Character (dark, bright, tonal, noisy, wide, bass), Motion (calm, moving, dense, sparse) and Features, with search, sort and favourites -- every preset was measured by rendering it, not tagged by hand. Map shows all presets as points clustered by what they sound like; click one to load it, or switch on Map blend and drag the cursor: the synth glides to the blend of the presets around it, so the space between two presets is playable. A ROUTE is a list of waypoints (presets or map positions with travel and hold times) the synth walks by itself: twelve route presets of 20-40 minutes, or your own from the cursor; Speed and Loop as you like.
 
@@ -796,6 +800,26 @@ R"(
 
 and the inverse transform is windowed and overlap-added at a hop of N/4 with a gain of 1.3 to restore the level, while the analysis position advances by hop / Stretch per frame. Every output frame is a plausible slice of the clip's spectrum with no memory of where its transients were -- the random phases destroy the temporal fine structure and keep the spectral envelope -- so a recording read forty times slower has no grain rhythm and no attack left standing. Pitch is applied when the window is read, as a resampling step through the clip, and the stretch to how far the read moves between frames; the two do not know about each other, which is what lets a chromatic sample play across the keyboard without a high note ending sooner than a low one. Measured: the pitch comes out identical to the granular player's, 110.7 Hz free and 220.3 Hz at A3.
 
+BOW
+
+The one source in the instrument that is a physical model rather than a description of a spectrum. The string is two digital waveguides meeting at the bow (Smith 2010): from the bow to the nut and back is 2a samples, to the bridge and back 2b, and a + b is half a period. The nut reflects and inverts; the bridge reflects, inverts and loses the highs through a one-pole whose damping is Bright, which is why the upper partials die first as they do on a real string. At the bow the relative velocity between hair and string decides how much force is transmitted, through the friction characteristic of McIntyre, Schumacher and Woodhouse (1983):
+
+    dv = v_bow - (v_left + v_right)
+    rho = min(1, (|(dv - 0.001) * slope| + 0.75)^-4),    slope = 5 - 4 * Force
+    f = dv * rho
+
+and that force is added into both outgoing waves. Everything about this sound is in the shape of rho. It has to FALL as the slipping gets faster -- more slip, less force -- because that negative resistance is what feeds the oscillation. The first version of this model used a curve that merely saturated, rho = (F/|dv|)^0.8 clipped at one, and it has a stable fixed point: the string sticks to the bow and stays there. Measured in the engine it was a constant with no pitch at all, RMS 0.0000. The corrected curve gives the Helmholtz motion, and the model then measures 222 Hz for an A3, 110 Hz an octave down, at the level of a wavetable slot to a tenth of a decibel.
+
+A bow that stops moving does not simply stop driving: the hair is still on the string, and hair that does not move absorbs. Without that the junction is a lossless termination and a stopped note rings on for seconds, which is also what the test found. A small contact loss, confined to the bottom sixth of the Speed range so that nothing being played is touched by it, takes a stopped note down by seventy-three decibels in a tenth of a second.
+
+SPECTRAL
+
+Every other type that reads a clip still plays samples: granular cuts it into pieces, Stretch smears its spectrum, and in both, pitch and speed are entangled in the one number that says how fast the recording is read. Spectral does not play samples at all. When a clip is loaded it is measured once into thirty-two bands one equal step of the ERB rate apart (Glasberg and Moore 1990, the same scale the loudness meter uses), and what is kept per frame is three numbers per band: how loud it is, where in it the strongest partial sits, and how tonal that content is. Tonality is measured as how far the content stands above the LOCAL noise floor -- the geometric mean of the magnitudes over twenty-one bins either side -- which is the one decision that makes the type work on anything. It needs no fundamental, so nothing has to be found that could be found wrong: a bell measures as nearly all partial, rain as nearly all noise, a voice as both.
+
+Playback rebuilds each band from an oscillator at that band's partial and a band of noise at the same place, weighted by the tonality and its complement. This is the deterministic-plus-stochastic decomposition of Serra and Smith (1990) taken band by band instead of partial by partial. Because nothing is a sample any more, the note sets the pitch and Rate sets the speed and neither knows about the other; at Rate 0 the read head stands still and one moment of a recording becomes a chord held for as long as the note lasts, transposed wherever it is played. Breath tilts the balance to the partials alone or to the noise alone -- a rain recording turned into the chord hiding inside it, or a struck bell turned into the wind that has its shape.
+
+Measured on a test clip that is two seconds of tone followed by two of noise: the tonal half reads 1.00 and the noisy half 0.20; a 300 Hz partial is placed at 299.9 Hz rather than at its band's centre; an octave up is an octave up to within half a per cent; and the level lands within a decibel of a wavetable at the same setting.
+
 NOISE
 
 The ten colours are the textbook slopes plus four shaped ones. White is flat; pink falls 3 dB an octave (equal energy per octave, 1/f); brown falls 6 (1/f^2, integrated white); blue and violet rise by the same amounts. The pink filter is the full seven-term form of Kellet's approximation, because the common three-pole short form is 1.7 dB an octave too steep; measured slopes are white -0.1, pink -3.1, brown -6.0, blue +2.8, violet +5.5 dB per octave. Grey is white noise weighted by the inverse of an equal-loudness contour (ISO 226), so that it sounds flat rather than measuring flat -- the one colour defined by psychoacoustics rather than by physics. Every colour is level-matched to a wavetable slot at the same Level; before that, violet sat eleven decibels above pink at the same setting.
@@ -902,10 +926,19 @@ The Headphones binaural mode takes the same model one step further. With it on, 
 
     azimuth = pan * 90 deg - yaw,   tau = (a / c)(|theta| + sin |theta|)
 
-so a voice stays where it is in the room while the listener looks round. That dynamic cue is, by the current research, the strongest single contributor to externalisation on headphones -- stronger than the pinna's spectral detail (Best et al. 2020; Hendrickx et al. 2017), which is why the mode exists at all rather than another filter. Measured: with the head turned ninety degrees a centred voice arrives at the ears with the same interaural delay as a hard-panned voice with the head straight, and that delay is Woodworth's 31.5 samples at 48 kHz plus the two or three the far ear's shadow filter adds as group delay -- which a real head adds too. Off, it is bit-identical to before.)"
+so a voice stays where it is in the room while the listener looks round. That dynamic cue is, by the current research, the strongest single contributor to externalisation on headphones -- stronger than the pinna's spectral detail (Best et al. 2020; Hendrickx et al. 2017), which is why the mode exists at all rather than another filter. Measured: with the head turned ninety degrees a centred voice arrives at the ears with the same interaural delay as a hard-panned voice with the head straight, and that delay is Woodworth's 31.5 samples at 48 kHz plus the two or three the far ear's shadow filter adds as group delay -- which a real head adds too. Off, it is bit-identical to before.
+
+The binaural mode also carries the head shadow itself, which the ordinary pan does not. A sphere the size of a head attenuates and delays what arrives at the far ear by an amount that depends on frequency and angle, and Brown and Duda give it as a one-pole, one-zero filter that needs no measured head:
+
+    H(s) = (1 + alpha s / (2 w0)) / (1 + s / (2 w0)),     w0 = c / a
+    alpha(theta) = 1 + a_min/2 + (1 - a_min/2) cos(theta / 150 deg * pi),   a_min = 0.1
+
+with a the head radius and c the speed of sound. At ninety degrees away the far ear loses the top end; at the front nothing happens; and behind the head the filter opens again, which is why the shadow alone cannot tell front from back and the pinna notch has to. It runs only in the binaural mode: on speakers the listener's own head does this, and doing it twice would be wrong.)"
 R"(
 
 The Ensemble's Microshift is the same argument applied to detuning. A chorus at thirteen to twenty-two milliseconds is a comb filter waiting to be summed; two channels detuned by c cents in opposite directions, at ratios r = 2^(c/1200) and 2^(-c/1200), and at different base delays, are never at a fixed phase difference, so there is no comb to cancel into. A pitch shift by a delay line is a delay that changes at a constant rate, d(t) = d_0 + (1 - r) t, and since it cannot change for ever it is wrapped: a ramp of 200 ms of travel and a 25 ms equal-power hand-over to a second tap one ramp behind. The textbook construction -- two taps half a cycle apart under a Hann pair -- was measured and rejected, because both taps are audible all the time at a fixed delay difference, which on a sustained tone is the comb above; it lost a fifth of the signal. With the long ramp the two taps overlap for a thousandth of the cycle. Measured by counting zero crossings of a 440 Hz sine: 443.06 Hz left, 436.96 Hz right, twelve cents each way to within half a hertz.
+
+The third mode, Velvet, drops the pitch shift entirely and decorrelates the two channels with velvet noise: a sparse sequence of impulses of plus or minus one over the square root of their number, one impulse placed at random inside each equal interval of a thirty-millisecond span, convolved with the signal, a different sequence per channel. Sparse enough and the ear hears no echo; random enough in sign and position and the two channels share no comb. The claim is not that it decorrelates better -- measured on a sustained tone the chorus and the velvet mode decorrelate about equally, 0.05 either way -- but that it does so without colouring: 1.32 dB of spectral colouration against the chorus's 5.41. That is what the literature on velvet noise says it is for, and it is the reason to have a third mode at all: the same width with none of the comb.
 
 THREE TIERS, AND THE FUNNEL
 
@@ -914,6 +947,26 @@ There are three reverbs because a room has three kinds of reflection. The near r
     g_i = 10^(-3 L_i / (T60 f_s))
 
 The far reverb has a second mode, Scattering, after Schlecht and Habets (2020): a short Schroeder all-pass inside every delay line's loop, with mutually prime lengths between 1.9 and 7.1 ms, so that each pass round the network scatters every echo into many. The echo density -- measured as the fraction of samples above the local RMS, which for Gaussian noise is 0.317 (Abel and Huang 2006) -- reaches 0.76 of Gaussian after fifty milliseconds against 0.60 for the classic network, with the same decay time and a late tail at least as smooth. The classic mode is the default and unchanged, because six thousand presets were voiced with it; the difference is a texture of tail, denser and more diffuse, not a different room.
+
+There is a third mode, Colourless, and it changes nothing in the structure: only the eight line lengths. A feedback delay network's tail is not flat -- its modes pile up wherever the line lengths share arithmetic -- and how flat it comes out is decided by those eight numbers alone. So they were searched for rather than chosen. Tools/optimise_fdn.py renders the network's impulse response, measures the spread of its late spectrum in decibels, and hill-climbs the lengths under the usual constraint that they stay mutually prime. Sixty iterations from three seeds gave
+
+    29.7  31.4  39.3  46.6  55.1  58.6  68.4  89.0 ms
+
+which measures 0.314 dB of spread against the classic set's 0.474 -- a third flatter, at the same decay time. This is the direction the recent literature on colourless reverberation points (Schlecht and Habets), reached by measurement rather than by design: the search does not know why the answer is better, and neither, honestly, does this chapter. It knows that it is, by a number.
+
+THE EARLY ROOM
+
+The three tiers above are all TAIL. What tells a listener the size of a room and where in it a source stands is not the tail at all but the first few reflections: their delays give the dimensions, their directions give the geometry, and the way both move when the source moves is what makes the room a place rather than a wash (Blauert 1997 for the direction, Bronkhorst and Houtgast 1999 for the distance). A reverb whose early part does not move when the source moves is a room the source is not in.
+
+So there is a fourth stage, off by default, which is a scattering delay network in the sense of De Sena, Hacihabiboglu and Cvetkovic (2015). A node sits at the centre of each of the six walls of a shoebox whose proportions have no simple ratio between them. A delay carries the source's sound to each node, and another carries each node's pressure to the listener, both at the real distances and with spherical spreading over the whole path. At each node a one-pole takes the wall's absorption out, and the incoming waves are scattered to all the other nodes by the isotropic matrix
+
+    p(k to m) = (2/(N-1)) * sum over j of p(j to k)  -  p(m to k),      N - 1 = 5
+
+which is its own inverse, so it moves energy between the surfaces without creating or losing any; a single gain below one decides how long the early field runs before the far reverb takes over. Each wall's contribution is panned by its own direction, so the left wall answers a source on the left first.
+
+The first version of this had the nodes scattering into one another after a delay of two samples rather than after the distance between them, and it is worth saying why that is not a small error. Two samples is a scattering loop at 24 kHz: within a few samples all six nodes carry the same signal, every direction is gone, and what is left is a diffuser. Measured, moving the source from one side of a ten-metre room to the other changed the balance between the ears by 0.02 dB -- which is to say, by nothing, in a stage whose entire purpose is that it should change. With the real inter-node distances in place the same test measures 1.60 dB, the first reflection of a four-metre room arrives at 6.8 ms and of a twenty-four-metre room at 35.5, and the two are the right way round.
+
+The measurement had a trap of its own. Taken over the whole quarter-second the side balance reads 0.04 dB even with the network correct, because after a few passes of the scattering the energy has been round every surface and points nowhere. Only the first thirty milliseconds carry direction, and that is where the test looks.
 
 The convolution room is a measured or designed space -- or, with the struck impulses, an object -- in parallel on the far plane, by uniform partitioned convolution in blocks of 512 samples (Gardner 1995): each input block's spectrum enters a frequency-domain delay line, every output block is the sum over partitions of input spectrum times impulse-partition spectrum, one inverse transform per block, overlap-added, one block of latency, which the far plane does not notice. Pre-delay on each reverb is the gap between the direct sound and the first reflection, which the ear reads not as the room's size but as where the source stands in it (Blauert 1997): a long pre-delay puts the source close and the wall far, a short one merges it with the room.
 
@@ -1100,11 +1153,31 @@ Two production papers on ambient and dark-ambient sound design were checked agai
 WHERE THE RESEARCH HAS MOVED ON)"
 R"(
 
-The design leans on classic accounts, and in four places the field has moved past them in ways the reader should know. Consonance is harmonicity and culture as much as roughness (above). Externalisation on headphones is, by the current evidence, driven first by reverberation and by the dynamic cues of head movement rather than by static spectral detail, which is what the head-tracked binaural mode answers and what a static pinna filter cannot. The Haas and precedence effects and the duplex theory have held up, with the refinement that low-frequency interaural time differences dominate when the cues conflict (Wightman and Kistler 1992; Macpherson and Middlebrooks 2002). And artificial reverberation has its own recent literature -- scattering delay networks, networks designed to be colourless -- of which the Scattering mode takes the first and simplest step. The conductor's judgement of consonance was a number about the ratio alone, and it now has a second ear that hears the spectrum (Timbre, in the previous chapter). What the instrument still does by convention rather than by measurement is said where it happens: the darkening with distance, the mono low end, the darker background as depth.
+The design leans on classic accounts, and the field has moved past several of them. Rather than list the gaps, the instrument was taken through them one at a time. Nine things were found; eight were built; each is neutral at its default, so the six thousand presets voiced before them sound to the bit exactly as they did -- the whole library was re-rendered and hashed after every one.
+
+Consonance is harmonicity and culture as much as roughness. The conductor's judgement was a number about the ratio alone, and it now has a second ear that hears the spectrum as well (Timbre, in the previous chapter), plus a third that hears how crowded a critical band is getting (Spacing).
+
+Octaves are not 2:1. Listeners set them wide, and pianos are tuned wider still (Ward 1954; Railsback 1938). Stretch does that to the whole scale, in cents per octave, compounding: f = f_ref * (f/f_ref)^(1 + s/1200).
+
+Externalisation on headphones is driven first by reverberation and by the dynamic cue of head movement, not by static spectral detail (Best et al. 2020; Hendrickx et al. 2017). The head-tracked binaural mode answers that, and it now carries Brown and Duda's spherical head shadow as well.
+
+Masking is not symmetric: a loud band masks upwards much further than downwards. The far reverb's Unmask now spreads that way, taking a band's own envelope plus half the band below, a quarter of the one below that, and a tenth of the one above.
+
+Decorrelation by chorus is decorrelation by comb filter. Velvet noise gives the same width without the colouration, and the two were measured side by side to say so.
+
+A feedback delay network's colouration is decided by its line lengths. Those were searched rather than chosen, and the Colourless mode is a third flatter than the classic set.
+
+Early reflections are a separate problem from the tail, and the current answer is the scattering delay network. That is now the Early Room, and it is the one stage in the instrument whose whole purpose is that the sound moves when the source does.
+
+Sound texture is recognised from time-averaged statistics of the auditory periphery (McDermott and Simoncelli 2011). That belongs offline rather than in the audio thread, and it is a tool in the library: measure a recording's statistics, impose them on noise, get an endless bed with the character of the original and none of its repetition.
+
+Loudness is not energy. The meter now says sones beside LUFS, and on this instrument's own presets the two disagree by a quarter at the same LUFS.
+
+The ninth was a neural sound model in the audio path -- an autoencoder trained on a recording, played as an instrument, in the manner of RAVE. It was considered and deliberately not built: it would put a hundred megabytes of weights and a hard real-time constraint into a synthesiser whose core is framework-free and meant to run on a headset, and it would make the instrument's sound something nobody could read. Every other decision in these chapters can be checked by reading a formula. That one could not.
 
 WHAT IS NOT CLAIMED
 
-Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
+Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The loudness in sones is Zwicker's model built from third-octave levels, not a certified ISO 532-1 implementation, and its absolute scale is pinned at the definition of the unit rather than derived; what is not pinned, and what should be checked against, is that sixty decibels comes out at 4.21 sones where the standard says four. The Early Room places the whole near bus at one position, the level-weighted mean of where its voices are, not each voice at its own: six delay lines per voice would cost more than the rest of the instrument. The Spectral source's model is thirty-two bands and one partial per band, so a dense chord in one band comes back as its loudest member plus noise. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
     { "Design VII: references",
 R"(The works the design chapters rest on, by area. Where a page or a chapter is named it is the part that was used.
 
@@ -1136,7 +1209,17 @@ Eramudugolla, R., Irvine, D. R. F., McAnally, K. I., Martin, R. L. and Mattingle
 
 Zahorik, P., Brungart, D. S. and Bronkhorst, A. W.: Auditory distance perception in humans: a summary of past and present research. Acta Acustica united with Acustica 91, 409-420, 2005. Intensity, direct-to-reverberant ratio and spectrum as distance cues.
 
-Zwicker, E. and Fastl, H.: Psychoacoustics. Facts and Models. Second edition, Springer, 1999. Masking, critical bands, loudness and its adaptation.
+Zwicker, E. and Fastl, H.: Psychoacoustics. Facts and Models. Second edition, Springer, 1999. Masking, critical bands, loudness and its adaptation; the specific-loudness law and the slopes of the excitation pattern that the sone meter is built from.
+
+ISO 532-1:2017: Acoustics -- Methods for calculating loudness -- Part 1: Zwicker method. The standardised form of that model.
+
+Glasberg, B. R. and Moore, B. C. J.: Derivation of auditory filter shapes from notched-noise data. Hearing Research 47, 103-138, 1990. The equivalent rectangular bandwidth: ERB(f) = 24.7 (0.00437 f + 1), the scale the Spectral source's bands, the conductor's Spacing and the texture tool all sit on.
+
+Terhardt, E.: Calculating virtual pitch. Hearing Research 1, 155-182, 1979. Also the approximation of the absolute threshold of hearing, and the level-dependent upper slope of a masking pattern -- 22 + min(230/f, 10) - 0.2 L dB per Bark, with f in hertz.
+
+McDermott, J. H. and Simoncelli, E. P.: Sound texture perception via statistics of the auditory periphery: evidence from sound synthesis. Neuron 71, 926-940, 2011. Texture is recognised from time-averaged statistics of subband envelopes; the basis of Tools/library/texture_statistics.py.
+
+McDermott, J. H., Schemitsch, M. and Simoncelli, E. P.: Summary statistics in auditory perception. Nature Neuroscience 16, 493-498, 2013.
 
 Moore, B. C. J.: An Introduction to the Psychology of Hearing. Sixth edition, Brill, 2012. Combination tones, pitch and the general account.
 
@@ -1190,7 +1273,21 @@ Le Brun, M.: Digital waveshaping synthesis. Journal of the Audio Engineering Soc
 
 Karplus, K. and Strong, A.: Digital synthesis of plucked-string and drum timbres. Computer Music Journal 7 (2), 43-55, 1983; Jaffe, D. A. and Smith, J. O.: Extensions of the Karplus-Strong plucked-string algorithm. Computer Music Journal 7 (2), 56-69, 1983. The Strike.
 
-Roads, C.: Microsound. MIT Press, 2001. Granular synthesis.)"
+Roads, C.: Microsound. MIT Press, 2001. Granular synthesis.
+
+McIntyre, M. E., Schumacher, R. T. and Woodhouse, J.: On the oscillations of musical instruments. Journal of the Acoustical Society of America 74, 1325-1345, 1983. The nonlinear friction characteristic of the bow, and why it has to fall with slip velocity for the string to oscillate at all.
+
+Serra, X. and Smith, J. O.: Spectral modeling synthesis: a sound analysis/synthesis system based on a deterministic plus stochastic decomposition. Computer Music Journal 14 (4), 12-24, 1990. Sound as partials plus a residual noise -- the Spectral source, taken band by band rather than partial by partial.
+
+Heeger, D. J. and Bergen, J. R.: Pyramid-based texture analysis/synthesis. SIGGRAPH 1995, 229-238; Portilla, J. and Simoncelli, E. P.: A parametric texture model based on joint statistics of complex wavelet coefficients. International Journal of Computer Vision 40, 49-71, 2000. Synthesis by alternating projection onto a set of statistics -- the loop the texture tool runs.
+
+Karjalainen, M. and Jaerveläinen, H.: Reverberation modeling using velvet noise. AES 30th International Conference, 2007; Vaelimaeki, V., Parker, J. D., Savioja, L., Smith, J. O. and Abel, J. S.: Fifty years of artificial reverberation. IEEE Transactions on Audio, Speech, and Language Processing 20, 1421-1448, 2012. Sparse signed impulses that decorrelate without colouring: the Ensemble's Velvet mode.
+
+De Sena, E., Hacihabiboglu, H., Cvetkovic, Z. and Smith, J. O.: Efficient synthesis of room acoustics via scattering delay networks. IEEE/ACM Transactions on Audio, Speech, and Language Processing 23, 1478-1492, 2015. One node per wall, real distances between them, isotropic scattering: the Early Room.
+
+Schlecht, S. J. and Habets, E. A. P.: On lossless feedback delay networks. IEEE Transactions on Signal Processing 65, 1554-1564, 2017. Where the colouration of a delay network comes from, and why its line lengths decide it.
+
+Engel, J., Hantrakul, L., Gu, C. and Roberts, A.: DDSP: differentiable digital signal processing. International Conference on Learning Representations, 2020; Caillon, A. and Esling, P.: RAVE: a variational autoencoder for fast and high-quality neural audio synthesis. arXiv:2111.05011, 2021. Read and deliberately not built -- see the end of the previous chapter.)"
 R"(
 
 Nasca, P. (Nasca Octavian Paul): Paul's Extreme Sound Stretch (Paulstretch), 2006, with the algorithm description published alongside the program. The Stretch type and the Nebula.

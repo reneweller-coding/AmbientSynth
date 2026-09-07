@@ -56,7 +56,7 @@ since 2013), a VST3 host if you want the plugin.
 * **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
   macros, four coupled Kuramoto oscillators, aftertouch, wheel and slide, all
   through one matrix onto any knob -- including the modulators' own.
-* **6400 presets in 32 packs**, each written in the spirit of an artist of
+* **6800 presets in 34 packs**, each written in the spirit of an artist of
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608
   wavetables and 240 impulse responses (forty of them struck objects cut from
   the field recordings, for convolving a pad with a piece of the world). A
@@ -121,7 +121,7 @@ The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (32 packs, 6400 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **preset library** (34 packs, 6800 presets) into `ProgramData\AmbientSynth\Packs`,
 * the **sample library** — 1848 samples, wavetables and impulse responses, 6.1 GB in six
   archives (467 of them seamless field recordings for the Stretch type, 40 struck objects for the
   convolution room), downloaded from the release and checked against its hash — into the same
@@ -205,7 +205,7 @@ and a wavetable of their own. They appear everywhere the built-in presets do
 -- programs, browser, map, routes -- each pack as its own family. Drop
 `*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
 `AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
-library of 6400 presets in 32 packs with the samples, wavetables and
+library of 6800 presets in 34 packs with the samples, wavetables and
 impulse responses they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes
@@ -215,8 +215,32 @@ the brain's root.
 Additive (a 32-partial bank shaped by tilt, brightness, odd/even, inharmonic
 stretch and shimmer -- in Source 1 the classic strand bank with unison,
 detune and stacks), Wavetable (a table of spectra), FM, Texture (granular,
-up to 64 grains), **Stretch** or Noise (ten colours); so four additive banks,
-four granular players or any mix are a matter of four choices.
+up to 64 grains), **Stretch**, **Bow**, **Spectral** or Noise (ten colours);
+so four additive banks, four granular players or any mix are a matter of four
+choices.
+
+**Bow** is a bowed string: two digital waveguides meeting under the bow, and
+at their junction the friction characteristic that decides, sample by sample,
+whether hair and string are stuck together or slipping. That alternation is
+the Helmholtz motion, and it sustains for as long as *Bow Speed* is above
+zero. *Bow Force* against *Bow Speed* is the whole gesture -- light and fast
+is breath, heavy and slow is tone. Measured: 222 Hz for an A3, at the level of
+a wavetable slot to a tenth of a decibel, and a bow that stops moving damps
+the string 73 dB in a tenth of a second, because the hair is still on it.
+
+**Spectral** does not play the clip at all; it rebuilds it. On loading, the
+recording is measured once into 32 bands on the ear's own frequency scale, and
+what is kept per frame is how loud each band is, where in it the strongest
+partial sits, and how far above the local noise floor that content stands.
+Playback makes each band again from an oscillator and a band of noise, in that
+proportion -- the deterministic-plus-stochastic decomposition of Serra and
+Smith, taken band by band, so no fundamental has to be found and a bell, rain
+and a voice all work. Nothing is a sample any more, so the note sets the pitch
+and *Rate* sets the speed and neither touches the other; at *Rate* 0 the read
+head stands still and one moment of a recording is held for as long as the
+note lasts. *Breath* tilts the balance to the partials alone or to the noise
+alone: rain becomes the chord hiding inside it, a struck bell becomes the wind
+that has its shape.
 
 **Stretch** is the same clip read as a continuum instead of as grains: a
 spectral time stretch after Paulstretch — a window of the recording is
@@ -325,9 +349,18 @@ silence.
 
 **Loudness.** In the header, where the small spectrum used to be (the strip
 below does that better now): integrated and short-term loudness to ITU-R
-BS.1770-4, the loudness range, the true peak between the samples and the crest
-factor, with the −18 to −24 LUFS window ambient masters live in marked on the
-bar. Click it to start measuring again. It is in the engine rather than in the
+BS.1770-4, the loudness range, the true peak between the samples, the crest
+factor and the loudness in **sones**, with the −18 to −24 LUFS window ambient
+masters live in marked on the bar. The sone figure answers a different
+question. LUFS is energy through one fixed weighting curve; loudness grows
+with bandwidth once a sound is wider than a critical band, and no energy meter
+will ever say so. On this instrument's own presets, *Sleep Concert* and
+*Subharmonic Deep* are 0.18 LUFS apart and 27 % apart in sones. For a piece
+that has to sit at a comfortable level for an hour, the second number is the
+useful one. It is Zwicker's model (ISO 532-1): a third-octave analysis, the
+excitation pattern with the two slopes of a masking curve, the specific
+loudness against the threshold in quiet, integrated over 24 Bark. Full scale
+is taken as 100 dB SPL. Click it to start measuring again. It is in the engine rather than in the
 interface, because the integrated figure is a number about the whole piece and
 a meter that only sees what the interface asked for has holes in it. The
 K-weighting is derived from the standard's analogue prototypes and reproduces
@@ -505,10 +538,14 @@ Sections of the GUI (all parameters are automatable in a DAW):
   far plane), the articulation that makes the room behind it feel deep.
   *Breath* and *Breath Rate*: each voice's distance wanders slowly, so a
   note drifts forward and sinks back on its own — the room breathes.
-* **Ensemble** — *Chorus*, three modulated taps, or *Microshift*: the two
+* **Ensemble** — *Chorus*, three modulated taps; *Microshift*, the two
   channels detuned a few cents in opposite directions and delayed by different
-  amounts, with nothing moving. A drone widened that way survives a mono sum,
-  where a deep chorus at 13–22 ms is a comb filter waiting to be summed.
+  amounts, with nothing moving; or *Velvet*, a sparse sequence of signed
+  impulses per channel. A drone widened either of the latter two ways survives
+  a mono sum, where a deep chorus at 13–22 ms is a comb filter waiting to be
+  summed. Measured on a sustained tone, velvet and chorus decorrelate the two
+  channels about equally, and velvet colours them by 1.32 dB where the chorus
+  colours them by 5.41.
 * **Delay** — stereo delay with independent L/R times (asymmetric by default),
   feedback, cross-feed, damping, mix, and *To Far*: how much of the echoes
   recede into the background reverb.
@@ -534,10 +571,23 @@ Sections of the GUI (all parameters are automatable in a DAW):
   the background's own stereo width before it joins the foreground. A mix in
   which everything is spread as far as it will go is a flat wall; pulling the
   far plane towards the centre while the foreground stays wide is the funnel
-  the ear reads as distance. *Mode*: the classic network, or *Scattering* with
-  an all-pass inside every line's loop — a denser tail at the same decay.
-  *Unmask* lets the background step aside for the foreground band by band, and
-  *Spread* gives it the ear's upward spread of masking.
+  the ear reads as distance. *Mode*: the classic network, *Scattering* with
+  an all-pass inside every line's loop (a denser tail at the same decay), or
+  *Colourless*, the same network with its eight line lengths searched rather
+  than chosen — 0.314 dB of spectral spread in the tail against the classic
+  set's 0.474. *Unmask* lets the background step aside for the foreground band
+  by band, and *Spread* gives it the ear's upward spread of masking.
+* **Early Room** — the fourth reverb stage, off by default, and the only one
+  that is about WHERE rather than about how long. A scattering delay network
+  with one node at the centre of each wall of a shoebox: the source's sound
+  reaches each wall after the real distance, the walls scatter into one another
+  after the real distances between them, and each wall's answer arrives at the
+  listener from its own direction. So the first reflections carry the room's
+  size and the source's place in it, and they MOVE when the source moves —
+  measured, 1.60 dB of side balance follows a source across a ten-metre room,
+  where a diffuser gives 0.02. *Early* is the level, *Size* the room's longest
+  wall in metres, *Absorb* how much each surface takes and how dark it returns,
+  *Width* how far apart the walls are placed in the picture.
 * **Room** — a third reverb, optional and additional: a convolution reverb
   on the far plane playing an impulse response (*Impulse…* loads a mono or
   stereo file, a built-in dark hall plays without one). The library's 240

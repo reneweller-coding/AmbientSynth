@@ -1264,11 +1264,11 @@ reasoning rather than as a changelog.
 *Strands had a tab of its own.* It is not a source: it is the strand bank of
 Source 1's additive type -- unison, detune, stack, bloom -- and it is greyed
 out the moment Source 1 is anything else. A tab suggested a fifth thing beside
-the four sources. The ten controls now sit under Source 1's own display, in the
-display's column, wrapped to its width (a page may name a section to place
-*under* its display, `TabRow::under`); Source 1 is narrower for it (nine cells
-instead of twelve), the additive-bank picture is half the height it was, and
-the row lost a tab that only ever meant "Source 1".
+the four sources. The ten controls moved under Source 1's own display first (a
+page could name a section to place *under* its display), and since 1.9.0 they
+stand beside Source 1 on its page, the bank's picture to the right of both, and
+are not on the page at all while the slot is anything but additive; the row
+lost a tab that only ever meant "Source 1".
 
 *Strike sat among the sources.* It is a sound source, but not one of the four
 oscillators: it fires at note-on, independent of what the slots do, exactly
@@ -2124,12 +2124,12 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   parameter's own skewed domain, inside the middle 70 % of its range), shift nudges them.
   Undo, redo and an A/B compare work on whole parameter snapshots. The header carries the
   output's own spectrum with its peak level, and a layout button that cycles three shapes:
-  Normal (one page, tabs), Compact (the widest rows wrap into two: 1.9 : 1 to 1.6 : 1, still
-  without scrolling -- wrapping every wide row rather than only those above ten cells gave
-  1.27 : 1, worse than the shape it started from, which is why the threshold is where it is)
-  and Expanded (every page of every tab row laid out under one another with a title in the
-  tab's place, no tabs, 2080 x 2604 at design size: the four sources, the two filters and
-  the conductor's six tables all in sight, for a tall screen or for reading a preset through).
+  Normal (one page, tabs), Compact (since 1.9.0: the same page in columns 88 % as wide, every
+  page refitted into them; before that the rows above ten cells wrapped into two -- wrapping
+  every wide row gave 1.27 : 1, worse than the shape it started from) and Expanded (every page
+  of every tab row laid out under one another with a title in the tab's place, no tabs: the
+  four sources, the two filters and the conductor's six tables all in sight, for a tall
+  screen or for reading a preset through).
   The mode is kept in the state; `AMBIENT_EXPANDED=1` / `AMBIENT_COMPACT=1` set it for a run,
   and the manual's tab pictures are always taken in Normal.
 
@@ -2196,6 +2196,53 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   the player's own action -- never on the window's. `AMBIENT_LAYOUT=<0|1|2>` sets the mode for
   a run over the recalled one (session recall keeps it, which is why the `AMBIENT_EXPANDED` run
   left the next start expanded).
+
+  Then Rene sent a picture of the tabbed page itself -- "viel zu viele leere Flächen, das sieht
+  einfach furchtbar aus" -- and it had the same disease from the other side: a tabbed row was
+  as tall as its tallest page and as wide as its widest, so the Clock stood alone in a box three
+  rows high, a closed Cosmos in one two rows high, the macros in a band with nothing beside
+  them, and the strand bank under Source 1's picture left a row of nothing under Source 1's
+  knobs. 1.9.0 gives the tabbed page its own layout (`layoutTabbed`), on three rules. (1) Every
+  page is FITTED to its column: the fewest rows at which its sections, each as narrow as that
+  allows, stand side by side in the column's width (`fit`, `widthsAt`: the search runs rows
+  1..11 and per section widens from its widest cell until the rows suffice); so the sections of
+  a page come out the same height and nothing is under a short one; what the row has over goes
+  to the display, or -- where there is none -- a cell at a time, round robin, to the sections
+  that can take it without losing a row, because a last row that is not full reads as a
+  section and a band at the end of the row reads as a hole. The hand-set widths (`wideUnits`)
+  now decide one thing only: the column widths, from the widest page at those widths; Expanded's
+  flows keep their own (`flowUnits`, the old ones). (2) A row is as tall as the page that is
+  open on it, not as its tallest page -- a tab click is the player's action and may relay out
+  the page -- while the design height is still the sum of the tallest pages (`colYMax`), so the
+  window never changes shape on a tab click, and the last group of each column grows into the
+  difference: its page is refitted for the new height (as many rows as it holds, so the
+  sections stand tall and the display takes the width), which is why the cluster brain is nine
+  cells wide when the columns are level and four when the left column is much the taller.
+  (3) The pages are cut so that each fills its row and every page that can have a display has
+  one: Strands beside Source 1 (and not on the page at all while the slot is not additive --
+  its cells are `unused` then, not greyed), the two filter pages sharing the filter picture,
+  Envelope + Expression sharing the envelope's, Morph + Macros + Vector one row with the vector's
+  square (the Vector left the sources' tabs, the Morph row its own), Coherence + Clock one page,
+  and a closed page keeps its display, which says why it is empty ("cosmos: send is off",
+  "choose a type to the left"). Compact is no longer a wrapping rule but a width: the columns
+  at `kCompactFactor` = 0.88 of Normal's, never narrower than the narrowest page, and the fit
+  does the rest. Measured at design size (`AMBIENT_SHOT` now sets the window to it): Normal
+  2522 x 1483 (1.70 : 1; before, at the same scale, 1.80 : 1 and the same zoom on a 1080-line
+  screen), Compact 2224 x 1712 (1.30 : 1, from 1.52), Expanded unchanged at 2.46 : 1.
+
+  What was left after that was a page whose sections are all closed and that has no display --
+  Early Room + Body + Patina all off, Strike off -- one row with a band beside it. Rene's
+  question settled it: "Ehe wir da Löcher haben, sollten wir sie nicht lieber sofort
+  ausklappen?" A section is closed to save the page room; where the row has the room anyway,
+  closing buys nothing and a title beside an empty band is worse than the section it hides. So
+  the layout opens what fits: on a fitted page, each closed section in turn is opened if the
+  page still fits its column at the same number of rows (`Section::opened`, set by the layout
+  and cleared at the start of every pass -- `collapsed` stays what the parameters say, or the
+  timer that watches for a thrown switch would see the layout's own doing and rebuild for
+  ever); in an Expanded flow, if it fits on the line as it stands. Now Early Room, Body and
+  Patina stand open side by side, Strike shows its type, decay, damping and bank, the Morph
+  page its A and B pickers. Expanded pays for it: 2.40 : 1 instead of 2.46, since a filled line
+  wraps sooner. What is left is only a section's own last row, which need not be full.
   Help (`Core/include/ambient/Help.h`): one or two sentences for every
   parameter (`paramHelp`, families share their text so the three slots and
   eight LFOs cannot drift apart; the self test insists every parameter has

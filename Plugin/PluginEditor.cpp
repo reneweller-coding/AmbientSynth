@@ -31,16 +31,22 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     // Two columns, everything in sight at once: the voice and the morph on the left, the effects,
     // the cosmos and the conductor on the right. Rows whose sections are of a kind (the three
     // sources, the two filters, the effect pairs, the conductor's tables) page through tabs.
+    // Every page is fitted to its column (layoutTabbed), so what the tables decide is which
+    // sections share a page, and the pages are cut so that each fills its row: no page of one
+    // small section with nothing beside it, and every page that can have a display has one.
     groups_ = {
-        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4", "Vector" }, { "Air", "Filter", "Envelope", "Z-Plane", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
-        { "MORPH",      kMorph,     { { "Morph", "Macros" } }, {}, 0 },
+        { "VOICE",      kVoice,     { { "Source 1", "Strands", "Source 2", "Source 3", "Source 4" }, { "Air", "Filter", "Z-Plane", "Envelope", "Expression" }, { "Space", "Foundation" } }, {}, 0 },   // rows 0 and 1 page through tabs
+        // Morph, the macros and the vector in one row: the three controls that act on the whole
+        // sound at once, with the vector's square as the row's display. (The vector used to be a
+        // tab of the sources, and the macros a page with nothing beside them.)
+        { "MORPH",      kMorph,     { { "Morph", "Macros", "Vector" } }, {}, 0 },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina" } }, {}, 1 },
         // Strike shares the Cosmos group as a tab: like the Cosmos it is a sound source that is
         // not one of the four oscillators, and beside them it read as a fifth.
         { "COSMOS",     kCosmos,    { { "Cosmos", "Strike" } }, {}, 1 },
-        // Stretchy as well, and for the same reason from the other side: in Compact the left
-        // column is the taller one, and then it is the note roll that grows into the gap.
+        // Last in the right column and stretchy: every page of it has a display, and whatever
+        // height the left column has over goes to that display, the page refitted taller.
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1, {}, 0, true },
         // Last in the left column, and the only group with no controls in it: the right column is
         // taller than the left, and the difference used to be an empty rectangle the width of the
@@ -49,19 +55,17 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "ANALYSIS",   kVoice,     { {} }, {}, 0, {}, 96, true },
     };
     tabRows_ = {
-        // The Vector belongs with the sources it mixes, so it is a page of the same row.
-        // Strands is not a page: it belongs to Source 1's additive bank alone and sits under that
-        // page's display (TabRow::under), so the row lost a tab that only ever meant "Source 1".
-        { 0, 0, { "SOURCE 1", "SOURCE 2", "SOURCE 3", "SOURCE 4", "VECTOR" }, { { "Source 1" }, { "Source 2" }, { "Source 3" }, { "Source 4" }, { "Vector" } } },
-        { 0, 1, { "FILTER", "Z-PLANE", "AMP ENV", "EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope" }, { "Expression" } } },
-        { 1, 0, { "MORPH", "MACROS" }, { { "Morph" }, { "Macros" } } },
+        // The strand bank is on Source 1's page beside the strip (it has no cells while the slot
+        // is not additive, and then it is not there); the two filter pages share the filter's
+        // picture; the envelope and the expression share a page and the envelope's picture.
+        { 0, 0, { "SOURCE 1", "SOURCE 2", "SOURCE 3", "SOURCE 4" }, { { "Source 1", "Strands" }, { "Source 2" }, { "Source 3" }, { "Source 4" } } },
+        { 0, 1, { "FILTER", "Z-PLANE", "ENVELOPE + EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope", "Expression" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
-        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "EARLY ROOM", "BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Early Room" }, { "Body", "Patina" } } },
-        { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE", "CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence" }, { "Clock" } } },
-        // Appended, so the indices the code above uses for the other rows stay what they were.
+        { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "EARLY ROOM + BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Early Room", "Body", "Patina" } } },
         { 4, 0, { "COSMOS", "STRIKE" }, { { "Cosmos" }, { "Strike" } } },
+        // The clock shares the coherence page: three cells alone were a page three quarters empty.
+        { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE + CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence", "Clock" } } },
     };
-    tabRows_[0].under = { "Strands", "", "", "", "" };   // under Source 1's display only
 
     content_.onPaint = [this](juce::Graphics& g) { paintContent(g); };
     content_.onMouse = [this](const juce::MouseEvent& e) {
@@ -158,11 +162,11 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     abButton_->setTooltip("Two whole snapshots to compare: the first click parks what you have in A and hands you B, every click after swaps");
     abButton_->onClick = [this] { swapAB(); };
     addAndMakeVisible(*abButton_);
-    // The layout, cycled by one button: Normal (one page, tabs), Compact (the widest rows wrap,
-    // narrower and taller) and Expanded (every page of every tab row under one another, no tabs,
-    // tall -- for a tall screen, or for reading a preset through without clicking).
+    // The layout, cycled by one button: Normal (one page, tabs), Compact (the same page in
+    // narrower columns, every page refitted taller) and Expanded (every page of every tab row
+    // under one another, no tabs -- for a tall screen, or for reading a preset through).
     compactButton_ = std::make_unique<juce::TextButton>("Normal");
-    compactButton_->setTooltip("Layout. Normal: one page with tabs. Compact: the widest rows wrap, narrower and taller. Expanded: every page of every tab row laid out under one another -- no tabs, a tall page, everything in sight.");
+    compactButton_->setTooltip("Layout. Normal: one page with tabs. Compact: the same page in narrower columns, every section refitted taller. Expanded: every page of every tab row laid out under one another -- no tabs, a wide page, everything in sight.");
     compactButton_->setClickingTogglesState(false);
     compactButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
     compactButton_->onClick = [this] { applyLayoutMode((proc_.layoutMode() + 1) % 3); };
@@ -262,19 +266,19 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(vectorView_.get()),
                                 static_cast<juce::Component*>(tuningView_.get()), static_cast<juce::Component*>(coherenceView_.get()) })
         content_.addAndMakeVisible(*c);
-    if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
-        tabRows_[0].displays = { source1View_.get(), source2View_.get(), source3View_.get(), source4View_.get(), vectorView_.get() };
+    if (tabRows_.size() > 5 && groups_.size() > 6) {
+        tabRows_[0].displays = { source1View_.get(), source2View_.get(), source3View_.get(), source4View_.get() };
         // The strand scope drew the bank's cycle on the Strands tab; that tab is gone and the
-        // additive-bank picture on Source 1's page shows the same partials. Kept for the manual.
+        // additive-bank picture on Source 1's page shows the same partials. Expanded uses it.
         if (scope_) scope_->setVisible(false);
-        tabRows_[1].displays = { filterView_.get(), nullptr, envView_.get(), nullptr };
-    }
-    if (groups_.size() > 4) {
+        // The filter picture draws both filters, so it is the display of both filter pages.
+        tabRows_[1].displays = { filterView_.get(), filterView_.get(), envView_.get() };
+        tabRows_[4].displays = { cosmosView_.get(), nullptr };                                                                    // COSMOS | STRIKE
+        tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), tuningView_.get(), coherenceView_.get() };   // BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE + CLOCK
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
-        tabRows_.back().displays = { cosmosView_.get(), nullptr };      // COSMOS | STRIKE (the row appended last)
+        groups_[1].displays = { vectorView_.get() };                    // MORPH: the vector's square
+        groups_[6].displays = { spectrumView_.get() };                  // ANALYSIS: the strip
     }
-    if (groups_.size() > 6) groups_[6].displays = { spectrumView_.get() };   // ANALYSIS: the strip
-    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), tuningView_.get(), coherenceView_.get(), nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
     // The Expanded page. Three columns: the voice's sources and its room on the left; its
     // shaping (filters, envelope, expression, z-plane, vector) with the effects, the background
     // and the small sections in the middle; morph, macros and the conductor on the right. The
@@ -325,6 +329,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         const juce::String lm = juce::SystemStats::getEnvironmentVariable("AMBIENT_LAYOUT", "");   // 0, 1 or 2, over the recalled one
         if (lm.isNotEmpty()) mode = juce::jlimit(0, 2, lm.getIntValue());
         if (mode != 0) applyLayoutMode(mode);
+        // A picture is taken at design size, so its pixels are the layout's own measurements.
+        if (juce::SystemStats::getEnvironmentVariable("AMBIENT_SHOT", "").isNotEmpty()) setSize(designW_, designH_);
     }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);
     {   // AMBIENT_PRESET=<name>: open on a named preset (dev aid for photographing a modulated patch)
@@ -355,6 +361,9 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         // illustrated the Sources chapter with a display that said "nothing sounding".
         const juce::String man = juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL", "");
         if (man.isNotEmpty()) {
+            // The manual's pictures are of the tabbed page. Session recall keeps the layout mode,
+            // and one export ran Expanded because the run before it had been.
+            applyLayoutMode(0);
             for (int n : { 45, 52, 57, 64, 69 }) proc_.engine().noteOn(n, 0.7f);
             juce::Timer::callAfterDelay(12000, [this, man] {
                 exportManual(juce::File(man), [] { juce::JUCEApplicationBase::quit(); });
@@ -417,23 +426,21 @@ void AmbientSynthEditor::buildCells()
         Section* sec = findSection(d.section);
         if (sec == nullptr) {
             Section s; s.name = d.section;
-            if (s.name == "Tuning" || s.name == "Far Reverb") s.maxUnits = 8;
-            if (s.name == "Cosmos") s.maxUnits = 8;                          // two even rows
+            // The widths in Expanded's flows, where a section's shape is its own: mostly one long
+            // row, so the closed sections stand beside the open ones on one line.
             if (s.name == "Tuning") s.maxUnits = 9;
+            if (s.name == "Cosmos") s.maxUnits = 8;                          // two even rows
             if (s.name == "Morph") s.maxUnits = 9;
             if (s.name == "Macros") s.maxUnits = 10;                         // one row: the eight macros, Air, Inertia
             if (s.name == "Space") s.maxUnits = 10;                          // two rows of ten
             if (s.name == "Foundation") s.maxUnits = 5;
-            // Source 1 is narrower than the others on purpose: its page shares the row with the
-            // strand bank under the display, and the display column needs the width for it.
             if (s.name == "Early Room") s.maxUnits = 4;                      // one row
             if (s.name == "Source 1") s.maxUnits = 9;
             else if (s.name == "Source 2" || s.name == "Source 3" || s.name == "Source 4") s.maxUnits = 12;
-            s.wideUnits = 0;   // filled in below, after every section knows its natural width
             if (s.name == "Strands") s.maxUnits = 10;
             if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 12;   // one row with the two Sync choices and Absorb
             if (s.name == "Far Reverb") s.maxUnits = 12;                     // one row with Rotate, Unmask, Diffuse and Width
-            if (s.name == "Master") s.maxUnits = 5;
+            if (s.name == "Master") s.maxUnits = 8;                          // the header's row
             if (s.name == "Body") s.maxUnits = 7;                            // one row
             if (s.name == "Room") s.maxUnits = 9;                            // one row with Morph and both impulses
             if (s.name == "Cluster Brain" || s.name == "Brain 2") s.maxUnits = 10;
@@ -441,8 +448,24 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 10;                         // one row: On, Model, five knobs, Drive, Fold
             if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
-            if (s.name == "Z-Plane") s.maxUnits = 13;                        // one row with Mode and Route
             if (s.name == "Z-Plane") s.maxUnits = 11;
+            s.flowUnits = s.maxUnits;
+            // The natural widths on the tabbed page. There they decide one thing only: how wide
+            // each column is, which is the widest page at these widths (Source 1 with the strand
+            // bank and its picture on the left, the cluster brain with its roll on the right).
+            // Every page is then fitted into that column (layoutTabbed), so a section's rows on
+            // the screen are whatever its page needs, not these.
+            if (s.name == "Cosmos") s.maxUnits = 9;
+            if (s.name == "Morph") s.maxUnits = 5;
+            if (s.name == "Macros") s.maxUnits = 5;
+            if (s.name == "Vector") s.maxUnits = 3;
+            if (s.name == "Strands") s.maxUnits = 6;                         // two rows beside Source 1
+            if (s.name == "Delay" || s.name == "Delay 2") s.maxUnits = 7;    // two rows, the second with Duck
+            if (s.name == "Far Reverb") s.maxUnits = 9;                      // two rows
+            if (s.name == "Body") s.maxUnits = 4;
+            if (s.name == "Room") s.maxUnits = 6;
+            if (s.name == "Cloud") s.maxUnits = 4;
+            if (s.name == "Clock") s.maxUnits = 2;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
                     for (auto& n : row) if (n == s.name) s.group = gi;
@@ -596,6 +619,7 @@ void AmbientSynthEditor::buildCells()
     auto impulseB = std::make_unique<juce::TextButton>("Impulse B...");
     impulseB->onClick = [this] { chooseImpulseFile(true); };
     impulseBCell_ = addExtraCell("Room", std::move(impulseB), "no second room", 2);
+    for (auto& s : sections_) s.wideUnits = s.maxUnits;   // the natural width, which every layout starts from
 
     auto boxA = std::make_unique<juce::ComboBox>();
     boxA->setTextWhenNothingSelected("A: preset");
@@ -726,11 +750,18 @@ bool AmbientSynthEditor::sectionCollapsed(const Section& s) const
 bool AmbientSynthEditor::cellShown(const Section& s, const Cell& c) const
 {
     if (c.unused) return false;
-    if (!s.collapsed) return true;
+    if (!s.closedNow()) return true;
     const Closer* k = closerFor(s.name);
     if (k == nullptr || c.param < 0) return false;
     for (ParamId id : k->keep) if (static_cast<int>(id) == c.param) return true;
     return false;
+}
+
+int AmbientSynthEditor::shownCells(const Section& s) const
+{
+    int n = 0;
+    for (int ci : s.cells) if (cellShown(s, cells_[static_cast<size_t>(ci)])) ++n;
+    return n;
 }
 
 int AmbientSynthEditor::sectionWidth(const Section& s) const
@@ -821,7 +852,6 @@ void AmbientSynthEditor::resized()
 
     // The Master section (mid/side) sits in the header, left of the master knob.
     if (Section* ms = findSection("Master")) {
-        ms->maxUnits = 8;
         layoutSection(*ms, W - 74 - sectionWidth(*ms) - 6, 4);
         ms->bounds = ms->bounds.withTrimmedTop(-2);
     }
@@ -837,8 +867,8 @@ void AmbientSynthEditor::resized()
 // size is measured from this once, in the constructor -- guessing it meant the right-hand column
 // kept falling off the edge. A tabbed row is as wide and as tall as its widest and tallest page,
 // so switching a tab never moves anything else.
-// Compact: a section wider than eight cells wraps into two rows. The page loses width and gains
-// height; nothing scrolls either way, and the arrangement is otherwise untouched.
+// Compact: the columns are kCompactFactor as wide and every page is refitted into them. The page
+// loses width and gains height; nothing scrolls either way, and the arrangement is otherwise untouched.
 void AmbientSynthEditor::applyLayoutMode(int mode)
 {
     mode = juce::jlimit(0, 2, mode);
@@ -851,13 +881,6 @@ void AmbientSynthEditor::applyLayoutMode(int mode)
 
 void AmbientSynthEditor::rebuildLayout()
 {
-    for (auto& s : sections_) {
-        if (s.wideUnits == 0) s.wideUnits = s.maxUnits;
-        // Only the rows that actually drive the page's width wrap: halving everything made the
-        // page taller than it was wide (1.27 : 1), which is worse on a 16:9 screen than the
-        // 1.9 : 1 it started from. Ten cells is the measured threshold.
-        s.maxUnits = (compact_ && s.wideUnits > 10) ? (s.wideUnits + 1) / 2 : s.wideUnits;
-    }
     resized();
     // The design's shape has changed, so the window has to follow: keep the width, take the new
     // height from the new ratio, and tell the constrainer about it or the corner would fight it.
@@ -872,18 +895,21 @@ void AmbientSynthEditor::rebuildLayout()
 
 void AmbientSynthEditor::layoutBody()
 {
-    for (auto& s : sections_) s.collapsed = sectionCollapsed(s);
+    for (auto& s : sections_) {
+        s.collapsed = sectionCollapsed(s);
+        s.opened = false;   // decided again below, from the room each row turns out to have
+        const int natural = expanded_ ? s.flowUnits : s.wideUnits;
+        if (natural > 0) s.maxUnits = natural;
+    }
     // Which page: the tabbed two-column page, or the Expanded three-column one with no tabs.
-    std::vector<Group>& G = expanded_ ? expandedGroups_ : groups_;
-    if (expanded_) {
-        for (auto& t : tabRows_) { t.tabs.clear(); t.bar = {}; }
-        // Displays the tabbed page owns and this one does not use go out of sight.
+    if (!expanded_) { layoutTabbed(); return; }
+    std::vector<Group>& G = expandedGroups_;
+    for (auto& t : tabRows_) { t.tabs.clear(); t.bar = {}; }
+    {   // Displays the tabbed page owns and this one does not use go out of sight.
         std::set<juce::Component*> used;
         for (auto& g : G) for (auto* d : g.displays) if (d != nullptr) used.insert(d);
         for (auto& t : tabRows_) for (auto* d : t.displays) if (d != nullptr && used.count(d) == 0) d->setVisible(false);
         for (auto& g : groups_) for (auto* d : g.displays) if (d != nullptr && used.count(d) == 0) d->setVisible(false);
-    } else {
-        for (auto& g : expandedGroups_) for (auto* d : g.displays) if (d != nullptr) d->setVisible(false);
     }
     int nCols = 1;
     for (auto& g : G) nCols = std::max(nCols, g.column + 1);
@@ -906,6 +932,13 @@ void AmbientSynthEditor::layoutBody()
         for (auto& n : names) {
             Section* s = findSection(n);
             if (s == nullptr) continue;
+            // Closed only where closing buys room: if it fits open on the line as it stands, it
+            // is laid out open. (Both passes see the same flags, so measuring and placing agree.)
+            if (s->closedNow()) {
+                const int before = shownCells(*s);
+                s->opened = true;
+                if (shownCells(*s) <= before || x + sectionWidth(*s) > x0 + maxW) s->opened = false;
+            }
             const int w = sectionWidth(*s), h = sectionHeight(*s);
             if (x > x0 + kPad && x + w > x0 + maxW) { x = x0 + kPad; y += lineH + kPad; lineH = 0; }
             if (place) { setSectionVisible(*s, true); layoutSection(*s, x, y); }
@@ -914,17 +947,25 @@ void AmbientSynthEditor::layoutBody()
         if (heightOut != nullptr) *heightOut = (y - y0) + lineH;
         return widest;
     };
-    // The rows of a group as they stand: on the Expanded page a row whose only section is closed
-    // has no display, and rows without a display that follow one another merge into one flow --
-    // two Off slots share a line instead of each leaving an empty band beside it.
+    // The rows of a group as they stand: a row whose only section is closed has no display, and
+    // rows without a display that follow one another merge into one flow -- two Off slots share
+    // a line instead of each leaving an empty band beside it.
     auto rowsOf = [&](Group& g) {
         std::vector<std::pair<std::vector<juce::String>, juce::Component*>> out;
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
             juce::Component* d = ri < g.displays.size() ? g.displays[ri] : nullptr;
             const auto& names = g.rows[ri];
-            if (expanded_ && d != nullptr && names.size() == 1)
-                if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { d->setVisible(false); d = nullptr; }
-            if (expanded_ && d == nullptr && !names.empty() && !out.empty() && out.back().second == nullptr && !out.back().first.empty())
+            // A row whose only section has no cells (the strand bank while Source 1 is not
+            // additive) is not there at all: no title, no display, no line.
+            if (names.size() == 1)
+                if (Section* only = findSection(names[0]); only != nullptr && shownCells(*only) == 0) {
+                    setSectionVisible(*only, false);
+                    if (d != nullptr) d->setVisible(false);
+                    continue;
+                }
+            if (d != nullptr && names.size() == 1)
+                if (const Section* only = findSection(names[0]); only != nullptr && only->closedNow()) { d->setVisible(false); d = nullptr; }
+            if (d == nullptr && !names.empty() && !out.empty() && out.back().second == nullptr && !out.back().first.empty())
                 out.back().first.insert(out.back().first.end(), names.begin(), names.end());
             else out.push_back({ names, d });
         }
@@ -935,26 +976,14 @@ void AmbientSynthEditor::layoutBody()
         const auto R = rowsOf(g);
         for (size_t ri = 0; ri < R.size(); ++ri) {
             // A page with a display asks for room to draw it in, or the picture would be squeezed out.
-            int w = 0;
-            TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
             const bool hasDisp = R[ri].second != nullptr;
-            if (t != nullptr) {
-                for (size_t pi = 0; pi < t->pages.size(); ++pi)
-                    w = std::max(w, pageWidth(t->pages[pi]) + (pi < t->displays.size() && t->displays[pi] != nullptr ? kDisplayMinW : 0));
-            } else if (expanded_ && !hasDisp) {
-                w = wrapped(R[ri].first, 0, 0, kWrapW, false, nullptr) + kPad;
-            } else {
-                w = pageWidth(R[ri].first) + (hasDisp ? kDisplayMinW : 0);
-            }
+            const int w = hasDisp ? pageWidth(R[ri].first) + kDisplayMinW : wrapped(R[ri].first, 0, 0, kWrapW, false, nullptr) + kPad;
             colWidth[static_cast<size_t>(g.column)] = std::max(colWidth[static_cast<size_t>(g.column)], w);
         }
     }
     colX[0] = kPad;
     for (size_t ci = 1; ci < colX.size(); ++ci) colX[ci] = colX[ci - 1] + colWidth[ci - 1] + kPad;
-    const juce::Font tabFont = ui::title(10.5f);
     // The stretchy row of each column, filled in as it is placed and grown at the end of the pass.
-    // One per column rather than one in total: which column comes out shorter depends on the tabs
-    // and on Compact, and the hole belongs to whichever one it is.
     struct Stretch { juce::Component* disp = nullptr; Group* group = nullptr; };
     std::vector<Stretch> stretch(static_cast<size_t>(nCols));
     for (size_t gi = 0; gi < G.size(); ++gi) {
@@ -964,52 +993,12 @@ void AmbientSynthEditor::layoutBody()
         int y = colY[col] + kGroupTitleH;
         const auto R = rowsOf(g);
         for (size_t ri = 0; ri < R.size(); ++ri) {
-            TabRow* t = expanded_ ? nullptr : tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
-            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : R[ri].first;
-            juce::Component* disp = nullptr;
-            Section* underSec = nullptr;      // a section placed under the display, if the page has one
-            int rowH = 0;
-            if (t != nullptr) {
-                for (auto& pg : t->pages) rowH = std::max(rowH, pageHeight(pg));
-                t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
-                t->tabs.clear();
-                int tx = t->bar.getX();
-                for (auto& nm : t->names) {
-                    const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
-                    t->tabs.push_back({ tx, y, tw, kTabH - 4 });
-                    tx += tw + 4;
-                }
-                for (size_t pi = 0; pi < t->pages.size(); ++pi) {
-                    if (static_cast<int>(pi) == t->active) continue;
-                    for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
-                    if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
-                    if (pi < t->under.size() && t->under[pi].isNotEmpty())
-                        if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
-                }
-                const size_t pgi = static_cast<size_t>(t->active);
-                if (pgi < t->displays.size()) disp = t->displays[pgi];
-                // The page's under-section wraps to the display column's width, and the row is
-                // tall enough to keep a real picture above it.
-                if (pgi < t->under.size() && t->under[pgi].isNotEmpty()) {
-                    if (Section* u = findSection(t->under[pgi])) {
-                        const int free = colWidth[col] - pageWidth(names) - kPad;
-                        u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
-                        underSec = u;
-                        rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
-                    }
-                }
-                y += kTabH;
-            } else {
-                rowH = std::max(pageHeight(names), g.minRowH);
-                disp = R[ri].second;
-            }
-            // A page whose only section is closed shows no display either: an Off slot is a
-            // title and a type menu, not a title, a menu and an empty picture.
-            if (disp != nullptr && names.size() == 1)
-                if (const Section* only = findSection(names[0]); only != nullptr && only->collapsed) { disp->setVisible(false); disp = nullptr; }
+            const std::vector<juce::String>& names = R[ri].first;
+            juce::Component* disp = R[ri].second;
+            int rowH = std::max(pageHeight(names), g.minRowH);
             int x = x0 + kPad;
-            if (t == nullptr && expanded_ && disp == nullptr) {
-                // Expanded, no display: the row wraps, and is as tall as its lines.
+            if (disp == nullptr) {
+                // No display: the row wraps, and is as tall as its lines.
                 int h = 0;
                 x += wrapped(names, x0, y, kWrapW, true, &h);
                 rowH = std::max(h, g.minRowH);
@@ -1021,26 +1010,11 @@ void AmbientSynthEditor::layoutBody()
                     layoutSection(*s, x, y);
                     x += s->bounds.getWidth() + kPad;
                 }
-            }
-            // Whatever the row leaves free goes to its display -- that room used to stay empty --
-            // and where the page has an under-section, the display keeps the top of that column
-            // and the section takes the bottom, wrapped to the column's width.
-            if (disp != nullptr) {
+                // Whatever the row leaves free goes to its display.
                 const int right = x0 + colWidth[col] - kPad;
-                int dispH = rowH;
-                if (underSec != nullptr && right - x >= 120) {
-                    const int uh = sectionHeight(*underSec);
-                    if (rowH - uh - kPad >= 80) {
-                        dispH = rowH - uh - kPad;
-                        setSectionVisible(*underSec, true);
-                        layoutSection(*underSec, x, y + dispH + kPad);
-                    } else setSectionVisible(*underSec, false);
-                }
-                if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
+                if (right - x >= 120 && rowH > 0) { disp->setBounds(x, y, right - x, rowH); disp->setVisible(true); }
                 else disp->setVisible(false);
                 if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
-            } else if (underSec != nullptr) {
-                setSectionVisible(*underSec, false);
             }
             y += rowH + kPad;
         }
@@ -1051,13 +1025,203 @@ void AmbientSynthEditor::layoutBody()
     bodyH_ = 0;
     for (int yy : colY) bodyH_ = std::max(bodyH_, yy);
     // The stretch. A stretchy group is the last one in its column, so growing its row only reaches
-    // downwards and nothing else has to move: the columns end level, whatever the tabs are set to.
+    // downwards and nothing else has to move: the columns end level.
     for (size_t ci = 0; ci < stretch.size(); ++ci) {
         if (stretch[ci].disp == nullptr || stretch[ci].group == nullptr) continue;
         const int deficit = bodyH_ - colY[ci];
         if (deficit <= 0) continue;
         stretch[ci].disp->setBounds(stretch[ci].disp->getBounds().withHeight(stretch[ci].disp->getHeight() + deficit));
         stretch[ci].group->bounds = stretch[ci].group->bounds.withHeight(stretch[ci].group->bounds.getHeight() + deficit);
+        colY[ci] += deficit;
+    }
+}
+
+// The tabbed page: Normal and Compact. See the header for the rule; the pieces are these.
+void AmbientSynthEditor::layoutTabbed()
+{
+    for (auto& g : expandedGroups_) for (auto* d : g.displays) if (d != nullptr) d->setVisible(false);
+    std::vector<Group>& G = groups_;
+    int nCols = 1;
+    for (auto& g : G) nCols = std::max(nCols, g.column + 1);
+    const size_t NC = static_cast<size_t>(nCols);
+    std::vector<int> colWidth(NC, 0), colX(NC, 0), colY(NC, kPad), colYMax(NC, kPad);
+
+    // A page: the sections that stand side by side, and the display that takes the rest.
+    struct Page { std::vector<juce::String> names; juce::Component* disp = nullptr; };
+    auto pagesOf = [&](size_t gi, size_t ri) {
+        std::vector<Page> out;
+        Group& g = G[gi];
+        if (TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri))) {
+            for (size_t pi = 0; pi < t->pages.size(); ++pi)
+                out.push_back({ t->pages[pi], pi < t->displays.size() ? t->displays[pi] : nullptr });
+        } else out.push_back({ g.rows[ri], ri < g.displays.size() ? g.displays[ri] : nullptr });
+        return out;
+    };
+    // The sections of a page that have anything to show. The strand bank has no cells while
+    // Source 1 is not additive, and then it is not on the page at all.
+    auto live = [&](const std::vector<juce::String>& names) {
+        std::vector<Section*> out;
+        for (auto& n : names)
+            if (Section* s = findSection(n)) {
+                if (shownCells(*s) > 0) out.push_back(s); else setSectionVisible(*s, false);
+            }
+        return out;
+    };
+    // A section's width and its rows if it were w cells wide; the widest cell it holds.
+    auto unitOf  = [&](const Section& s) { int u = 1; for (int ci : s.cells) if (cellShown(s, cells_[static_cast<size_t>(ci)])) u = std::max(u, cells_[static_cast<size_t>(ci)].units); return u; };
+    auto widthAt = [&](Section& s, int w) { const int keep = s.maxUnits; s.maxUnits = w; const int r = sectionWidth(s); s.maxUnits = keep; return r; };
+    auto rowsAt  = [&](Section& s, int w) { const int keep = s.maxUnits; s.maxUnits = w; const int h = sectionHeight(s); s.maxUnits = keep; return (h - kTitleH - kPad) / kCellH; };
+    auto pageH   = [&](const std::vector<Section*>& secs) { int h = 0; for (auto* s : secs) h = std::max(h, sectionHeight(*s)); return h; };
+    // A page's width at the natural widths, and at the narrowest (every section one cell wide).
+    auto naturalW = [&](const Page& p) { int w = kPad; for (auto* s : live(p.names)) w += widthAt(*s, s->wideUnits) + kPad; return w + (p.disp != nullptr ? kDisplayMinW : 0); };
+    auto narrowW  = [&](const Page& p) { int w = kPad; for (auto* s : live(p.names)) w += widthAt(*s, unitOf(*s)) + kPad; return w + (p.disp != nullptr ? kDisplayMinW : 0); };
+    // The widths of a page's sections at r rows each: the narrowest at which none needs more.
+    // Returns the width they take side by side, with the pads.
+    auto widthsAt = [&](const std::vector<Section*>& secs, int r, std::vector<int>& ws) {
+        int total = kPad; ws.clear();
+        for (Section* s : secs) {
+            int w = unitOf(*s);
+            while (w < 64 && rowsAt(*s, w) > r) ++w;
+            ws.push_back(w); total += widthAt(*s, w) + kPad;
+        }
+        return total;
+    };
+    // The fit: the fewest rows at which the page fits its column, its sections each as narrow as
+    // that allows. Where the row is taller than the page needs (the stretch), as many rows as the
+    // height holds instead, so the sections stand tall and the display takes the width.
+    auto fit = [&](const Page& p, int availW, int availH) {
+        auto secs = live(p.names);
+        const int room = availW - (p.disp != nullptr ? kDisplayMinW : 0);
+        std::vector<int> ws;
+        int r = 1;
+        for (; r < 12; ++r) if (widthsAt(secs, r, ws) <= room) break;
+        int used = widthsAt(secs, r, ws);
+        // Closed only where closing buys room. A section whose switch is off shrinks to its title
+        // to save the page room; where the page has the room anyway, it is laid out open instead,
+        // because a title beside an empty band is worse than the section it is hiding.
+        for (Section* s : secs) {
+            if (!s->closedNow()) continue;
+            const int before = shownCells(*s);
+            s->opened = true;
+            std::vector<int> ws2;
+            const int t = widthsAt(secs, r, ws2);
+            if (shownCells(*s) > before && t <= room) { ws = ws2; used = t; }
+            else { s->opened = false; used = widthsAt(secs, r, ws); }
+        }
+        // What the row has over is handed out a cell at a time, round robin, to the sections that
+        // can take it without losing a row: a last row that is not full reads as a section, an
+        // empty band at the end of the row reads as a hole. A display takes it instead.
+        if (p.disp == nullptr) {
+            bool any = true;
+            while (any && used + kCellW <= room) {
+                any = false;
+                for (size_t i = 0; i < secs.size() && used + kCellW <= room; ++i) {
+                    const int w2 = ws[i] + 1;
+                    if (rowsAt(*secs[i], w2) != rowsAt(*secs[i], ws[i])) continue;
+                    const int grow = widthAt(*secs[i], w2) - widthAt(*secs[i], ws[i]);
+                    if (grow <= 0 || used + grow > room) continue;
+                    ws[i] = w2; used += grow; any = true;
+                }
+            }
+        }
+        for (size_t i = 0; i < secs.size(); ++i) secs[i]->maxUnits = ws[i];
+        if (p.disp != nullptr && availH > 0) {
+            for (int rr = r + 1; rr < 12; ++rr) {
+                std::vector<int> ws2;
+                if (widthsAt(secs, rr, ws2) > room) break;
+                bool taller = false, fits = true;
+                for (size_t i = 0; i < secs.size(); ++i) {
+                    const int rows2 = rowsAt(*secs[i], ws2[i]);
+                    if (rows2 * kCellH + kTitleH + kPad > availH) fits = false;
+                    if (rows2 > rowsAt(*secs[i], ws[i])) taller = true;
+                }
+                if (!fits) break;
+                if (taller) { ws = ws2; for (size_t i = 0; i < secs.size(); ++i) secs[i]->maxUnits = ws[i]; }
+            }
+        }
+        return pageH(secs);
+    };
+    // Column widths: the widest page at its natural width. Compact takes a fraction of that,
+    // never less than the narrowest page needs.
+    std::vector<int> narrow(NC, 0);
+    for (size_t gi = 0; gi < G.size(); ++gi)
+        for (size_t ri = 0; ri < G[gi].rows.size(); ++ri)
+            for (const Page& p : pagesOf(gi, ri)) {
+                const size_t col = static_cast<size_t>(G[gi].column);
+                colWidth[col] = std::max(colWidth[col], naturalW(p));
+                narrow[col] = std::max(narrow[col], narrowW(p));
+            }
+    if (compact_) for (size_t c = 0; c < NC; ++c) colWidth[c] = std::max(narrow[c], juce::roundToInt(colWidth[c] * kCompactFactor));
+    colX[0] = kPad;
+    for (size_t ci = 1; ci < colX.size(); ++ci) colX[ci] = colX[ci - 1] + colWidth[ci - 1] + kPad;
+
+    const juce::Font tabFont = ui::title(10.5f);
+    // The stretchy row of each column: placed here, refitted and grown once the deficit is known.
+    struct Stretch { Group* group = nullptr; Page page; int x0 = 0, y = 0, rowH = 0; bool set = false; };
+    std::vector<Stretch> stretch(NC);
+    for (size_t gi = 0; gi < G.size(); ++gi) {
+        auto& g = G[gi];
+        const size_t col = static_cast<size_t>(g.column);
+        const int x0 = colX[col];
+        int y = colY[col] + kGroupTitleH, yMax = colYMax[col] + kGroupTitleH;
+        for (size_t ri = 0; ri < g.rows.size(); ++ri) {
+            const auto pages = pagesOf(gi, ri);
+            TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
+            // Every page fitted, so the tallest is known -- the design height counts that one.
+            int rowHMax = g.minRowH;
+            for (const Page& p : pages) rowHMax = std::max(rowHMax, fit(p, colWidth[col], 0));
+            const size_t act = t != nullptr ? static_cast<size_t>(juce::jlimit(0, static_cast<int>(pages.size()) - 1, t->active)) : 0;
+            const Page& p = pages[act];
+            if (t != nullptr) {
+                t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
+                t->tabs.clear();
+                int tx = t->bar.getX();
+                for (auto& nm : t->names) {
+                    const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
+                    t->tabs.push_back({ tx, y, tw, kTabH - 4 });
+                    tx += tw + 4;
+                }
+                for (size_t pi = 0; pi < pages.size(); ++pi) {
+                    if (pi == act) continue;
+                    for (auto& n : pages[pi].names) if (Section* s = findSection(n)) setSectionVisible(*s, false);
+                    if (pages[pi].disp != nullptr && pages[pi].disp != p.disp) pages[pi].disp->setVisible(false);
+                }
+                y += kTabH; yMax += kTabH;
+            }
+            auto secs = live(p.names);
+            const int rowH = std::max(pageH(secs), g.minRowH);
+            int x = x0 + kPad;
+            for (Section* s : secs) { setSectionVisible(*s, true); layoutSection(*s, x, y); x += s->bounds.getWidth() + kPad; }
+            if (p.disp != nullptr) {
+                const int right = x0 + colWidth[col] - kPad;
+                if (right - x >= 120 && rowH > 0) { p.disp->setBounds(x, y, right - x, rowH); p.disp->setVisible(true); }
+                else p.disp->setVisible(false);
+                if (g.stretch && p.disp->isVisible()) stretch[col] = { &g, p, x0, y, rowH, true };
+            }
+            y += rowH + kPad; yMax += rowHMax + kPad;
+        }
+        g.bounds = { x0, colY[col], colWidth[col], y - colY[col] };
+        colY[col] = y + kPad; colYMax[col] = yMax + kPad;
+    }
+    bodyW_ = colX.back() + colWidth.back() + kPad;
+    bodyH_ = 0;
+    for (int yy : colYMax) bodyH_ = std::max(bodyH_, yy);   // the tallest pages: the shape a tab click cannot change
+    // The stretch: the last row of each column grows to the body's height. Its page is refitted
+    // for the new height -- the sections as tall as it holds, the display beside them as wide as
+    // that leaves -- so the room under the knobs is not a hole but more picture.
+    for (size_t ci = 0; ci < stretch.size(); ++ci) {
+        Stretch& st = stretch[ci];
+        if (!st.set) continue;
+        const int deficit = bodyH_ - colY[ci];
+        if (deficit <= 0) continue;
+        const int rowH = st.rowH + deficit;
+        fit(st.page, colWidth[ci], rowH);
+        auto secs = live(st.page.names);
+        int x = st.x0 + kPad;
+        for (Section* s : secs) { setSectionVisible(*s, true); layoutSection(*s, x, st.y); x += s->bounds.getWidth() + kPad; }
+        const int right = st.x0 + colWidth[ci] - kPad;
+        st.page.disp->setBounds(x, st.y, std::max(120, right - x), rowH);
+        st.group->bounds = st.group->bounds.withHeight(st.group->bounds.getHeight() + deficit);
         colY[ci] += deficit;
     }
 }
@@ -1332,7 +1496,6 @@ juce::Image AmbientSynthEditor::snapshotTab(int rowIndex, int page)
         if (Section* s = findSection(name)) box = box.isEmpty() ? s->bounds : box.getUnion(s->bounds);
     };
     for (const auto& n : t.pages[static_cast<size_t>(page)]) add(n);
-    if (page < static_cast<int>(t.under.size())) add(t.under[static_cast<size_t>(page)]);
     if (page < static_cast<int>(t.displays.size()) && t.displays[static_cast<size_t>(page)] != nullptr) {
         juce::Component* d = t.displays[static_cast<size_t>(page)];
         if (d->isVisible() && d->getWidth() > 0) box = box.getUnion(d->getBounds());
@@ -1437,7 +1600,6 @@ juce::StringArray AmbientSynthEditor::tabSectionNames(int rowIndex, int page) co
     const TabRow& t = tabRows_[static_cast<size_t>(rowIndex)];
     if (page < 0 || page >= static_cast<int>(t.pages.size())) return out;
     for (const auto& n : t.pages[static_cast<size_t>(page)]) out.add(n);
-    if (page < static_cast<int>(t.under.size()) && t.under[static_cast<size_t>(page)].isNotEmpty()) out.add(t.under[static_cast<size_t>(page)]);
     return out;
 }
 
@@ -1788,7 +1950,7 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
         { { "Morph", "Macros" }, 6 },                       // morph
         { {}, 0 },                                          // presets: the browser
         { { "Clock" }, 0 },                                 // clock
-        { { "Master" }, 0 },                                // midi / osc / files
+        { { "Master", "Expression" }, 0 },                  // midi / osc / files (Expression: the MPE dimensions)
         { {}, 0 },                                          // shortcuts
     };
     static const char* const kLiveCaption[7] = {
@@ -1828,14 +1990,12 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
         if (!img.isValid()) return;
         tabPics.push_back(img); tabNames.add(name); tabCaptions.add(caption); tabSections.push_back(sections);
     };
-    static const int kRowChapter[] = { 1, 2, 8, 4, 4, 6, 5 };    // tab row -> chapter
+    static const int kRowChapter[] = { 1, 2, 4, 4, 5, 6 };    // tab row -> chapter
     for (int r = 0; r < static_cast<int>(owner.tabRows_.size()); ++r) {
         const auto& t = owner.tabRows_[static_cast<size_t>(r)];
         for (int pg = 0; pg < static_cast<int>(t.pages.size()); ++pg) {
-            int chapter = r < 7 ? kRowChapter[r] : 4;
-            if (r == 1 && pg == 2) chapter = 7;      // AMP ENV with the modulation
-            if (r == 1 && pg == 3) chapter = 11;     // EXPRESSION with MIDI
-            if (r == 5 && pg == 5) chapter = 10;     // CLOCK with the clock chapter
+            int chapter = r < 6 ? kRowChapter[r] : 4;
+            if (r == 1 && pg == 2) chapter = 7;      // ENVELOPE + EXPRESSION with the modulation
             if (chapter != row) continue;
             const juce::StringArray secs = owner.tabSectionNames(r, pg);
             juce::String what = secs.joinIntoString(", ");
@@ -1847,9 +2007,9 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
             addTab(owner.snapshotTab(r, pg), t.names[static_cast<size_t>(pg)], caption, secs);
         }
     }
-    if (row == 1)   // the strand bank, under Source 1's display
+    if (row == 1)   // the strand bank, beside Source 1 on its page
         addTab(owner.snapshotSection("Strands"), "STRANDS",
-               "The Strands section, which sits under Source 1's display: the strand bank's ten controls.", { "Strands" });
+               "The Strands section, which stands beside Source 1 on its page while the slot is additive: the strand bank's ten controls.", { "Strands" });
     if (row == 3) {
         addTab(owner.snapshotSection("Space"), "SPACE", "The Space section: the spatial model's controls, two rows side by side.", { "Space" });
         addTab(owner.snapshotSection("Foundation"), "FOUNDATION", "The Foundation section: the sub and its source.", { "Foundation" });
@@ -2164,6 +2324,13 @@ void AmbientSynthEditor::updateSourceCells()
             if (wc.unused != !on) { wc.unused = !on; cellsChanged = true; }
         }
     }
+    if (Section* strands = findSection("Strands")) {   // the strand bank exists only while Source 1 is additive: not greyed, gone
+        const bool on = std::lround(proc_.engine().getParam(ParamId::Src1Type)) == Additive;
+        for (int ci : strands->cells) {
+            Cell& c = cells_[static_cast<size_t>(ci)];
+            if (c.unused != !on) { c.unused = !on; c.comp->setEnabled(on); cellsChanged = true; }
+        }
+    }
     if (refreshLayoutState()) cellsChanged = true;
     if (cellsChanged && getWidth() > 0) rebuildLayout();   // at construction the size is not set yet; the first layout follows
     auto nameCell = [&](int ci, const juce::String& base, const juce::String& file) {
@@ -2172,13 +2339,6 @@ void AmbientSynthEditor::updateSourceCells()
         const juce::String text = file.isNotEmpty() ? file : base;
         if (c.label->getText() != text) c.label->setText(text, juce::dontSendNotification);
     };
-    if (Section* strands = findSection("Strands")) {   // the strand bank exists only while Source 1 is additive
-        const bool on = std::lround(proc_.engine().getParam(ParamId::Src1Type)) == Additive;
-        for (int ci : strands->cells) {
-            Cell& c = cells_[static_cast<size_t>(ci)];
-            if (c.comp && c.comp->isEnabled() != on) { c.comp->setEnabled(on); c.comp->setAlpha(on ? 1.0f : 0.35f); c.label->setAlpha(on ? 1.0f : 0.35f); }
-        }
-    }
     nameCell(tableCell_, "User table", proc_.wavetableName());
     for (int k = 0; k < ambient::kSlots; ++k) nameCell(textureCell_[k], "Texture file", proc_.textureName(k));
     nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());
@@ -2510,7 +2670,7 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
         }
         // The loop, made visible where it closes: the feedback section says it is returning
         // into the sources, and Source 1 says it is being fed. A glyph, not an animation.
-        if (s.collapsed) {
+        if (s.closedNow()) {
             g.setColour(kDim.withAlpha(0.8f));
             g.setFont(juce::FontOptions(10.5f));
             g.drawText("off -- switch on to open", s.bounds.getX() + 90, s.bounds.getY() + 1, s.bounds.getWidth() - 120, kTitleH, juce::Justification::centredLeft);

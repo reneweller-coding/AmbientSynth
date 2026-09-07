@@ -92,9 +92,10 @@ private:
     // Not owned: the cell owns the component, the editor only needs to read the selection back.
     juce::ComboBox* zPresetBox_ = nullptr;
     juce::ComboBox* strikePresetBox_ = nullptr;
-    // Compact: the widest rows wrap into two, so the page is narrower and taller. Everything is
-    // still on one page; only the shape changes. Kept in the plugin state.
+    // Compact: the same page in columns kCompactFactor as wide, every page refitted into them --
+    // narrower and taller, nothing left out. Kept in the plugin state.
     bool compact_ = false;
+    static constexpr float kCompactFactor = 0.88f;
     // Expanded: every page of every tab row placed under one another. No tabs to click, a
     // tall page, and the four sources, the two filters and the conductor's six tables all in
     // sight at once -- for a tall screen, or for reading a preset through.
@@ -189,13 +190,21 @@ private:
         std::vector<int> cells;
         juce::Rectangle<int> bounds;
         int maxUnits = 7;
-        int wideUnits = 0;          // the natural width, before Compact halves it
+        int wideUnits = 0;          // the natural width on the tabbed page (decides the columns; the fit may change it)
+        int flowUnits = 0;          // the width in Expanded's flows, where a section's shape is its own
         int group = -1;
         bool visible = true;   // false while its tab is not the open one
         // Its switch is off (a type of Off, a level at zero, an Active that is not): only the
         // title and the switch's own cells are shown. Off means closed. Opening it is the
         // player's own action on the switch, so the page never rearranges itself.
         bool collapsed = false;
+        // ... unless closing it buys nothing. A section is closed to save room, and where the row
+        // has the room anyway, it is laid out open instead: a title beside an empty band is worse
+        // than the section itself. Decided by the layout, from the row's own width, and cleared at
+        // the start of every pass -- `collapsed` stays what the parameters say, so the timer that
+        // watches for a switch being thrown cannot see this and rebuild for ever.
+        bool opened = false;
+        bool closedNow() const { return collapsed && !opened; }
     };
     struct Group {
         juce::String name;
@@ -218,11 +227,7 @@ private:
         int group = 0, row = 0;
         std::vector<juce::String> names;                       // one label per page
         std::vector<std::vector<juce::String>> pages;          // section names per page
-        std::vector<juce::Component*> displays;                // per page: display for the leftover width, or null
-        // Per page, optionally: a section that sits UNDER the display, in the display's column,
-        // wrapping to that column's width. Source 1's page keeps the strand bank's ten knobs there
-        // rather than on a tab of their own, over a half-height picture of the bank.
-        std::vector<juce::String> under;
+        std::vector<juce::Component*> displays;                // per page: display for the leftover width, or null; two pages may share one
         int active = 0;
         juce::Rectangle<int> bar;
         std::vector<juce::Rectangle<int>> tabs;
@@ -236,6 +241,7 @@ private:
     // Which cells a section shows, and whether it is closed. Both are functions of the parameter
     // state alone, never of the window, so the layout is reproducible and the manual can be.
     bool cellShown(const Section&, const Cell&) const;
+    int  shownCells(const Section&) const;   // how many of its cells are on the page as it stands
     bool sectionCollapsed(const Section&) const;
     int      sectionWidth(const Section&) const;
     int      sectionHeight(const Section&) const;
@@ -247,6 +253,14 @@ private:
     int   designW_ = 1400, designH_ = 820;   // measured from the layout, not guessed
     int   bodyW_ = 0, bodyH_ = 0;
     void  layoutBody();
+    // The tabbed page (Normal and Compact). Every page of every row is FITTED to its column: its
+    // sections are given the fewest rows at which they stand side by side in the column's width,
+    // each as narrow as that allows, so they come out the same height and the page has no hole
+    // under a short one; the display takes the width that is left. A row is as tall as the page
+    // that is open on it, not as its tallest page, so a one-row page is one row; the design
+    // height is still the sum of the tallest pages, so the window never changes shape on a tab
+    // click, and the last group of each column grows into the difference.
+    void  layoutTabbed();
     std::vector<Cell> cells_;
     std::vector<Section> sections_;
     std::vector<Group> groups_;

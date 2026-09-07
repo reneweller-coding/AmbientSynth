@@ -19,12 +19,12 @@ against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 ## Download
 
-**[AmbientSynth-1.8.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.8.0/AmbientSynth-1.8.0-Setup.exe)**
+**[AmbientSynth-1.9.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-1.9.0-Setup.exe)**
 (14 MB) -- installs the standalone, the VST3, the preset library and, with your
 consent, downloads the 6 GB sample library. Nothing else has to be installed:
-the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.8.0/AmbientSynth-1.8.0-portable.zip)**
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-1.9.0-portable.zip)**
 (15 MB) for anyone who would rather not run an installer, and the
-**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.8.0/AmbientSynth-Manual.pdf)**
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.9.0/AmbientSynth-Manual.pdf)**
 (PDF, 158 pages) -- every tab of the panel as a picture, with what it does and
 what its knobs mean, and seven Design chapters on why the instrument is built
 the way it is, with the mathematics and the references. Everything is on the
@@ -360,11 +360,15 @@ section, shift to nudge it); Undo, Redo and A|B work on whole snapshots; the hea
 output's spectrum. The page is laid out from the parameters, never from the window: a source
 strip holds only the knobs its type uses, and a section whose switch is off -- a slot on Off, a
 level at zero, a Morph or a second conductor that is not active -- closes to its title and its
-switch; choose a type or throw the switch and it opens. Three layouts, one button: Normal (one
-page, tabs; 2269 x 1260 at design size), Compact (the widest rows wrap, for a narrower window)
-and Expanded (a page of its own, no tabs, three columns -- the voice and its room; the
-shaping, the effects, the background and the small sections side by side; morph, macros and
-the conductor -- 2269 x 923, about 2.5 : 1; on a 1920 x 1080 screen the width is now what limits it, at 85 %).
+switch -- unless the row has the room anyway, and then it is laid out open, because a title
+beside an empty band is worse than the section it hides. Every page of the tabbed layout is
+fitted to its column -- its sections the same height, side by side, the display taking what is
+left, a row as tall as the page open on it -- so the panel has no empty bands. Three layouts,
+one button: Normal (one page, tabs; 2522 x 1483 at design size, 1.7 : 1), Compact (the same
+page in columns 88 % as wide, refitted taller, for a narrower window; 1.3 : 1) and Expanded (a
+page of its own, no tabs, three columns -- the voice and its room; the shaping, the effects,
+the background and the small sections side by side; morph, macros and the conductor -- about
+2.5 : 1).
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

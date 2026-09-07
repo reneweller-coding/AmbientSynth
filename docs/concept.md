@@ -1606,6 +1606,50 @@ passed, a friction curve that was silent rather than wrong, a scattering loop
 two samples long that destroyed the very thing it existed to carry, and a
 pitch estimator that reported a clean A3 as 440 Hz.
 
+## The harmony round
+
+The same treatment was then given to the note generators, and the gaps there
+turned out to be older and closer to home than the acoustic ones.
+
+* **Harmonic.** The conductor scored a chord as the mean consonance over all
+  its pairs. For two tones that is the whole question; for five it inverts the
+  ranking. Measured on the instrument's own function, the pairwise rule prefers
+  a stack of fifths (4:6:9, 0.233) to a just major triad (4:5:6, 0.212) and puts
+  a plain segment of the harmonic series last of all (8:9:10:11:12, 0.165) —
+  neighbouring members of one series make complicated ratios two at a time,
+  however perfectly the set fits together. *Harmonic* asks instead how strongly
+  the whole set implies one virtual root.
+* **Key.** Krumhansl and Kessler's probe-tone profiles, correlated against a
+  pitch-class distribution weighted by how long each class has been sounding.
+  Nothing sets the key; it is found, and the correlation is both the confidence
+  and the weight. Over three minutes the conductor's key confidence goes from
+  0.73 to 0.90 with all nine pitch classes still in play.
+* **Even** and **Smooth**, after Tymoczko. Evenness is the property that lets a
+  chord move rather than leap; *Smooth* picks which voice moves so the chord
+  travels least. His other measure needed nothing: for an exchange of one voice
+  the voice-leading distance is exactly that voice's leap, which is the number
+  the conductor had been using all along.
+* **Timbre (Sethares)**, the thirteenth tuning: the instrument's own dissonance
+  curve, swept across the octave while it plays, with a degree wherever it dips.
+
+Four measurement traps, in the same spirit as the acoustic round's:
+
+1. **A circular measure.** "How well do the notes fit the key?" — where the key
+   is found from those very notes. It reported that *Key* made things worse.
+   What the parameter claims is that the music sits more clearly in *one* key,
+   which is the correlation itself.
+2. **A window shorter than the thing measured.** Twenty-one seconds against a
+   three-minute memory said the key confidence *fell*. Over three minutes it
+   rises.
+3. **A wrong reason nearly written into the code.** The fix for (2) was first
+   attributed to a change that, remeasured, does nothing for the headline
+   number. It was kept — root and key should know about each other — but the
+   comment now says so plainly.
+4. **A flag assigned over.** The timbre scale was rebuilt correctly and the flag
+   that retunes the sounding notes was set, and three lines further down that
+   flag was overwritten. The table test passed throughout; only a test that asks
+   what a key actually *sounds at* catches it.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

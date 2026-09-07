@@ -52,8 +52,18 @@ since 2013), a VST3 host if you want the plugin.
 * **A conductor** that plays all night: the Cluster Brain chooses notes from
   the scale, places them on the planes and holds them for minutes; an autoplay
   that exchanges one voice at a time; a second conductor for the background;
-  twelve just and historical tunings and Scala files; purity drift and the
-  **BEAT** source, the instrument listening to how far out of tune it is.
+  purity drift and the **BEAT** source, the instrument listening to how far out
+  of tune it is. It judges a chord four ways — by its intervals, by the
+  roughness of the partials actually sounding, by whether the whole set implies
+  **one root**, and by how evenly it is spread — and it **finds the key** it has
+  drifted into from what has been sounding and for how long, rather than being
+  told one.
+* **Thirteen tunings**: twelve just and historical tables, Scala files, and one
+  that is not a table at all. **Timbre (Sethares)** sweeps the instrument's own
+  roughness curve across the octave while it plays and puts a degree wherever
+  the curve dips — just intonation for a harmonic spectrum, to within two cents,
+  and something quite else once *Inharmonic* is up. Turn a knob and the tuning
+  follows the sound.
 * **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
   macros, four coupled Kuramoto oscillators, aftertouch, wheel and slide, all
   through one matrix onto any knob -- including the modulators' own.

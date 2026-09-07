@@ -289,7 +289,7 @@ const HelpEntry kHelp[] = {
     { "brain_wander", "How readily the brain's root moves to a new centre over time." },
 
     // ---- tuning
-    { "scale", "The tuning: just scales, 12-TET, Bohlen-Pierce, or User for a loaded Scala file. Every note the brain or the keys play comes from here." },
+    { "scale", "The tuning: just scales, 12-TET, Bohlen-Pierce, User for a loaded Scala file, or Timbre. Timbre is not a table: it is the scale THIS sound asks for, computed while it plays. The instrument's own roughness curve is swept across the octave -- how rough the timbre is against a transposed copy of itself -- and wherever the curve dips, a degree goes. For a harmonic spectrum those dips are just intonation, to within a couple of cents, which is the reason just intonation exists at all; turn Inharmonic up and they move somewhere else entirely, because a stiff string wants a different scale and this gives it one. Change Tilt, Brightness or Inharmonic and the tuning follows the sound. Every note the brain or the keys play comes from here." },
     { "keymap", "Snap: the 12 keys of an octave snap to the nearest scale degree. Consecutive: each key is the next degree, whatever the scale's step count." },
     { "root", "The key's root note. The brain's root lives an octave below it." },
     { "ref_pitch", "Reference pitch of A4 in hertz." },
@@ -1022,6 +1022,31 @@ Stretch widens the octave. Listeners judge an octave as in tune when it is a lit
 
 so every octave above A4 is s cents wider and every octave below s cents narrower, the reference itself not moving, and the same slope in both directions keeps every interval within an octave nearly as it was -- a fifth a note above A4 is stretched by seven twelfths of s. It is applied after Purity and before the per-voice drift, so it composes with the just ratios rather than replacing them; a held note follows the change through the same glide the purity drift uses. At 0 it is the exact 2:1 of every preset that was ever saved. Measured: at twelve cents an octave up from A4 is 1212.00 cents, an octave down 1212.00, two octaves 2424. Tide leans the whole instrument's pitch by up to thirty cents on a minute-scale curve, and the sub follows, so the harmony stays while the pitch centre drifts the way an organ's does with the temperature of the room.
 
+THE SCALE A TIMBRE ASKS FOR
+
+The argument above runs one way: a harmonic spectrum makes simple ratios sound smooth. Sethares
+(Tuning, Timbre, Spectrum, Scale, 2005) runs it the other. To a spectrum -- any spectrum -- there
+belongs a set of intervals at which that spectrum, sounded against a transposed copy of itself, is
+least rough. Play those and the partials line up; play others and they beat. Just intonation is
+what that answer happens to be FOR A HARMONIC SPECTRUM. It is not a fact about numbers, and for an
+inharmonic timbre it is as arbitrary as a gamelan's tuning would be on a piano.
+
+An instrument that already computes its own spectrum and already has the roughness formula can
+therefore compute its own scale, and the thirteenth tuning does. The roughness of the timbre against
+itself is swept across the octave at three cents a step; where the curve dips, a parabola through
+the three points around the dip gives its bottom to well under a cent; the least rough dips, up to
+twelve of them, become the degrees. There is no table anywhere in that path.
+
+Measured on the instrument's own spectrum at its plain harmonic setting, the degrees land on 5/4,
+4/3, 3/2, 8/5, 5/3 and 7/4 within 1.7 cents, with 7/5 and 10/7 in the tritone. Turn Inharmonic to
+the top and four of those six no longer have a degree within fifteen cents: the stiff string asks
+for a different scale, and gets one. Change Tilt or Brightness or Inharmonic while it plays and the
+tuning follows the sound, a few times a second -- sweeping the curve costs a third of a millisecond,
+which is nothing now and then and far too much every block.
+
+A spectrum with few partials, or only odd ones, has few minima and therefore few degrees. That is
+the model's answer rather than a failure of it, and it is left standing.
+
 CONSONANCE AS A NUMBER
 
 The conductor needs consonance as a number, and the instrument's is
@@ -1056,6 +1081,94 @@ Portamento with Gravity is the microtonal glide of a lap steel. A new key slides
     s(d) = 1 / (1 + (d / 30)^2)        d the distance in cents to the nearest just ratio
 
 half at thirty cents, eight per cent at a semitone, nothing between the nodes -- a Lorentzian, chosen because a magnet has almost no reach and then all of it. The first version braked in proportion to the consonance of whatever ratio the slide was passing through, a quantity that rises and falls smoothly across the whole glide, so the pull was everywhere and nowhere.
+
+WHAT THE PAIRS CANNOT HEAR
+
+The conductor's judgement was, for a long time, a mean over pairs: every candidate against the root
+and against each sounding voice, averaged. For two tones that is the whole question. For five it is
+not, and the difference is not academic. Measured on the instrument's own intervalConsonance, the
+mean over pairs prefers a stack of fifths (4:6:9, 0.233) to a just major triad (4:5:6, 0.212), and
+puts a plain segment of the harmonic series (8:9:10:11:12, 0.165) last of all -- because
+neighbouring members of one series make complicated ratios two at a time (9/8, 11/10) however
+perfectly the set fits together as a whole.
+
+Harmonic is the second opinion. It asks how strongly the WHOLE sounding set implies one virtual
+root -- Terhardt's virtual pitch, Parncutt's root support, and the property that listeners' stated
+preferences track at least as strongly as they track the absence of beating (McDermott, Lehr and
+Oxenham 2010). Every fundamental that could hold the set is tried, from the lowest tone divided by
+one to sixteen; each tone is assigned to its nearest harmonic; and the score is how cleanly it sits
+there, weighted so that a tone on a low harmonic supports the root far more than one high up:
+
+    H = max over f0 of (1/N) sum over i of exp(-(cents_i / 25)^2) / log2(1 + n_i)
+
+Two rules keep the trivial answers out, both of them put there because the first version handed
+them over. Two tones may not share a harmonic number -- several tones crammed onto one harmonic is
+a cluster, not a fit. And a root supported by fewer than two tones does not count at all, because
+every tone is the first harmonic of itself; without that, a semitone cluster scored as high as a
+just major triad and a bare tritone scored higher than both. With them: just triad 0.391, stacked
+fifths 0.377, tempered triad 0.376, cluster 0.235, diminished seventh 0.208.
+
+Getting that into the music took three changes rather than one, and the reasons are worth naming.
+The free mode -- which is what nearly every preset uses -- weighs a candidate against the ROOT
+alone, not against the chord, so without the term there the parameter did exactly nothing. A
+weighted random draw is not an argmax, so the exponent had to be higher to shift the odds at all.
+And which voice LEAVES is half the question: retiring by the clock gives back, one voice at a time,
+whatever the arrivals gained. There was also a rule pulling openly against it. "An octave doubling
+is not a new colour" is a matter of taste, while harmonicity says an octave is the strongest
+relation two tones can have -- harmonics one and two of the same series. Harmonic settles that
+argument now: at zero the old taste rule stands untouched, and as it rises the veto softens into a
+preference. Measured over four chord sizes, the harmonicity of the chords the conductor actually
+builds goes from 0.317 to 0.493, and at six voices three pitch classes remain: a rooted sonority
+with octave doublings, which is a colour and not a general improvement.
+
+A KEY, FOUND RATHER THAN SET
+
+The conductor knew nothing of degrees. It asked how a candidate sounded against what was sounding,
+which is a question about intervals, and never how it sat in a key. Krumhansl and Kessler (1982)
+measured how stable each degree of a key feels -- a listener hears a context, then a probe tone,
+and rates the fit -- and their two profiles, major and minor, are what Key weighs a candidate by.
+
+Nothing sets the key. It is found, by the method of Krumhansl and Schmuckler: correlate the
+distribution of what is sounding against all twenty-four rotated profiles and take the best. The
+correlation is the confidence, and it does the weighting as well, so a passage with no key in it
+pulls at nothing and an honest "this is barely a key" is available as an answer. The distribution
+is weighted by HOW LONG each pitch class has been sounding, which on an instrument whose notes last
+minutes is the only weighting that means anything, and it fades over about three minutes so the key
+can travel when the music does.
+
+The pitch class is taken from the frequency, not from the MIDI number, because a scale here need
+not have twelve degrees: with consecutive degrees on a nine-tone scale, note modulo twelve means
+nothing at all, while cents always mean cents.
+
+Measured, on distributions whose answer is known: a C major scale comes back as C major (r 0.76),
+the same seven notes with A and E held long come back as A minor (r 0.80), a full chromatic in
+balance comes back as no key at all, and a five-semitone cluster as a weak one (r 0.37). On the
+conductor itself, over three minutes, the confidence of the key it is in rises from 0.73 to 0.90
+with nine pitch classes still in play -- a centre, not a restriction.
+
+EVENNESS, AND THE DISTANCE A CHORD TRAVELS
+
+Tymoczko (Science, 2006) showed that the chords which can be joined to their neighbours by small
+voice movements are the nearly even ones, and that those are the chords Western music actually
+uses. Evenness is therefore not a taste but the property that makes a chord able to MOVE; a cluster
+can only leap. Even measures it as the spread of the gaps between the pitch classes: one for a
+chord that divides the octave equally, zero for one whose notes are all in the same place. The
+augmented triad and the diminished seventh measure 1.000, a major triad 0.875 -- nearly even, not
+quite, which is exactly Tymoczko's point -- a cluster 0.250, three octaves of one note 0.000. On
+the chords the conductor builds, Even takes the mean from 0.664 to 0.768; Harmonic takes it the
+other way, to 0.445. The two are meant to be set against each other.
+
+His other measure needed no building, and finding that out was worth more than building it.
+Voice-leading distance is the smallest total movement over all ways of pairing two chords. When one
+note is exchanged that sum is exactly the leap the one voice makes -- the displacements of the
+others telescope away -- so the number that had been in the conductor since the beginning was
+already the right one. Checked over four thousand random exchanges: agreement to the last bit. The
+selftest keeps that on the record so that nobody improves it.
+
+What was missing is which voice moves. The conductor retired whichever had been sounding longest, a
+rule about time that knows nothing about where the chord would land. Smooth tries them all and
+keeps the exchange that moves the chord least for what it gains: measured over a hundred and
+forty-five exchanges, 3.12 semitones against 2.68.
 
 COHERENCE
 
@@ -1177,11 +1290,21 @@ Sound texture is recognised from time-averaged statistics of the auditory periph
 
 Loudness is not energy. The meter now says sones beside LUFS, and on this instrument's own presets the two disagree by a quarter at the same LUFS.
 
+Then the same was done for harmony, where the gaps turned out to be older and closer to home.
+
+A chord is not its pairs. The conductor averaged consonance over every pair of voices, which for two tones is the whole question and for five inverts the ranking: measured on its own function, a stack of fifths beat a just major triad and a segment of the harmonic series came last. Harmonic asks instead how strongly the whole set implies one root.
+
+A key is a thing a listener hears, and it can be measured rather than declared. Krumhansl and Kessler's profiles, correlated against what has actually been sounding and weighted by how long, tell the conductor which key it has drifted into; Key then decides how much it cares.
+
+Chords that move smoothly are the nearly even ones (Tymoczko 2006), and that is now a control. His other measure -- the distance between two chords -- needed no work at all: for an exchange of one voice it is exactly the leap that voice makes, which the conductor had been using since the beginning without anybody knowing it was the right number.
+
+And a scale is not a thing to choose but a thing a timbre asks for (Sethares). The thirteenth tuning computes the instrument's own dissonance curve while it plays and puts its minima where the degrees go: just intonation for a harmonic spectrum, to within two cents, and something quite else for a stiff string.
+
 The ninth was a neural sound model in the audio path -- an autoencoder trained on a recording, played as an instrument, in the manner of RAVE. It was considered and deliberately not built: it would put a hundred megabytes of weights and a hard real-time constraint into a synthesiser whose core is framework-free and meant to run on a headset, and it would make the instrument's sound something nobody could read. Every other decision in these chapters can be checked by reading a formula. That one could not.
 
 WHAT IS NOT CLAIMED
 
-Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The loudness in sones is Zwicker's model built from third-octave levels, not a certified ISO 532-1 implementation, and its absolute scale is pinned at the definition of the unit rather than derived; what is not pinned, and what should be checked against, is that sixty decibels comes out at 4.21 sones where the standard says four. The Early Room places the whole near bus at one position, the level-weighted mean of where its voices are, not each voice at its own: six delay lines per voice would cost more than the rest of the instrument. The Spectral source's model is thirty-two bands and one partial per band, so a dense chord in one band comes back as its loudest member plus noise. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
+Some things this instrument does not do, and does not pretend to. It has no compressor, no limiter and no dithering, and does not intend to; mastering is a separate craft with its own tools. The four-pole ladder filter is not zero-delay and is not going to become so in place. The Quest application builds against the same core and has not yet been run on a headset. The loudness in sones is Zwicker's model built from third-octave levels, not a certified ISO 532-1 implementation, and its absolute scale is pinned at the definition of the unit rather than derived; what is not pinned, and what should be checked against, is that sixty decibels comes out at 4.21 sones where the standard says four. The Early Room places the whole near bus at one position, the level-weighted mean of where its voices are, not each voice at its own: six delay lines per voice would cost more than the rest of the instrument. The Spectral source's model is thirty-two bands and one partial per band, so a dense chord in one band comes back as its loudest member plus noise. The key profiles of Krumhansl and Kessler were measured on listeners raised on Western tonal music, and are quoted as what they are: a measurement of those listeners, not a fact about music -- the same caution the consonance section carries. Smooth does nothing outside Chords mode, because in the free mode which voice leaves is decided elsewhere; that is a limitation, not a subtlety. And the timbre scale is computed from the spectrum of the additive bank alone, so a patch whose sound comes mostly from a sample or a bowed string is being tuned for a timbre it is not really playing. The psychoacoustics quoted in these chapters is the standard account -- the duplex theory, roughness as the basis of consonance, the structural model of the head, auditory scene analysis -- rather than the frontier of the field, and it is quoted because it is what the design used, not as a claim to have tested it. The numbers that are claimed are the ones the instrument measured on itself.)" },
     { "Design VII: references",
 R"(The works the design chapters rest on, by area. Where a page or a chapter is named it is the part that was used.
 
@@ -1262,6 +1385,14 @@ Tenney, J.: John Cage and the Theory of Harmony. 1983 (in Soundings 13, 1984). H
 Partch, H.: Genesis of a Music. Second edition, Da Capo, 1974. Otonality and utonality, the ratios of the built-in scales.
 
 Bohlen, H.: 13 Tonstufen in der Duodezime. Acustica 39, 76-86, 1978; Mathews, M. V., Pierce, J. R., Reeves, A. and Roberts, L. A.: Theoretical and experimental explorations of the Bohlen-Pierce scale. Journal of the Acoustical Society of America 84, 1214-1222, 1988.
+
+Krumhansl, C. L. and Kessler, E. J.: Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys. Psychological Review 89, 334-368, 1982. The probe-tone profiles: how stable each degree of a key is measured to feel, and the basis of the key-finding correlation of Krumhansl and Schmuckler.
+
+Krumhansl, C. L.: Cognitive Foundations of Musical Pitch. Oxford University Press, 1990. The tonal hierarchy, and the key-finding algorithm in full.
+
+Parncutt, R.: Harmony: A Psychoacoustical Approach. Springer, 1989. Root support and pitch salience: how strongly a set of tones implies one root.
+
+Tymoczko, D.: The geometry of musical chords. Science 313, 72-74, 2006; and A Geometry of Music. Oxford University Press, 2011. Voice-leading distance as a distance in an orbifold, and the result that the chords which move smoothly are the nearly even ones.
 
 Kuramoto, Y.: Chemical Oscillations, Waves, and Turbulence. Springer, 1984. The coupled-oscillator model behind the Coherence section.
 
@@ -1369,7 +1500,7 @@ const TabHelp kTabHelp[] = {
     { "BRAIN", "The conductor: chooses notes from the scale, places them on the planes between the ear and the background, holds them for minutes and lets them go, and can play a whole night by itself. Density is how many it keeps sounding, Rate how often it changes its mind, the Hold range how long a note lives, Register where it plays, Consonance how simple the ratios to the root have to be (1 is only fifths and octaves, 0 is clusters), Wander how far the root drifts. Off, only your keys play. Timbre gives it a second ear: instead of judging an interval by its ratio alone it can weigh the roughness the two tones' actual partials would make (after Sethares), so an inharmonic patch is conducted in the intervals it is consonant at. Its display is the stage: every sounding voice as a dot at its distance." },
     { "AUTOPLAY", "The brain's other mode: instead of holding a cluster it exchanges one voice at a time, in Free steps or in Chords drawn from the scale, at a Rate or on the clock, with a Tension that decides how far each step may go and a Step button to make it move now. The way a patient improviser plays a chord instrument: nothing ever changes all at once." },
     { "BRAIN 2", "A second conductor for the background alone. With it on, the far plane gets its own slow life -- its own hold range, its own Depth -- independent of the foreground's, so the two planes stop moving in step and the picture gains a second layer of time." },
-    { "TUNING", "What a note means. Scale chooses the tuning -- twelve just and historical scales and a Scala file of your own -- Root its centre, Ref Pitch its A. Purity is how close the instrument sits to the pure ratios, Purity Drift how far it lets them slip and at what rate, so a chord breathes in and out of tune; Tide leans the whole pitch over minutes; Portamento glides between notes, slowing near consonant ratios by Gravity. Hold latches the keys." },
+    { "TUNING", "What a note means. Scale chooses the tuning -- eleven just and historical tables, a Scala file of your own, and Timbre, which is no table at all but the instrument's own dissonance curve read while it plays -- Root its centre, Ref Pitch its A. Purity is how close the instrument sits to the pure ratios, Purity Drift how far it lets them slip and at what rate, so a chord breathes in and out of tune; Tide leans the whole pitch over minutes; Portamento glides between notes, slowing near consonant ratios by Gravity. Hold latches the keys." },
     { "COHERENCE", "Four slow oscillators coupled after the Kuramoto model of fireflies falling into step. At Coherence 0 they run free on their own periods; turned up they lock into one pulse and move brightness, depth, pan and the z-plane point together. The four are also sources in the matrix, so anything can be pulled into that shared breath. Sympathy is a different kind of coherence: the voices hear each other, a little of the whole foreground fed back into every voice through its own filter." },
     { "CLOCK", "Where the tempo comes from -- the internal Tempo and Run, the host, or MIDI clock -- and the beat every Sync choice in the instrument is measured against. Nothing here has to be used: the instrument's own rates are in seconds and minutes, and a synced LFO is a choice, not the default." },
     // ---- cosmos and strike

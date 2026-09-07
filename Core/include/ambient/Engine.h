@@ -213,6 +213,9 @@ public:
     // Observers for the GUI (approximate, lock-free).
     int  activeVoices() const { return activeVoices_.load(std::memory_order_relaxed); }
     int  brainRoot() const    { return brainRoot_.load(std::memory_order_relaxed); }
+    // The key the conductor has found itself in, measured from what has been sounding and
+    // for how long. Read on the message thread for the panel; never set from outside.
+    KeyEstimate brainKey() const { return brain_.estimatedKey(); }
     float arcValue() const    { return arcValue_.load(std::memory_order_relaxed); }
     void soundingNotes(bool (&out)[128]) const;
     // Distance (0 near .. 1 far) of the voice sounding `note`, or -1 if none.

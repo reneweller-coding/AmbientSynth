@@ -121,6 +121,79 @@ inline double chordHarmonicity(const double* freqs, int n)
     return best;
 }
 
+// The tonal hierarchy: how stable each degree of a key feels.
+//
+// Krumhansl and Kessler (1982) measured it. A listener hears a context that establishes a key,
+// then a single probe tone, and rates how well it fits; averaged over listeners the twelve
+// ratings are these two profiles. The tonic stands highest, then the fifth, then the third, then
+// the rest of the scale, then the notes outside it. It is not a rule anybody wrote down -- it is
+// what a set of listeners reported, and it has held up across four decades of replication.
+//
+// The conductor had no notion of a degree at all. It asked how a candidate sounded against what
+// was already sounding, which is a question about intervals, and never how it sat in a key.
+inline const float* keyProfileMajor()
+{
+    static const float p[12] = { 6.35f, 2.23f, 3.48f, 2.33f, 4.38f, 4.09f, 2.52f, 5.19f, 2.39f, 3.66f, 2.29f, 2.88f };
+    return p;
+}
+inline const float* keyProfileMinor()
+{
+    static const float p[12] = { 6.33f, 2.68f, 3.52f, 5.38f, 2.60f, 3.53f, 2.54f, 4.75f, 3.98f, 2.69f, 3.34f, 3.17f };
+    return p;
+}
+
+// Which key a distribution of sounding pitch classes is in: the Krumhansl-Schmuckler method.
+// Correlate the distribution against all twenty-four rotated profiles and take the best. The
+// correlation itself is the confidence, and it is worth having: an honest "this is barely a key
+// at all" is exactly what a cluster should report.
+// The pitch class of a frequency, in twelve bins of a hundred cents from an arbitrary anchor.
+// Arbitrary is fine: the key search tries all twelve rotations, so only the intervals matter.
+// Taken from the frequency rather than from the MIDI number because a scale in this instrument
+// need not have twelve degrees -- with consecutive degrees on a nine-tone scale, note % 12 means
+// nothing at all, while cents always mean cents.
+inline int pitchClassOf(double f)
+{
+    if (!(f > 0.0)) return 0;
+    const int semis = static_cast<int>(std::lround(12.0 * std::log2(f / 261.6255653005986)));
+    return ((semis % 12) + 12) % 12;
+}
+
+struct KeyEstimate {
+    int   key = -1;            // 0..11 major, 12..23 minor, -1 for nothing heard yet
+    float confidence = 0.0f;   // the correlation, -1..1
+    bool  minor() const { return key >= 12; }
+    int   tonic() const { return key < 0 ? -1 : key % 12; }
+};
+
+inline KeyEstimate findKey(const float* weights)
+{
+    double mean = 0.0;
+    for (int i = 0; i < 12; ++i) mean += weights[i];
+    mean /= 12.0;
+    double var = 0.0;
+    for (int i = 0; i < 12; ++i) var += (weights[i] - mean) * (weights[i] - mean);
+    KeyEstimate out;
+    if (var < 1.0e-9) return out;                 // silence, or twelve notes in perfect balance
+    const double sd = std::sqrt(var);
+    for (int k = 0; k < 24; ++k) {
+        const float* prof = k < 12 ? keyProfileMajor() : keyProfileMinor();
+        const int rot = k % 12;
+        double pm = 0.0;
+        for (int i = 0; i < 12; ++i) pm += prof[i];
+        pm /= 12.0;
+        double pv = 0.0, cov = 0.0;
+        for (int i = 0; i < 12; ++i) {
+            const double a = weights[(i + rot) % 12] - mean;
+            const double b = prof[i] - pm;
+            cov += a * b;
+            pv += b * b;
+        }
+        const double r = cov / (sd * std::sqrt(pv) + 1.0e-12);
+        if (out.key < 0 || r > out.confidence) { out.key = k; out.confidence = static_cast<float>(r); }
+    }
+    return out;
+}
+
 struct BrainParams {
     bool  on = true;
     BrainMode mode = BrainMode::Free;
@@ -136,6 +209,12 @@ struct BrainParams {
     // Timbre: how much of the consonance is judged from the actual spectrum (Sethares) rather
     // than from the ratio alone. 0 is the ratio score the conductor always had.
     float timbre = 0.0f;
+    // Key: how strongly the conductor prefers the stable degrees of the key it finds itself in.
+    // Nothing sets that key -- it is measured from what has actually been sounding, weighted by
+    // how long, which for an instrument whose notes last minutes is the only weighting that means
+    // anything. Turn it up and the music acquires a home it keeps returning to; leave it at zero
+    // and the conductor hears intervals and no key at all, as it always did.
+    float key = 0.0f;
     // Harmonic: how much the choice is judged by how well the WHOLE resulting chord fits one
     // harmonic series, rather than only by how its pairs sound. Listeners' preferences track
     // harmonicity at least as strongly as they track the absence of beating (McDermott, Lehr and
@@ -190,10 +269,16 @@ public:
         for (int& r : recent_) r = -1;
         recentHead_ = 0;
         for (auto& s : slots_) { s.note = -1; s.remaining = 0.0; }
+        for (float& w : pcWeight_) w = 0.0f;
         root_ = rootNote;
         timer_ = 1.0;
         wasOn_ = false;
     }
+
+    // What key the conductor finds itself in, and how sure it is. Measured, never set: the
+    // histogram below is what has actually been sounding, weighted by how long.
+    KeyEstimate estimatedKey() const { return findKey(pcWeight_); }
+    const float* pitchClassWeights() const { return pcWeight_; }
 
     int  root() const { return root_; }
     void setRoot(int note) { root_ = clampv(note, 0, 127); }
@@ -219,6 +304,18 @@ public:
         }
         if (!wasOn_) { wasOn_ = true; timer_ = 0.5; }
         if (anchorNote >= 0) root_ = anchorNote;
+
+        // What has been sounding, and for how long. A note held for four minutes tells more about
+        // where the music is than one that passed through in twenty seconds, and on this
+        // instrument that is the difference between almost every pair of notes. The memory fades
+        // over about three minutes, so the key can drift when the music does instead of being
+        // anchored for ever to whatever it opened with.
+        {
+            const double fade = std::exp(-dt / 180.0);
+            for (float& w : pcWeight_) w = static_cast<float>(w * fade);
+            for (const auto& s : slots_)
+                if (s.note >= 0) pcWeight_[pitchClassOf(freqOf(s.note))] += static_cast<float>(dt);
+        }
         if (p.mode == BrainMode::Chords) { updateChords(dt, p, freqOf, emit); return; }
 
         for (auto& s : slots_) {
@@ -234,6 +331,7 @@ public:
 
         const int low = std::min(p.low, p.high), high = std::max(p.low, p.high);
         const int density = clampv(p.density, 1, kSlots);
+        const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
 
         if (activeCount() >= density) {
             // Room is full: half of the time retire a note, else wait.
@@ -264,7 +362,7 @@ public:
             slots_[best].note = -1;
         }
 
-        if (anchorNote < 0 && rng_.uniform() < p.wander * 0.35f) wanderRoot(low, high, freqOf);
+        if (anchorNote < 0 && rng_.uniform() < p.wander * 0.35f) wanderRoot(low, high, freqOf, p.key);
 
         // Weighted choice of the next note.
         const double rootFreq = freqOf(root_);
@@ -306,6 +404,7 @@ public:
                 if (m >= 2)
                     w *= static_cast<float>(std::pow(std::max(chordHarmonicity(set, m), 1.0e-4), 5.0 * static_cast<double>(p.harmonic)));
             }
+            if (p.key > 0.0f) w *= static_cast<float>(keyWeightOf(fc, key, p.key));
             if (pitchClassEqual(fc, rootFreq)) w *= rootSounding ? 0.25f : 3.0f;                       // keep a foundation
             weights[c] = w;
             total += w;
@@ -370,7 +469,7 @@ private:
         const int leaving = slots_[oldest].note;
         // The root may travel with the chord, which is what turns a voicing change into a
         // progression; without it the harmony circles one centre for ever.
-        if (p.rootMove > 0.0f && rng_.uniform() < p.rootMove * 0.5f) wanderRoot(low, high, freqOf);
+        if (p.rootMove > 0.0f && rng_.uniform() < p.rootMove * 0.5f) wanderRoot(low, high, freqOf, p.key);
         slots_[oldest].note = -1;                                   // it must not vote on its own replacement
         const int arriving = chooseNote(leaving, low, high, p, freqOf);
         slots_[oldest].note = leaving;
@@ -399,6 +498,7 @@ private:
     int chooseNote(int from, int low, int high, const BrainParams& p, FreqFn&& freqOf) const
     {
         const double rootFreq = freqOf(root_);
+        const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
         const float lead = std::max(p.voiceLead, 0.5f);
         int best = -1; double bestScore = -1e9;
         for (int c = low; c <= high && c < 128; ++c) {
@@ -434,6 +534,7 @@ private:
                 const int age = (recentHead_ - 1 - i + 2 * kRecent) % kRecent;   // 0 = just left
                 score *= 0.12 + 0.11 * static_cast<double>(age);
             }
+            if (p.key > 0.0f) score *= keyWeightOf(fc, key, p.key);
             // And how the WHOLE chord would sit, if the conductor has been told to listen for it.
             // The pairwise score above cannot hear this: it asks how each pair sounds, never
             // whether the set has one root.
@@ -454,6 +555,19 @@ private:
         return best;
     }
 
+    // How stable a frequency is as a degree of the key that was found, on the Krumhansl-Kessler
+    // profile: 1 for the tonic, about a third for a note outside the scale. Weighted by the
+    // confidence of the key estimate, so an uncertain key pulls gently and a clear one pulls
+    // hard -- and a passage with no key in it at all is left alone.
+    static double keyWeightOf(double f, const KeyEstimate& k, float amount)
+    {
+        if (amount <= 0.0f || k.key < 0 || k.confidence <= 0.0f) return 1.0;
+        const float* prof = k.minor() ? keyProfileMinor() : keyProfileMajor();
+        const int degree = ((pitchClassOf(f) - k.tonic()) % 12 + 12) % 12;
+        const double stability = static_cast<double>(prof[degree]) / 6.35;
+        return std::pow(stability, 2.5 * static_cast<double>(amount) * static_cast<double>(k.confidence));
+    }
+
     static bool pitchClassEqual(double fa, double fb)
     {
         double r = fa / fb;
@@ -463,18 +577,29 @@ private:
     }
 
     template <class FreqFn>
-    void wanderRoot(int low, int high, FreqFn&& freqOf)
+    void wanderRoot(int low, int high, FreqFn&& freqOf, float keyAmount = 0.0f)
     {
         static const double kTargets[] = { 1.5, 4.0 / 3.0, 1.25, 1.2, 5.0 / 3.0, 1.6 };
         const double target = kTargets[rng_.below(6)];
         const double rootFreq = freqOf(root_);
+        // The root and the key are two different things, and this is where they are told about
+        // each other: a root that lands on a stable degree of the key the music is already in is
+        // what a modulation is, while a root that ignores it is a second conductor disagreeing
+        // with the first. It should be said that this is an argument, not a measurement. Measured
+        // over three minutes it makes no difference to how clearly the music sits in a key -- 0.90
+        // against 0.91 with the root left key-blind -- and what it does buy is one more pitch
+        // class in play, nine against eight. It is kept because it is right, not because the
+        // number moved.
+        const KeyEstimate key = keyAmount > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
         int best = root_; double bestScore = 1e9;
         for (int c = low; c <= high; ++c) {
             if (c == root_) continue;
             double r = freqOf(c) / rootFreq;
             while (r >= 2.0) r *= 0.5;
             while (r < 1.0) r *= 2.0;
-            const double score = std::fabs(std::log2(r / target)) * 12.0 + std::fabs(c - root_) / 12.0;
+            double score = std::fabs(std::log2(r / target)) * 12.0 + std::fabs(c - root_) / 12.0;
+            // A penalty, not a veto: the wander is what keeps the harmony moving at all.
+            if (keyAmount > 0.0f) score += 2.0 * static_cast<double>(keyAmount) * (1.0 - keyWeightOf(freqOf(c), key, 1.0f));
             if (score < bestScore) { bestScore = score; best = c; }
         }
         if (bestScore < 0.5 + 3.0) root_ = best;
@@ -487,6 +612,7 @@ private:
     bool   wasOn_ = false;
     bool   stepRequested_ = false;
     static constexpr int kRecent = 8;   // Chords: the notes that left, most recent first-ish
+    float  pcWeight_[12] = {};    // how long each pitch class has been sounding, faded
     int    recent_[kRecent] = { -1, -1, -1, -1, -1, -1, -1, -1 };
     int    recentHead_ = 0;
 };

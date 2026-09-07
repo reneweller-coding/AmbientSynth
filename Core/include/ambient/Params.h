@@ -191,7 +191,7 @@ enum class ParamId : int {
     // of every slot.
     Src1BowForce, Src1BowSpeed, Src2BowForce, Src2BowSpeed, Src3BowForce, Src3BowSpeed, Src4BowForce, Src4BowSpeed,
     Src1SpecRate, Src1SpecBreath, Src2SpecRate, Src2SpecBreath, Src3SpecRate, Src3SpecBreath, Src4SpecRate, Src4SpecBreath,
-    BrainHarmonic,
+    BrainHarmonic, BrainKey,
     Count
 };
 

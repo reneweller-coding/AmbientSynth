@@ -3617,6 +3617,82 @@ void testResearchBatch()
         }
     }
 
+    // ---- the tonal hierarchy, and finding the key -------------------------------------------
+    {
+        // The finder first, on distributions whose answer is known. C major's own scale must come
+        // back as C major; the same notes with A weighted heavily must come back as A minor,
+        // because that is exactly what the two profiles differ about.
+        auto named = [](const KeyEstimate& k) {
+            static const char* n[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+            static char buf[16];
+            if (k.key < 0) { std::snprintf(buf, sizeof(buf), "none"); return static_cast<const char*>(buf); }
+            std::snprintf(buf, sizeof(buf), "%s %s", n[k.tonic()], k.minor() ? "minor" : "major");
+            return static_cast<const char*>(buf);
+        };
+        {   // A plain C major scale, every degree sounding equally.
+            float w[12] = { 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1 };
+            const KeyEstimate k = findKey(w);
+            std::printf("  [probe] key of a C major scale: %s (r %.2f)\n", named(k), k.confidence);
+            CHECK(k.key == 0, "a C major scale is found to be C major");
+            CHECK(k.confidence > 0.5f, "and the finder is confident about it");
+        }
+        {   // The same seven notes, but A and E held far longer: the relative minor.
+            float w[12] = { 1, 0, 1, 0, 1, 1, 0, 2, 0, 4, 0, 1 };
+            const KeyEstimate k = findKey(w);
+            std::printf("  [probe] key with A and E held: %s (r %.2f)\n", named(k), k.confidence);
+            CHECK(k.key == 12 + 9, "the same notes with A held are found to be A minor");
+        }
+        {   // Twelve notes in perfect balance are not a key, and the finder must say so rather
+            // than picking one at random.
+            float w[12] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+            const KeyEstimate k = findKey(w);
+            std::printf("  [probe] key of a full chromatic: %s (r %.2f)\n", named(k), k.confidence);
+            CHECK(k.key < 0, "a perfectly balanced chromatic is no key at all");
+            float z[12] = {};
+            CHECK(findKey(z).key < 0, "and silence is no key either");
+        }
+        {   // A cluster: five neighbouring semitones. A key may be found, but weakly.
+            float w[12] = { 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0 };
+            const KeyEstimate k = findKey(w);
+            std::printf("  [probe] key of a five-semitone cluster: %s (r %.2f)\n", named(k), k.confidence);
+            CHECK(k.confidence < 0.55f, "a cluster is at best a weak key, and says so");
+        }
+
+        // And in the conductor: with Key up, what it plays must fit the key it has found better
+        // than what it plays without.
+        auto run = [&](float keyAmount, int& classes, float& conf) {
+            Engine en;
+            en.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) en.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            en.setParam(ParamId::BrainOn, 1.0f);
+            en.setParam(ParamId::BrainKey, keyAmount);
+            en.setParam(ParamId::BrainRate, 2.0f);
+            en.setParam(ParamId::BrainDensity, 5.0f);
+            en.setParam(ParamId::BrainConsonance, 0.3f);   // loose, so the key has something to do
+            en.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 34000; ++b) en.process(L.data(), R.data(), 256);   // three minutes
+            const KeyEstimate k = en.brainKey();
+            conf = k.confidence;
+            bool on[128] = {};
+            en.soundingNotes(on);
+            bool seen[12] = {};
+            classes = 0;
+            for (int i = 0; i < 128; ++i) {
+                if (!on[i]) continue;
+                const int pc = pitchClassOf(en.frequencyOf(i));
+                if (!seen[pc]) { seen[pc] = true; ++classes; }
+            }
+        };
+        int clOff = 0, clOn = 0; float cOff = 0.0f, cOn = 0.0f;
+        run(0.0f, clOff, cOff);
+        run(1.0f, clOn, cOn);
+        std::printf("  [probe] conductor after 3 min: key confidence %.2f off (%d pitch classes), %.2f on (%d classes)\n",
+                    cOff, clOff, cOn, clOn);
+        CHECK(cOn > cOff, "with Key up the music sits more clearly in one key than without it");
+        CHECK(clOn >= 2, "and it is still playing a chord, not one note");
+    }
+
     // ---- loudness in sones ------------------------------------------------------------------
     {
         // The model is checked against the anchors that DEFINE the sone, not against itself. A

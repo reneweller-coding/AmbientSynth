@@ -681,6 +681,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     if (soundName_.isNotEmpty())  state.setProperty("soundPreset", soundName_, nullptr);
     if (cosmosName_.isNotEmpty()) state.setProperty("cosmosPreset", cosmosName_, nullptr);
     if (compact_) state.setProperty("compact", 1, nullptr);          // how the editor is laid out
+    if (layoutMode_ != 0) state.setProperty("layout", layoutMode_, nullptr);
     if (levelMatch_) state.setProperty("levelMatch", 1, nullptr);
     juce::ValueTree midi("midi");
     for (int cc = 0; cc < 128; ++cc) {
@@ -753,6 +754,8 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
                 for (int i = 0; i < numCosmosPresets(); ++i) if (cosmosName_ == cosmosPreset(i).name) { cosmosIndex_ = i; break; }
             }
             compact_ = static_cast<int>(tree.getProperty("compact", 0)) != 0;
+            layoutMode_ = static_cast<int>(tree.getProperty("layout", compact_ ? 1 : 0));
+            compact_ = layoutMode_ == 1;
             levelMatch_ = static_cast<int>(tree.getProperty("levelMatch", 0)) != 0;
             const juce::String route = tree.getProperty("route").toString();
             const juce::String modMatrix = tree.getProperty("modMatrix").toString();

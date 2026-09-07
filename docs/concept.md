@@ -2123,10 +2123,36 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   section's title carries a die: a click draws that section's parameters again (in the
   parameter's own skewed domain, inside the middle 70 % of its range), shift nudges them.
   Undo, redo and an A/B compare work on whole parameter snapshots. The header carries the
-  output's own spectrum with its peak level, and a Compact switch that wraps the widest rows
-  into two: the page goes from 1.9 : 1 to 1.6 : 1, still without scrolling. (Wrapping every
-  wide row, rather than only those above ten cells, gave 1.27 : 1 -- worse than the shape it
-  started from, which is why the threshold is where it is.)
+  output's own spectrum with its peak level, and a layout button that cycles three shapes:
+  Normal (one page, tabs), Compact (the widest rows wrap into two: 1.9 : 1 to 1.6 : 1, still
+  without scrolling -- wrapping every wide row rather than only those above ten cells gave
+  1.27 : 1, worse than the shape it started from, which is why the threshold is where it is)
+  and Expanded (every page of every tab row laid out under one another with a title in the
+  tab's place, no tabs, 2080 x 2604 at design size: the four sources, the two filters and
+  the conductor's six tables all in sight, for a tall screen or for reading a preset through).
+  The mode is kept in the state; `AMBIENT_EXPANDED=1` / `AMBIENT_COMPACT=1` set it for a run,
+  and the manual's tab pictures are always taken in Normal.
+
+  The GUI round (after a third report, on the interface): a knob shows everything that moves
+  it -- the matrix as before, in its source's colour; the morph or the map's blend as a
+  neutral arc from the knob's value to the live one (`effectiveParam` + `modAmount` against
+  the raw value); and the arc and the tide, whose swing is too slow to see as motion, as a
+  dot on the outer ring (`halo`) saying where in it they are. The Tuning page's display draws
+  the timbre's roughness curve across the octave from the same `BrainSpectrum` the conductor
+  judges with (computed every block now, a dozen pows; nothing reads it unless Timbre is up,
+  so the sound is untouched: oracle 41/41), the scale's degrees as ticks -- they sit in the
+  dips when the scale is the timbre's own -- the key the conductor found, the comma, the
+  tide. The Coherence page's display: the Kuramoto ring, the Lenia field as a grey grid, the
+  six attractor readings; asleep, they say so. The stage's three planes (conductor, keys,
+  second conductor) are lines a hand can drag, through the host's parameter system, so the
+  drag is automated and undone like a knob; the voices stay a picture, because the conductor
+  put them where they are. A glyph where the loop closes (Feedback says it returns to the
+  sources, Source 1 that it is fed), a sentence under a one-strand additive bank saying why it
+  is one strand, and fixed-width figures in the knobs and the header line (shrunk to fit --
+  the first draft cut "40 min" to "40 mi"). Declined from that report, with reasons in the
+  manual: the three-zone rebuild, the isometric stage with grabbable voices, a 3D filter cube,
+  a second preset explorer. `AMBIENT_SHOT=<png>` writes a picture of the whole editor after ten
+  seconds of a chord, for looking at the panel without a screen grab.
   Help (`Core/include/ambient/Help.h`): one or two sentences for every
   parameter (`paramHelp`, families share their text so the three slots and
   eight LFOs cannot drift apart; the self test insists every parameter has

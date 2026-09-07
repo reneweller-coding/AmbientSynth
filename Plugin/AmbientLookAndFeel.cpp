@@ -124,6 +124,26 @@ void AmbientLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
         if (std::abs(to - angle) > 1.0e-3f) arc(g, c, ringR, angle, to, thick * 0.6f, mc, true);
     }
 
+    // Not the matrix, but something playing a value the knob does not show -- the morph, the
+    // map's blend, a route: the same arc in the neutral warm colour, no outer ring.
+    if (s.getProperties().contains("liveOffset")) {
+        const float off = static_cast<float>(s.getProperties().getWithDefault("liveOffset", 0.0));
+        const float to = juce::jlimit(startAngle, endAngle, angle + off * (endAngle - startAngle));
+        if (std::abs(to - angle) > 1.0e-3f) arc(g, c, ringR, angle, to, thick * 0.6f, ui::live.withAlpha(0.85f), true);
+    }
+    // A slow process's own state -- where the arc or the tide stands in its swing -- as a dot on
+    // the outer ring, from one end of the knob's travel (-1) to the other (+1).
+    if (s.getProperties().contains("halo")) {
+        const float h = juce::jlimit(-1.0f, 1.0f, static_cast<float>(s.getProperties().getWithDefault("halo", 0.0)));
+        const float a = startAngle + (0.5f + 0.5f * h) * (endAngle - startAngle);
+        const float outer = ringR + thick * 0.5f + 2.0f;
+        const juce::Point<float> p(c.x + outer * std::sin(a), c.y - outer * std::cos(a));
+        g.setColour(ui::live.withAlpha(0.35f));
+        g.fillEllipse(p.x - 4.0f, p.y - 4.0f, 8.0f, 8.0f);
+        g.setColour(ui::live);
+        g.fillEllipse(p.x - 2.0f, p.y - 2.0f, 4.0f, 4.0f);
+    }
+
     // Pointer: a short radial tick, not a full needle.
     {
         juce::Path p;
@@ -139,8 +159,9 @@ void AmbientLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
         const juce::String txt = valueText(s);
         if (txt.isNotEmpty()) {
             g.setColour(enabled ? (hot ? ui::text : ui::text.withAlpha(0.82f)) : ui::faint);
-            g.setFont(ui::body(juce::jlimit(9.0f, 13.0f, r * 0.62f)));
-            g.drawText(txt, area.reduced(r * 0.30f), juce::Justification::centred, false);
+            // A fixed-width face for the figures, so a value that moves does not shiver in width.
+            g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), juce::jlimit(9.0f, 13.0f, r * 0.62f), juce::Font::plain)));
+            g.drawFittedText(txt, area.reduced(r * 0.30f).toNearestInt(), juce::Justification::centred, 1, 0.7f);   // the fixed-width figures are wider: shrink rather than cut ("40 mi")
         }
     }
 }

@@ -489,6 +489,8 @@ public:
         return static_cast<float>(h);
     }
     double excitation() const { return excite_; }
+    int ringNote(int i) const { return (i >= 0 && i < kRing) ? ring_[i] : -1; }
+    int ringPos() const { return ringPos_; }
 
     // Advance `dt` seconds. `freqOf(int note) -> double`, `emit(const BrainEvent&)`.
     // `anchorNote` (>= 0) pins the root to a note the player holds on the keyboard.

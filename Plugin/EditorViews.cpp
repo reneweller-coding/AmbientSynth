@@ -56,11 +56,82 @@ void AmbientSynthEditor::BrainView::paint(juce::Graphics& g)
 
 // ---------------------------------------------------------------- stage
 
+juce::Rectangle<float> AmbientSynthEditor::StageView::plotRect() const
+{
+    return getLocalBounds().toFloat().reduced(12.0f, 8.0f).withTrimmedTop(14.0f);
+}
+
+namespace {
+// The three planes a hand can move on the stage, each the parameter that is its depth.
+struct StagePlane { const char* key; const char* label; };
+const StagePlane kStagePlanes[3] = { { "depth", "conductor" }, { "keys_depth", "keys" }, { "brain2_depth", "conductor 2" } };
+}
+
+int AmbientSynthEditor::StageView::lineAt(juce::Point<int> pos) const
+{
+    const auto plot = plotRect();
+    int best = -1; float bestD = 7.0f;
+    for (int i = 0; i < 3; ++i) {
+        const float d = rawParam(proc, kStagePlanes[i].key);
+        const float y = plot.getBottom() - 8.0f - d * (plot.getHeight() - 16.0f);
+        const float dist = std::abs(static_cast<float>(pos.y) - y);
+        if (dist < bestD) { bestD = dist; best = i; }
+    }
+    return best;
+}
+
+void AmbientSynthEditor::StageView::mouseMove(const juce::MouseEvent& e)
+{
+    const int was = hoverLine;
+    hoverLine = lineAt(e.getPosition());
+    setMouseCursor(hoverLine >= 0 ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+    if (was != hoverLine) repaint();
+}
+
+void AmbientSynthEditor::StageView::mouseDown(const juce::MouseEvent& e)
+{
+    dragLine = lineAt(e.getPosition());
+    if (dragLine < 0) return;
+    if (onUndo) onUndo(juce::String(kStagePlanes[dragLine].label) + " depth");
+    if (auto* p = proc.apvts.getParameter(kStagePlanes[dragLine].key)) p->beginChangeGesture();
+    mouseDrag(e);
+}
+
+void AmbientSynthEditor::StageView::mouseDrag(const juce::MouseEvent& e)
+{
+    if (dragLine < 0) return;
+    const auto plot = plotRect();
+    const float d = juce::jlimit(0.0f, 1.0f, (plot.getBottom() - 8.0f - static_cast<float>(e.getPosition().y)) / juce::jmax(1.0f, plot.getHeight() - 16.0f));
+    if (auto* p = proc.apvts.getParameter(kStagePlanes[dragLine].key)) p->setValueNotifyingHost(p->convertTo0to1(d));
+    repaint();
+}
+
+void AmbientSynthEditor::StageView::mouseUp(const juce::MouseEvent&)
+{
+    if (dragLine < 0) return;
+    if (auto* p = proc.apvts.getParameter(kStagePlanes[dragLine].key)) p->endChangeGesture();
+    dragLine = -1;
+    repaint();
+}
+
 void AmbientSynthEditor::StageView::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds();
     displayFrame(g, r, "STAGE", ui::voiceCol);
-    const auto plot = r.toFloat().reduced(12.0f, 8.0f).withTrimmedTop(14.0f);
+    const auto plot = plotRect();
+    // The planes: where the conductor, the keys and the second conductor stand in the room, each
+    // a line a hand can take hold of. The one under the mouse brightens; the one being dragged
+    // carries its value.
+    for (int i = 0; i < 3; ++i) {
+        const float d = rawParam(proc, kStagePlanes[i].key);
+        const float y = plot.getBottom() - 8.0f - d * (plot.getHeight() - 16.0f);
+        const bool hot = i == hoverLine || i == dragLine;
+        g.setColour((i == 1 ? ui::live : ui::voiceCol).withAlpha(hot ? 0.9f : 0.35f));
+        g.drawLine(plot.getX() + 26.0f, y, plot.getRight() - 4.0f, y, hot ? 1.6f : 1.0f);
+        g.setFont(ui::body(9.0f));
+        g.drawText(juce::String(kStagePlanes[i].label) + (hot ? "  " + juce::String(d, 2) : juce::String()),
+                   juce::roundToInt(plot.getRight()) - 96, juce::roundToInt(y) - 11, 92, 10, juce::Justification::centredRight, false);
+    }
     // The room: near plane at the bottom, far at the top, faint depth lines between.
     g.setColour(ui::track.withAlpha(0.5f));
     for (int i = 1; i < 4; ++i) g.drawHorizontalLine(juce::roundToInt(plot.getY() + plot.getHeight() * i / 4.0f), plot.getX(), plot.getRight());
@@ -104,6 +175,137 @@ void AmbientSynthEditor::StageView::paint(juce::Graphics& g)
     g.setColour(ui::dim); g.setFont(ui::body(10.0f));
     g.drawText(juce::String(n) + (n == 1 ? " voice" : " voices") + "   brain " + juce::String(juce::CharPointer_UTF8("\xe2\x97\x8f")) + " keys " + juce::String(juce::CharPointer_UTF8("\xe2\x97\x8f")),
                r.reduced(9, 5), juce::Justification::topRight, false);
+}
+
+// ---------------------------------------------------------------- tuning
+
+void AmbientSynthEditor::TuningView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds();
+    displayFrame(g, r, "TUNING", ui::condCol);
+    const auto plot = r.toFloat().reduced(12.0f, 8.0f).withTrimmedTop(16.0f).withTrimmedBottom(14.0f);
+    // The timbre's roughness against itself, swept across the octave (Sethares): where it dips is
+    // where its own scale lies. Drawn from the same template the conductor judges with.
+    const ambient::BrainSpectrum& sp = proc.engine().brainSpectrum();
+    const double base = 261.6255653005986;
+    float lo = 1.0e9f, hi = -1.0e9f;
+    if (sp.count > 0) {
+        for (int k = 0; k < kPoints; ++k) {
+            const double cents = k * 1200.0 / (kPoints - 1);
+            const float v = static_cast<float>(ambient::spectralRoughness(base, base * std::pow(2.0, cents / 1200.0), sp));
+            curve[k] += (v - curve[k]) * 0.5f;
+            lo = juce::jmin(lo, curve[k]); hi = juce::jmax(hi, curve[k]);
+        }
+    }
+    auto xOf = [&](double cents) { return plot.getX() + static_cast<float>(cents / 1200.0) * plot.getWidth(); };
+    // The scale's degrees, as ticks: they should sit in the dips when the scale is the timbre's own.
+    const ambient::FixedScale& sc = proc.engine().scale();
+    for (int i = 0; i < sc.count; ++i) {
+        const double cents = 1200.0 * std::log2(sc.ratios[i]);
+        if (cents < 0.0 || cents > 1200.0) continue;
+        const float x = xOf(cents);
+        g.setColour(ui::condCol.withAlpha(i == 0 ? 0.7f : 0.4f));
+        g.drawLine(x, plot.getY(), x, plot.getBottom(), 1.0f);
+    }
+    if (sp.count > 0 && hi > lo + 1.0e-9f) {
+        juce::Path p;
+        for (int k = 0; k < kPoints; ++k) {
+            const float t = (curve[k] - lo) / (hi - lo);
+            const float x = plot.getX() + plot.getWidth() * k / static_cast<float>(kPoints - 1);
+            const float y = plot.getBottom() - t * plot.getHeight();   // rough is high; the dips are the scale
+            if (k == 0) p.startNewSubPath(x, y); else p.lineTo(x, y);
+        }
+        juce::Path fill(p);
+        fill.lineTo(plot.getRight(), plot.getBottom()); fill.lineTo(plot.getX(), plot.getBottom()); fill.closeSubPath();
+        g.setColour(ui::accent.withAlpha(0.12f));
+        g.fillPath(fill);
+        g.setColour(ui::accent.withAlpha(0.85f));
+        g.strokePath(p, juce::PathStrokeType(1.4f));
+    } else {
+        g.setColour(ui::faint); g.setFont(ui::body(11.0f));
+        g.drawText("roughness curve -- nothing sounding", plot, juce::Justification::centred, false);
+    }
+    // Axis: the just intervals as landmarks, so a dip can be named.
+    g.setColour(ui::faint); g.setFont(ui::body(9.0f));
+    struct Mark { double cents; const char* name; };
+    static const Mark kMarks[] = { { 0.0, "1/1" }, { 386.3, "5/4" }, { 498.0, "4/3" }, { 702.0, "3/2" }, { 884.4, "5/3" }, { 1200.0, "2/1" } };
+    for (const auto& m : kMarks) g.drawText(m.name, juce::roundToInt(xOf(m.cents)) - 14, juce::roundToInt(plot.getBottom()) + 1, 28, 11, juce::Justification::centred, false);
+    // The words: the key the conductor has found, the comma's offset, the tide.
+    const ambient::KeyEstimate key = proc.engine().brainKey();
+    juce::String txt = key.key >= 0 && key.confidence > 0.0f
+        ? "key " + juce::MidiMessage::getMidiNoteName(key.tonic(), true, false, 0) + (key.minor() ? " minor" : " major") + "  r " + juce::String(key.confidence, 2)
+        : juce::String("no key yet");
+    if (rawParam(proc, "purity_adapt") > 0.0f) txt += "   comma " + juce::String(proc.engine().commaCents(), 1) + " ct";
+    if (rawParam(proc, "tide") > 0.0f) txt += "   tide " + juce::String(proc.engine().tideNow(), 1) + " ct";
+    txt += "   " + juce::String(sc.name);
+    g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+    g.drawText(txt, r.reduced(9, 5), juce::Justification::topRight, false);
+}
+
+// ---------------------------------------------------------------- coherence
+
+void AmbientSynthEditor::CoherenceView::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds();
+    displayFrame(g, r, "COHERENCE", ui::condCol);
+    const auto plot = r.toFloat().reduced(12.0f, 8.0f).withTrimmedTop(14.0f);
+    const float third = plot.getWidth() / 3.0f;
+    // Left: the Kuramoto ring. Four points on a circle at their phases; lock and they bunch.
+    {
+        const auto box = plot.withWidth(third).reduced(6.0f);
+        const float rad = juce::jmin(box.getWidth(), box.getHeight()) * 0.42f;
+        const auto c = box.getCentre();
+        g.setColour(ui::track); g.drawEllipse(c.x - rad, c.y - rad, 2.0f * rad, 2.0f * rad, 1.0f);
+        for (int i = 0; i < 4; ++i) {
+            const float ph = proc.engine().coherencePhase(i);
+            const juce::Point<float> p(c.x + rad * std::cos(ph), c.y - rad * std::sin(ph));
+            g.setColour(ui::condCol.withAlpha(0.35f)); g.drawLine(c.x, c.y, p.x, p.y, 1.0f);
+            g.setColour(ui::condCol); g.fillEllipse(p.x - 3.5f, p.y - 3.5f, 7.0f, 7.0f);
+        }
+        g.setColour(ui::dim); g.setFont(ui::body(9.5f));
+        g.drawText("kuramoto ring", box.withHeight(11.0f), juce::Justification::centredTop, false);
+    }
+    // Middle: the Lenia field, grey by value; asleep until a route reads it.
+    {
+        const auto box = plot.withX(plot.getX() + third).withWidth(third).reduced(6.0f);
+        const int n = ambient::Engine::kLeniaSize;
+        const float cell = juce::jmin(box.getWidth(), box.getHeight() - 12.0f) / static_cast<float>(n);
+        const float x0 = box.getCentreX() - cell * n * 0.5f, y0 = box.getY() + 12.0f;
+        if (proc.engine().leniaSteps() > 0) {
+            for (int y = 0; y < n; ++y)
+                for (int x = 0; x < n; ++x) {
+                    const float v = proc.engine().leniaCell(x, y);
+                    if (v < 0.02f) continue;
+                    g.setColour(ui::backCol.withAlpha(0.15f + 0.85f * v));
+                    g.fillRect(x0 + x * cell, y0 + y * cell, cell, cell);
+                }
+        } else {
+            g.setColour(ui::faint); g.setFont(ui::body(9.5f));
+            g.drawText("asleep: route lenia1..4 to wake it", juce::Rectangle<float>(x0, y0, cell * n, cell * n), juce::Justification::centred, false);
+        }
+        g.setColour(ui::track.withAlpha(0.6f)); g.drawRect(x0, y0, cell * n, cell * n, 1.0f);
+        g.setColour(ui::dim); g.setFont(ui::body(9.5f));
+        g.drawText("lenia " + juce::String(n) + " x " + juce::String(n), box.withHeight(11.0f), juce::Justification::centredTop, false);
+    }
+    // Right: the attractors, six readings as bars from the centre.
+    {
+        const auto box = plot.withX(plot.getX() + 2.0f * third).withWidth(third).reduced(6.0f);
+        const bool awake = proc.engine().chaosSteps() > 0;
+        static const char* kNames[6] = { "lx", "ly", "lz", "rx", "ry", "rz" };
+        const float bw = (box.getWidth() - 10.0f) / 6.0f;
+        const float mid = box.getY() + 12.0f + (box.getHeight() - 24.0f) * 0.5f, half = (box.getHeight() - 24.0f) * 0.5f;
+        g.setColour(ui::track); g.drawHorizontalLine(juce::roundToInt(mid), box.getX(), box.getRight());
+        for (int k = 0; k < 6; ++k) {
+            const float v = awake ? proc.engine().chaosOut(k) : 0.0f;
+            const float x = box.getX() + 5.0f + k * bw;
+            g.setColour((k < 3 ? ui::cosmosCol : ui::morphCol).withAlpha(awake ? 0.8f : 0.25f));
+            g.fillRect(x + 2.0f, v >= 0.0f ? mid - v * half : mid, bw - 4.0f, std::abs(v) * half);
+            g.setColour(ui::dim); g.setFont(ui::body(9.0f));
+            g.drawText(kNames[k], juce::roundToInt(x), juce::roundToInt(box.getBottom()) - 11, juce::roundToInt(bw), 11, juce::Justification::centred, false);
+        }
+        g.setColour(ui::dim); g.setFont(ui::body(9.5f));
+        g.drawText(awake ? "lorenz / roessler" : "attractors asleep: route one", box.withHeight(11.0f), juce::Justification::centredTop, false);
+    }
 }
 
 // ---------------------------------------------------------------- cosmos spectrum
@@ -428,6 +630,13 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText(juce::String(n) + " partials" + (slot == 1 ? "   " + juce::String(rawParam(proc, "strands"), 0) + " strands" : juce::String()),
                    r.reduced(9, 5), juce::Justification::topRight, false);
+        if (slot != 1) {
+            // Said, rather than left to be guessed from greyed cells: this bank is one strand by
+            // design, and why.
+            g.setColour(ui::faint); g.setFont(ui::body(9.5f));
+            g.drawText("one strand: Strands (unison, detune, stack) belong to Source 1's bank -- a second bank costs what a wavetable slot costs",
+                       r.reduced(9, 5), juce::Justification::bottomLeft, false);
+        }
     } else {   // noise: the colour as a spectral slope, plus the band centre for Band and Wind
         const int kind = static_cast<int>(std::lround(rawParam(proc, (pre + "noise").toRawUTF8())));
         static const float kSlope[] = { 0.0f, -3.0f, -6.0f, 3.0f, 6.0f, 0.0f, 0.0f, 0.0f, -2.0f, -6.0f };

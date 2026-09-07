@@ -157,15 +157,14 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     abButton_->setTooltip("Two whole snapshots to compare: the first click parks what you have in A and hands you B, every click after swaps");
     abButton_->onClick = [this] { swapAB(); };
     addAndMakeVisible(*abButton_);
-    compactButton_ = std::make_unique<juce::TextButton>("Compact");
-    compactButton_->setTooltip("Wraps the widest rows into two, so the page is narrower and taller. Still one page, still no scrolling.");
-    compactButton_->setClickingTogglesState(true);
+    // The layout, cycled by one button: Normal (one page, tabs), Compact (the widest rows wrap,
+    // narrower and taller) and Expanded (every page of every tab row under one another, no tabs,
+    // tall -- for a tall screen, or for reading a preset through without clicking).
+    compactButton_ = std::make_unique<juce::TextButton>("Normal");
+    compactButton_->setTooltip("Layout. Normal: one page with tabs. Compact: the widest rows wrap, narrower and taller. Expanded: every page of every tab row laid out under one another -- no tabs, a tall page, everything in sight.");
+    compactButton_->setClickingTogglesState(false);
     compactButton_->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.5f));
-    compactButton_->onClick = [this] {
-        compact_ = compactButton_->getToggleState();
-        proc_.setCompactLayout(compact_);
-        rebuildLayout();
-    };
+    compactButton_->onClick = [this] { applyLayoutMode((proc_.layoutMode() + 1) % 3); };
     addAndMakeVisible(*compactButton_);
     // Session recall, and the switch for it. Only in the standalone: in a plugin the host saves
     // the state with the project, which is what a plugin is supposed to do.
@@ -247,6 +246,9 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     envView_ = std::make_unique<EnvView>(proc_);
     vectorView_ = std::make_unique<VectorView>(proc_);
     spectrumView_ = std::make_unique<SpectrumView>(proc_);
+    tuningView_ = std::make_unique<TuningView>(proc_);
+    coherenceView_ = std::make_unique<CoherenceView>(proc_);
+    stageView_->onUndo = [this](const juce::String& what) { pushUndo(what); };
     for (juce::Component* c : { static_cast<juce::Component*>(scope_.get()), static_cast<juce::Component*>(filterView_.get()),
                                 static_cast<juce::Component*>(source2View_.get()), static_cast<juce::Component*>(source3View_.get()),
                                 static_cast<juce::Component*>(source4View_.get()),
@@ -256,7 +258,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                                 static_cast<juce::Component*>(stageView_.get()), static_cast<juce::Component*>(cosmosView_.get()),
                                 static_cast<juce::Component*>(envView_.get()),
                                 static_cast<juce::Component*>(spectrumView_.get()),
-                                static_cast<juce::Component*>(vectorView_.get()) })
+                                static_cast<juce::Component*>(vectorView_.get()),
+                                static_cast<juce::Component*>(tuningView_.get()), static_cast<juce::Component*>(coherenceView_.get()) })
         content_.addAndMakeVisible(*c);
     if (tabRows_.size() > 1) {   // VOICE row 0: OSC 1 | SOURCE 2 | SOURCE 3; row 1: FILTER | Z-PLANE
         tabRows_[0].displays = { source1View_.get(), source2View_.get(), source3View_.get(), source4View_.get(), vectorView_.get() };
@@ -270,7 +273,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         tabRows_.back().displays = { cosmosView_.get(), nullptr };      // COSMOS | STRIKE (the row appended last)
     }
     if (groups_.size() > 6) groups_[6].displays = { spectrumView_.get() };   // ANALYSIS: the strip
-    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), nullptr, nullptr, nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
+    if (tabRows_.size() > 5) tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), tuningView_.get(), coherenceView_.get(), nullptr };   // CONDUCTOR: BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE | CLOCK
 
     // Free scaling: the corner is the zoom. The ratio is fixed so the arrangement never changes,
     // only its size, and the window opens at whatever fraction of the screen actually fits.
@@ -292,8 +295,12 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         }
         setSize(juce::roundToInt(designW_ * fit), juce::roundToInt(designH_ * fit));
     }
-    compact_ = proc_.compactLayout() || juce::SystemStats::getEnvironmentVariable("AMBIENT_COMPACT", "").isNotEmpty();
-    if (compact_) { compactButton_->setToggleState(true, juce::dontSendNotification); rebuildLayout(); }
+    {
+        int mode = proc_.layoutMode();
+        if (juce::SystemStats::getEnvironmentVariable("AMBIENT_COMPACT", "").isNotEmpty()) mode = 1;
+        if (juce::SystemStats::getEnvironmentVariable("AMBIENT_EXPANDED", "").isNotEmpty()) mode = 2;
+        if (mode != 0) applyLayoutMode(mode);
+    }
     if (juce::SystemStats::getEnvironmentVariable("AMBIENT_PERFORM", "").isNotEmpty()) setPage(1);
     {   // AMBIENT_PRESET=<name>: open on a named preset (dev aid for photographing a modulated patch)
         const juce::String ps = juce::SystemStats::getEnvironmentVariable("AMBIENT_PRESET", "");
@@ -326,6 +333,21 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
             for (int n : { 45, 52, 57, 64, 69 }) proc_.engine().noteOn(n, 0.7f);
             juce::Timer::callAfterDelay(12000, [this, man] {
                 exportManual(juce::File(man), [] { juce::JUCEApplicationBase::quit(); });
+            });
+        }
+        // AMBIENT_SHOT=<file.png>: a picture of the whole editor as it stands -- the layout mode,
+        // the open tabs, the live displays -- ten seconds after a chord, then quit. The dev aid for
+        // looking at the panel without a screen grab, which takes whatever else is on the screen.
+        const juce::String shot = juce::SystemStats::getEnvironmentVariable("AMBIENT_SHOT", "");
+        if (shot.isNotEmpty() && man.isEmpty()) {
+            for (int n : { 45, 52, 57, 64, 69 }) proc_.engine().noteOn(n, 0.7f);
+            juce::Timer::callAfterDelay(10000, [this, shot] {
+                const juce::Image img = createComponentSnapshot(getLocalBounds(), true, 1.0f);
+                juce::File f(shot);
+                f.deleteFile();
+                juce::PNGImageFormat png;
+                if (auto out = std::unique_ptr<juce::FileOutputStream>(f.createOutputStream())) png.writeImageToStream(img, *out);
+                juce::JUCEApplicationBase::quit();
             });
         }
         // AMBIENT_MOD=lfo|env|matrix: which tab of the modulation strip to open. Only a dev aid,
@@ -716,6 +738,16 @@ void AmbientSynthEditor::resized()
 // so switching a tab never moves anything else.
 // Compact: a section wider than eight cells wraps into two rows. The page loses width and gains
 // height; nothing scrolls either way, and the arrangement is otherwise untouched.
+void AmbientSynthEditor::applyLayoutMode(int mode)
+{
+    mode = juce::jlimit(0, 2, mode);
+    compact_ = mode == 1;
+    expanded_ = mode == 2;
+    proc_.setLayoutMode(mode);
+    if (compactButton_) compactButton_->setButtonText(mode == 0 ? "Normal" : mode == 1 ? "Compact" : "Expanded");
+    rebuildLayout();
+}
+
 void AmbientSynthEditor::rebuildLayout()
 {
     for (auto& s : sections_) {
@@ -781,72 +813,92 @@ void AmbientSynthEditor::layoutBody()
         int y = colY[col] + kGroupTitleH;
         for (size_t ri = 0; ri < g.rows.size(); ++ri) {
             TabRow* t = tabRowFor(static_cast<int>(gi), static_cast<int>(ri));
-            const std::vector<juce::String>& names = t != nullptr ? t->pages[static_cast<size_t>(t->active)] : g.rows[ri];
-            juce::Component* disp = nullptr;
-            Section* underSec = nullptr;      // a section placed under the display, if the page has one
-            int rowH = 0;
+            // Which pages of the row are placed: the open one -- or, Expanded, every one of them,
+            // under one another, each with its own title where the tab bar was.
+            std::vector<int> pages;
+            if (t == nullptr) pages.push_back(-1);
+            else if (expanded_) for (size_t pi = 0; pi < t->pages.size(); ++pi) pages.push_back(static_cast<int>(pi));
+            else pages.push_back(t->active);
             if (t != nullptr) {
-                for (auto& pg : t->pages) rowH = std::max(rowH, pageHeight(pg));
-                t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
                 t->tabs.clear();
-                int tx = t->bar.getX();
-                for (auto& nm : t->names) {
-                    const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
-                    t->tabs.push_back({ tx, y, tw, kTabH - 4 });
-                    tx += tw + 4;
-                }
-                for (size_t pi = 0; pi < t->pages.size(); ++pi) {
-                    if (static_cast<int>(pi) == t->active) continue;
-                    for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
-                    if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
-                    if (pi < t->under.size() && t->under[pi].isNotEmpty())
-                        if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
-                }
-                if (static_cast<size_t>(t->active) < t->displays.size()) disp = t->displays[static_cast<size_t>(t->active)];
-                // The page's under-section wraps to the display column's width, and the row is
-                // tall enough to keep a real picture above it.
-                if (static_cast<size_t>(t->active) < t->under.size() && t->under[static_cast<size_t>(t->active)].isNotEmpty()) {
-                    if (Section* u = findSection(t->under[static_cast<size_t>(t->active)])) {
-                        const int free = colWidth[col] - pageWidth(names) - kPad;
-                        u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
-                        underSec = u;
-                        rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
+                if (!expanded_) {
+                    t->bar = { x0 + kPad, y, colWidth[col] - 2 * kPad, kTabH };
+                    int tx = t->bar.getX();
+                    for (auto& nm : t->names) {
+                        const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, nm) + 30;
+                        t->tabs.push_back({ tx, y, tw, kTabH - 4 });
+                        tx += tw + 4;
                     }
+                    for (size_t pi = 0; pi < t->pages.size(); ++pi) {
+                        if (static_cast<int>(pi) == t->active) continue;
+                        for (auto& n : t->pages[pi]) if (Section* s = findSection(n)) setSectionVisible(*s, false);
+                        if (pi < t->displays.size() && t->displays[pi] != nullptr) t->displays[pi]->setVisible(false);
+                        if (pi < t->under.size() && t->under[pi].isNotEmpty())
+                            if (Section* s = findSection(t->under[pi])) setSectionVisible(*s, false);
+                    }
+                } else t->bar = {};
+            }
+            for (int pg : pages) {
+                const size_t pgi = static_cast<size_t>(std::max(pg, 0));
+                const std::vector<juce::String>& names = t != nullptr ? t->pages[pgi] : g.rows[ri];
+                juce::Component* disp = nullptr;
+                Section* underSec = nullptr;      // a section placed under the display, if the page has one
+                int rowH = 0;
+                if (t != nullptr) {
+                    if (expanded_) {
+                        // A title in the tab's place, one per page, and each page only as tall as itself.
+                        const int tw = juce::GlyphArrangement::getStringWidthInt(tabFont, t->names[pgi]) + 30;
+                        t->tabs.push_back({ x0 + kPad, y, tw, kTabH - 4 });
+                        rowH = pageHeight(names);
+                    } else {
+                        for (auto& pgn : t->pages) rowH = std::max(rowH, pageHeight(pgn));
+                    }
+                    if (pgi < t->displays.size()) disp = t->displays[pgi];
+                    // The page's under-section wraps to the display column's width, and the row is
+                    // tall enough to keep a real picture above it.
+                    if (pgi < t->under.size() && t->under[pgi].isNotEmpty()) {
+                        if (Section* u = findSection(t->under[pgi])) {
+                            const int free = colWidth[col] - pageWidth(names) - kPad;
+                            u->maxUnits = std::max(2, (free - 2 * kPad) / kCellW);
+                            underSec = u;
+                            rowH = std::max(rowH, sectionHeight(*u) + kPad + 110);
+                        }
+                    }
+                    y += kTabH;
+                } else {
+                    rowH = std::max(pageHeight(names), g.minRowH);
+                    if (ri < g.displays.size()) disp = g.displays[ri];
                 }
-                y += kTabH;
-            } else {
-                rowH = std::max(pageHeight(names), g.minRowH);
-                if (ri < g.displays.size()) disp = g.displays[ri];
-            }
-            int x = x0 + kPad;
-            for (auto& n : names) {
-                Section* s = findSection(n);
-                if (s == nullptr) continue;
-                setSectionVisible(*s, true);
-                layoutSection(*s, x, y);
-                x += s->bounds.getWidth() + kPad;
-            }
-            // Whatever the row leaves free goes to its display -- that room used to stay empty --
-            // and where the page has an under-section, the display keeps the top of that column
-            // and the section takes the bottom, wrapped to the column's width.
-            if (disp != nullptr) {
-                const int right = x0 + colWidth[col] - kPad;
-                int dispH = rowH;
-                if (underSec != nullptr && right - x >= 120) {
-                    const int uh = sectionHeight(*underSec);
-                    if (rowH - uh - kPad >= 80) {
-                        dispH = rowH - uh - kPad;
-                        setSectionVisible(*underSec, true);
-                        layoutSection(*underSec, x, y + dispH + kPad);
-                    } else setSectionVisible(*underSec, false);
+                int x = x0 + kPad;
+                for (auto& n : names) {
+                    Section* s = findSection(n);
+                    if (s == nullptr) continue;
+                    setSectionVisible(*s, true);
+                    layoutSection(*s, x, y);
+                    x += s->bounds.getWidth() + kPad;
                 }
-                if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
-                else disp->setVisible(false);
-                if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
-            } else if (underSec != nullptr) {
-                setSectionVisible(*underSec, false);
+                // Whatever the row leaves free goes to its display -- that room used to stay empty --
+                // and where the page has an under-section, the display keeps the top of that column
+                // and the section takes the bottom, wrapped to the column's width.
+                if (disp != nullptr) {
+                    const int right = x0 + colWidth[col] - kPad;
+                    int dispH = rowH;
+                    if (underSec != nullptr && right - x >= 120) {
+                        const int uh = sectionHeight(*underSec);
+                        if (rowH - uh - kPad >= 80) {
+                            dispH = rowH - uh - kPad;
+                            setSectionVisible(*underSec, true);
+                            layoutSection(*underSec, x, y + dispH + kPad);
+                        } else setSectionVisible(*underSec, false);
+                    }
+                    if (right - x >= 120 && dispH > 0) { disp->setBounds(x, y, right - x, dispH); disp->setVisible(true); }
+                    else disp->setVisible(false);
+                    if (g.stretch && disp->isVisible()) { stretch[col].disp = disp; stretch[col].group = &g; }
+                } else if (underSec != nullptr) {
+                    setSectionVisible(*underSec, false);
+                }
+                y += rowH + kPad;
             }
-            y += rowH + kPad;
         }
         g.bounds = { x0, colY[col], colWidth[col], y - colY[col] };
         colY[col] = y + kPad;
@@ -884,6 +936,7 @@ void AmbientSynthEditor::setSectionVisible(Section& s, bool v)
 
 void AmbientSynthEditor::clickTabs(juce::Point<int> pos)
 {
+    if (expanded_) return;   // every page is open; the titles are titles, not tabs
     for (auto& t : tabRows_)
         for (size_t i = 0; i < t.tabs.size(); ++i)
             if (t.tabs[i].contains(pos) && static_cast<int>(i) != t.active) {
@@ -1111,6 +1164,8 @@ juce::Image AmbientSynthEditor::snapshotTab(int rowIndex, int page)
     TabRow& t = tabRows_[static_cast<size_t>(rowIndex)];
     if (page < 0 || page >= static_cast<int>(t.pages.size())) return {};
     const int was = t.active;
+    const bool wasExpanded = expanded_;   // the manual's pictures are of the page as it is normally: one tab open
+    expanded_ = false;
     t.active = page;
     layoutBody();
     juce::Rectangle<int> box = t.bar;                      // the tab bar itself belongs in the picture
@@ -1127,6 +1182,7 @@ juce::Image AmbientSynthEditor::snapshotTab(int rowIndex, int page)
     juce::Image img;
     if (!box.isEmpty()) img = content_.createComponentSnapshot(box.expanded(4), true, 1.0f);
     t.active = was;
+    expanded_ = wasExpanded;
     layoutBody();
     return img;
 }
@@ -1795,11 +1851,17 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
-    {   // mark the knobs the matrix drives, and how far it is pushing them right now
+    {   // Mark what is moving each knob right now. The matrix, in its source's colour, as before;
+        // and everything else that plays a value the knob does not show -- the morph between two
+        // presets, the map's blend, a route -- as a neutral arc from the knob's value to the live
+        // one. The slow processes with a state of their own (the arc, the tide) get a dot on the
+        // outer ring that says where in their swing they are: the panel's answer to a modulation
+        // too slow for the eye to catch as motion.
         const ambient::ModMatrix& m = proc_.engine().modMatrix();
         for (auto& c : cells_) {
             auto* sl = dynamic_cast<juce::Slider*>(c.comp.get());
             if (sl == nullptr || c.param < 0) continue;
+            const ParamId id = static_cast<ParamId>(c.param);
             int colour = 0;
             for (int k = 0; k < m.count(); ++k) {
                 if (static_cast<int>(m.route(k).target) != c.param) continue;
@@ -1810,21 +1872,26 @@ void AmbientSynthEditor::timerCallback()
                 else if (si >= static_cast<int>(MS::Env1) && si <= static_cast<int>(MS::Env6)) col = ui::foreCol;
                 else if (si >= static_cast<int>(MS::MacroA) && si <= static_cast<int>(MS::MacroH)) col = ui::morphCol;
                 else if (si >= static_cast<int>(MS::Kura1) && si <= static_cast<int>(MS::Kura4)) col = ui::condCol;
+                else if (si >= static_cast<int>(MS::Lenia1) && si <= static_cast<int>(MS::Lenia4)) col = ui::backCol;
                 colour = static_cast<int>(col.getARGB());
                 break;
             }
-            const bool had = sl->getProperties().contains("modColour");
-            if (colour != 0) {
-                const ParamDesc& d = paramDesc(static_cast<ParamId>(c.param));
-                const float off = proc_.engine().modAmount(static_cast<ParamId>(c.param)) / juce::jmax(1.0e-6f, d.max - d.min);
-                sl->getProperties().set("modColour", colour);
-                sl->getProperties().set("modOffset", off);
-                sl->repaint();
-            } else if (had) {
-                sl->getProperties().remove("modColour");
-                sl->getProperties().remove("modOffset");
-                sl->repaint();
+            const ParamDesc& d = paramDesc(id);
+            const float range = juce::jmax(1.0e-6f, d.max - d.min);
+            const float raw = proc_.engine().getParam(id);
+            const float live = proc_.engine().effectiveParam(id) + proc_.engine().modAmount(id);
+            const float off = (live - raw) / range;
+            bool changed = false;
+            auto setP = [&](const char* key, const juce::var& v) { if (!sl->getProperties().contains(key) || sl->getProperties()[key] != v) { sl->getProperties().set(key, v); changed = true; } };
+            auto remP = [&](const char* key) { if (sl->getProperties().contains(key)) { sl->getProperties().remove(key); changed = true; } };
+            if (colour != 0) { setP("modColour", colour); setP("modOffset", static_cast<double>(off)); remP("liveOffset"); }
+            else {
+                remP("modColour"); remP("modOffset");
+                if (std::fabs(off) > 1.0e-4f) setP("liveOffset", static_cast<double>(off)); else remP("liveOffset");
             }
+            if (id == ParamId::ArcAmount) setP("halo", static_cast<double>(proc_.engine().arcNow()));
+            else if (id == ParamId::Tide) setP("halo", static_cast<double>(juce::jlimit(-1.0f, 1.0f, proc_.engine().tideNow() / juce::jmax(1.0f, raw))));
+            if (changed) sl->repaint();
         }
     }
     if (mapOpen_) {
@@ -2176,7 +2243,7 @@ void AmbientSynthEditor::paint(juce::Graphics& g)
     info += "   L " + juce::String(gl.input(GestureInput::LeftHeight), 2) + "  R " + juce::String(gl.input(GestureInput::RightHeight), 2)
           + "  dist " + juce::String(gl.input(GestureInput::HandDistance), 2) + "  pinch " + juce::String(clutch, 2);
     g.setColour(kDim);
-    g.setFont(juce::FontOptions(11.0f));
+    g.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain)));   // figures that do not jump
     g.drawText(info, 14, header_.getBottom() - 16, designW_ - 420, 14, juce::Justification::centredLeft);
 
     if (proc_.isRecording()) {
@@ -2209,7 +2276,7 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
     for (const auto& t : tabRows_) {
         const juce::Colour col = groups_[static_cast<size_t>(t.group)].colour;
         for (size_t i = 0; i < t.tabs.size(); ++i) {
-            const bool on = static_cast<int>(i) == t.active;
+            const bool on = expanded_ || static_cast<int>(i) == t.active;   // Expanded: every title is an open page
             const auto r = t.tabs[i].toFloat();
             g.setColour(on ? col.withAlpha(0.26f) : kSectionFill.brighter(0.04f));
             g.fillRoundedRectangle(r, 5.0f);
@@ -2239,6 +2306,22 @@ void AmbientSynthEditor::paintContent(juce::Graphics& g)
             const float cx = die.toFloat().getCentreX(), cy = die.toFloat().getCentreY(), d = 3.2f;
             for (auto o : { juce::Point<float>(-d, -d), { d, -d }, { 0.0f, 0.0f }, { -d, d }, { d, d } })
                 g.fillEllipse(cx + o.x - 1.0f, cy + o.y - 1.0f, 2.0f, 2.0f);
+        }
+        // The loop, made visible where it closes: the feedback section says it is returning
+        // into the sources, and Source 1 says it is being fed. A glyph, not an animation.
+        if (s.name == "Feedback" || s.name == "Source 1") {
+            const float bus = proc_.apvts.getRawParameterValue("fb_bus")->load();
+            const float fm = proc_.apvts.getRawParameterValue("fb_fm")->load();
+            juce::String note;
+            if (s.name == "Feedback" && (bus > 0.0f || fm > 0.0f))
+                note = juce::String(juce::CharPointer_UTF8("\xe2\x86\xba")) + "  returns to the sources" + (fm > 0.0f ? " (pitch)" : "");
+            if (s.name == "Source 1" && fm > 0.0f)
+                note = juce::String(juce::CharPointer_UTF8("\xe2\x86\xba")) + "  fed back from the output";
+            if (note.isNotEmpty()) {
+                g.setColour(ui::live.withAlpha(0.85f));
+                g.setFont(juce::FontOptions(10.5f));
+                g.drawText(note, s.bounds.getX() + 90, s.bounds.getY() + 1, s.bounds.getWidth() - 120, kTitleH, juce::Justification::centredLeft);
+            }
         }
         if (s.name == "Morph") {
             const float pos = proc_.engine().morphPosition();

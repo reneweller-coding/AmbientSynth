@@ -58,6 +58,10 @@ public:
     bool levelMatch() const { return levelMatch_; }
     void setCompactLayout(bool on) { compact_ = on; }
     bool compactLayout() const { return compact_; }
+    // 0 normal, 1 compact (wide rows wrap), 2 expanded (every page of every tab row laid out
+    // under one another -- the tabs gone, the page tall). Kept in the state like Compact.
+    void setLayoutMode(int m) { layoutMode_ = m; compact_ = m == 1; }
+    int  layoutMode() const { return layoutMode_; }
     juce::String textureName(int slot = 0) const
     {
         const int k = juce::jlimit(0, ambient::kSlots - 1, slot);
@@ -143,12 +147,14 @@ private:
     // Output muted at the device: set by AMBIENT_MUTE=1, and implied by AMBIENT_MANUAL (the
     // export plays a chord for its pictures; nobody asked to hear it). Read once, at start.
     const bool muteOutput_ = juce::SystemStats::getEnvironmentVariable("AMBIENT_MUTE", "").isNotEmpty()
-                          || juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL", "").isNotEmpty();
+                          || juce::SystemStats::getEnvironmentVariable("AMBIENT_MANUAL", "").isNotEmpty()
+                          || juce::SystemStats::getEnvironmentVariable("AMBIENT_SHOT", "").isNotEmpty();
     std::array<std::atomic<float>*, ambient::kNumParams> raw_{};
     juce::AudioBuffer<float> scratch_;
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_[ambient::kSlots], wavetableFile_, impulseFile_, impulseBFile_;
     bool       levelMatch_ = false, compact_ = false;
+    int        layoutMode_ = 0;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;
     juce::String routeText_;

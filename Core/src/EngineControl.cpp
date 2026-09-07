@@ -732,7 +732,10 @@ void Engine::readParams()
     // The spectrum is needed by the conductor's Timbre ear and by the timbre scale, and the
     // scale is read further down, so the question is asked here from the raw value.
     const bool wantTimbreScale = std::lround(getParam(ParamId::Scale)) == kTimbreScaleIndex;
-    if (bp_.timbre > 0.0f || wantTimbreScale) {
+    {   // Computed every block now, not only when Timbre or the timbre scale asks: the panel's
+        // Tuning display draws the roughness curve from it. A dozen pows; nothing downstream
+        // reads it unless Timbre is up, so the sound is untouched.
+        (void)wantTimbreScale;
         const int count = std::min(BrainSpectrum::kMax, std::max(1, vp_.partials));
         const float hc = 1.0f + vp_.brightness * vp_.brightness * 31.0f;
         const double B = static_cast<double>(vp_.inharmonic) * vp_.inharmonic * 0.02;

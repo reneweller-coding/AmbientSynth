@@ -95,10 +95,15 @@ private:
     // Compact: the widest rows wrap into two, so the page is narrower and taller. Everything is
     // still on one page; only the shape changes. Kept in the plugin state.
     bool compact_ = false;
+    // Expanded: every page of every tab row placed under one another. No tabs to click, a
+    // tall page, and the four sources, the two filters and the conductor's six tables all in
+    // sight at once -- for a tall screen, or for reading a preset through.
+    bool expanded_ = false;
     // The die in a section's title: one click randomises that section, shift-click nudges it.
     std::map<juce::String, juce::Rectangle<int>> diceOf_;
     void     randomiseSection(const juce::String& name, bool subtle);
     void     rebuildLayout();
+    void     applyLayoutMode(int mode);   // 0 normal, 1 compact, 2 expanded
     struct HelpView : juce::Component, juce::ListBoxModel {
         HelpView(AmbientSynthProcessor&, AmbientSynthEditor&);
         void paint(juce::Graphics&) override;
@@ -504,14 +509,48 @@ private:
     // The stereo stage: every sounding voice as a dot, left-right by its pan, near-far by its
     // plane, size by its envelope -- the spatial model (concept.md) as a picture, moving.
     struct StageView : juce::Component, juce::Timer {
-        explicit StageView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }
+        explicit StageView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(20); }
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
+        // The planes are the things on the stage a hand can move: the conductor's, the keys' and
+        // the second conductor's depth, each a line across the room. Drag a line and its knob
+        // follows (through the host, so it is automated and undone like any knob). The voices
+        // themselves are where the conductor put them and stay a picture.
+        void mouseMove(const juce::MouseEvent&) override;
+        void mouseDown(const juce::MouseEvent&) override;
+        void mouseDrag(const juce::MouseEvent&) override;
+        void mouseUp(const juce::MouseEvent&) override;
+        void mouseExit(const juce::MouseEvent&) override { hoverLine = -1; repaint(); }
+        juce::Rectangle<float> plotRect() const;
+        int  lineAt(juce::Point<int>) const;
+        std::function<void(const juce::String&)> onUndo;
+        int hoverLine = -1, dragLine = -1;
         AmbientSynthProcessor& proc;
         struct Dot { float x = 0.0f, y = 0.0f, r = 0.0f; int note = -1; bool on = false; };
         Dot dots[ambient::Engine::kMaxVoices];   // smoothed positions, one per voice slot seen
     };
     std::unique_ptr<StageView> stageView_;
+    // The Tuning page's display: the timbre's own roughness curve across the octave (Sethares),
+    // the chosen scale's degrees on it, the key the conductor has found, the comma and the tide.
+    // What the tuning section computes, drawn, instead of only its numbers.
+    struct TuningView : juce::Component, juce::Timer {
+        explicit TuningView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(5); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+        static constexpr int kPoints = 240;   // five cents apart
+        float curve[kPoints] = {};
+    };
+    std::unique_ptr<TuningView> tuningView_;
+    // The Coherence page's display: the four Kuramoto phases on a ring, the Lenia field as a
+    // grey grid, the six attractor readings as bars -- the living modulators, seen.
+    struct CoherenceView : juce::Component, juce::Timer {
+        explicit CoherenceView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(10); }
+        void paint(juce::Graphics&) override;
+        void timerCallback() override { if (isShowing()) repaint(); }
+        AmbientSynthProcessor& proc;
+    };
+    std::unique_ptr<CoherenceView> coherenceView_;
     // The Cosmos return's spectrum: what the shifter, the resonator, the vowel and the nebula are
     // handing back, on a log-frequency axis, smoothed the way a meter falls.
     struct CosmosView : juce::Component, juce::Timer {

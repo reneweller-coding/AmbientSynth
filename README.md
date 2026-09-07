@@ -342,14 +342,21 @@ pairs, the conductor's tables, morph and macros -- page through tabs. Each
 row's spare room is a live display drawn from the engine's numbers: the
 source's bank as partials and cycle, the grains reading the clip, the chosen
 filter model's response, the amp envelope with the live level, the stage with
-every voice as a dot (left-right by pan, near-far by plane), the Cosmos
-return's spectrum, the conductor's notes as a roll. The strip along the
-bottom holds the modulators: drag a card onto a knob to route it, right-click
-a card or a knob to see and remove routes, and the LFO / ENVELOPES / MATRIX
-tabs edit the sources. A modulated knob wears a ring in its source's colour
-and shows the modulation moving it. Every section title carries a die (click to redraw that
+every voice as a dot (left-right by pan, near-far by plane) and the three
+planes as lines you can drag, the Cosmos return's spectrum, the conductor's
+notes as a roll, the timbre's own roughness curve with the scale's degrees in
+its dips and the key the conductor has found, the Kuramoto ring, the Lenia
+field and the attractors. The strip along the bottom holds the modulators:
+drag a card onto a knob to route it, right-click a card or a knob to see and
+remove routes, and the LFO / ENVELOPES / MATRIX tabs edit the sources. A knob
+shows what is moving it: the matrix as a ring in its source's colour, the
+morph or the map's blend as a neutral arc from the knob's value to the live
+one, and the arc and the tide as a dot on the outer ring that says where in
+their slow swing they are. Every section title carries a die (click to redraw that
 section, shift to nudge it); Undo, Redo and A|B work on whole snapshots; the header shows the
-output's spectrum; Compact wraps the widest rows for a narrower window.
+output's spectrum. Three layouts, one button: Normal (one page, tabs), Compact (the widest
+rows wrap, for a narrower window) and Expanded (every page of every tab row under one another
+-- no tabs, a tall page, everything in sight, for a tall screen or for reading a preset through).
 
 **Morph.** The Morph section holds two full snapshots, A and B: pick a preset
 for each or capture the current state with *A ← now* / *B ← now*. Switch

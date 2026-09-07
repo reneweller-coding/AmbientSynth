@@ -244,6 +244,14 @@ public:
     float  brainLean() const { return brain_.lean(); }
     float  brainEntropyBits() const { return brain_.entropyBits(); }
     double commaCents() const { return commaCents_; }
+    // For the panel's Tuning and Coherence displays: the timbre's partial template (the roughness
+    // curve is drawn from it), the tide's current offset in cents, the conductor's deja-vu ring
+    // and its cascade excitation.
+    const BrainSpectrum& brainSpectrum() const { return brainSpec_; }
+    float  tideNow() const { return tide_ * tideDrift_.value(); }
+    int    brainRingNote(int i) const { return brain_.ringNote(i); }
+    int    brainRingPos() const { return brain_.ringPos(); }
+    float  brainExcitation() const { return static_cast<float>(brain_.excitation()); }
     // The offset, in cents, that tunes `note` pure against what is sounding now (0 if nothing is).
     float  adaptiveOffset(int note) const;
     // What Match would make of partial h (1-based) against the current scale: the ratio to f0.

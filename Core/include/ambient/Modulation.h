@@ -164,6 +164,12 @@ enum class ModSource : int {
     // the filter's resonance, the wavetable position and the reverb at once needs them here. All
     // three rest at 0, so route them with the 0..1 flag and a patch at rest sounds untouched.
     Pressure, Wheel, Slide,
+    // A Lenia field (Chan 2019): a continuous cellular automaton -- Conway's Life with real-valued
+    // cells, a ring-shaped neighbourhood and a smooth growth rule -- run on a small torus in the
+    // background, read at four fixed points. Its blobs drift, pulse, split and die; the four
+    // readings are what they do near each corner. Off the clock and off the random stream:
+    // motion that is caused by its own neighbours, which is what makes it read as alive.
+    Lenia1, Lenia2, Lenia3, Lenia4,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

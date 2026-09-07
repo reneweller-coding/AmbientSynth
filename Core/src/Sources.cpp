@@ -143,7 +143,7 @@ double baseHzFromName(const char* fileName)
     return 440.0 * std::pow(2.0, (midi - 69) / 12.0);
 }
 
-void Wavetable::spectrumAt(float pos, float* out) const
+void Wavetable::spectrumAt(float pos, float* out, float transport) const
 {
     if (frames <= 0) { std::memset(out, 0, sizeof(float) * kTablePartials); return; }
     if (frames == 1) { std::memcpy(out, amp[0], sizeof(float) * kTablePartials); return; }
@@ -151,6 +151,34 @@ void Wavetable::spectrumAt(float pos, float* out) const
     const int i = std::min(static_cast<int>(x), frames - 2);
     const float f = x - static_cast<float>(i);
     for (int h = 0; h < kTablePartials; ++h) out[h] = amp[i][h] + f * (amp[i + 1][h] - amp[i][h]);
+    if (transport <= 0.0f || f <= 0.0f || f >= 1.0f) return;
+    // Optimal transport along the partial axis. Mass is what a partial's amplitude is read as
+    // (negative entries count as nothing); the two frames' distributions are normalised, walked
+    // together by cumulative mass, and every slice put down at (1 - f) * from + f * to, split
+    // between the two nearest partials when that lands between them. What comes out carries the
+    // blended total, and the plain blend is faded into it by the amount.
+    const float* A = amp[i];
+    const float* B = amp[i + 1];
+    float mA = 0.0f, mB = 0.0f;
+    for (int h = 0; h < kTablePartials; ++h) { mA += std::max(A[h], 0.0f); mB += std::max(B[h], 0.0f); }
+    if (mA <= 1.0e-9f || mB <= 1.0e-9f) return;
+    float ot[kTablePartials] = {};
+    const float total = (1.0f - f) * mA + f * mB;
+    int ia = 0, ib = 0;
+    float ra = std::max(A[0], 0.0f) / mA, rb = std::max(B[0], 0.0f) / mB;
+    for (int guard = 0; guard < 4 * kTablePartials && ia < kTablePartials && ib < kTablePartials; ++guard) {
+        if (ra <= 1.0e-7f) { if (++ia < kTablePartials) ra = std::max(A[ia], 0.0f) / mA; continue; }
+        if (rb <= 1.0e-7f) { if (++ib < kTablePartials) rb = std::max(B[ib], 0.0f) / mB; continue; }
+        const float m = std::min(ra, rb);
+        const float xPos = (1.0f - f) * static_cast<float>(ia) + f * static_cast<float>(ib);
+        const int x0 = std::min(static_cast<int>(xPos), kTablePartials - 1);
+        const float fr = xPos - static_cast<float>(x0);
+        ot[x0] += m * total * (1.0f - fr);
+        if (x0 + 1 < kTablePartials) ot[x0 + 1] += m * total * fr;
+        ra -= m; rb -= m;
+    }
+    const float t = clampv(transport, 0.0f, 1.0f);
+    for (int h = 0; h < kTablePartials; ++h) out[h] += t * (ot[h] - out[h]);
 }
 
 bool Wavetable::analyse(const float* mono, int n, int frameLen)
@@ -306,7 +334,7 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
     // Control: spectrum at the (wandering) position, targets normalised, rotations refreshed.
     const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.5f * p.positionDrift;
     float spec[kTablePartials];
-    if (table != nullptr) table->spectrumAt(p.position + wander, spec);
+    if (table != nullptr) table->spectrumAt(p.position + wander, spec, p.transport);
     else std::memset(spec, 0, sizeof(spec));
     const double nyq = 0.45 * sr_;
     float sumSq = 0.0f; int H = 0;

@@ -1883,7 +1883,7 @@ void AmbientSynthEditor::updateSourceCells()
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        for (int off = 1; off <= 31; ++off) {
+        for (int off = 1; off <= 32; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Table; break;                                  // wavetable choice
@@ -1908,6 +1908,7 @@ void AmbientSynthEditor::updateSourceCells()
             case 29: on = type == Bow; break;                                     // bow force, bow speed
             case 30:
             case 31: on = type == Spectral; break;                                // spectral rate, breath
+            case 32: on = type == Table; break;                                   // transport: how the frames morph
             default: break;
             }
             const int ci = cellForParam(ids[off]);

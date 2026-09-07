@@ -38,7 +38,9 @@ since 2013), a VST3 host if you want the plugin.
 * **Four equal source slots** per voice -- additive bank, wavetable (a table of
   spectra), two-operator FM, granular texture, a Paulstretch-style spectral
   stretch that turns a field recording into weather, ten noise colours -- and
-  a **Vector** that reads the four as the corners of one square.
+  a **Vector** that reads the four as the corners of one square. Wavetables
+  morph by **optimal transport** when asked: a formant slides through the
+  partials instead of fading across them.
 * **Two filters**: ten models with a wavefolder, and a **Z-plane** morphing
   filter after the E-mu Morpheus with 155 shapes in twelve families, a cube
   rather than a square, and a modal mode that turns it into a struck body.
@@ -50,7 +52,12 @@ since 2013), a VST3 host if you want the plugin.
   tiers -- near room, far reverb, convolution room -- with the background
   narrowed as it goes back, an **Envelop** that lifts the low lateral energy
   the sense of being inside a room is made of, and a **Depth Law** that makes
-  the depth knob linear in heard distance rather than computed distance.
+  the depth knob linear in heard distance rather than computed distance. A
+  **Near Field** for voices within reach (the low-frequency level difference a
+  far-field head never makes), **Comodulate** to let the whole background
+  breathe as one so the foreground is heard through it, and a **Rotating**
+  reverb whose lossless feedback matrix turns while every delay line stands
+  still.
 * **The Cosmos**: a parallel path of frequency shifter, tuned resonators, a
   vowel filter, a spectral nebula and a self-regulating shimmer loop.
 * **A conductor** that plays all night: the Cluster Brain chooses notes from
@@ -65,6 +72,11 @@ since 2013), a VST3 host if you want the plugin.
   window instead of voice by voice, **Guard** keeps drifting beats out of the
   2–8 Hz band where they read as wobble, and **Arc Harmony** lets the hour-scale
   arc loosen and tighten the harmony as it already does density and brightness.
+  **Cascade** makes its clock a Hawkes process -- events that cause events,
+  clusters and silences instead of a steady average -- **Surprise** and
+  **Homeostat** hold the entropy of its choices to a target, and **Adaptive**
+  tunes each arriving note pure against what is sounding while a shared comma
+  offset walks the ensemble home at three cents a minute.
 * **Thirteen tunings**: twelve just and historical tables, Scala files, and one
   that is not a table at all. **Timbre (Sethares)** sweeps the instrument's own
   roughness curve across the octave while it plays and puts a degree wherever
@@ -73,8 +85,10 @@ since 2013), a VST3 host if you want the plugin.
   follows the sound. **Match** runs the other way: it bends the partials onto
   the degrees of whatever scale is chosen, so a tempered chord stops beating.
 * **Modulation** everywhere: eight LFOs, six hand-drawn envelopes, eight
-  macros, four coupled Kuramoto oscillators, aftertouch, wheel and slide, all
-  through one matrix onto any knob -- including the modulators' own.
+  macros, four coupled Kuramoto oscillators, a **Lenia** field -- a continuous
+  cellular automaton whose blobs drift, split and die by their neighbours'
+  doing, read at four points -- aftertouch, wheel and slide, all through one
+  matrix onto any knob -- including the modulators' own.
 * **6800 presets in 34 packs**, each written in the spirit of an artist of
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608
   wavetables and 240 impulse responses (forty of them struck objects cut from

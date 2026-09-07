@@ -148,6 +148,13 @@ public:
     bool routeRunning() const { return route_.running(); }
     bool asleep() const { return asleep_; }   // no voice and no tail for two seconds: effects skipped
     float coherencePhase(int i) const { return kuraPhase_[i & 3]; }   // Kuramoto oscillator phases, for pictures
+    // The Lenia field, for pictures and tests: a cell (0..1), how many full steps it has taken,
+    // how often it had to be reseeded (dead or saturated), and the four readings the matrix sees.
+    static constexpr int kLeniaSize = 32;
+    float leniaCell(int x, int y) const { return lenia_[((y % kLeniaSize + kLeniaSize) % kLeniaSize) * kLeniaSize + ((x % kLeniaSize + kLeniaSize) % kLeniaSize)]; }
+    int   leniaSteps() const { return leniaSteps_; }
+    int   leniaReseeds() const { return leniaReseeds_; }
+    float leniaOut(int k) const { return leniaOut_[k & 3]; }
 
     // ---- clock (Clock.h). A host with a play head calls setHostClock() once per block, before
     // process(); MIDI clock messages arrive through midiClock*() (audio thread). Which of them
@@ -416,6 +423,14 @@ private:
     // Foundation sub voice
     double       subPhaseL_ = 0.0, subPhaseR_ = 0.0, subFreqCur_ = 0.0;
     float        subLevel_ = 0.0f, subLevelCur_ = 0.0f, subGlide_ = 8.0f, subBinaural_ = 0.0f, subTone_ = 0.2f;
+    // Pulse: the Foundation amplitude-modulated at the Binaural rate, a raised cosine. The
+    // binaural offset alone makes a beat only inside the brainstem, where the two ears' phases
+    // are compared; an amplitude modulation is a beat on the basilar membrane itself, and it
+    // drives the auditory steady-state response several times harder (the hybrid "isochronic"
+    // stimulation of the entrainment literature). Whether that entrains anything worth the name
+    // is a separate and less settled question; what is built here is the modulation.
+    float        subPulse_ = 0.0f, subPulseCur_ = 0.0f;
+    double       subPulsePhase_ = 0.0;
     int          subOctave_ = 1;
     bool         subGhost_ = false;   // Source = Difference: follow the ghost tone of the two lowest voices
     bool         hold_ = false;
@@ -446,6 +461,21 @@ private:
     float             inertiaCur_[kNumParams] = {};
     float             lastBlockSeconds_ = 0.005f;
     float             kuraPhase_[4] = { 0.0f, 1.3f, 2.9f, 4.4f };   // Kuramoto bank phases
+    // The Lenia field. Thirty-two by thirty-two on a torus, a ring kernel of radius five, the
+    // update spread over the blocks so that one full step costs a few rows each and never a
+    // spike; stepped only while a route in the matrix reads one of its four sources, so a patch
+    // that does not use it pays nothing for it. Reseeded with a few soft blobs when it dies out
+    // or fills up, which on a grid this small it sometimes does.
+    static constexpr int kLeniaRadius = 5;
+    float             lenia_[kLeniaSize * kLeniaSize] = {}, leniaNext_[kLeniaSize * kLeniaSize] = {};
+    float             leniaKernel_[(2 * kLeniaRadius + 1) * (2 * kLeniaRadius + 1)] = {};
+    float             leniaTarget_[4] = {}, leniaOut_[4] = {};
+    float             leniaRate_ = 4.0f, leniaMu_ = 0.15f, leniaRowAcc_ = 0.0f;
+    int               leniaRow_ = 0, leniaSteps_ = 0, leniaReseeds_ = 0;
+    bool              leniaInit_ = false, leniaUsed_ = false;
+    Rng               leniaRng_;
+    void stepLenia(float dt);
+    void seedLenia();
     // The Beat modulation source: the instrument listening to its own tuning.
     float             beatPhase_ = 0.0f, beatHz_ = 0.0f;
     float             updateBeat(float dt);
@@ -454,6 +484,14 @@ private:
     float             portamento_ = 0.0f, portaGravity_ = 0.5f;
     double            lastKeyHz_ = 0.0;   // frequency of the last key pressed, for portamento
     float             fbTape_ = 0.0f;
+    // Bias: the feedback shaper's operating point follows the level of the bass going into it.
+    // A static curve makes the same harmonics whatever came before; a transformer or a
+    // capacitor-coupled tube stage does not -- low-frequency energy charges the coupling and
+    // shifts where the curve is being used, so a bass swell changes how the highs distort (the
+    // reactive nonlinearities of the wave-digital literature, Chowdhury among others). This is
+    // the cheapest honest form of that: the loop's content below sixty hertz, rectified and
+    // followed at five hertz, pushes the shaper's input off centre as it rises, in the curve's units after Drive, saturating at 1.2 once the bass is a hundredth of full scale.
+    float             fbBias_ = 0.0f, fbBiasLpL_ = 0.0f, fbBiasLpR_ = 0.0f, fbBiasEnvL_ = 0.0f, fbBiasEnvR_ = 0.0f;
     Drifter           tapeWow_;
     double            tapeFlutterPhase_ = 0.0;
     double            purityCur_ = 1.0;   // Purity plus its drift, evaluated per block

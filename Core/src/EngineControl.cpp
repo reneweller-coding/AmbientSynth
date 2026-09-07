@@ -150,6 +150,12 @@ void Engine::stepModulation(float dt)
         matrix_ = matrixPending_;
         for (int i = 0; i < kNumModEnvs; ++i) envShape_[i] = envPending_[i];
         modSeen_ = mv;
+        // Whether anything reads the Lenia field, so it is only computed when it is heard.
+        leniaUsed_ = false;
+        for (int i = 0; i < matrix_.count(); ++i) {
+            const ModRoute& r = matrix_.route(i);
+            if (static_cast<int>(r.source) >= static_cast<int>(ModSource::Lenia1) || static_cast<int>(r.via) >= static_cast<int>(ModSource::Lenia1)) leniaUsed_ = true;
+        }
     }
 
     // A modulator's own settings, with the matrix's last word on them.
@@ -235,6 +241,9 @@ void Engine::stepModulation(float dt)
         modSrc_[static_cast<int>(ModSource::MacroA) + m] = uni(getParam(static_cast<ParamId>(static_cast<int>(ParamId::MacroA) + m)));
     for (int k = 0; k < 4; ++k)
         modSrc_[static_cast<int>(ModSource::Kura1) + k] = std::sin(kuraPhase_[k]);
+    if (leniaUsed_) stepLenia(dt);
+    for (int k = 0; k < 4; ++k)
+        modSrc_[static_cast<int>(ModSource::Lenia1) + k] = uni(leniaOut_[k]);
     modSrc_[static_cast<int>(ModSource::Note)] = uni(loud ? (loud->note() - 24) / 84.0f : 0.5f);
     modSrc_[static_cast<int>(ModSource::Velocity)] = uni(loud ? loud->level() : 0.0f);
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
@@ -255,6 +264,92 @@ void Engine::stepModulation(float dt)
     // inside would fight the hand that is holding them.
     for (const ParamDesc& d : paramTable())
         if (isPerformanceParam(d.id)) modOut_[static_cast<int>(d.id)] = 0.0f;
+}
+
+// ---------------------------------------------------------------- Lenia
+//
+// Lenia (Chan 2019) is Conway's Life taken to the continuum: cells hold a value in 0..1, each
+// looks at a ring-shaped neighbourhood -- a bell around half the radius, normalised -- and grows
+// or shrinks by a smooth growth function of what it sees, 2 exp(-(u - mu)^2 / 2 sigma^2) - 1, so
+// a cell in the right company grows and one in too little or too much decays. The field is
+// updated a tenth of the way per step. On a large grid this breeds the gliders and rotors the
+// literature shows; on thirty-two cells it breeds blobs that drift, pulse, split and sometimes
+// die, which is what is wanted from a modulator. Four readings, each the mean of a three-by-
+// three patch near a corner, glide to their new values with the step's own time constant.
+void Engine::stepLenia(float dt)
+{
+    constexpr int S = kLeniaSize, R = kLeniaRadius, K = 2 * R + 1;
+    auto bell = [](float x, float m, float s) { const float d = (x - m) / s; return std::exp(-0.5f * d * d); };
+    if (!leniaInit_) {
+        leniaInit_ = true;
+        leniaRng_.seed(0x1E51Aull);
+        float sum = 0.0f;
+        for (int dy = -R; dy <= R; ++dy)
+            for (int dx = -R; dx <= R; ++dx) {
+                const float r = std::sqrt(static_cast<float>(dx * dx + dy * dy)) / static_cast<float>(R);
+                const float k = r <= 1.0f ? bell(r, 0.5f, 0.15f) : 0.0f;
+                leniaKernel_[(dy + R) * K + (dx + R)] = k;
+                sum += k;
+            }
+        for (float& k : leniaKernel_) k /= sum;
+        seedLenia();
+    }
+    // How many rows this block: one full field per 1/rate seconds, the remainder carried over.
+    leniaRowAcc_ += static_cast<float>(S) * dt * std::max(leniaRate_, 0.01f);
+    int rows = static_cast<int>(leniaRowAcc_);
+    leniaRowAcc_ -= static_cast<float>(rows);
+    rows = clampv(rows, 0, S);
+    const float sigma = 0.02f;
+    for (int pass = 0; pass < rows; ++pass) {
+        const int y = leniaRow_;
+        for (int x = 0; x < S; ++x) {
+            float u = 0.0f;
+            for (int dy = -R; dy <= R; ++dy) {
+                const float* row = &lenia_[((y + dy + S) % S) * S];
+                const float* krow = &leniaKernel_[(dy + R) * K];
+                for (int dx = -R; dx <= R; ++dx) u += krow[dx + R] * row[(x + dx + S) % S];
+            }
+            const float g = 2.0f * bell(u, leniaMu_, sigma) - 1.0f;
+            leniaNext_[y * S + x] = clampv(lenia_[y * S + x] + 0.1f * g, 0.0f, 1.0f);
+        }
+        if (++leniaRow_ >= S) {
+            leniaRow_ = 0;
+            std::memcpy(lenia_, leniaNext_, sizeof(lenia_));
+            ++leniaSteps_;
+            float mass = 0.0f;
+            for (float v : lenia_) mass += v;
+            if (mass < 3.0f || mass > 0.85f * static_cast<float>(S * S)) { seedLenia(); ++leniaReseeds_; }
+            static const int px[4] = { 8, 24, 8, 24 }, py[4] = { 8, 8, 24, 24 };
+            for (int k = 0; k < 4; ++k) {
+                float s = 0.0f;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) s += lenia_[((py[k] + dy) % S) * S + (px[k] + dx) % S];
+                leniaTarget_[k] = s / 9.0f;
+            }
+        }
+    }
+    const float c = 1.0f - std::exp(-dt * std::max(leniaRate_, 0.01f));
+    for (int k = 0; k < 4; ++k) leniaOut_[k] += c * (leniaTarget_[k] - leniaOut_[k]);
+}
+
+// A few soft blobs on an empty torus. From the field's own random stream, so the sound's is not touched.
+void Engine::seedLenia()
+{
+    constexpr int S = kLeniaSize;
+    for (float& v : lenia_) v = 0.0f;
+    for (int b = 0; b < 3; ++b) {
+        const float cx = leniaRng_.uniform() * S, cy = leniaRng_.uniform() * S;
+        const float rad = 2.5f + 2.5f * leniaRng_.uniform();
+        const float peak = 0.6f + 0.4f * leniaRng_.uniform();
+        for (int y = 0; y < S; ++y)
+            for (int x = 0; x < S; ++x) {
+                float dx = std::fabs(static_cast<float>(x) - cx), dy = std::fabs(static_cast<float>(y) - cy);
+                dx = std::min(dx, static_cast<float>(S) - dx); dy = std::min(dy, static_cast<float>(S) - dy);
+                lenia_[y * S + x] = std::min(1.0f, lenia_[y * S + x] + peak * std::exp(-(dx * dx + dy * dy) / (2.0f * rad * rad)));
+            }
+    }
+    std::memcpy(leniaNext_, lenia_, sizeof(lenia_));
+    leniaRow_ = 0;
 }
 
 // ---------------------------------------------------------------- clock
@@ -404,6 +499,7 @@ void Engine::readParams()
             s.bowSpeed      = at(29);
             s.specRate      = at(30);
             s.specBreath    = at(31);
+            s.transport     = at(32);
         }
         // ---- the Vector
         //
@@ -453,6 +549,7 @@ void Engine::readParams()
     subOctave_      = std::lround(g(ParamId::SubOctave)) == 0 ? 1 : 2;
     subGlide_       = g(ParamId::SubGlide);
     subBinaural_    = g(ParamId::SubBinaural);
+    subPulse_       = g(ParamId::SubPulse);
     subTone_        = g(ParamId::SubTone);
     subGhost_       = std::lround(g(ParamId::SubSource)) == 1;
     vp_.lowCut      = g(ParamId::PadLowCut);
@@ -520,6 +617,8 @@ void Engine::readParams()
     // the master and lifting it here would be lifting something the guard then removes.
     envelop_ = g(ParamId::Envelop);
     comod_ = g(ParamId::FarComod);
+    leniaRate_ = g(ParamId::LeniaRate);
+    leniaMu_ = g(ParamId::LeniaGrowth);
     {
         const float lo = std::max(125.0f, getParam(ParamId::BassMono));
         envCoefLo_ = 1.0f - std::exp(-kTwoPi * lo / static_cast<float>(sr_));
@@ -715,6 +814,7 @@ void Engine::readParams()
     fbFm_    = g(ParamId::FeedbackFm);
     fbTone_  = g(ParamId::FeedbackTone);
     fbDrive_ = g(ParamId::FeedbackDrive);
+    fbBias_  = g(ParamId::FeedbackBias);
     vp_.fmAmount = fbFm_;
 
     // Cosmos

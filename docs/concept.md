@@ -1675,6 +1675,58 @@ both engine-level tests placed their note before the first `process()`, when
 Keys Depth had not yet been read, and measured a note standing on the wrong
 plane — nought decibels of lift and nought distance, from code that worked.
 
+## The sixth round
+
+A survey of the state of the art, written by a research model against the
+v1.2.0 manual, proposed eleven things; nine were built (`Core/`, each with a
+selftest), two declined (port-Hamiltonian rewrites of the physical models --
+a passivity guarantee, not a sound; and a biosignal loop, which needs hardware).
+
+*Cascade* -- the conductor's clock as a Hawkes process (time-rescaling: the
+gap is drawn as before and consumed faster while the excitation is up;
+branching 0.65 at full). Gaps' CV 0.91 -> 1.41, 2.8x the events. *Surprise* /
+*Homeostat* -- a fading histogram of chosen interval classes, its Shannon
+entropy held to a target by flattening or sharpening the draw; 3.52 -> 2.92
+bits downwards. The untouched conductor already sits at 98 % of the maximum
+twelve classes allow, so upwards there is almost nothing. *Adaptive* -- a new
+note tuned pure against the sounding set (nearest of twelve ratios per voice,
+weighted by simplicity, capped at 30 cents) and a common comma offset that
+returns the ensemble's centre at 3 cents/min while every interval stays pure:
+third 0.00 cents off 5:4, fifth 0.00 off 3:2, centre -3.9 -> -0.9 cents after a
+minute. Found on the way: `brain_blend` (round 3) was never read into `bp_`;
+its test drove `ClusterBrain` directly and passed. Wired, with a test through
+the engine (2 -> 5 voices).
+
+*Comodulate* -- one random envelope (a Drifter at 9 Hz, own RNG) on the far
+bus: modulation index 0.15 -> 0.67, low/high envelope correlation 0.41 -> 0.98
+(Hall, Haggard & Fernandes 1984). *Rotating* -- fourth far-reverb mode: fixed
+lengths, eight Givens rotations (per-sample rotation recurrence, renormalised
+every 4096) before the Householder; frozen it loses 0.4 dB more than the fixed
+network over 4 s, i.e. nothing beyond the interpolated delays' own loss, and its
+modes drift second to second as much as the wobbling lines' do (0.51 vs 0.55)
+-- a match, not a win, and the manual says so. *Near Field* -- low shelf per
+ear below 1 kHz (-18 dB far, +4 dB near) scaled by lateral x nearness^2; ILD
+below 400 Hz -5 -> +10 dB with the 3-6 kHz shadow unchanged (Brungart &
+Rabinowitz 1999).
+
+*Transport* (slot field 32) -- the 1-D Wasserstein barycentre between wavetable
+frames: masses walked by cumulative distribution, each slice put down at
+(1-f) from + f to; halfway energy 0.50 -> 1.00, spread 5 partials -> 0.
+*Pulse* -- raised-cosine AM of the Foundation at the Binaural rate (`sin01`
+reads a table: the phase must be wrapped before the quarter-turn offset).
+*Bias* -- the feedback shaper's input pushed off centre by the 5 Hz envelope of
+its content below 60 Hz. *Lenia* -- 32x32 torus, ring kernel R=5, growth
+2 exp(-(u-mu)^2/2 sigma^2)-1, dt 0.1, rows spread over blocks, stepped only
+while a matrix route reads `lenia1..4`; 599 steps in 30 s at 20 Hz, one reseed,
+readings never move more than 1 % per block.
+
+Test traps of the round: an engine-level test that calls `noteOn` before the
+first `process()` (Keys Depth unread, again); third-octave bands cannot see
+modes move (0.92 vs 0.94 -- bin resolution can); Bass Mono folds the very lows a
+near-field test is about; the engine sleeps without a voice, so a Foundation
+test needs a silent note to stay awake; the feedback loop throttles itself off
+above a mean level of 0.1, so a loop test must play quietly.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the

@@ -3917,6 +3917,164 @@ void testResearchBatch()
         CHECK(std::fabs(high1 - high0) < 2.5, "and leaves the head's own shadow up top as it was");
     }
 
+    // ---- transport: the morph that slides ------------------------------------------------
+    {
+        Wavetable t;
+        t.frames = 2;
+        t.amp[0][2] = 1.0f;     // a formant on the third partial
+        t.amp[1][12] = 1.0f;    // and on the thirteenth
+        auto stats = [](const float* a, double& energy, double& spread) {
+            double m = 0.0, c = 0.0; energy = 0.0;
+            for (int h = 0; h < kTablePartials; ++h) { m += a[h]; c += a[h] * h; energy += static_cast<double>(a[h]) * a[h]; }
+            c /= std::max(m, 1e-12);
+            double v = 0.0;
+            for (int h = 0; h < kTablePartials; ++h) v += a[h] * (h - c) * (h - c);
+            spread = std::sqrt(v / std::max(m, 1e-12));
+        };
+        float lin[kTablePartials], ot[kTablePartials];
+        t.spectrumAt(0.5f, lin, 0.0f);
+        t.spectrumAt(0.5f, ot, 1.0f);
+        double eLin, sLin, eOt, sOt;
+        stats(lin, eLin, sLin); stats(ot, eOt, sOt);
+        std::printf("  [probe] transport halfway: energy %.2f -> %.2f, spread %.1f -> %.1f partials, mass at 8 = %.2f\n", eLin, eOt, sLin, sOt, ot[7]);
+        CHECK(std::fabs(eLin - 0.5) < 1e-4, "the plain blend halfway holds half the energy: two half-height peaks");
+        CHECK(eOt > 0.95, "the transport halfway holds all of it: one peak, on the partial between");
+        CHECK(sLin > 4.5 && sOt < 0.5, "and the spread collapses from five partials to none");
+        // Along the way the peak slides: its centre moves with the position, and never splits.
+        bool slides = true;
+        for (int k = 1; k < 8; ++k) {
+            const float pos = static_cast<float>(k) / 8.0f;
+            float a[kTablePartials];
+            t.spectrumAt(pos, a, 1.0f);
+            double e, s; stats(a, e, s);
+            if (s > 0.6 || e < 0.45) slides = false;   // a split peak would spread wide and lose energy
+        }
+        CHECK(slides, "at every position between, the peak is one peak");
+        // Off, the plain blend, bit for bit.
+        float plain[kTablePartials];
+        t.spectrumAt(0.37f, plain);
+        t.spectrumAt(0.37f, ot, 0.0f);
+        bool same = true;
+        for (int h = 0; h < kTablePartials; ++h) if (plain[h] != ot[h]) same = false;
+        CHECK(same, "at zero the table reads exactly as it always did");
+    }
+
+    // ---- pulse: the Foundation breathing at the binaural rate -------------------------------
+    {
+        auto index = [&](float pulse) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::SubLevel, 1.0f);
+            e.setParam(ParamId::SubBinaural, 4.0f);
+            e.setParam(ParamId::SubPulse, pulse);
+            e.setParam(ParamId::OscLevel, 0.0f);   // a silent voice keeps the engine awake; the Foundation is all that sounds
+            e.reset();
+            std::vector<float> L(256), R(256), cap;
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            e.noteOn(48, 0.5f);
+            for (int b = 0; b < static_cast<int>(5.0 * sr / 256); ++b) { e.process(L.data(), R.data(), 256); if (b >= static_cast<int>(3.0 * sr / 256)) cap.insert(cap.end(), L.begin(), L.end()); }
+            // One channel alone: its own tone is a single sine, so any envelope on it is the pulse
+            // (the two channels together would beat at the offset with or without it).
+            const float smooth = 1.0f - std::exp(-6.2831853f * 15.0f / static_cast<float>(sr));
+            float env = 0.0f; std::vector<double> v;
+            for (size_t i = 0; i < cap.size(); ++i) { env += smooth * (std::fabs(cap[i]) - env); if (i > static_cast<size_t>(sr / 4) && i % 32 == 0) v.push_back(env); }
+            double mean = 0.0; for (double x : v) mean += x; mean /= static_cast<double>(v.size());
+            double sd = 0.0; for (double x : v) sd += (x - mean) * (x - mean); sd = std::sqrt(sd / static_cast<double>(v.size()));
+            return sd / (mean + 1e-12);
+        };
+        const double off = index(0.0f), on = index(1.0f);
+        std::printf("  [probe] pulse: one channel's envelope varies by %.3f of its mean without, %.3f with\n", off, on);
+        CHECK(off < 0.08, "without Pulse the Foundation's own channel holds its level");
+        CHECK(on > 0.4, "with Pulse it breathes deeply at the binaural rate");
+    }
+
+    // ---- bias: the shaper that remembers the bass --------------------------------------------
+    {
+        // Two sines into the feedback loop: a bass at 41 Hz and a tone at 440. The loop's shaper
+        // is symmetric, so 880 Hz -- the tone's second harmonic -- is what Bias must make.
+        auto secondHarmonic = [&](float bias) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 1.0f); e.setParam(ParamId::Unison, 1.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f);
+            e.setParam(ParamId::FeedbackBus, 1.0f); e.setParam(ParamId::FeedbackDrive, 1.0f); e.setParam(ParamId::FeedbackTone, 8000.0f);
+            e.setParam(ParamId::FeedbackBias, bias);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.reset();
+            std::vector<float> L(256), R(256), cap;
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            // Quietly: the loop throttles itself to nothing above a mean level of 0.1, so a loud
+            // pair of notes would switch the very thing being measured off.
+            e.setParam(ParamId::OscLevel, 0.08f);
+            e.noteOn(28, 0.6f);    // E1, 41 Hz
+            e.noteOn(69, 0.45f);   // A4
+            for (int b = 0; b < static_cast<int>(3.0 * sr / 256); ++b) { e.process(L.data(), R.data(), 256); if (b >= static_cast<int>(2.0 * sr / 256)) cap.insert(cap.end(), L.begin(), L.end()); }
+            const int N = 32768;
+            std::vector<float> re(static_cast<size_t>(N), 0.0f), im(static_cast<size_t>(N), 0.0f);
+            for (int i = 0; i < N && i < static_cast<int>(cap.size()); ++i) re[static_cast<size_t>(i)] = cap[static_cast<size_t>(i)] * (0.5f - 0.5f * std::cos(6.2831853f * static_cast<float>(i) / N));
+            Fft fft(N);
+            fft.transform(re.data(), im.data(), false);
+            auto peak = [&](double hz) {
+                double best = 0.0;
+                for (int k = static_cast<int>((hz - 12.0) * N / sr); k <= static_cast<int>((hz + 12.0) * N / sr); ++k)
+                    best = std::max(best, static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)] + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)]);
+                return best;
+            };
+            // Even-order intermodulation: the sum and difference tones of the pair, 481 and 399 Hz,
+            // which only an asymmetric curve makes -- a symmetric one puts its products at odd
+            // orders only (2 f2 +/- f1, f2 +/- 2 f1). The second harmonic itself was tried first and
+            // turned out to be confounded: something upstream already makes -38 dB of it, and the
+            // bias's own second harmonic partly cancelled that.
+            return 10.0 * std::log10((std::max(peak(481.0), peak(399.0)) + 1e-30) / (peak(440.0) + 1e-30));
+        };
+        const double k2Off = secondHarmonic(0.0f), k2On = secondHarmonic(1.0f);
+        std::printf("  [probe] bias: even-order sum tone of bass and tone %+.1f dB below the tone without, %+.1f dB with the bass biasing the curve\n", k2Off, k2On);
+        CHECK(k2On > k2Off + 6.0, "Bias makes the even-order product of bass and tone rise by more than six decibels");
+    }
+
+    // ---- Lenia: motion caused by neighbours -------------------------------------------------
+    {
+        auto run = [&](const char* matrix, double seconds, std::vector<float>* trace) {
+            auto e = std::make_unique<Engine>();
+            e->prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e->setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e->setParam(ParamId::BrainOn, 0.0f);
+            e->setParam(ParamId::LeniaRate, 20.0f);
+            e->setModMatrixText(matrix);
+            e->reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < static_cast<int>(seconds * sr / 256); ++b) {
+                e->process(L.data(), R.data(), 256);
+                if (trace != nullptr) trace->push_back(e->leniaOut(0));
+            }
+            return e;
+        };
+        auto idle = run("lfo1>cutoff:0.2", 5.0, nullptr);
+        CHECK(idle->leniaSteps() == 0, "a patch that reads none of the Lenia sources never computes the field");
+        std::vector<float> trace;
+        auto live = run("lenia1>cutoff:0.3;lenia3>far_level:0.2", 30.0, &trace);
+        float sum = 0.0f; for (float v : trace) sum += v;
+        const float mean = sum / static_cast<float>(trace.size());
+        float var = 0.0f, worstStep = 0.0f;
+        for (size_t i = 0; i < trace.size(); ++i) { var += (trace[i] - mean) * (trace[i] - mean); if (i > 0) worstStep = std::max(worstStep, std::fabs(trace[i] - trace[i - 1])); }
+        const float sd = std::sqrt(var / static_cast<float>(trace.size()));
+        float mass = 0.0f;
+        for (int y = 0; y < Engine::kLeniaSize; ++y) for (int x = 0; x < Engine::kLeniaSize; ++x) mass += live->leniaCell(x, y);
+        std::printf("  [probe] lenia: %d steps in 30 s, reseeded %d times, mass %.1f of %d, reading 1 mean %.2f sd %.3f, largest move per block %.4f\n",
+                    live->leniaSteps(), live->leniaReseeds(), mass, Engine::kLeniaSize * Engine::kLeniaSize, mean, sd, worstStep);
+        CHECK(live->leniaSteps() > 500, "with a route reading it the field steps at the asked rate");
+        CHECK(live->leniaReseeds() <= live->leniaSteps() / 20, "and stays alive for dozens of steps between reseeds");
+        CHECK(sd > 0.02f, "the reading moves");
+        CHECK(worstStep < 0.05f, "and never jumps: the largest move from one block to the next is a few per cent");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

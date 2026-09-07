@@ -65,8 +65,19 @@ extern const char* const kNoiseKindNames[kNumNoiseKinds];
 struct Wavetable {
     int   frames = 0;
     float amp[kTableFrames][kTablePartials] = {};
-    // Spectrum at position 0..1 (linear between frames), 32 amplitudes.
-    void spectrumAt(float pos, float* out) const;
+    // Spectrum at position 0..1, 32 amplitudes. Between two frames the amplitudes are blended
+    // linearly, which is what every wavetable does and what makes a morph between two formants
+    // sound hollow halfway: the old peak fades out, the new one fades in, and between them the
+    // energy dips (two half-height peaks hold half the energy of one). With `transport` the
+    // blend becomes the displacement interpolation of optimal transport instead -- the
+    // one-dimensional Wasserstein barycentre, which along a line is exact and cheap: each
+    // frame's amplitudes are read as a distribution of mass over the partials, the two are
+    // walked in step by cumulative mass, and every slice of mass is put down at the point
+    // between where it sits in one frame and where in the other. Peaks SLIDE from one partial
+    // to the next rather than fading, the total mass is the blend of the two totals, and the
+    // hollow is gone (Roma, Green and Tremblay; measured in the selftest: the energy halfway
+    // doubles, and the spread of the spectrum collapses from five partials to none).
+    void spectrumAt(float pos, float* out, float transport = 0.0f) const;
     // Builds a table from raw samples laid out as consecutive single-cycle frames of
     // `frameLen` samples (2048 = Serum/Vital layout). Up to kTableFrames frames are kept
     // (evenly picked when there are more). Returns false if there is not one full frame.
@@ -151,6 +162,7 @@ struct SlotParams {
     // Spectral: how fast the model is read (1 = the speed it was recorded at, 0 = held still),
     // and which half of it is favoured (-1 = the partials only, +1 = the noise only).
     float specRate = 1.0f, specBreath = 0.0f;
+    float transport = 0.0f;      // Wavetable: 0 crossfade between frames, 1 slide the spectral mass
     // Stretch: the factor, and the crossfade at the loop seam as a fraction of the clip (ignored
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;

@@ -557,11 +557,28 @@ void Engine::renderChunk(float* L, float* R, int n)
         // DC blocker in the loop: a saturating loop with a DC gain above one locks onto a DC
         // operating point (Feedback Hiss sat at +0.11 before this), so nothing below 10 Hz circulates.
         const float hpc = 1.0f - kTwoPi * 10.0f / static_cast<float>(sr_);
+        const float biasLp = 1.0f - std::exp(-kTwoPi * 60.0f / static_cast<float>(sr_));
+        const float biasEnv = 1.0f - std::exp(-kTwoPi * 5.0f / static_cast<float>(sr_));
         for (int i = 0; i < n; ++i) {
             fbLpL_ += lpc * (L[i] - fbLpL_);
             fbLpR_ += lpc * (R[i] - fbLpR_);
-            const float xl = fbLpL_ - fbHpXL_ + hpc * fbHpYL_; fbHpXL_ = fbLpL_; fbHpYL_ = xl;
-            const float xr = fbLpR_ - fbHpXR_ + hpc * fbHpYR_; fbHpXR_ = fbLpR_; fbHpYR_ = xr;
+            float xl = fbLpL_ - fbHpXL_ + hpc * fbHpYL_; fbHpXL_ = fbLpL_; fbHpYL_ = xl;
+            float xr = fbLpR_ - fbHpXR_ + hpc * fbHpYR_; fbHpXR_ = fbLpR_; fbHpYR_ = xr;
+            float biasL = 0.0f, biasR = 0.0f;   // the operating point's offset, in the curve's own units
+            if (fbBias_ > 0.0f) {
+                // The operating point: the bass's level, slow, pushed against the curve. The
+                // offset goes in before the drive, so what it does scales with Drive as a real
+                // stage's would; the DC it makes on the way out is the blocker's to clean up.
+                fbBiasLpL_ += biasLp * (xl - fbBiasLpL_);
+                fbBiasLpR_ += biasLp * (xr - fbBiasLpR_);
+                fbBiasEnvL_ += biasEnv * (std::fabs(fbBiasLpL_) - fbBiasEnvL_);
+                fbBiasEnvR_ += biasEnv * (std::fabs(fbBiasLpR_) - fbBiasEnvR_);
+                // In the curve's units, after the drive, and never past 1.2: an offset larger than
+                // the curve pushes the whole signal off its end and returns a flat line (measured:
+                // the loop went from -40 to -87 dB when the offset was let ride on Drive).
+                biasL = fbBias_ * 1.2f * fbBiasEnvL_ / (fbBiasEnvL_ + 0.01f);
+                biasR = fbBias_ * 1.2f * fbBiasEnvR_ / (fbBiasEnvR_ + 0.01f);
+            }
             const float mag = 0.5f * (std::fabs(L[i]) + std::fabs(R[i]));
             fbEnv_ += envC * (mag - fbEnv_);
             const int idx = (fbW_ + i) & fbMask_;
@@ -570,11 +587,11 @@ void Engine::renderChunk(float* L, float* R, int n)
                 // next pass) and a noise floor that rises with the level in the loop.
                 const float asym = 0.2f * fbTape_;
                 const float noise = 0.02f * fbTape_ * fbEnv_;
-                fbRingL_[static_cast<size_t>(idx)] = sat((xl + asym * xl * xl) * drive) * comp + noise * rng_.bipolar();
-                fbRingR_[static_cast<size_t>(idx)] = sat((xr + asym * xr * xr) * drive) * comp + noise * rng_.bipolar();
+                fbRingL_[static_cast<size_t>(idx)] = sat((xl + asym * xl * xl) * drive - biasL) * comp + noise * rng_.bipolar();
+                fbRingR_[static_cast<size_t>(idx)] = sat((xr + asym * xr * xr) * drive - biasR) * comp + noise * rng_.bipolar();
             } else {
-                fbRingL_[static_cast<size_t>(idx)] = sat(xl * drive) * comp;
-                fbRingR_[static_cast<size_t>(idx)] = sat(xr * drive) * comp;
+                fbRingL_[static_cast<size_t>(idx)] = sat(xl * drive - biasL) * comp;
+                fbRingR_[static_cast<size_t>(idx)] = sat(xr * drive - biasR) * comp;
             }
         }
         fbW_ = (fbW_ + n) & fbMask_;
@@ -636,6 +653,17 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float g = subLevelCur_ * 0.45f;
             subL[i] = g * ((1.0f - subTone_) * sin01(subPhaseL_) + subTone_ * triL);
             subR[i] = g * ((1.0f - subTone_) * sin01(subPhaseR_) + subTone_ * triR);
+            if (subPulse_ > 0.0f || subPulseCur_ > 1.0e-4f) {
+                // A raised cosine at the Binaural rate: 1 at the top of every cycle, 1 - Pulse at
+                // the bottom, no corner anywhere. With Binaural at zero the phase stands still at
+                // the top and nothing moves.
+                subPulseCur_ += (subPulse_ - subPulseCur_) * levelC;
+                subPulsePhase_ += subBinaural_ / sr_;
+                if (subPulsePhase_ >= 1.0) subPulsePhase_ -= 1.0;
+                double q = subPulsePhase_ + 0.25; if (q >= 1.0) q -= 1.0;   // sin01 reads a table: the phase must stay in [0, 1)
+                const float pulse = 1.0f - subPulseCur_ * (0.5f - 0.5f * sin01(q));
+                subL[i] *= pulse; subR[i] *= pulse;
+            }
         }
     }
     // The body: the whole mix passes through a bank of modes and their answer is added back. It

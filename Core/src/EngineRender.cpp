@@ -439,6 +439,20 @@ void Engine::renderChunk(float* L, float* R, int n)
             fl[i] = mid + side; fr[i] = mid - side;
         }
     }
+    // Comodulation: the whole background breathes to one random envelope, a new target about
+    // nine times a second and a smooth curve between, so every band of it rises and falls
+    // together and the ear can hear the foreground through it (comodulation masking release).
+    // Its own random stream, so the knob touches nothing else that draws from the engine's.
+    if (comod_ > 0.0f || smComod_.value > 1.0e-4f) {
+        if (!comodInit_) { comodRng_.seed(0xC0D0ull); comodDrift_.init(comodRng_); comodInit_ = true; }
+        const float dt = 1.0f / static_cast<float>(sr_);
+        for (int i = 0; i < n; ++i) {
+            const float depth = smComod_.next(comod_);
+            const float m = comodDrift_.update(dt, 9.0f, comodRng_);      // -1 .. 1
+            const float g = 1.0f - depth * 0.5f * (1.0f + m);              // 1 .. 1 - depth
+            fl[i] *= g; fr[i] *= g;
+        }
+    }
     // The Haas band, on the foreground only: the background has the reverb's own width and does
     // not need help. After the unmask, so what the side chain measured is the plane as it was.
     haas_.process(nl, nr, n);

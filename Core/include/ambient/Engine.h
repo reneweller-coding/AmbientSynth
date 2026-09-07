@@ -366,6 +366,17 @@ private:
     // Envelopment: the far bus's low-mid side channel, between Bass Mono and 500 Hz.
     float         envelop_ = 0.0f, envCoefLo_ = 0.0f, envCoefHi_ = 0.0f, envLo_ = 0.0f, envHi_ = 0.0f;
     Smoother      smEnvelop_;
+    // Comodulation. The background's gain follows one slow random envelope, shared by every
+    // band of it at once. Hall, Haggard and Fernandes (1984): a tone in a noise whose bands
+    // rise and fall together is heard ten to fifteen decibels further down than in a noise
+    // whose bands move independently -- comodulation masking release. The ear groups what
+    // moves together into one object and hears past it. Nothing in the foreground follows
+    // the envelope, so the foreground is what is heard past it.
+    float         comod_ = 0.0f;
+    Smoother      smComod_;
+    Drifter       comodDrift_;
+    Rng           comodRng_;
+    bool          comodInit_ = false;
     Rng           auxRng_;
     PitchShifter  shimmerL_, shimmerR_;
     Drifter       shiftDrift_;

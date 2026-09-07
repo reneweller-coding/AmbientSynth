@@ -98,10 +98,25 @@ public:
     // Prawda, Schlecht and Valimaki). A delay network's tail is a sum of modes at the lines'
     // own frequencies, and where those pile up the tail rings; lengths chosen against that
     // measure ring less -- 0.31 dB of third-octave spread against the classic set's 0.47.
+    // Rotating (3) is Colourless with the feedback changed: the line lengths stop moving (the
+    // classic network wobbles each by a sample and a half, which is how it keeps its modes from
+    // ringing) and the feedback matrix turns instead -- eight Givens rotations on pairs of
+    // lines, their angles advancing at a few hundredths of a hertz, in front of the Householder
+    // reflection the network always had. A product of rotations and a reflection is orthogonal
+    // whatever the angles are, so the loop is lossless at every instant and the tail loses
+    // energy only through the gains and the damping, as designed; and because the modes are
+    // being re-mixed rather than re-tuned, nothing in the tail is pitch-modulated (Schlecht and
+    // Habets 2015, time-varying feedback matrices). Measured: the band pattern of the tail
+    // drifts from one moment to the next where the fixed network's stays put.
     void setMode(int mode) { mode_ = mode; }
     void process(float* L, float* R, int n);
 private:
     static constexpr int kLines = 8;
+    static constexpr int kRotations = 8;
+    float  rot_ = 0.0f;                                // 0 fixed matrix .. 1 turning, glided
+    float  rotC_[kRotations] = {}, rotS_[kRotations] = {};     // the angles, as cos and sin
+    float  rotDc_[kRotations] = {}, rotDs_[kRotations] = {};   // their per-sample advance
+    int    rotNorm_ = 0;
     static constexpr int kAllpasses = 4;
     std::vector<float> line_[kLines];
     std::vector<float> ap_[kAllpasses];

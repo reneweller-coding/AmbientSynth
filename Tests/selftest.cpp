@@ -3738,6 +3738,185 @@ void testResearchBatch()
         CHECK(together >= 4, "with Blend the knob reaches the conductor and the chord is there at once");
     }
 
+    // ---- comodulation ------------------------------------------------------------------------
+    {
+        auto envelopes = [&](float comod, double* indexOut) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 32.0f); e.setParam(ParamId::Brightness, 1.0f); e.setParam(ParamId::Tilt, 0.3f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::KeysDepth, 1.0f);            // a far voice: the background is what sounds
+            e.setParam(ParamId::FarLevel, 0.8f);
+            e.setParam(ParamId::FarComod, comod);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.reset();
+            std::vector<float> L(256), R(256), cap;
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);   // Keys Depth is read on the first block
+            e.noteOn(55, 0.8f);
+            for (int b = 0; b < static_cast<int>(5.0 * sr / 256); ++b) { e.process(L.data(), R.data(), 256); if (b >= static_cast<int>(2.0 * sr / 256)) cap.insert(cap.end(), L.begin(), L.end()); }
+            // Two bands, split at 800 Hz, each rectified and smoothed at 40 Hz.
+            const float split = 1.0f - std::exp(-6.2831853f * 800.0f / static_cast<float>(sr));
+            const float smooth = 1.0f - std::exp(-6.2831853f * 40.0f / static_cast<float>(sr));
+            float lp = 0.0f, envLo = 0.0f, envHi = 0.0f;
+            std::vector<double> lo, hi;
+            for (size_t i = 0; i < cap.size(); ++i) {
+                lp += split * (cap[i] - lp);
+                envLo += smooth * (std::fabs(lp) - envLo);
+                envHi += smooth * (std::fabs(cap[i] - lp) - envHi);
+                if (i % 48 == 0 && i > static_cast<size_t>(sr / 10)) { lo.push_back(envLo); hi.push_back(envHi); }
+            }
+            auto stats = [](const std::vector<double>& v, double& mean, double& sd) {
+                mean = 0.0; for (double x : v) mean += x; mean /= static_cast<double>(v.size());
+                sd = 0.0; for (double x : v) sd += (x - mean) * (x - mean); sd = std::sqrt(sd / static_cast<double>(v.size()));
+            };
+            double mLo, sLo, mHi, sHi;
+            stats(lo, mLo, sLo); stats(hi, mHi, sHi);
+            double cov = 0.0;
+            for (size_t i = 0; i < lo.size(); ++i) cov += (lo[i] - mLo) * (hi[i] - mHi);
+            cov /= static_cast<double>(lo.size());
+            if (indexOut != nullptr) *indexOut = sLo / (mLo + 1e-12);
+            return cov / (sLo * sHi + 1e-20);
+        };
+        double idx0 = 0.0, idx1 = 0.0;
+        const double corr0 = envelopes(0.0f, &idx0), corr1 = envelopes(1.0f, &idx1);
+        std::printf("  [probe] comodulation: low-band modulation index %.3f -> %.3f, low/high envelope correlation %.2f -> %.2f\n", idx0, idx1, corr0, corr1);
+        CHECK(idx1 > idx0 + 0.15, "with Comodulate the background's envelope moves where before it held still");
+        CHECK(corr1 > 0.8, "and the low and high bands move together, which is the condition of the release");
+    }
+
+    // ---- the rotating network ----------------------------------------------------------------
+    {
+        // Lossless: frozen, the turning matrix neither gains nor loses -- a wrong rotation would.
+        // Measured against the fixed network rather than against zero, because a frozen network
+        // is not lossless to begin with: its delays are read at fractional positions by linear
+        // interpolation, which is a small low-pass, and that costs about a decibel a second
+        // whichever matrix is in the loop. What the matrix adds on top of that is the question.
+        auto frozenEnergy = [&](int mode, double& early, double& late) {
+            Reverb r;
+            r.prepare(sr);
+            r.setMode(mode);
+            r.set(1.6f, 6.0f, 0.0f, 0.0f, false, 1.0f);
+            std::vector<float> L(256, 0.0f), R(256, 0.0f);
+            L[0] = R[0] = 1.0f;
+            r.process(L.data(), R.data(), 256);
+            for (int b = 1; b < 20; ++b) { std::fill(L.begin(), L.end(), 0.0f); std::fill(R.begin(), R.end(), 0.0f); r.process(L.data(), R.data(), 256); }
+            r.set(1.6f, 6.0f, 0.0f, 0.0f, true, 1.0f);
+            early = late = 0.0;
+            const int blocks = static_cast<int>(4.0 * sr / 256);
+            for (int b = 0; b < blocks; ++b) {
+                std::fill(L.begin(), L.end(), 0.0f); std::fill(R.begin(), R.end(), 0.0f);
+                r.process(L.data(), R.data(), 256);
+                double s = 0.0; for (int i = 0; i < 256; ++i) s += static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i];
+                if (b < blocks / 4) early += s; else if (b >= 3 * blocks / 4) late += s;
+            }
+        };
+        double e0, l0, e3, l3;
+        frozenEnergy(2, e0, l0); frozenEnergy(3, e3, l3);
+        const double driftFixed = 10.0 * std::log10(l0 / (e0 + 1e-30)), driftRot = 10.0 * std::log10(l3 / (e3 + 1e-30));
+        std::printf("  [probe] frozen tail, first second against last: %+.2f dB fixed matrix, %+.2f dB rotating\n", driftFixed, driftRot);
+        CHECK(std::fabs(driftRot - driftFixed) < 1.0, "frozen, the turning matrix loses nothing beyond what the interpolated delays already cost");
+
+        // Re-mixed, not re-tuned: the tail's pattern of modes drifts from one second to the next
+        // where the fixed network's stays put. Third-octave bands cannot see this -- each
+        // averages dozens of modes and comes out the same whatever they do (measured: 0.92
+        // against 0.94) -- so the pattern is taken bin by bin, at three hertz, where the modes are.
+        auto patternCorrelation = [&](int mode) {
+            Reverb r;
+            r.prepare(sr);
+            r.setMode(mode);
+            r.set(1.6f, 8.0f, 0.0f, 0.0f, false, 1.0f);
+            std::vector<float> L(256, 0.0f), R(256, 0.0f), tail;
+            L[0] = R[0] = 1.0f;
+            const int blocks = static_cast<int>(4.0 * sr / 256);
+            for (int b = 0; b < blocks; ++b) {
+                if (b > 0) { std::fill(L.begin(), L.end(), 0.0f); std::fill(R.begin(), R.end(), 0.0f); }
+                r.process(L.data(), R.data(), 256);
+                if (b >= static_cast<int>(1.0 * sr / 256)) tail.insert(tail.end(), L.begin(), L.end());
+            }
+            const int N = 16384;
+            Fft fft(N);
+            std::vector<std::vector<double>> patterns;
+            for (size_t start = 0; start + static_cast<size_t>(N) <= tail.size(); start += static_cast<size_t>(sr)) {
+                std::vector<float> re(static_cast<size_t>(N)), im(static_cast<size_t>(N), 0.0f);
+                for (int i = 0; i < N; ++i) re[static_cast<size_t>(i)] = tail[start + static_cast<size_t>(i)] * (0.5f - 0.5f * std::cos(6.2831853f * static_cast<float>(i) / N));
+                fft.transform(re.data(), im.data(), false);
+                std::vector<double> bands;
+                for (int k = static_cast<int>(200.0 * N / sr); k < static_cast<int>(4000.0 * N / sr); ++k)
+                    bands.push_back(10.0 * std::log10(static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)] + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)] + 1e-30));
+                double mean = 0.0; for (double b : bands) mean += b; mean /= static_cast<double>(bands.size());
+                for (double& b : bands) b -= mean;
+                patterns.push_back(bands);
+            }
+            double sum = 0.0; int count = 0;
+            for (size_t w = 1; w < patterns.size(); ++w) {
+                double xy = 0.0, xx = 0.0, yy = 0.0;
+                for (size_t b = 0; b < patterns[w].size(); ++b) { xy += patterns[w][b] * patterns[w - 1][b]; xx += patterns[w][b] * patterns[w][b]; yy += patterns[w - 1][b] * patterns[w - 1][b]; }
+                sum += xy / std::sqrt(xx * yy + 1e-30); ++count;
+            }
+            return count > 0 ? sum / count : 0.0;
+        };
+        const double cFixed = patternCorrelation(2), cRot = patternCorrelation(3);
+        std::printf("  [probe] tail modes, second to second: correlation %.2f fixed, %.2f rotating\n", cFixed, cRot);
+        // Measured honestly: the classic network's wobbling lines ALREADY move its modes about this
+        // much (0.55 second to second), so the turning matrix does not beat it -- it matches it
+        // (0.51) with every line standing still. That is the claim the mode can make: the same
+        // re-mixing of the modes, and not one delay length moving to get it.
+        CHECK(cRot < 0.7 && cRot < cFixed + 0.1, "with the matrix turning the modes drift at least as much as the wobbling lines move them, and no line moves");
+    }
+
+    // ---- the near field ---------------------------------------------------------------------
+    {
+        // A voice hard left, by the ear: the level difference below 400 Hz, which the far-field
+        // head barely makes, against the one at 3-6 kHz, which it makes anyway.
+        auto ild = [&](float nearIld, double& highOut) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 32.0f); e.setParam(ParamId::Brightness, 1.0f); e.setParam(ParamId::Tilt, 0.3f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Spread, 0.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f);
+            e.setParam(ParamId::Binaural, 1.0f);
+            e.setParam(ParamId::BassMono, 40.0f);   // or the master folds the very lows this is about
+            e.setParam(ParamId::Haas, 0.0f);
+            e.setParam(ParamId::NearIld, nearIld);
+            e.setParam(ParamId::Attack, 0.02f);
+            e.setHeadYaw(90.0f);                  // the head turns right, so the voice in front is now at the left ear
+            e.reset();
+            e.noteOn(43, 0.8f);                   // G2, 98 Hz: partials from 98 Hz up
+            std::vector<float> L(256), R(256), capL, capR;
+            for (int b = 0; b < 240; ++b) { e.process(L.data(), R.data(), 256); if (b >= 100) { capL.insert(capL.end(), L.begin(), L.end()); capR.insert(capR.end(), R.begin(), R.end()); } }
+            const int N = 16384;
+            Fft fft(N);
+            auto bands = [&](const std::vector<float>& cap, double& low, double& high) {
+                std::vector<float> re(static_cast<size_t>(N), 0.0f), im(static_cast<size_t>(N), 0.0f);
+                for (int i = 0; i < N; ++i) re[static_cast<size_t>(i)] = cap[static_cast<size_t>(i)] * (0.5f - 0.5f * std::cos(6.2831853f * static_cast<float>(i) / N));
+                fft.transform(re.data(), im.data(), false);
+                auto band = [&](double lo, double hi) {
+                    double s = 0.0;
+                    for (int k = static_cast<int>(lo * N / sr); k <= static_cast<int>(hi * N / sr); ++k)
+                        s += static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)] + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)];
+                    return s;
+                };
+                low = band(80.0, 400.0); high = band(3000.0, 6000.0);
+            };
+            double lL, hL, lR, hR;
+            bands(capL, lL, hL); bands(capR, lR, hR);
+            highOut = 10.0 * std::log10((hL + 1e-30) / (hR + 1e-30));
+            return 10.0 * std::log10((lL + 1e-30) / (lR + 1e-30));
+        };
+        double high0, high1;
+        const double low0 = ild(0.0f, high0), low1 = ild(1.0f, high1);
+        std::printf("  [probe] near field, voice at the left ear: ILD below 400 Hz %+.1f -> %+.1f dB, at 3-6 kHz %+.1f -> %+.1f dB\n", low0, low1, high0, high1);
+        CHECK(low1 > low0 + 10.0, "Near Field puts more than ten decibels of level difference into the lows");
+        CHECK(std::fabs(high1 - high0) < 2.5, "and leaves the head's own shadow up top as it was");
+    }
+
     // ---- the clock-locked arc --------------------------------------------------------------
     {
         // The mapping from the hour to the arc, held to what the help text promises.

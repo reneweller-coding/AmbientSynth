@@ -417,6 +417,27 @@ void Voice::control(int blockLen, const VoiceParams& p)
     const float fcR = 20000.0f * std::pow(2.0f, -shadowOct * std::max(-lateral, 0.0f));
     shadowCoefL_ = fcL >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcL / static_cast<float>(sr_));
     shadowCoefR_ = fcR >= 19000.0f ? 1.0f : 1.0f - std::exp(-kTwoPi * fcR / static_cast<float>(sr_));
+    // The near field. The head model above is a far-field one: plane waves, and a level
+    // difference that lives above a kilohertz or so where the head is big enough to shadow.
+    // Within a metre the wavefront is curved, the two ears are at measurably different
+    // distances from the source, and the level difference grows at EVERY frequency, most of
+    // all at the low ones the far-field head does not touch -- twenty decibels and more at
+    // two hundred hertz for a source near the ear (Brungart and Rabinowitz 1999). That growth
+    // is the ear's own cue for "within reach", which no amount of presence or loudness gives
+    // it. So: a shelf below a kilohertz, cut on the far ear by up to eighteen decibels and
+    // lifted on the near one by up to four, scaled by how far to the side the source is and by
+    // the square of its nearness, so it is gone by the middle of the room.
+    ildAmt_ = clampv(p.nearIld, 0.0f, 1.0f);
+    if (ildAmt_ > 0.0f) {
+        const float prox = 1.0f - clampv(distEff_, 0.0f, 1.0f);
+        const float lat = clampv(lateral, -1.0f, 1.0f);
+        const float amount = ildAmt_ * prox * prox * std::fabs(lat);
+        const float cut = 1.0f - std::pow(10.0f, -18.0f * amount / 20.0f);    // fraction of the lows taken from the far ear
+        const float lift = std::pow(10.0f, 4.0f * amount / 20.0f) - 1.0f;     // fraction added to the near one
+        ildL_ = lat > 0.0f ? cut : -lift;
+        ildR_ = lat < 0.0f ? cut : -lift;
+        ildCoef_ = 1.0f - std::exp(-kTwoPi * 1000.0f / static_cast<float>(sr_));
+    }
     // Externalisation: the pinna's notch sits near 7 kHz for a source in front and climbs towards
     // 9 kHz as it moves to the side; the shoulder reflection arrives about a quarter of a
     // millisecond later. Together they are most of what tells the ear a sound is outside the head.
@@ -673,6 +694,10 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             } else {
                 shadowL_ += shadowCoefL_ * (outL - shadowL_); outL = shadowL_;
                 shadowR_ += shadowCoefR_ * (outR - shadowR_); outR = shadowR_;
+            }
+            if (ildAmt_ > 0.0f) {   // the near field's low shelf, per ear
+                ildLpL_ += ildCoef_ * (outL - ildLpL_); outL -= ildL_ * ildLpL_;
+                ildLpR_ += ildCoef_ * (outR - ildLpR_); outR -= ildR_ * ildLpR_;
             }
             if (pinnaAmt_ > 0.0f) {
                 // The shoulder's copy comes out of the same ring the interaural delay reads, one

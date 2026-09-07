@@ -502,6 +502,7 @@ void Engine::readParams()
     vp_.elevNear = g(ParamId::ElevNear);
     vp_.elevFar = g(ParamId::ElevFar);
     vp_.depthLaw = g(ParamId::DepthLaw);
+    vp_.nearIld = g(ParamId::NearIld);
     vp_.strikeLevel = g(ParamId::StrikeLevel);
     vp_.strikeType  = static_cast<int>(std::lround(g(ParamId::StrikeType)));
     vp_.strikeDecay = g(ParamId::StrikeDecay);
@@ -518,12 +519,13 @@ void Engine::readParams()
     // starts where Bass Mono ends, because everything under that corner is folded to mono at
     // the master and lifting it here would be lifting something the guard then removes.
     envelop_ = g(ParamId::Envelop);
+    comod_ = g(ParamId::FarComod);
     {
         const float lo = std::max(125.0f, getParam(ParamId::BassMono));
         envCoefLo_ = 1.0f - std::exp(-kTwoPi * lo / static_cast<float>(sr_));
         envCoefHi_ = 1.0f - std::exp(-kTwoPi * 500.0f / static_cast<float>(sr_));
     }
-    farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 2));
+    farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 3));
 
     depth_       = g(ParamId::Depth);
     keysDepth_   = g(ParamId::KeysDepth);

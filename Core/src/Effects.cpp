@@ -477,6 +477,15 @@ void Reverb::prepare(double sampleRate)
     for (int l = 0; l < kLines; ++l) { sc_[l].assign(static_cast<size_t>(size), 0.0f); scLen_[l] = std::max(1, static_cast<int>(kScMs[l] * sr_ / 1000.0)); }
     static const float kModHz[kLines] = { 0.11f, 0.13f, 0.17f, 0.19f, 0.23f, 0.29f, 0.31f, 0.37f };
     for (int l = 0; l < kLines; ++l) { modRate_[l] = kModHz[l]; modPh_[l] = l / static_cast<double>(kLines); lp_[l] = 0.0f; lenCur_[l] = 0.0f; }
+    // The rotating mode's angles: eight rates, none a multiple of another, staggered in phase.
+    static const float kRotHz[kRotations] = { 0.031f, 0.043f, 0.057f, 0.071f, 0.083f, 0.097f, 0.113f, 0.127f };
+    for (int k = 0; k < kRotations; ++k) {
+        const float ph = static_cast<float>(k) * 0.3927f;   // pi / 8 apart
+        rotC_[k] = std::cos(ph); rotS_[k] = std::sin(ph);
+        const float d = kTwoPi * kRotHz[k] / static_cast<float>(sr_);
+        rotDc_[k] = std::cos(d); rotDs_[k] = std::sin(d);
+    }
+    rot_ = 0.0f; rotNorm_ = 0;
     preCur_ = 0.0f;
     outDelayCur_ = 0.0f;
     hcL_ = hcR_ = 0.0f;
@@ -516,7 +525,7 @@ void Reverb::set(float size, float decaySeconds, float damping, float preDelayMs
     const float maxLen = static_cast<float>(mask_) - 8.0f;
     for (int l = 0; l < kLines; ++l) {
         const float stretch = (l >= kLines / 2) ? (1.0f + 0.08f * asym_) : 1.0f;   // right-hand group runs longer
-        const float baseMs = (mode_ == 2) ? kFlatMs[l] : kBaseMs[l];
+        const float baseMs = (mode_ >= 2) ? kFlatMs[l] : kBaseMs[l];
         lenTarget_[l] = std::min(baseMs * size_ * stretch * static_cast<float>(sr_ / 1000.0), maxLen);
         if (lenCur_[l] <= 0.0f) lenCur_[l] = lenTarget_[l];
         gain_[l] = freeze_ ? 1.0f : std::pow(10.0f, -3.0f * lenTarget_[l] / (decay_ * static_cast<float>(sr_)));
@@ -531,8 +540,11 @@ void Reverb::process(float* L, float* R, int n)
     const float inGain = freeze_ ? 0.0f : 0.5f;
     const float mix = mix_;
     const float glide = 0.0005f;
+    const float rotTarget = (mode_ == 3) ? 1.0f : 0.0f;
     float* outR = outR_.data();
     for (int i = 0; i < n; ++i) {
+        rot_ += (rotTarget - rot_) * glide;
+        if (rot_ < 1.0e-6f) rot_ = 0.0f;
         const float in = 0.5f * (L[i] + R[i]);
         pre_[static_cast<size_t>(w_ & mask_)] = in;
         preCur_ += (preTarget_ - preCur_) * glide;
@@ -552,7 +564,7 @@ void Reverb::process(float* L, float* R, int n)
             lenCur_[l] += (lenTarget_[l] - lenCur_[l]) * glide;
             modPh_[l] += modRate_[l] / sr_;
             if (modPh_[l] >= 1.0) modPh_[l] -= 1.0;
-            const float d = lenCur_[l] + 1.5f * sin01(modPh_[l]) + 2.0f;
+            const float d = lenCur_[l] + (1.5f * (1.0f - rot_)) * sin01(modPh_[l]) + 2.0f;   // the wobble fades as the matrix takes over
             float v = ringRead(line_[l].data(), mask_, w_, d);
             if (mode_ != 0) {   // scattering (and colourless, which also scatters)
                 float* sb = sc_[l].data();
@@ -566,8 +578,44 @@ void Reverb::process(float* L, float* R, int n)
             sum += o[l];
         }
         const float hh = sum * (2.0f / static_cast<float>(kLines));   // Householder reflection
-        for (int l = 0; l < kLines; ++l)
-            line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (o[l] - hh) + ((l & 1) ? -inGain : inGain) * x;
+        if (rot_ <= 0.0f) {
+            for (int l = 0; l < kLines; ++l)
+                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (o[l] - hh) + ((l & 1) ? -inGain : inGain) * x;
+        } else {
+            // The turning matrix: the reflection's output through two layers of Givens rotations,
+            // neighbours first and then across, every angle advanced by its own tiny step per
+            // sample (a rotation of a rotation, no trigonometry in the loop; the pair is pulled
+            // back onto the unit circle every few thousand samples so rounding cannot walk it
+            // off). Between the two matrices while the mode is switching.
+            float v[kLines], u[kLines];
+            for (int l = 0; l < kLines; ++l) v[l] = o[l] - hh;
+            for (int k = 0; k < kRotations; ++k) {
+                const float c = rotC_[k], s = rotS_[k];
+                rotC_[k] = c * rotDc_[k] - s * rotDs_[k];
+                rotS_[k] = s * rotDc_[k] + c * rotDs_[k];
+            }
+            if (++rotNorm_ >= 4096) {
+                rotNorm_ = 0;
+                for (int k = 0; k < kRotations; ++k) {
+                    const float g = 1.0f / std::sqrt(rotC_[k] * rotC_[k] + rotS_[k] * rotS_[k]);
+                    rotC_[k] *= g; rotS_[k] *= g;
+                }
+            }
+            static const int kPair[kRotations][2] = { { 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 }, { 0, 2 }, { 1, 3 }, { 4, 6 }, { 5, 7 } };
+            for (int k = 0; k < 4; ++k) {
+                const int a = kPair[k][0], b = kPair[k][1];
+                u[a] = rotC_[k] * v[a] - rotS_[k] * v[b];
+                u[b] = rotS_[k] * v[a] + rotC_[k] * v[b];
+            }
+            for (int k = 4; k < kRotations; ++k) {
+                const int a = kPair[k][0], b = kPair[k][1];
+                const float ua = rotC_[k] * u[a] - rotS_[k] * u[b];
+                const float ub = rotS_[k] * u[a] + rotC_[k] * u[b];
+                u[a] = ua; u[b] = ub;
+            }
+            for (int l = 0; l < kLines; ++l)
+                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (v[l] + rot_ * (u[l] - v[l])) + ((l & 1) ? -inGain : inGain) * x;
+        }
 
         float wetL = 0.3f * (o[0] - o[1] + o[2] - o[3]);
         float wetR = 0.3f * (o[4] - o[5] + o[6] - o[7]);

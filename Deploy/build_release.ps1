@@ -21,6 +21,16 @@ param(
     # every installer since 1.0.0 asked v1.0.0 for files that had moved -- a 404 in the middle of
     # somebody's install, which is where this was finally noticed.
     [string]$ContentTag = "v1.11.0",
+    # Code signing. Without it Windows shows "Unknown publisher" on the first run of the setup --
+    # SmartScreen has nothing to go on but the file's reputation, and a fresh file has none.
+    #   -SignWith "<thumbprint>"   a certificate in the current user's store (signtool /sha1)
+    #   -SignWith "<file.pfx>"     a PFX on disk; -SignPassword goes with it
+    # An EV certificate or Azure Trusted Signing removes the warning at once; an ordinary OV one
+    # only earns it back over downloads. Unsigned is not dangerous, it is unattested: anyone can
+    # check the SHA-256 below against the release page instead.
+    [string]$SignWith = "",
+    [string]$SignPassword = "",
+    [string]$TimestampUrl = "http://timestamp.digicert.com",
     [switch]$SkipBuild,       # reuse whatever is in build-release already
     [switch]$NoSetup,         # stage and zip, but do not call the Inno compiler
     [switch]$SkipManual       # reuse the manual already in docs/manual
@@ -176,6 +186,27 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Host ("  portable zip: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
 
+# ---------------------------------------------------------------- signing
+function Invoke-Sign([string]$path) {
+    if (-not $SignWith) { return }
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+                Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
+    if (-not $signtool) { throw "signtool.exe not found (Windows SDK). Install it, or build without -SignWith." }
+    $args = @("sign", "/fd", "SHA256", "/tr", $TimestampUrl, "/td", "SHA256")
+    if (Test-Path $SignWith) {
+        $args += @("/f", $SignWith)
+        if ($SignPassword) { $args += @("/p", $SignPassword) }
+    } else {
+        $args += @("/sha1", $SignWith)
+    }
+    & $signtool @args $path
+    if ($LASTEXITCODE -ne 0) { throw "signing failed for $path" }
+    Write-Host "  signed $(Split-Path $path -Leaf)" -ForegroundColor Green
+}
+# The executable is signed before it goes into the installer, and the installer after it is built:
+# Windows checks both, and a signed setup that unpacks an unsigned exe warns on the exe instead.
+Invoke-Sign (Join-Path $stage "AmbientSynth.exe")
+
 # ---------------------------------------------------------------- setup
 if (-not $NoSetup) {
     $iscc = Get-ChildItem "C:\Program Files\Inno Setup *\ISCC.exe", "C:\Program Files (x86)\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
@@ -186,6 +217,17 @@ if (-not $NoSetup) {
     & $iscc "/DVersion=$Version" "/DContentBaseUrl=$contentUrl" (Join-Path $root "Deploy\AmbientSynth.iss")
     if ($LASTEXITCODE -ne 0) { throw "the installer failed to build" }
     $setup = Join-Path $out "AmbientSynth-$Version-Setup.exe"
+    Invoke-Sign $setup
     Write-Host ("  setup: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB)) -ForegroundColor Green
 }
+
+# ---------------------------------------------------------------- checksums
+# What an unsigned build can offer instead of a signature: the hashes, printed here and meant for
+# the release notes, so anyone can check that the file they downloaded is the file that was built.
+$sums = Join-Path $out "SHA256SUMS.txt"
+Get-ChildItem $out -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+    "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+} | Set-Content $sums -Encoding ascii
+Write-Host "  checksums: $sums" -ForegroundColor Green
+Get-Content $sums | ForEach-Object { Write-Host "    $_" }
 Get-ChildItem $out | Format-Table Name, @{n="MB";e={"{0:N1}" -f ($_.Length/1MB)}}, LastWriteTime

@@ -49,6 +49,22 @@ Tools/TextureGen/.venv/Scripts/python Tools/TextureGen/texturegen_worker.py \
     --resume --nice --max-minutes 330
 ```
 
+Most of the shelf comes from the prompt lists rather than from per-style generation, because a
+thousand distinct ideas beat forty variations of forty. Those runs take a plain text file instead
+of a jobs file (see `Tools/library/prompts/README.md`):
+
+```
+Tools/TextureGen/.venv/Scripts/python Tools/TextureGen/texturegen_worker.py \
+    --batch Tools/library/prompts/tonal.txt --count 4 --out-dir Library/Textures --resume --nice
+Tools/TextureGen/.venv/Scripts/python Tools/TextureGen/texturegen_worker.py \
+    --batch Tools/library/prompts/atonal.txt --count 3 --out-dir Library/FieldRecordings --resume --nice
+python Tools/library/sort_clips.py
+```
+
+`sort_clips.py` has the last word on which folder a clip belongs in: the generator writes the
+detected note into the file name, and only a clip that has one may be transposed to the note being
+played.
+
 Audit the clips: text-to-audio misses sometimes, and a silent or gappy clip makes a dead
 granular source. `--repair` high-passes clips with a DC offset instead of rejecting them, and
 `--compact` halves the library by rewriting 32-bit float as 16-bit PCM, which is worth doing

@@ -31,3 +31,6 @@ Deploy/out/
 Deploy/content/
 docs/manual/
 Deploy/manual-work/
+Tools/library/texture_retry.json
+Tools/library/field_jobs.json
+Tools/library/field_report.json

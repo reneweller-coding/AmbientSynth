@@ -118,9 +118,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--taps", required=True, help="folder of 12 s mono excerpts")
     ap.add_argument("--out", required=True, help="JSON: per preset an embedding, its scores and its phrases")
-    ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--top", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--resume", action="store_true",
+                    help="keep what the output file already holds and only do the rest")
     a = ap.parse_args()
 
     import torch
@@ -137,8 +139,23 @@ def main():
     files = sorted(glob.glob(os.path.join(a.taps, "*.wav")))
     if a.limit:
         files = files[:a.limit]
-    print(f"{len(files)} excerpts", flush=True)
+    # Written as it goes, and resumable. Eight thousand excerpts is a long enough job that losing
+    # it whole to one interruption has already cost an afternoon twice.
     out = {}
+    if a.resume and os.path.exists(a.out):
+        try:
+            out = json.load(open(a.out, encoding="utf-8")).get("presets", {})
+        except (ValueError, OSError):
+            out = {}
+    done_names = set(out)
+    files = [f for f in files if os.path.splitext(os.path.basename(f))[0] not in done_names]
+    print(f"{len(files)} excerpts to do" + (f", {len(out)} already there" if out else ""), flush=True)
+
+    def flush():
+        tmp = a.out + ".part"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"phrases": PHRASES, "groups": PHRASE_GROUP, "presets": out}, f)
+        os.replace(tmp, a.out)
     for start in range(0, len(files), a.batch):
         chunk = files[start:start + a.batch]
         waves = []
@@ -172,7 +189,8 @@ def main():
             }
         if (start // a.batch) % 20 == 0:
             print(f"  {start + len(chunk)}/{len(files)}", flush=True)
-    json.dump({"phrases": PHRASES, "groups": PHRASE_GROUP, "presets": out}, open(a.out, "w", encoding="utf-8"))
+            flush()
+    flush()
     print(f"wrote {a.out}: {len(out)} presets", flush=True)
     return 0
 

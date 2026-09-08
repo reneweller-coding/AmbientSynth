@@ -158,14 +158,17 @@ def main():
         if run([py, os.path.join(HERE, "map_all.py"), "--pack-cache", cache, "--builtin-cache", bcache,
                 "--taps", taps, "--jobs", str(a.jobs), "--dry-run"], a.dry_run):
             return 1
-    if want("clap", clap):
+    if want("clap", clap if os.path.exists(clap + ".done") else None):
         # CLAP needs torch, and the interpreter that runs the rest of this does not have it. The
         # clip generator's environment does, so that is the default rather than a second install.
         if not os.path.exists(cpy):
             print(f"-- clap: no interpreter at {cpy}; pass --clap-python")
             return 1
-        if run([cpy, os.path.join(HERE, "clap_embed.py"), "--taps", taps, "--out", clap], a.dry_run):
+        if run([cpy, os.path.join(HERE, "clap_embed.py"), "--taps", taps, "--out", clap,
+                "--resume"], a.dry_run):
             return 1
+        if not a.dry_run:
+            open(clap + ".done", "w").close()
     if want("map"):
         if run([py, os.path.join(HERE, "map_all.py"), "--pack-cache", cache, "--builtin-cache", bcache,
                 "--taps", taps, "--clap", clap, "--clusters", str(a.clusters), "--jobs", str(a.jobs)],

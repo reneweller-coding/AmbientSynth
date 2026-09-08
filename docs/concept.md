@@ -1953,7 +1953,7 @@ from the other side -- our points cannot move, since where they are is what they
 came with them (Still, Evolving, Smooth, Rough, Near, Far), so the Columns view filters on the
 same things.
 
-**What it is like, what it is, what it sounds like (1.12.0).** The nine descriptors have a blind
+**What it is like, what it is, what it sounds like (1.11.0).** The nine descriptors have a blind
 spot that no tenth descriptor of the same kind would close. Two presets can agree on brightness,
 motion, width, noisiness, bass, density, evolution, roughness and wetness and still be, to an ear,
 a goods yard and a beehive. Rene put it back to us after reading that sentence in a report: "Können

@@ -157,8 +157,10 @@ std::string presetDescription(int index)
     return out;
 }
 
-// The whole card, in the manner of u-he's PRESET INFO: what it is, what your hands do in it,
-// what it is filed under. Longer than the one-line description, and put together from the same
+// The whole card, in the manner of u-he's PRESET INFO: what it is, what it sounds like, what it
+// is filed under, and last what your hands do in it. That order is not taste: the panel paints
+// until it runs out of height, and on the map side it has 240 pixels, so what identifies a preset
+// stands above the list of its routes. Longer than the one-line description, and put together from the same
 // three sources -- the measurements, the settings, and the preset's own modulation matrix.
 std::string presetInfoText(int index)
 {
@@ -193,6 +195,33 @@ std::string presetInfoText(int index)
         if (!pace.empty()) { out += "\nIts pace: " + listOf(pace) + "."; }
     }
 
+    // Where it is filed: the family it came from, the group it measured into, and its tags.
+    if (numPresetMeta() == numPresets()) {
+        const PresetMeta& m = presetMeta(index);
+        // What a model that listened to the render says. The sentence above was written from the
+        // settings -- it knows what is switched on; this line knows only the sound, which is why
+        // the two are kept apart and never blended into one paragraph.
+        if (numPresetPhrases() > 0 && m.phrase[0] >= 0) {
+            out += "\n\nSOUNDS LIKE\n";
+            out += presetPhrase(m.phrase[0]);
+            if (m.phrase[1] >= 0 && m.phrase[1] != m.phrase[0]) { out += ", "; out += presetPhrase(m.phrase[1]); }
+            out += "\n";
+        }
+        out += "\n\nFILED UNDER\n";
+        out += presetFamilyName(m.family);
+        const int c = presetClusterOf(m);
+        if (c >= 0 && *presetClusterName(c) != 0) { out += "   -   group: "; out += presetClusterName(c); }
+        out += "\n";
+        std::string tags;
+        for (int t = 0; t < kNumPresetTags; ++t)
+            if (m.tags & (1u << t)) { if (!tags.empty()) tags += "  "; tags += presetTagName(t); }
+        if (!tags.empty()) out += tags + "\n";
+        if (m.loudDb < -0.5f) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "measured at %.1f dBFS\n", static_cast<double>(m.loudDb));
+            out += buf;
+        }
+    }
     // What your hands do here. Only the routes a player can reach -- the macros, the wheel, the
     // pressure and the slide; the LFOs and the fields are the instrument moving by itself.
     if (p.mod != nullptr && *p.mod != 0) {
@@ -227,33 +256,6 @@ std::string presetInfoText(int index)
         }
     }
 
-    // Where it is filed: the family it came from, the group it measured into, and its tags.
-    if (numPresetMeta() == numPresets()) {
-        const PresetMeta& m = presetMeta(index);
-        // What a model that listened to the render says. The sentence above was written from the
-        // settings -- it knows what is switched on; this line knows only the sound, which is why
-        // the two are kept apart and never blended into one paragraph.
-        if (numPresetPhrases() > 0 && m.phrase[0] >= 0) {
-            out += "\n\nSOUNDS LIKE\n";
-            out += presetPhrase(m.phrase[0]);
-            if (m.phrase[1] >= 0 && m.phrase[1] != m.phrase[0]) { out += ", "; out += presetPhrase(m.phrase[1]); }
-            out += "\n";
-        }
-        out += "\n\nFILED UNDER\n";
-        out += presetFamilyName(m.family);
-        const int c = presetClusterOf(m);
-        if (c >= 0 && *presetClusterName(c) != 0) { out += "   -   group: "; out += presetClusterName(c); }
-        out += "\n";
-        std::string tags;
-        for (int t = 0; t < kNumPresetTags; ++t)
-            if (m.tags & (1u << t)) { if (!tags.empty()) tags += "  "; tags += presetTagName(t); }
-        if (!tags.empty()) out += tags + "\n";
-        if (m.loudDb < -0.5f) {
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "measured at %.1f dBFS\n", static_cast<double>(m.loudDb));
-            out += buf;
-        }
-    }
     return out;
 }
 

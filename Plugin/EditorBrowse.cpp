@@ -604,7 +604,9 @@ void AmbientSynthEditor::BrowseView::resized()
         const int perRow = 5, tagH = 22;
         const int rows = (kNumPresetTags + perRow - 1) / perRow;
         auto tags = left.removeFromTop(rows * tagH);
-        info2.setBounds(left.removeFromBottom(juce::jmin(190, left.getHeight() / 2)).withTrimmedTop(8));
+        // The card paints until it runs out of room, so on the map side it gets as much as half
+        // the column: the description, the phrases and the filing all have to fit above the fold.
+        info2.setBounds(left.removeFromBottom(juce::jmin(240, left.getHeight() / 2)).withTrimmedTop(8));
         for (int t = 0; t < kNumPresetTags; ++t) {
             const int r = t / perRow, c = t % perRow;
             tagButtons[static_cast<size_t>(t)]->setBounds(tags.getX() + c * (tags.getWidth() / perRow), tags.getY() + r * tagH, tags.getWidth() / perRow, tagH);

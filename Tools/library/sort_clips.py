@@ -26,6 +26,8 @@ import shutil
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 TEX = os.path.join(ROOT, "Library", "Textures")
 FLD = os.path.join(ROOT, "Library", "FieldRecordings")
+# Folded as well, but never sorted: nothing moves between these and anywhere else.
+ALSO = [os.path.join(ROOT, "Library", d) for d in ("Wavetables", "Impulses")]
 PITCHED = re.compile(r"_[A-G]#?-?[0-9]\.wav$")
 INDEX = "clips.json"
 KEEP = {"rejected.txt"}          # read by make_presets.py: which clips are duds
@@ -57,7 +59,8 @@ def fold(folder, dry):
         except (ValueError, OSError):
             index = {}
     handed, folded, orphans = {}, 0, 0
-    other = FLD if folder == TEX else TEX
+    # Only the two clip folders exchange anything; Wavetables and Impulses have no partner.
+    other = FLD if folder == TEX else (TEX if folder == FLD else None)
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".txt") or name in KEEP:
             continue
@@ -68,7 +71,7 @@ def fold(folder, dry):
             meta = {"raw": open(os.path.join(folder, name), encoding="utf-8", errors="replace").read()}
         if os.path.exists(os.path.join(folder, wav)):
             index[wav] = meta
-        elif os.path.exists(os.path.join(other, wav)):
+        elif other is not None and os.path.exists(os.path.join(other, wav)):
             handed[wav] = meta
         else:
             orphans += 1                 # the clip was rejected or deleted; its note goes with it
@@ -122,7 +125,13 @@ def main():
             json.dump(blob, open(path, "w", encoding="utf-8"), indent=0, sort_keys=True)
             print("%-32s %5d notes taken over from the other folder" % (os.path.basename(folder), len(extra)))
 
-    for d in (TEX, FLD):
+        for folder in ALSO:
+            if not os.path.isdir(folder):
+                continue
+            folded, orphans, _ = fold(folder, a.dry_run)
+            print("%-32s %5d notes folded in, %d without a clip" % (os.path.basename(folder), folded, orphans))
+
+    for d in [TEX, FLD] + [x for x in ALSO if os.path.isdir(x)]:
         files = os.listdir(d)
         n = len([f for f in files if f.endswith(".wav")])
         rest = len(files) - n

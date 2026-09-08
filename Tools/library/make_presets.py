@@ -1384,6 +1384,16 @@ def wavetable_pool(dirname, style):
     slugs = [re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_") for t in style["tables"]]
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
     own = [f for f in files if any(f.startswith(s + "_") for s in slugs)]
+    # A table sliced out of a clip is named "clip_<the clip's name>", so it inherits that clip's
+    # place in the library: if a model put the recording of a bowed cymbal near this style, the
+    # table made from it belongs there too. Nineteen recipes cannot tell a style apart; a thousand
+    # recorded sounds can.
+    # The table's name is "clip_" + the same slug rule WavetableGen uses, so the two are compared
+    # on their first forty characters rather than on a guess about the suffix.
+    close = {re.sub(r"[^A-Za-z0-9]+", "_", os.path.splitext(os.path.basename(c))[0]).strip("_")[:40]
+             for c in affinity_for(style["name"])}
+    if close:
+        own = own + [f for f in files if f.startswith("clip_") and f[5:45] in close]
     return (own * 3 + files) if own else files
 
 

@@ -1,13 +1,24 @@
-"""Build the wavetable library for the generated presets.
+"""Build the wavetable library for the generated presets, from two sources.
 
-Every recipe in Tools/WavetableGen is rendered several times with different partial counts,
-spectral noise and phase scatter, so the library holds a spread of related tables instead of
-one per recipe. Fast and deterministic: the same seed always writes the same files, which is
-what lets the preset generator name a table before it exists.
+*Recipes.* Every recipe in Tools/WavetableGen is rendered several times with different partial
+counts, spectral noise and phase scatter. Fast and deterministic: the same seed always writes the
+same files, which is what lets the preset generator name a table before it exists.
 
-    python Tools/library/make_wavetables.py --per-recipe 32 --out-dir Library/Wavetables
+*Clips.* There are only nineteen recipes, so a shelf built from them alone is nineteen ideas with
+variations -- thirty-two neighbours of one theme, which is what it sounds like. The tonal sample
+library is thousands of different recorded sounds, and every clip with a stable pitch can be sliced
+into single cycles and stacked into a table (Tools/WavetableGen, the same code its GUI uses). A
+table made from a bowed cymbal and one made from a reed organ are not variations of anything.
 
-19 recipes x 32 variants = 608 tables of 32 frames, written as 16-bit PCM (about 130 kB each).
+    python Tools/library/make_wavetables.py --per-recipe 16 --from-clips 2
+
+Both halves land in Library/Wavetables as 32-frame 16-bit tables of about 130 kB. --from-clips N
+takes at most N clips per prompt idea, so the shelf spreads over ideas rather than over the four
+seeds of whichever prompt happened to come first.
+
+Slicing needs soundfile, which lives in the clip generator's environment:
+
+    Tools/TextureGen/.venv/Scripts/python Tools/library/make_wavetables.py --from-clips 2
 """
 import argparse
 import os
@@ -23,6 +34,55 @@ from wavetablegen_core import RECIPES, save_table, table_procedural  # noqa: E40
 
 def slug(text):
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+PITCHED = re.compile(r"_([A-G]#?-?[0-9])\.wav$")
+
+
+def clip_ideas(folder, per_idea, limit):
+    """Pitched clips, grouped by the prompt they came from. A clip's name is the prompt slug, the
+    model, the seed and the note, so everything up to the model is the idea -- and four clips of
+    one idea would make four tables that are neighbours again."""
+    ideas = {}
+    for f in sorted(os.listdir(folder)):
+        if not PITCHED.search(f):
+            continue
+        key = re.sub(r"_(sao|musicgen-large|musicgen-medium|musicgen-small|audioldm2)_.*$", "", f)
+        ideas.setdefault(key, []).append(os.path.join(folder, f))
+    picked = []
+    for key in sorted(ideas):
+        picked.extend(ideas[key][:per_idea])
+    if limit and len(picked) > limit:
+        # Thin evenly across the ideas rather than cutting the alphabet off halfway.
+        step = len(picked) / float(limit)
+        picked = [picked[int(i * step)] for i in range(limit)]
+    return picked, len(ideas)
+
+
+def build_from_clips(files, frames, out_dir, int16):
+    """One table per clip, sliced out of it. A clip whose pitch is not steady enough is skipped:
+    a table built from frames that were never the same note is noise with a period."""
+    sys.path.insert(0, os.path.join(ROOT, "Tools", "WavetableGen"))
+    import wavetablegen_core as wt
+    os.makedirs(out_dir, exist_ok=True)
+    written, skipped, failed = [], 0, 0
+    for f in files:
+        try:
+            mono, sr = wt.read_wav_mono(f)
+            table, info = wt.table_from_audio(mono, sr, frames=frames)
+            if info["voiced"] < 0.6:
+                skipped += 1
+                continue
+            base = "clip_" + wt.slugify(os.path.splitext(os.path.basename(f))[0], 56)
+            if not base.endswith("_" + info["note"]):
+                base += "_" + info["note"]
+            info["file"] = os.path.basename(f)
+            written.append(save_table(os.path.join(out_dir, base + ".wav"), table, info, float32=not int16))
+        except Exception as e:                        # a short or silent clip: not worth a stack trace
+            failed += 1
+            if failed <= 5:
+                print(f"  skip {os.path.basename(f)}: {type(e).__name__}: {e}")
+    return written, skipped, failed
 
 
 def build(per_recipe, frames, out_dir, seed, int16):
@@ -48,6 +108,10 @@ def build(per_recipe, frames, out_dir, seed, int16):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--per-recipe", type=int, default=32)
+    ap.add_argument("--from-clips", type=int, default=0,
+                    help="also slice a table out of the tonal clips: at most this many per prompt idea")
+    ap.add_argument("--clips", default=os.path.join(ROOT, "Library", "Textures"))
+    ap.add_argument("--max-clips", type=int, default=1600, help="ceiling on the sliced tables")
     ap.add_argument("--frames", type=int, default=32)
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "Library", "Wavetables"))
@@ -57,6 +121,12 @@ def main():
     print(f"{len(written)} wavetables from {len(names)} recipes -> {a.out_dir}")
     for n in names:
         print(f"  {n}")
+    if a.from_clips > 0:
+        files, ideas = clip_ideas(a.clips, a.from_clips, a.max_clips)
+        print(f"clips: {len(files)} of {ideas} ideas in {a.clips}", flush=True)
+        made, skipped, failed = build_from_clips(files, a.frames, a.out_dir, not a.float32)
+        print(f"{len(made)} wavetables sliced from clips "
+              f"({skipped} not steady enough, {failed} unreadable) -> {a.out_dir}")
 
 
 if __name__ == "__main__":

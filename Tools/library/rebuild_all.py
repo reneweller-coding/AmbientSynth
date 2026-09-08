@@ -83,6 +83,8 @@ def main():
     ap.add_argument("--anyway", action="store_true",
                     help="start even though the GPU or another generator is busy")
     ap.add_argument("--clusters", type=int, default=14)
+    ap.add_argument("--clap-device", default="cpu", choices=("cpu", "cuda", "auto"),
+                    help="where CLAP listens (see the note at the clap step)")
     ap.add_argument("--clap-python", default="", help="interpreter with torch and transformers "
                     "(default: Tools/TextureGen/.venv, the one the clip generator uses)")
     ap.add_argument("--force", action="store_true", help="redo steps whose output is already there")
@@ -164,8 +166,13 @@ def main():
         if not os.path.exists(cpy):
             print(f"-- clap: no interpreter at {cpy}; pass --clap-python")
             return 1
+        # On the processor by default. This machine crashed three times in one afternoon, every
+        # time during CUDA work and twice during exactly this step -- with the card at three
+        # percent of its memory, so it is not a load that can be tuned away. Forty minutes on the
+        # processor against ten on the card is a price worth paying for a step that cannot take
+        # the machine with it. --clap-device cuda for anyone whose card behaves.
         if run([cpy, os.path.join(HERE, "clap_embed.py"), "--taps", taps, "--out", clap,
-                "--resume"], a.dry_run):
+                "--resume", "--device", a.clap_device], a.dry_run):
             return 1
         if not a.dry_run:
             open(clap + ".done", "w").close()

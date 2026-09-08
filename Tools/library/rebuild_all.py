@@ -1,17 +1,18 @@
 """The whole library, from the clips on disk to the tables the synth ships with.
 
-Seven steps, each of which can be run on its own; this driver exists so the order and the arguments
+Eight steps, each of which can be run on its own; this driver exists so the order and the arguments
 are written down once instead of living in a session's scrollback. It never generates audio -- the
 clip generators (make_textures.py, make_field_recordings.py, make_wavetables.py, make_impulses.py)
 are run by hand because they take hours of GPU time and their output is committed.
 
-    1  presets    Tools/library/make_presets.py     the packs themselves
-    2  verify     Tools/library/verify_packs.py     every key and value actually exists
-    3  measure    Tools/library/measure_packs.py    60 s per preset, numbers plus a 12 s excerpt
-    4  builtins   Tools/library/map_all.py --dry-run  the same for the built-ins, so CLAP hears them too
-    5  clap       Tools/library/clap_embed.py       what a model says the excerpts sound like
-    6  map        Tools/library/map_all.py          one layout, the groups, the phrases, the tables
-    7  build      cmake --build ... && the selftest
+    1  affinity   Tools/library/clip_affinity.py    which clips belong to which style, by ear
+    2  presets    Tools/library/make_presets.py     the packs themselves
+    3  verify     Tools/library/verify_packs.py     every key and value actually exists
+    4  measure    Tools/library/measure_packs.py    60 s per preset, numbers plus a 12 s excerpt
+    5  builtins   Tools/library/map_all.py --dry-run  the same for the built-ins, so CLAP hears them too
+    6  clap       Tools/library/clap_embed.py       what a model says the excerpts sound like
+    7  map        Tools/library/map_all.py          one layout, the groups, the phrases, the tables
+    8  build      cmake --build ... && the selftest
 
   python Tools/library/rebuild_all.py --work <dir> [--from measure] [--jobs 4] [--dry-run]
 
@@ -28,7 +29,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PACKS = os.path.join(ROOT, "Library", "Packs")
-STEPS = ["presets", "verify", "measure", "builtins", "clap", "map", "build"]
+STEPS = ["affinity", "presets", "verify", "measure", "builtins", "clap", "map", "build"]
 
 
 def run(cmd, dry, cwd=ROOT):
@@ -44,7 +45,7 @@ def run(cmd, dry, cwd=ROOT):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", required=True, help="folder for the cache, the excerpts and the CLAP file")
-    ap.add_argument("--from", dest="start", default="presets", choices=STEPS)
+    ap.add_argument("--from", dest="start", default="affinity", choices=STEPS)
     ap.add_argument("--to", dest="stop", default="build", choices=STEPS)
     ap.add_argument("--jobs", type=int, default=4, help="renders at a time; the machine stays usable at 4")
     ap.add_argument("--clusters", type=int, default=14)
@@ -74,6 +75,14 @@ def main():
             return False
         return True
 
+    aff = os.path.join(ROOT, "Library", "affinity.json")
+    cpy = a.clap_python or os.path.join(ROOT, "Tools", "TextureGen", ".venv", "Scripts", "python.exe")
+    if want("affinity", aff):
+        if not os.path.exists(cpy):
+            print(f"-- affinity: no interpreter at {cpy}; pass --clap-python")
+            return 1
+        if run([cpy, os.path.join(HERE, "clip_affinity.py"), "--out", aff], a.dry_run):
+            return 1
     if want("presets"):
         if run([py, os.path.join(HERE, "make_presets.py")], a.dry_run):
             return 1
@@ -97,7 +106,6 @@ def main():
     if want("clap", clap):
         # CLAP needs torch, and the interpreter that runs the rest of this does not have it. The
         # clip generator's environment does, so that is the default rather than a second install.
-        cpy = a.clap_python or os.path.join(ROOT, "Tools", "TextureGen", ".venv", "Scripts", "python.exe")
         if not os.path.exists(cpy):
             print(f"-- clap: no interpreter at {cpy}; pass --clap-python")
             return 1

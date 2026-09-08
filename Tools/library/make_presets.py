@@ -19,6 +19,7 @@ they are there; presets whose sample is missing simply load nothing into that sl
 import argparse
 import io
 import glob
+import json
 import math
 import os
 import random
@@ -1327,12 +1328,43 @@ def texture_pool(dirname, style_name, rejected, fielddir=None, fieldshare=0.5):
     own = [f for f in tex + fld if os.path.basename(f).startswith(slug + "_")]
     if own:
         return own
-    # The style has no clips of its own: both shelves, with the environments weighted by the
-    # style's own appetite for them.
+    # No clips of its own: the shelves, with the environments weighted by the style's appetite.
     if not fld:
-        return tex
-    reps = max(1, int(round(fieldshare * 4)))
-    return tex + fld * reps if tex else fld
+        base = tex
+    elif not tex:
+        base = fld
+    else:
+        base = tex + fld * max(1, int(round(fieldshare * 4)))
+    # Most of the library now comes from prompt lists rather than per-style generation, so the
+    # file name no longer says which style a clip belongs to. Tools/library/clip_affinity.py
+    # answers that by listening: CLAP scores every clip against every style's own sentences. The
+    # style's clips are weighted heavily and the whole shelf is left in behind them, because a
+    # library where every style only ever hears its own material is a library of forty islands.
+    close = affinity_for(style_name)
+    if close:
+        have = set(base)
+        picked = [c for c in close if c in have]
+        if picked:
+            return picked * 3 + base
+    return base
+
+
+_AFFINITY = {}
+
+
+def affinity_for(style_name):
+    """The clips a model put closest to this style, or nothing if the file was never written."""
+    if not _AFFINITY:
+        path = os.path.join(ROOT, "Library", "affinity.json")
+        _AFFINITY["_"] = {}
+        if os.path.exists(path):
+            try:
+                blob = json.load(open(path, encoding="utf-8"))
+                for nm, folders in blob.get("byStyle", {}).items():
+                    _AFFINITY["_"][nm] = [c for lst in folders.values() for c in lst]
+            except (ValueError, OSError):
+                pass
+    return _AFFINITY["_"].get(style_name, [])
 
 
 def impulse_pool(dirname, style):

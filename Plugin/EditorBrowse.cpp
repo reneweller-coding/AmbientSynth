@@ -353,6 +353,10 @@ void AmbientSynthEditor::BrowseView::InfoPanel::paint(juce::Graphics& g)
     g.setFont(juce::FontOptions(11.5f));
     juce::StringArray lines;
     lines.addLines(body);
+    // The phrases under SOUNDS LIKE are the only text here nobody wrote for this preset: a model
+    // picked them out of our vocabulary. They are set in italic so the eye can tell the measured
+    // sentence from the chosen one without being told.
+    bool quoted = false;
     for (const auto& line : lines) {
         if (r.getHeight() <= 0) break;
         const juce::String t = line.trim();
@@ -360,6 +364,7 @@ void AmbientSynthEditor::BrowseView::InfoPanel::paint(juce::Graphics& g)
         // A heading is a line in capitals: draw it as one, with a rule under it.
         const bool heading = t == t.toUpperCase() && t.containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZ -");
         if (heading) {
+            quoted = (t == "SOUNDS LIKE");
             r.removeFromTop(5);
             auto h = r.removeFromTop(14);
             g.setColour(kAccent.withAlpha(0.85f)); g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
@@ -372,7 +377,9 @@ void AmbientSynthEditor::BrowseView::InfoPanel::paint(juce::Graphics& g)
         }
         // Prose wraps; the arrow rows do not need to.
         juce::GlyphArrangement ga;
-        ga.addFittedText(juce::FontOptions(11.5f), t, static_cast<float>(r.getX()), static_cast<float>(r.getY()),
+        const juce::FontOptions bodyFont = quoted ? juce::FontOptions(11.5f).withStyle("Italic")
+                                                  : juce::FontOptions(11.5f);
+        ga.addFittedText(bodyFont, t, static_cast<float>(r.getX()), static_cast<float>(r.getY()),
                          static_cast<float>(r.getWidth()), static_cast<float>(juce::jmin(r.getHeight(), 44)),
                          juce::Justification::topLeft, 3, 1.0f);
         g.setColour(t.contains("->") ? kDim : kText.withAlpha(0.92f));

@@ -1890,6 +1890,30 @@ are measured, not estimated: `Tools/library/measure_packs.py` renders all six
 thousand and writes the result back into the pack files, and corrects each
 preset's master gain to the loudness it actually came out at.
 
+**The impulse shelf, rebuilt (1.11.0).** The same question as the wavetables, asked about the
+Room, and the same answer: 240 impulses were eight families, and 238 of them were used, so the
+coverage was never the problem -- the number of ideas was. Six families were added, chosen as
+shapes a designed room cannot make because a room that dark or that empty would be a broken room:
+**diffusion** (velvet noise -- taps at random times, all the same size, random sign: what a
+diffusion network converges to, and the smoothest tail there is, no comb colour and no grain),
+**echoes** (a handful of separate reflections and almost nothing between them -- a stone circle, a
+cliff; what makes it a place is that you can count them), **tube** (one resonance and the air
+around it: the Room as a body with a pitch rather than a space with a size), **underwater** (four
+poles of low-pass and a very long tail), **chord** (several combs at once in just intonation: a
+room that answers with a chord whatever you play into it) and **sheet** (a steel plate: dozens of
+inharmonic modes decaying at different rates, so the metal changes colour while it rings).
+
+And the same silent narrowing as the styles' dead recipe name. The `struck` family finds its
+sources by matching a file name, and the rule wanted the prefix `field_recordings_` -- which only
+the clips generated per style ever carried. Everything made from the prompt lists was invisible to
+it, so the shelf had quietly stopped growing while thousands of struck objects piled up next to
+it. Sources are now chosen by material (bell, metal, glass, stone, wood) across both clip folders,
+and there are 160 rather than 40. A second cross-synthesis came with it: **space** takes not a
+recording's sharpest event but its steadiest window -- the least movement in the log of its
+envelope -- and shapes that into a tail, so a minute of rain or of a ventilation shaft becomes a
+room with that texture in its walls, irregular in a way no designed hall is. 546 impulses in
+sixteen families, 274 of them cut from real recordings.
+
 Two layers, loadable independently and combinable (`PresetScope`):
 *Sound* = every parameter outside the Cosmos section, *Cosmos* = the Cosmos
 section. Applying a preset in one scope resets only that scope's parameters

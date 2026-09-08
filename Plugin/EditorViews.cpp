@@ -553,6 +553,16 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         return;
     }
 
+    // Which clip this is. The window showed its envelope, its grains and its length, and not
+    // its name -- the one thing that says what one is listening to. Bottom left, under the
+    // waveform, cut with an ellipsis when the frame is narrower than the name.
+    auto clipName = [&](juce::Graphics& gg) {
+        const juce::String name = proc.textureName(slot - 1);
+        if (name.isEmpty()) return;
+        gg.setColour(ui::dim); gg.setFont(ui::body(10.0f));
+        gg.drawText(name, r.reduced(9, 5).removeFromLeft(juce::jmax(40, r.getWidth() * 2 / 3)), juce::Justification::bottomLeft, true);
+    };
+
     juce::Path p;
     const int steps = juce::jmax(64, static_cast<int>(plot.getWidth()));
     auto plotWave = [&](auto valueAt) {
@@ -630,6 +640,7 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         g.drawText(juce::String(clipSec, 1) + " s clip  x " + juce::String(stretch, 0) + "  =  " + length
                        + (tex->seamless ? "   seamless" : ""),
                    r.reduced(9, 5), juce::Justification::topRight, false);
+        clipName(g);
         return;
     } else if (type == 3) {   // texture: the clip's envelope, and the window the grains are drawn from
         const ambient::Texture* tex = proc.engine().displayTexture(slot - 1);
@@ -700,6 +711,7 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText(juce::String(tex->mono.size() / juce::jmax(1.0, tex->sampleRate), 1) + " s   base " + juce::String(tex->baseHz, 1) + " Hz",
                    r.reduced(9, 5), juce::Justification::topRight, false);
+        clipName(g);
         return;
     } else if (type == 5) {   // additive: the bank's partials as they are being summed, and the cycle they make
         float live[ambient::kTablePartials] = {};

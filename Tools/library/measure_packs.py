@@ -203,6 +203,8 @@ def main():
     # rewrites positions, descriptors and tags, and not one sample of what the library plays.
     ap.add_argument("--no-gain", action="store_true", help="do not touch master_gain")
     ap.add_argument("--taps", default="", help="also write a 12 s mono excerpt of every preset here")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip presets the cache already holds (the cache is written as it goes)")
     a = ap.parse_args()
 
     if a.taps:
@@ -220,17 +222,41 @@ def main():
             r["m"] = cached.get(r["name"])
         print(f"  read {sum(1 for r in rows if r['m'])} measurements from {a.from_cache}")
     else:
+        # The cache is written as the run goes, not at the end. Eight thousand presets is hours,
+        # and a run that loses everything to one interruption is a run nobody dares interrupt --
+        # which is how an afternoon went once. With --resume a second run picks up what is there.
+        have = {}
+        if a.cache and a.resume and os.path.exists(a.cache):
+            try:
+                have = json.load(open(a.cache, encoding="utf-8"))
+            except (ValueError, OSError):
+                have = {}
+        todo = [r for r in rows if r["name"] not in have]
+        for r in rows:
+            r["m"] = have.get(r["name"])
+        if have:
+            print(f"  {len(have)} already measured, {len(todo)} to go")
+
+        def flush():
+            if not a.cache:
+                return
+            tmp = a.cache + ".part"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({r["name"]: r["m"] for r in rows if r["m"]}, f)
+            os.replace(tmp, a.cache)          # never a half-written cache on disk
+
         t0 = time.time()
         with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
             done = 0
-            for r, m in zip(rows, ex.map(lambda r: render(r["name"], a.packs, a.seconds, a.taps or None), rows)):
+            for r, m in zip(todo, ex.map(lambda r: render(r["name"], a.packs, a.seconds, a.taps or None), todo)):
                 r["m"] = m
                 done += 1
                 if done % 250 == 0:
                     el = time.time() - t0
-                    print(f"  {done}/{len(rows)}  {el/60:.0f} min, noch etwa {el/done*(len(rows)-done)/60:.0f} min", flush=True)
+                    print(f"  {done}/{len(todo)}  {el/60:.0f} min, noch etwa {el/done*(len(todo)-done)/60:.0f} min", flush=True)
+                    flush()
+        flush()
         if a.cache:
-            json.dump({r["name"]: r["m"] for r in rows if r["m"]}, open(a.cache, "w", encoding="utf-8"))
             print(f"  cached {sum(1 for r in rows if r['m'])} measurements in {a.cache}")
         if a.no_write:
             print("cache only (--no-write): the pack files were not touched")

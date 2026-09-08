@@ -76,9 +76,10 @@ def main():
     ap.add_argument("--work", required=True, help="folder for the cache, the excerpts and the CLAP file")
     ap.add_argument("--from", dest="start", default="affinity", choices=STEPS)
     ap.add_argument("--to", dest="stop", default="build", choices=STEPS)
-    ap.add_argument("--jobs", type=int, default=3,
-                    help="renders at a time; three leaves the machine usable, four does not when "
-                         "anything else is running")
+    ap.add_argument("--jobs", type=int, default=12,
+                    help="renders at a time. Twelve of the machine's twenty-four logical cores: "
+                         "each render is about 100 MB, so this is CPU, not memory. Keep it well "
+                         "clear of a GPU job -- that combination is what froze the machine once")
     ap.add_argument("--anyway", action="store_true",
                     help="start even though the GPU or another generator is busy")
     ap.add_argument("--clusters", type=int, default=14)
@@ -140,14 +141,17 @@ def main():
     if want("verify"):
         if run([py, os.path.join(HERE, "verify_packs.py")], a.dry_run):
             return 1
-    if want("measure", cache):
+    if want("measure", cache if os.path.exists(cache + ".done") else None):
         # A minute, not the twelve seconds measure_packs defaults to: the evolution descriptors
         # measure how far a drone travels, and over twelve seconds every drone stands still. The
         # built-ins are measured at sixty by map_all, and both halves of the library have to be
         # measured under the same conditions or the ranks are meaningless.
         if run([py, os.path.join(HERE, "measure_packs.py"), "--packs", PACKS, "--cache", cache,
-                "--seconds", "60", "--taps", taps, "--jobs", str(a.jobs), "--no-write"], a.dry_run):
+                "--seconds", "60", "--taps", taps, "--jobs", str(a.jobs), "--no-write",
+                "--resume"], a.dry_run):
             return 1
+        if not a.dry_run:
+            open(cache + ".done", "w").close()   # the cache is complete, not just partial
     if want("builtins", bcache):
         # The layout is thrown away here; what is kept is the built-ins' measurements and their
         # excerpts, which have to exist before CLAP listens or the 196 would have no line.

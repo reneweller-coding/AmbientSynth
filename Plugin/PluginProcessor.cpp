@@ -457,6 +457,11 @@ void AmbientSynthProcessor::applySoundPreset(int index)
 {
     if (index < 0 || index >= numPresets()) return;
     soundIndex_ = index;
+    // ...and the program number with it. Only setCurrentProgram used to move this, which is the
+    // DAW's way in -- so picking a preset in the box or in the browser left it at 0, and every
+    // view that asks "what is playing" (the map's ring, the host's program display) answered
+    // "Init" however long you had been playing something else.
+    currentProgram_ = index;
     soundName_ = preset(index).name;
     // A sound preset brings its own Z-plane and its own Strike with it, so whatever layer preset
     // was picked before is no longer what is loaded. Cleared rather than left standing: a box

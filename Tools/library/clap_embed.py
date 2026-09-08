@@ -123,13 +123,22 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--resume", action="store_true",
                     help="keep what the output file already holds and only do the rest")
+    ap.add_argument("--device", default="auto", choices=("auto", "cuda", "cpu"),
+                    help="cpu is several times slower and cannot take the machine down with it")
+    ap.add_argument("--half", action="store_true",
+                    help="fp16 on the card: 323 MB of weights instead of 589, and a batch of 8 "
+                         "peaks at 427 MB instead of 807. Measured, not estimated. It is free for "
+                         "what this is used for -- a cosine distance between unit vectors")
     a = ap.parse_args()
 
     import torch
     import soundfile as sf
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = a.device if a.device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
     model, proc = load_model(device)
-    print(f"CLAP on {device}: {len(PHRASES)} phrases in {len(VOCAB)} groups", flush=True)
+    if a.half and device == "cuda":
+        model = model.half()
+    print(f"CLAP on {device}{' (fp16)' if a.half and device == 'cuda' else ''}: "
+          f"{len(PHRASES)} phrases in {len(VOCAB)} groups", flush=True)
 
     with torch.no_grad():
         t = proc(text=PHRASES, return_tensors="pt", padding=True).to(device)
@@ -175,7 +184,10 @@ def main():
                 inp = proc(audio=waves, sampling_rate=SR, return_tensors="pt", padding=True).to(device)
             except (TypeError, ValueError):
                 inp = proc(audios=waves, sampling_rate=SR, return_tensors="pt", padding=True).to(device)
-            emb = _tensor(model.get_audio_features(**inp))
+            if a.half and device == "cuda":
+                inp = {k: (v.half() if hasattr(v, "is_floating_point") and v.is_floating_point() else v)
+                       for k, v in inp.items()}
+            emb = _tensor(model.get_audio_features(**inp)).float()
             emb = torch.nn.functional.normalize(emb, dim=-1)
             sim = emb @ textEmb.T
             best = sim.topk(a.top, dim=-1)

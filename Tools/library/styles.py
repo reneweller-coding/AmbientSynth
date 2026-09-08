@@ -130,7 +130,12 @@ MODULES_BASE = {
     # the second conductor, adaptive tuning, the near field, the newer room axes -- was in nothing
     # at all. These weights are how a preset reaches for them. They are drawn from the `extra`
     # stream, like bow and spectral, so a style that leaves them alone is untouched.
-    "slot1": 0.72,          # the first slot is something other than the additive bank
+    # Raised from 0.72 after the shelves grew: the tonal sample library roughly tripled, and a
+    # measurement of both spaces said what Rene had said three times -- a grain slot carrying its
+    # own recording differs from its neighbours more than an additive bank differs from another
+    # additive bank. The bank keeps about a quarter of the library, which is the share where it
+    # is the point rather than the default.
+    "slot1": 0.82,          # the first slot is something other than the additive bank
     "noiseprimary": 0.0,    # ... and may be noise: only where a style asks for it by name
     "cascade": 0.28,        # the conductor's clock as a Hawkes process: events breed events
     "surprise": 0.22,       # entropy held to a target (Surprise + Homeostat)

@@ -92,11 +92,11 @@ void fft(std::vector<float>& re, std::vector<float>& im)
 // for the preset map, three descriptors that say what a drone is like rather than what a note is
 // like: how much it changes over a minute, how rough its spectrum is, and how wet it stands.
 // stemE holds the energy of the four buses (near, far, cosmos, room) or is null.
-void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, int voices,
+void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, double voices,
                        const double* stemE = nullptr)
 {
     const size_t n = L.size();
-    if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%d peak=0 jump=0 dc=0 monoloss=0\n", voices); return; }
+    if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%.2f peak=0 jump=0 dc=0 monoloss=0\n", voices); return; }
     const size_t half = n / 2;
     const int win = 2048, hop = 1024;
     std::vector<float> re(win), im(win), mag(win / 2 + 1), prev(win / 2 + 1, 0.0f), hann(win);
@@ -291,7 +291,7 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
         const double all = stemE[0] + stemE[1] + stemE[2] + stemE[3];
         if (all > 1e-18) wet = (stemE[1] + stemE[2] + stemE[3]) / all;
     }
-    std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d "
+    std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%.2f "
                 "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f evo_tone=%.5f evo_level=%.4f rough=%.6f wet=%.5f hash=%016llx\n",
                 20.0 * std::log10(rms + 1e-12), centroid * inv, flatness * inv,
                 frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices,
@@ -608,6 +608,11 @@ int main(int argc, char** argv)
 
     double sumSq[2] = { 0, 0 }; float peak = 0.0f; long nans = 0;
     double secSq[2] = { 0, 0 }; long secCount = 0; int sec = 0;
+    // How many voices are sounding, averaged over the settled half of the render. It used to be
+    // engine.activeVoices() at the last sample -- one instantaneous reading of a number that a
+    // generative conductor changes every few seconds, which made the map's density axis a coin
+    // toss. Sampled per block and averaged over the same half every other descriptor uses.
+    double voiceSum = 0.0; long voiceBlocks = 0;
     if (stats) std::printf("sec, rmsL_dB, rmsR_dB, peak, voices, root, arc\n");
     float secPeak = 0.0f;
 
@@ -629,6 +634,7 @@ int main(int argc, char** argv)
                        [&](ParamId id) { return engine.getParam(id); },
                        [&](ParamId id, float v) { engine.setParam(id, v); });
         engine.process(L.data(), R.data(), n);
+        if (done >= total / 2) { voiceSum += engine.activeVoices(); ++voiceBlocks; }
         if (!stemPrefix.empty())
             for (int c = 0; c < Engine::kNumStems * 2; ++c)
                 stemOut[static_cast<size_t>(c)].insert(stemOut[static_cast<size_t>(c)].end(), stemPtr[c], stemPtr[c] + n);
@@ -688,7 +694,7 @@ int main(int argc, char** argv)
     if (measure) {   // descriptors straight from the buffer: no temporary file at all
         std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);
         for (size_t k = 0; k + 1 < wav.size(); k += 2) { ml[k / 2] = wav[k]; mr[k / 2] = wav[k + 1]; }
-        printMeasurements(ml, mr, sr, engine.activeVoices(), stemE);
+        printMeasurements(ml, mr, sr, voiceBlocks > 0 ? voiceSum / voiceBlocks : engine.activeVoices(), stemE);
         return nans == 0 ? 0 : 1;
     }
     if (!writeWav(out, wav, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", out.c_str()); return 1; }

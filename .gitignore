@@ -5,7 +5,13 @@ out/
 *.user
 *.wav
 __pycache__/
-ThirdParty/
+ThirdParty/*
+# ...except the one library that is vendored rather than fetched: a single public-domain header
+# the core needs to read FLAC. Git never descends into an excluded directory, so the pattern above
+# excludes the CONTENTS and these two lines let one folder back in. Without the header in the repo
+# nobody but this machine can build -- which is exactly what CI said, three red jobs in a row.
+!ThirdParty/dr_libs/
+!ThirdParty/dr_libs/*.h
 *.keystore
 Textures/
 Tools/TextureGen/.venv/

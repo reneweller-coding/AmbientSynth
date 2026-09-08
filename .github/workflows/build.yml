@@ -7,8 +7,22 @@ name: build
 on:
   push:
     branches: [master]
+    # A day of work on the library is thirty pushes, and most of them cannot break a build: prose,
+    # generated preset packs, the sample lists. Those do not need a compiler, and a mailbox full of
+    # notifications about them is a mailbox nobody reads.
+    paths-ignore:
+      - 'docs/**'
+      - 'Library/**'
+      - 'Tools/library/prompts/**'
+      - '**/*.md'
   pull_request:
   workflow_dispatch:
+
+# One run per branch. Pushing again while a run is going cancels it rather than queueing a second:
+# what matters is whether the tip builds, not whether every intermediate commit did.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   core:

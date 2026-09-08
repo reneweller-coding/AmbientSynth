@@ -230,14 +230,14 @@ MOD_TARGETS = [
     # Everything the library never modulated. The instrument has had these for rounds; not one
     # preset moved them, because the target list was written before they existed.
     ("far_rotate",    0.08, 0.25, None),
-    ("far_spread",    0.08, 0.28, None),
+    ("far_unmask_spread", 0.08, 0.28, None),   # the key is far_unmask_spread; "far_spread" was a route to nowhere
     ("far_envelop",   0.08, 0.30, None),
     ("far_comod",     0.08, 0.30, None),
     ("early_size",    0.08, 0.30, None),
     ("elev_far",      0.08, 0.30, None),
     ("near_ild",      0.08, 0.30, None),
     ("presence",      0.06, 0.22, None),
-    ("time_width",    0.06, 0.22, None),
+    ("itd",           0.06, 0.22, None),   # the Time Width control; "time_width" was its label, not its key
     ("doppler",       0.06, 0.20, None),
     ("partial_spread", 0.10, 0.35, None),
     ("sub_pulse",     0.08, 0.25, None),

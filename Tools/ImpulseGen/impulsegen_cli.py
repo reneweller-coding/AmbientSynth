@@ -25,7 +25,10 @@ import impulsegen_core as ig  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 TEXTURE_WORKER = os.path.normpath(os.path.join(HERE, "..", "TextureGen", "texturegen_worker.py"))
-DEFAULT_OUT = os.path.join(ROOT, "Impulses")
+# Where a hand-run experiment lands. NOT Library/: what the three designers write while
+# somebody is trying things out is not the shipping library, and three folders in the repo
+# root called Textures, Wavetables and Impulses looked exactly like a second one.
+DEFAULT_OUT = os.path.join(ROOT, "Scratch", "Impulses")
 
 # name: (seconds, rt60 low/mid/high, size, predelay ms, width, tone, modulation)
 ROOM_PRESETS = {

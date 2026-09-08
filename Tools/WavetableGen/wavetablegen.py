@@ -29,7 +29,10 @@ sys.path.insert(0, os.path.join(HERE, "..", "TextureGen"))
 import wavetablegen_core as wt  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-DEFAULT_OUT = os.path.join(ROOT, "Wavetables")
+# Where a hand-run experiment lands. NOT Library/: what the three designers write while
+# somebody is trying things out is not the shipping library, and three folders in the repo
+# root called Textures, Wavetables and Impulses looked exactly like a second one.
+DEFAULT_OUT = os.path.join(ROOT, "Scratch", "Wavetables")
 TEXTURE_WORKER = os.path.normpath(os.path.join(HERE, "..", "TextureGen", "texturegen_worker.py"))
 try:
     from texturegen_worker import MODELS as TEXTURE_MODELS

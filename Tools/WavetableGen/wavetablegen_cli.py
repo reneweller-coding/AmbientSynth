@@ -125,7 +125,8 @@ def main():
 
     def common(p):
         p.add_argument("--frames", type=int, default=32)
-        p.add_argument("--out-dir", default=os.path.join(ROOT, "Wavetables"))
+        # Where a hand-run experiment lands -- not Library/, which is the shipping shelf.
+        p.add_argument("--out-dir", default=os.path.join(ROOT, "Scratch", "Wavetables"))
         p.add_argument("--int16", action="store_true", help="16-bit PCM instead of 32-bit float")
 
     p = sub.add_parser("audio"); common(p)

@@ -21,7 +21,10 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORKER = os.path.join(HERE, "texturegen_worker.py")
-DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "..", "Textures"))
+# Where a hand-run experiment lands. NOT Library/: what the three designers write while
+# somebody is trying things out is not the shipping library, and three folders in the repo
+# root called Textures, Wavetables and Impulses looked exactly like a second one.
+DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "..", "Scratch", "Textures"))
 sys.path.insert(0, HERE)
 from texturegen_worker import MODELS  # noqa: E402
 

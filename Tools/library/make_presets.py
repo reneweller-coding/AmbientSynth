@@ -355,9 +355,17 @@ def modulation_for(p, style, rng, shade_name):
         # Now and then the source is not an LFO at all: BEAT is the chord listening to how far
         # out of tune it is, and the coherence ring is four oscillators that pull on each other.
         # Both make the modulation come from the instrument rather than from a clock.
+        # A wavetable's position is the one control where a plain eight-second sine is audibly
+        # wrong: scanning a table is a slow walk through a spectrum, and a rigid one turns the
+        # drone into an LFO with a spectrum attached. Positions get a chaotic source more often,
+        # and when they do get an LFO it is a slow and smooth one (below).
+        is_pos = target.endswith("_pos") or target == "pos"
         other = None
-        if rng.random() < 0.34:
-            other = OTHER_SOURCES[rng.randrange(len(OTHER_SOURCES))]
+        if rng.random() < (0.55 if is_pos else 0.34):
+            src = OTHER_SOURCES
+            if is_pos and rng.random() < 0.6:
+                src = [x for x in OTHER_SOURCES if x.startswith(("lorenz", "rossler", "lenia"))] or OTHER_SOURCES
+            other = src[rng.randrange(len(src))]
         if other is not None:
             depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
             if other.startswith("lenia"):
@@ -375,8 +383,12 @@ def modulation_for(p, style, rng, shade_name):
         if lfo not in used_lfo:
             used_lfo.append(lfo)
             period = base_period * (PHI ** len(used_lfo))
+            if is_pos:
+                # Thirty seconds to three minutes, and never a shape that jumps.
+                period = max(period, math.exp(u(rng, math.log(30.0), math.log(180.0))))
             p[f"lfo{lfo}_rate"] = 1.0 / period
-            p[f"lfo{lfo}_shape"] = LFO_SHAPES[rng.randrange(len(LFO_SHAPES))]
+            p[f"lfo{lfo}_shape"] = (["Sine", "Triangle", "Random", "Random", "Table"][rng.randrange(5)]
+                                    if is_pos else LFO_SHAPES[rng.randrange(len(LFO_SHAPES))])
             p[f"lfo{lfo}_phase"] = round(u(rng, 0.0, 1.0), 3)
             p[f"lfo{lfo}_depth"] = round(u(rng, 0.6, 1.0), 3)
             if p[f"lfo{lfo}_shape"] == "Table":

@@ -209,6 +209,125 @@ def make_spectral(rng, seconds, bands, spread, tone):
     return out
 
 
+def make_diffusion(rng, seconds, density, tone, decay):
+    """Velvet noise: taps at random times, all the same size, sign chosen at random. It is what a
+    diffusion network converges to, and it is the smoothest tail there is -- no comb colour, no
+    grain, just air. The designed rooms cannot do this: their early pattern always leaves a
+    signature."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    for c in range(2):
+        step = SR / max(density, 20.0)
+        at = rng.uniform(0.0, step)
+        while at < n - 2:
+            i = int(at + rng.uniform(0.0, step))
+            if i >= n:
+                break
+            out[c, i] += 1.0 if rng.random() < 0.5 else -1.0
+            at += step
+    from scipy.signal import lfilter
+    # One pole of colour, so the tail is not white: a room absorbs the top.
+    a = 1.0 - math.exp(-2 * math.pi * (1200.0 * (1.0 + 2.0 * tone)) / SR)
+    out = lfilter([a], [1.0, -(1.0 - a)], out, axis=-1)
+    return out * decay_env(n, SR, decay)
+
+
+def make_echoes(rng, seconds, taps, spread, tone):
+    """A handful of separate reflections and almost nothing between them: a stone circle, a cliff
+    face, a canyon. What makes it a place rather than a reverb is that you can count them."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    out[:, :3] += np.array([[1.0, 0.4, 0.15], [1.0, 0.4, 0.15]]) * 0.6
+    for k in range(taps):
+        t = (k + 1) * spread * rng.uniform(0.75, 1.3)
+        i = int(t * SR)
+        if i >= n - 64:
+            break
+        width = max(8, int(SR * 0.002 * (1.0 + 3.0 * tone) * (1.0 + k * 0.4)))
+        env = np.hanning(width * 2)[width:]
+        grain = rng.standard_normal(width) * env
+        amp = 0.8 ** (k + 1)
+        pan = rng.uniform(0.1, 0.9)
+        m = min(width, n - i)
+        out[0, i:i + m] += grain[:m] * amp * math.cos(pan * math.pi / 2)
+        out[1, i:i + m] += grain[:m] * amp * math.sin(pan * math.pi / 2)
+    return out * decay_env(n, SR, seconds * 0.8)
+
+
+def make_tube(rng, seconds, hz, q, air):
+    """One resonance and the air around it: a pipe, a ventilation shaft, a chimney, a bottle. The
+    Room becomes a body with a pitch rather than a space with a size."""
+    from scipy.signal import lfilter
+    n = int(seconds * SR)
+    x = stereo_noise(rng, n) * decay_env(n, SR, seconds * rng.uniform(0.3, 0.7))
+    out = np.zeros((2, n))
+    for k, ratio in enumerate((1.0, 3.0, 5.0, 7.0)):          # a stopped pipe: odd partials
+        f = hz * ratio
+        if f > SR * 0.45:
+            break
+        r = 1.0 - math.pi * (f / q) / SR
+        theta = 2 * math.pi * f / SR
+        b = [1.0 - r]
+        a = [1.0, -2 * r * math.cos(theta), r * r]
+        out += lfilter(b, a, x, axis=-1) * (0.7 ** k)
+    return out + x * air
+
+
+def make_underwater(rng, seconds, cutoff, decay):
+    """Everything above a few hundred hertz gone, and a very long tail: under ice, inside a tank,
+    a room heard through a wall. The one direction the designed halls never go, because a hall
+    that dark would be a broken hall."""
+    from scipy.signal import lfilter
+    n = int(seconds * SR)
+    x = stereo_noise(rng, n) * decay_env(n, SR, decay)
+    a = 1.0 - math.exp(-2 * math.pi * cutoff / SR)
+    for _ in range(4):                                        # four poles: really gone, not tilted
+        x = lfilter([a], [1.0, -(1.0 - a)], x, axis=-1)
+    # A slow swell in the tail, so it breathes rather than just fades.
+    t = np.arange(n) / SR
+    return x * (1.0 + 0.35 * np.sin(2 * math.pi * rng.uniform(0.05, 0.4) * t))
+
+
+def make_chord_comb(rng, seconds, root_hz, ratios, feedback):
+    """Several combs at once, tuned to a chord in just intonation. `tuned` rings on one note; this
+    is a room that answers with a chord, whatever you play into it."""
+    n = int(seconds * SR)
+    out = np.zeros((2, n))
+    for j, ratio in enumerate(ratios):
+        period = SR / (root_hz * ratio)
+        for c in range(2):
+            amp, at, k = 1.0 / (1 + j), period * (1.0 + 0.002 * c), 0
+            while at < n - 4 and amp > 0.001 and k < 3000:
+                i = int(at)
+                out[c, i] += amp * (1.0 if k % 2 == 0 else -1.0)
+                amp *= feedback
+                at += period
+                k += 1
+    return out * decay_env(n, SR, seconds * 0.85)
+
+
+def make_sheet(rng, seconds, modes, rt60, spread):
+    """A steel sheet, a waterphone, a saw blade: dozens of inharmonic modes, close together and
+    decaying at different rates, so the metal changes colour while it rings."""
+    from scipy.signal import lfilter
+    n = int(seconds * SR)
+    x = stereo_noise(rng, n) * decay_env(n, SR, 0.02)
+    out = np.zeros((2, n))
+    base = rng.uniform(60.0, 320.0)
+    for k in range(modes):
+        # Square-law spacing (a stiff plate) scattered a little: nothing lands on a harmonic.
+        f = base * (1.0 + spread * (k ** 1.7) / modes) * rng.uniform(0.94, 1.06)
+        if f > SR * 0.45:
+            break
+        rt = rt60 * rng.uniform(0.3, 1.4)
+        r = 10.0 ** (-3.0 / (rt * SR))
+        theta = 2 * math.pi * f / SR
+        a = [1.0, -2 * r * math.cos(theta), r * r]
+        gain = (1.0 / (1.0 + k * 0.25)) * rng.uniform(0.5, 1.0)
+        out += lfilter([1.0 - r], a, x, axis=-1) * gain
+    return out
+
+
 # ---------------------------------------------------------------- the catalogue
 
 def catalogue(rng):
@@ -304,13 +423,57 @@ def catalogue(rng):
 
     # -- struck objects, cut from the field recordings (see above). Skipped silently when the
     # recordings have not been generated: everything else in this library must still build.
-    files = field_files(os.path.join(ROOT, "Library", "Textures"))
-    if files:
-        picks = [files[(i * 37 + 11) % len(files)] for i in range(40)]
-        for i, f in enumerate(picks):
-            def build(rng=rng, f=f):
-                return make_struck(rng, f, rng.uniform(0.12, 0.45))
-            jobs.append(("struck", f"struck_{i:02d}", build))
+    # -- diffusion, echoes, tube, underwater, chord combs, sheets: six shapes the designed rooms
+    # cannot make, because a room that dark or that empty would be a broken room.
+    for i in range(12):
+        def build(rng=rng):
+            return make_diffusion(rng, min(MAX_SECONDS, rng.uniform(2.0, 7.0)),
+                                  density=rng.uniform(400.0, 4000.0), tone=rng.uniform(-0.4, 0.9),
+                                  decay=rng.uniform(1.5, 6.0))
+        jobs.append(("diffusion", f"diffusion_{i:02d}", build))
+    for i in range(12):
+        def build(rng=rng):
+            return make_echoes(rng, min(MAX_SECONDS, rng.uniform(2.0, 7.0)),
+                               taps=int(rng.integers(3, 9)), spread=rng.uniform(0.06, 0.5),
+                               tone=rng.uniform(0.0, 1.0))
+        jobs.append(("echoes", f"echoes_{i:02d}", build))
+    for i in range(12):
+        def build(rng=rng):
+            return make_tube(rng, min(MAX_SECONDS, rng.uniform(1.5, 5.0)),
+                             hz=rng.uniform(45.0, 260.0), q=rng.uniform(12.0, 90.0),
+                             air=rng.uniform(0.02, 0.25))
+        jobs.append(("tube", f"tube_{i:02d}", build))
+    for i in range(12):
+        def build(rng=rng):
+            return make_underwater(rng, min(MAX_SECONDS, rng.uniform(4.0, 8.0)),
+                                   cutoff=rng.uniform(120.0, 700.0), decay=rng.uniform(3.0, 9.0))
+        jobs.append(("underwater", f"underwater_{i:02d}", build))
+    for i in range(12):
+        def build(rng=rng):
+            root = rng.uniform(45.0, 150.0)
+            ratios = [[1, 1.5, 2], [1, 1.25, 1.5], [1, 1.2, 1.5, 1.8],
+                      [1, 1.5, 2.25], [1, 1.75, 2.5], [1, 1.5, 1.75, 2]][int(rng.integers(0, 6))]
+            return make_chord_comb(rng, min(MAX_SECONDS, rng.uniform(2.0, 6.0)),
+                                   root, list(ratios), feedback=rng.uniform(0.93, 0.995))
+        jobs.append(("chord", f"chord_{i:02d}", build))
+    for i in range(12):
+        def build(rng=rng):
+            return make_sheet(rng, min(MAX_SECONDS, rng.uniform(2.0, 6.0)),
+                              modes=int(rng.integers(14, 40)), rt60=rng.uniform(0.8, 4.0),
+                              spread=rng.uniform(0.6, 3.0))
+        jobs.append(("sheet", f"sheet_{i:02d}", build))
+
+    # -- struck objects and places, cut from the clip library. Skipped silently when the clips
+    # have not been generated: everything else here must still build.
+    clips = [os.path.join(ROOT, "Library", "Textures"), os.path.join(ROOT, "Library", "FieldRecordings")]
+    for i, f in enumerate(source_files(STRUCK_WORDS, clips, 160)):
+        def build(rng=rng, f=f):
+            return make_struck(rng, f, rng.uniform(0.12, 0.45))
+        jobs.append(("struck", f"struck_{i:03d}", build))
+    for i, f in enumerate(source_files(SPACE_WORDS, [clips[1], clips[0]], 120)):
+        def build(rng=rng, f=f):
+            return make_space(rng, f, rng.uniform(1.2, 4.5))
+        jobs.append(("space", f"space_{i:03d}", build))
 
     return jobs
 
@@ -331,18 +494,39 @@ def catalogue(rng):
 STRUCK_CATEGORIES = ("industrial", "machines", "interior", "city", "cave", "forest", "water")
 
 
-def field_files(texture_dir):
-    """The field recordings that might have a strike in them, in a stable order."""
-    if not os.path.isdir(texture_dir):
-        return []
+# What a struck object sounds like, and what a place sounds like: the two vocabularies the clip
+# folders are searched with. The old rule wanted a "field_recordings_" prefix, which only the
+# clips generated per style ever had -- everything made from the prompt lists was invisible to it,
+# and the shelf quietly stopped growing.
+STRUCK_WORDS = ("bell|gong|bowl|chime|anvil|cymbal|tam_tam|struck|strike|hammer|mallet|plate|"
+                "metal|steel|copper|brass|iron|aluminium|rail|pipe|tube|rod|spring|glass|crystal|"
+                "porcelain|ceramic|terracotta|stone|slate|marble|flint|wood|timber|log|block|"
+                "drum|tabla|udu|ghatam|piano|harp|kalimba|mbira|tine|clang|knock|tap")
+SPACE_WORDS = ("hall|cathedral|church|chapel|corridor|stairwell|tunnel|cave|cavern|cistern|"
+               "warehouse|hangar|silo|bunker|basement|cellar|attic|room|shaft|pool|reservoir|"
+               "quarry|mine|bridge|underpass|car_park|station|concourse|factory|boiler|"
+               "rain|wind|storm|forest|river|stream|waves|surf|ocean|snow|ice|fog|"
+               "machinery|ventilation|fan|engine|turbine|generator|compressor|transformer|"
+               "traffic|motorway|railway|harbour|ferry|market|crowd|library|museum")
+
+
+def source_files(words, folders, want):
+    """Clips whose name says they are the right kind of material, in a stable order, spread over
+    the whole shelf rather than taken from the front of the alphabet."""
+    import re as _re
+    pat = _re.compile(words, _re.I)
     out = []
-    for f in sorted(os.listdir(texture_dir)):
-        if not f.startswith("field_recordings_") or not f.endswith(".wav"):
+    for d in folders:
+        if not os.path.isdir(d):
             continue
-        rest = f[len("field_recordings_"):]
-        if rest.split("_", 1)[0] in STRUCK_CATEGORIES:
-            out.append(os.path.join(texture_dir, f))
-    return out
+        out += [os.path.join(d, f) for f in sorted(os.listdir(d))
+                if f.endswith(".wav") and pat.search(f)]
+    if not out or want <= 0:
+        return out[:max(want, 0)]
+    if len(out) <= want:
+        return out
+    step = len(out) / float(want)
+    return [out[int(i * step)] for i in range(want)]
 
 
 def read_wav_mono(path):
@@ -420,6 +604,56 @@ def make_struck(rng, path, seconds):
         src = np.linspace(0.0, ir.shape[1] - 1.0, m)
         ir = np.stack([np.interp(src, np.arange(ir.shape[1]), ir[c]) for c in range(2)])
     return normalise(fade_out(fade_in(ir, SR, 1.0), SR, 8.0))
+
+
+def make_space(rng, path, seconds):
+    """The other way to use a recording: not its sharpest event but a quiet stretch of it, shaped
+    into a tail. Convolved with a drone, a minute of rain or of a ventilation shaft becomes a room
+    with that texture in its walls -- irregular in a way no designed hall is, because no designed
+    hall was ever outdoors."""
+    x, sr = read_wav_mono(path)
+    if x is None or sr <= 0 or x.size < sr:
+        return None
+    n = int(seconds * sr)
+    if x.size < n + sr // 4:
+        return None
+    # The steadiest window rather than the loudest: an event in the tail would read as an echo of
+    # something that never happened.
+    hop = max(1, int(sr * 0.05))
+    frames = x[: (x.size // hop) * hop].reshape(-1, hop)
+    env = np.log(np.sqrt((frames ** 2).mean(axis=1)) + 1e-9)
+    w = max(2, n // hop)
+    if env.size <= w:
+        return None
+    # Rolling mean and variance, cheaply: the window with the least movement in it.
+    c1 = np.concatenate([[0.0], np.cumsum(env)])
+    c2 = np.concatenate([[0.0], np.cumsum(env ** 2)])
+    mean = (c1[w:] - c1[:-w]) / w
+    var = np.maximum((c2[w:] - c2[:-w]) / w - mean ** 2, 0.0)
+    # Loud enough to be something, steady enough to be a texture.
+    score = var - 0.15 * mean
+    start = int(np.argmin(score)) * hop
+    seg = x[start:start + n].copy()
+    if seg.size < n or float(np.sqrt((seg ** 2).mean())) < 1e-5:
+        return None
+    # A room decays; a recording does not. Two envelopes: the tail falls to -60 dB, and the head
+    # rises over a few milliseconds so it is a room and not a sample being triggered.
+    t = np.arange(seg.size) / sr
+    seg = seg * np.exp(-6.9078 * t / (seconds * 0.85)) * np.minimum(1.0, t / 0.004)
+    seg -= seg.mean()
+    # Two channels: the same texture, decorrelated by a few milliseconds, which is what makes a
+    # convolution reverb wide instead of centred.
+    lag = int(sr * rng.uniform(0.003, 0.012))
+    right = np.concatenate([np.zeros(lag), seg[: seg.size - lag]]) * rng.uniform(0.85, 1.0)
+    ir = np.stack([seg, right])
+    if sr != SR:
+        m = int(round(ir.shape[1] * SR / sr))
+        src = np.linspace(0.0, ir.shape[1] - 1.0, m)
+        i0 = np.floor(src).astype(int)
+        fr = src - i0
+        i0 = np.clip(i0, 0, ir.shape[1] - 2)
+        ir = ir[:, i0] * (1 - fr) + ir[:, i0 + 1] * fr
+    return ir
 
 
 # ---------------------------------------------------------------- checks

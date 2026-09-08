@@ -14,7 +14,10 @@ are run by hand because they take hours of GPU time and their output is committe
     7  map        Tools/library/map_all.py          one layout, the groups, the phrases, the tables
     8  build      cmake --build ... && the selftest
 
-  python Tools/library/rebuild_all.py --work <dir> [--from measure] [--jobs 4] [--dry-run]
+  python Tools/library/rebuild_all.py --work <dir> [--from measure] [--jobs 3] [--dry-run]
+
+It refuses to start while the GPU or another of these tools is busy: every step is minutes to
+hours long, and two at once is how a workstation stops responding (--anyway overrides).
 
 --work holds everything that is not committed: the measurement cache, the excerpts and the CLAP
 file. Steps are skipped when their output is already there, so an interrupted run continues where
@@ -32,6 +35,32 @@ PACKS = os.path.join(ROOT, "Library", "Packs")
 STEPS = ["affinity", "presets", "verify", "measure", "builtins", "clap", "map", "build"]
 
 
+def gpu_busy(limit_mb=4000):
+    """How much of the card is already spoken for. A generative model loading beside a batch of
+    renders is what froze the machine once: the driver starts paging VRAM into system memory under
+    pressure and Windows stops answering. Cheap to ask, so it is asked before every long step."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=20).stdout
+        used = max(int(v.strip()) for v in out.split() if v.strip().isdigit())
+    except Exception:
+        return 0
+    return used if used > limit_mb else 0
+
+
+def other_batches():
+    """Another generator already at work, from this repo's own toolchain."""
+    try:
+        out = subprocess.run(["wmic", "process", "where", "name like '%python%'", "get", "commandline"],
+                             capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        return []
+    mine = os.path.basename(__file__)
+    names = ("texturegen_worker", "make_textures", "make_field_recordings", "make_wavetables",
+             "make_impulses", "clip_affinity", "clap_embed", "measure_packs", "map_all")
+    return sorted({n for n in names if n in out and n != mine})
+
+
 def run(cmd, dry, cwd=ROOT):
     print("\n$ " + " ".join(str(c) for c in cmd), flush=True)
     if dry:
@@ -47,13 +76,31 @@ def main():
     ap.add_argument("--work", required=True, help="folder for the cache, the excerpts and the CLAP file")
     ap.add_argument("--from", dest="start", default="affinity", choices=STEPS)
     ap.add_argument("--to", dest="stop", default="build", choices=STEPS)
-    ap.add_argument("--jobs", type=int, default=4, help="renders at a time; the machine stays usable at 4")
+    ap.add_argument("--jobs", type=int, default=3,
+                    help="renders at a time; three leaves the machine usable, four does not when "
+                         "anything else is running")
+    ap.add_argument("--anyway", action="store_true",
+                    help="start even though the GPU or another generator is busy")
     ap.add_argument("--clusters", type=int, default=14)
     ap.add_argument("--clap-python", default="", help="interpreter with torch and transformers "
                     "(default: Tools/TextureGen/.venv, the one the clip generator uses)")
     ap.add_argument("--force", action="store_true", help="redo steps whose output is already there")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+
+    # Nothing here starts while something else is already using the machine. Every step below is
+    # minutes to hours long, and two of them at once is how a workstation stops responding.
+    if not a.dry_run and not a.anyway:
+        busy = gpu_busy()
+        others = other_batches()
+        if busy or others:
+            print(f"refusing to start: {busy} MB of the GPU is in use" if busy else "refusing to start:", end=" ")
+            if others:
+                print(f"{', '.join(others)} already running")
+            else:
+                print("")
+            print("wait for it, or pass --anyway if you know it is small enough")
+            return 1
 
     work = os.path.abspath(a.work)
     os.makedirs(work, exist_ok=True)

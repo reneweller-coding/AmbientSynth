@@ -37,7 +37,11 @@ find_package(Threads)
 if(Threads_FOUND)
     target_link_libraries(AmbientCore PUBLIC Threads::Threads)
 endif()
-target_include_directories(AmbientCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(AmbientCore
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+    # dr_flac, one public-domain header: the sample library ships as FLAC, and the core reads it
+    # without a framework the way it reads WAV. PRIVATE -- nobody outside needs the decoder.
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/dr_libs)
 target_compile_features(AmbientCore PUBLIC cxx_std_20)
 set_target_properties(AmbientCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(MSVC)

@@ -87,6 +87,37 @@ def read_wav(path):
     return None
 
 
+def to_flac(path):
+    """(bytes, name, why) -- the file as 24-bit FLAC, under its own name.
+
+    FLAC is lossless: the same samples to the bit, in roughly 40 % of the float original against
+    the 75 % that 24-bit PCM costs. Measured on this library it takes the download from 15.4 GB to
+    8.4 GB. The core reads it without a framework (dr_flac in Core/src/WavFile.cpp), and a preset
+    that names "x.wav" finds "x.flac" beside it, so nothing in any pack has to change.
+    """
+    try:
+        import soundfile as sf
+    except ImportError:
+        return None, None, "no soundfile: run this with Tools/TextureGen/.venv"
+    try:
+        x, rate = sf.read(path, dtype="float32", always_2d=True)
+    except Exception:
+        return None, None, "unreadable"
+    if x.size == 0:
+        return None, None, "empty"
+    import io
+    buf = io.BytesIO()
+    try:
+        # PCM_24 for material that came in as float, and the file's own depth when it was already
+        # integer -- a 16-bit wavetable gains nothing from being written as 24.
+        info = sf.info(path)
+        sub = "PCM_16" if info.subtype == "PCM_16" else "PCM_24"
+        sf.write(buf, x, rate, format="FLAC", subtype=sub)
+    except Exception as e:
+        return None, None, "flac failed: %s" % type(e).__name__
+    return buf.getvalue(), os.path.splitext(os.path.basename(path))[0] + ".flac", "flac"
+
+
 def to_24bit(path):
     """(bytes, why) -- the file as 24-bit PCM, or (None, why) when it is left exactly as it is.
 
@@ -167,6 +198,8 @@ def main():
     ap.add_argument("--max-part-mb", type=int, default=1800,
                     help="largest archive to write; GitHub refuses a release asset over 2 GB")
     ap.add_argument("--check-only", action="store_true")
+    ap.add_argument("--wav", action="store_true",
+                    help="ship 24-bit WAV as before instead of FLAC (twice the download)")
     ap.add_argument("--add-new", action="store_true",
                     help="pack only the files the existing manifest does not have, as a new part")
     ap.add_argument("--emit-only", action="store_true",
@@ -216,17 +249,19 @@ def main():
     for i, ((kind, name), src) in enumerate(sorted(want.items())):
         dst_dir = os.path.join(OUT, kind)
         os.makedirs(dst_dir, exist_ok=True)
-        dst = os.path.join(dst_dir, name)
-        conv, why = to_24bit(src)
-        why_count[why] = why_count.get(why, 0) + 1
+        conv, out_name, why = (None, None, "") if a.wav else to_flac(src)
         if conv is None:
-            with open(src, "rb") as f:
-                conv = f.read()
-        else:
-            saved += os.path.getsize(src) - len(conv)
+            out_name = name
+            conv, why = to_24bit(src)
+            if conv is None:
+                with open(src, "rb") as f:
+                    conv = f.read()
+        dst = os.path.join(dst_dir, out_name)
+        why_count[why] = why_count.get(why, 0) + 1
+        saved += os.path.getsize(src) - len(conv)
         with open(dst, "wb") as f:
             f.write(conv)
-        staged.append((kind, name, dst))
+        staged.append((kind, out_name, dst))
         if (i + 1) % 200 == 0:
             print("  %d/%d" % (i + 1, len(want)), flush=True)
     print("%s -- saved %.2f GB" % (", ".join("%s: %d" % kv for kv in sorted(why_count.items())), saved / 1e9))

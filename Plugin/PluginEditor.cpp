@@ -151,6 +151,27 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     addAndMakeVisible(*helpButton_);
     help_ = std::make_unique<HelpView>(proc_, *this);
     addChildComponent(*help_);
+    // Which build this is. Asked for after a release where the answer mattered: two installers
+    // carried the same version string for twenty minutes, and there was no way to tell from the
+    // window which one was running.
+    aboutButton_ = std::make_unique<juce::TextButton>("?");
+    aboutButton_->setTooltip("Version and what is loaded");
+    aboutButton_->onClick = [this] {
+        const int packs = ambient::numPresetPacks();
+        juce::String text;
+        text << "AmbientSynth " << JucePlugin_VersionString << "\n"
+             << "built " << juce::String(__DATE__).trim() << ", " << __TIME__ << "\n\n"
+             << ambient::numPresets() << " presets";
+        if (packs > 0) text << " (" << ambient::builtinPresetCount() << " built in, " << packs << " packs)";
+        text << "\n" << ambient::numPresetClusters() << " measured groups, "
+             << ambient::numPresetPhrases() << " phrases\n\n"
+             << "Sample library: "
+             << (proc_.engine().displayTexture(0) != nullptr && !proc_.engine().displayTexture(0)->empty()
+                     ? "a clip is loaded" : "nothing loaded in slot 1")
+             << "\n" << JucePlugin_Manufacturer << "   " << "github.com/reneweller-coding/AmbientSynth";
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::NoIcon, "About AmbientSynth", text, "Close", this);
+    };
+    addAndMakeVisible(*aboutButton_);
     undoButton_ = std::make_unique<juce::TextButton>("Undo");
     undoButton_->setTooltip("Undo the last preset, die roll or A/B swap (Ctrl+Z)");
     undoButton_->onClick = [this] { doUndo(); };
@@ -837,6 +858,7 @@ void AmbientSynthEditor::resized()
     if (compactButton_) compactButton_->setBounds(1304, 8, 70, 24);
     if (recallButton_) recallButton_->setBounds(1378, 8, 62, 24);
     if (helpButton_) helpButton_->setBounds(1446, 8, 56, 24);
+    if (aboutButton_) aboutButton_->setBounds(1506, 8, 24, 24);
 
     const int W = designW_, H = designH_;
     if (perform_) perform_->setBounds(0, kHeaderH, W, H - kHeaderH);
@@ -2505,6 +2527,16 @@ void AmbientSynthEditor::ScopeView::paint(juce::Graphics& g)
         g.drawText(juce::String(hz, 1) + " Hz   " + juce::String(count) + " partials",
                    r.reduced(10.0f, 5.0f), juce::Justification::topRight, false);
     }
+}
+
+void AmbientSynthEditor::parentHierarchyChanged()
+{
+    // A maximise button beside the other two. Only the standalone has a DocumentWindow of its own;
+    // in a host the plug-in lives in the host's window and this finds nothing, which is right.
+    if (auto* window = findParentComponentOfClass<juce::DocumentWindow>())
+        window->setTitleBarButtonsRequired(juce::DocumentWindow::minimiseButton
+                                         | juce::DocumentWindow::maximiseButton
+                                         | juce::DocumentWindow::closeButton, false);
 }
 
 void AmbientSynthEditor::paint(juce::Graphics& g)

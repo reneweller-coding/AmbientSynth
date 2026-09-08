@@ -29,6 +29,10 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent&) override;
+    // The standalone window is JUCE's own, and it is built with a minimise and a close button and
+    // nothing else. The editor is the first thing that can reach it, and only once it has been put
+    // inside it -- hence here rather than in the constructor.
+    void parentHierarchyChanged() override;
 
 private:
     void timerCallback() override;
@@ -223,6 +227,7 @@ private:
     void runManualStep();
     std::unique_ptr<HelpView> help_;
     std::unique_ptr<juce::TextButton> helpButton_;
+    std::unique_ptr<juce::TextButton> aboutButton_;
     std::unique_ptr<juce::TooltipWindow> tooltips_;
 
     struct Cell {

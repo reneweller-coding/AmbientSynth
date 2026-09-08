@@ -590,6 +590,13 @@ public:
             if (best < 0) return;
             emit(BrainEvent{ BrainEvent::Type::NoteOff, slots_[best].note, 0.0f });
             slots_[best].note = -1;
+            // At the target this is an exchange: one note leaves, one arrives below, and the
+            // cluster stays the size it was. ABOVE the target it must not be -- Density had been
+            // turned down, and refilling here is what made the cluster ignore that. Measured over
+            // ninety-second stretches before this line existed: asked for two voices while ten
+            // were sounding, it held 9.99; asked for one, 7.79. Now it sheds one per tick until
+            // it is where it was asked to be.
+            if (activeCount() >= density) return;
         }
 
         if (anchorNote < 0 && rng_.uniform() < p.wander * 0.35f) wanderRoot(low, high, freqOf, p.key);

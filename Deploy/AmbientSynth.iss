@@ -221,8 +221,10 @@ begin
 end;
 
 // Where the preset packs and their samples live: one folder, machine-wide or per user, so that
-// the relative paths inside the packs ("../Textures/x.wav") land where they are looked for. Never
-// the user's own Documents\AmbientSynth, which is theirs and must survive an uninstall.
+// the relative paths inside the packs ("../Textures/x.wav") land where they are looked for. What
+// actually arrives there is "x.flac" -- the same audio at half the download -- and the synth looks
+// for the FLAC beside the name a pack gives, so both spellings work. Never the user's own
+// Documents\AmbientSynth, which is theirs and must survive an uninstall.
 function LibDir(Param: String): String;
 begin
   if IsAdminInstallMode then

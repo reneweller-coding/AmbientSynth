@@ -171,8 +171,18 @@ def table_from_audio(mono, sr, frames=32, pitch_hz=None, start=0.0, end=None, cy
 
 # ---------------------------------------------------------------- procedural
 
+def _scatter(h, salt=0.0):
+    """A fixed pseudo-random phase per partial. Deterministic in h rather than drawn from the
+    rng, because the rng advances on every frame: a recipe that draws its phases lands a
+    different set in each frame, consecutive cycles stop being related, and scanning the table
+    becomes a noise burst instead of a movement. Everything here has to be continuous."""
+    x = np.sin(h * 12.9898 + salt) * 43758.5453
+    return (x - np.floor(x)) * 2.0 * np.pi - np.pi
+
+
 RECIPES = {
-    # name: function(partial index array 1..N, t in 0..1, rng) -> magnitudes
+    # name: function(partial index array 1..N, t in 0..1, rng) -> magnitudes, or (magnitudes,
+    # phases) for a recipe that moves its partials against each other across the table
     "Saw to square": lambda h, t, r: (1.0 / h) * np.where(h % 2 == 1, 1.0, 1.0 - t),
     "Tilt walk":     lambda h, t, r: h ** -(0.5 + 1.5 * t),
     "Formant sweep": lambda h, t, r: (1.0 / np.sqrt(h)) * (0.05 + np.exp(-((h - (2 + 14 * t)) / 2.5) ** 2) + 0.4 * np.exp(-((h - (8 + 20 * t)) / 4.0) ** 2)),
@@ -216,6 +226,80 @@ RECIPES = {
     "Breath band":   lambda h, t, r: (h ** -0.25) * (0.08 + np.exp(-((np.log(h) - np.log(2 + 30 * t)) / 0.55) ** 2)),
     # Sub fold: an almost pure fundamental that grows a second and a third.
     "Sub fold":      lambda h, t, r: np.where(h == 1, 1.0, np.where(h <= 3, 0.05 + 0.55 * t, 0.02 / h)),
+
+    # --- for drones specifically ---------------------------------------------------------------
+    # A single cycle is periodic, so its spectrum is harmonic whether we like it or not: a
+    # wavetable cannot hold a truly inharmonic partial. What it can hold is a harmonic set chosen
+    # so the EAR hears inharmonicity -- the sparse, widely spaced patterns struck metal actually
+    # has -- and partials that move against each other as the table is scanned. The second half is
+    # what these recipes add: a recipe may return (magnitudes, phases), and a phase that turns with
+    # t makes two neighbouring partials beat while the table is swept, which is the shimmer a drone
+    # lives on and which no fixed spectrum can give.
+
+    # Singing bowl: the bowl's own sparse set, with two twin partials beside it whose phase turns
+    # once over the table -- the beat you hear when a bowl is struck twice.
+    "Singing bowl":  lambda h, t, r: (np.where(np.isin(h, [1, 3, 5, 8, 12, 17, 23]), h ** -(0.3 + 0.6 * t), 0.01 / h)
+                                      + 0.5 * np.where(np.isin(h, [4, 9, 18]), h ** -0.5, 0.0),
+                                      np.where(np.isin(h, [4, 9, 18]), 2.0 * np.pi * t, 0.0)),
+    # Gong: square-law bar partials and primes together, the wash filling in as t rises.
+    "Gong wash":     lambda h, t, r: (np.where(np.isin(h, [1, 4, 9, 16, 25, 36, 49]), h ** -0.35, 0.0)
+                                      + t * np.where(np.isin(h, [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43]),
+                                                     h ** -0.8, 0.0) + 0.008 / h),
+    # Bowed string: 1/h^1.2 with the bow's noise sitting as a broad band in the top, rising with
+    # pressure, and the even partials a little down the way a bowed string really is.
+    "Bowed string":  lambda h, t, r: ((1.0 / h ** 1.2) * np.where(h % 2 == 0, 0.7, 1.0)
+                                      + (0.25 + 0.5 * t) * np.exp(-((np.log(h) - np.log(9 + 26 * t)) / 0.7) ** 2) / np.sqrt(h),
+                                      _scatter(h, 1.0) * np.clip((h - 6) / 20.0, 0.0, 1.0)),
+    # Bowed cymbal: almost nothing at the bottom, a dense cluster high up that climbs.
+    "Bowed cymbal":  lambda h, t, r: (np.where(h <= 2, 0.12, 1.0) * (h ** -0.3)
+                                      * np.exp(-((np.log(h) - np.log(12 + 30 * t)) / 0.9) ** 2)
+                                      + 0.01 / h,
+                                      _scatter(h, 2.0)),
+    # Prepared piano: the string's own series, and a screw's metallic buzz arriving on the high
+    # primes as t rises.
+    "Prepared piano": lambda h, t, r: ((1.0 / h ** 1.5)
+                                       + t * 0.6 * np.where(np.isin(h, [13, 17, 19, 23, 29, 31, 37, 41, 43, 47]),
+                                                            h ** -0.4, 0.0),
+                                       np.where(h > 12, np.pi * t, 0.0)),
+    # A real piano's partials are stretched by the stiffness of the string (Railsback): the nth
+    # sits at n*sqrt(1 + B n^2), rounded to where a periodic cycle can put it.
+    "Stretched string": lambda h, t, r: np.where(
+        np.isin(h, np.unique(np.round(np.arange(1, 17) * np.sqrt(1.0 + (0.0004 + 0.0016 * t) * np.arange(1, 17) ** 2)))),
+        h ** -0.9, 0.01 / h),
+    # Two formants a hair apart, one of them turning in phase: vowel interference rather than a
+    # vowel. Two of these detuned against each other is the choir nobody sang.
+    "Formant beat":  lambda h, t, r: ((1.0 / np.sqrt(h)) * (0.05
+                                      + 0.9 * np.exp(-((h - 4.0) / 1.5) ** 2)
+                                      + 0.9 * np.exp(-((h - (4.6 + 0.8 * t)) / 1.5) ** 2)
+                                      + 0.5 * np.exp(-((h - (11 + 9 * t)) / 3.0) ** 2)),
+                                      np.where(np.abs(h - (4.6 + 0.8 * t)) < 2.0, 2.0 * np.pi * t, 0.0)),
+    # PPG / Microwave: the magnitudes quantised to a handful of levels, which is what those tables
+    # were -- eight bits of spectrum and no apology for it.
+    "PPG digital":   lambda h, t, r: np.round((1.0 / h ** (0.6 + 0.5 * t)) * 7.0) / 7.0 + 0.01,
+    # The same idea taken further: three bits, and a hard cluster up top standing in for the
+    # aliasing those machines never hid.
+    "Lo-fi bits":    lambda h, t, r: (np.round((1.0 / h ** 0.8) * 3.0) / 3.0
+                                      + 0.25 * np.where(h > 30, np.abs(np.cos(h * (0.4 + 2.0 * t))), 0.0) + 0.01),
+    # A bank of resonators tuned to a sparse set, sharpening as t rises: rings rather than shapes.
+    "Resonator bank": lambda h, t, r: sum(np.exp(-((h - c) / (2.2 - 1.7 * t)) ** 2) * c ** -0.5
+                                          for c in (1, 3, 7, 13, 22, 34)) + 0.008 / h,
+    # Two saws at a phase offset that opens across the table: hollow at one end, solid at the
+    # other, and everything between is comb filtering that never sits still.
+    "Bi-phase":      lambda h, t, r: ((1.0 / h) * np.abs(np.cos(np.pi * h * t * 0.5)) + 0.01 / h,
+                                      np.pi * h * t * 0.5),
+    # Pink noise through one resonance, walking slowly. Random phases: this one is a colour, not
+    # a waveform.
+    "Pink resonance": lambda h, t, r: ((1.0 / h) * (0.15 + np.exp(-((np.log(h) - np.log(2 + 24 * t)) / 0.45) ** 2)),
+                                       _scatter(h, 3.0)),
+    # Bohlen-Pierce: the tritave divided in thirteen, so nothing lands on an octave and the ear
+    # never finds the series it is looking for.
+    "Bohlen-Pierce": lambda h, t, r: np.where(
+        np.isin(h, np.unique(np.round(3.0 ** (np.arange(0, 14) / 13.0) * (3 + 9 * t)))),
+        h ** -0.7, 0.01 / h),
+    # A sub with one odd partial at a time coming up out of it.
+    "Sub bloom":     lambda h, t, r: np.where(h == 1, 1.0,
+                                              np.where(h % 2 == 1,
+                                                       0.35 * np.exp(-((h - (3 + 20 * t)) / 2.5) ** 2), 0.005 / h)),
 }
 
 
@@ -232,10 +316,17 @@ def table_procedural(recipe, frames=32, partials=48, seed=0, noise=0.0, phase_sc
     targets = [np.exp(rng.normal(0, 1.0, partials)) for _ in range(frames // 8 + 2)]
     for i in range(frames):
         t = i / max(frames - 1, 1)
+        ph = phases
         if recipe == "Random walk":
             base = h ** -(0.7 + 0.6 * t)
         else:
-            base = np.maximum(RECIPES[recipe](h, t, rng), 0.0)
+            got = RECIPES[recipe](h, t, rng)
+            # A recipe may hand back its own phases as well: partials that turn against each other
+            # as the table is scanned, which is how a still spectrum is made to shimmer.
+            if isinstance(got, tuple):
+                got, own = got
+                ph = phases + np.asarray(own, dtype=np.float64)
+            base = np.maximum(got, 0.0)
         if noise > 0 or recipe == "Random walk":
             seg = i / 8.0
             a, b = targets[int(seg)], targets[int(seg) + 1]
@@ -243,7 +334,7 @@ def table_procedural(recipe, frames=32, partials=48, seed=0, noise=0.0, phase_sc
             walk = a + (b - a) * u
             amount = max(noise, 1.0 if recipe == "Random walk" else 0.0)
             base = base * (walk ** amount)
-        table[i] = frame_from_spectrum(base, phases)
+        table[i] = frame_from_spectrum(base, ph)
     return phase_align(normalise(table))
 
 

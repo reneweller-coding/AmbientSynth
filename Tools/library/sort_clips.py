@@ -95,12 +95,16 @@ def main():
     a = ap.parse_args()
     os.makedirs(TEX, exist_ok=True)
     os.makedirs(FLD, exist_ok=True)
+    # `keep` is what a clip in this folder must be: Textures keeps the ones with a note in the
+    # name, FieldRecordings the ones without. This pair was the wrong way round once, and because
+    # a wrong pair swaps the two folders on every run rather than failing, it stayed unnoticed
+    # until a count came back as "3325 clips, 0 with a note". Hence the check at the end.
     moved = [0, 0]
-    for src, dst, want in ((TEX, FLD, False), (FLD, TEX, True)):
+    for src, dst, keep in ((TEX, FLD, True), (FLD, TEX, False)):
         for name in sorted(os.listdir(src)):
             if not name.endswith(".wav"):
                 continue
-            if bool(PITCHED.search(name)) == want:
+            if bool(PITCHED.search(name)) == keep:
                 continue
             moved[0 if src == TEX else 1] += 1
             move_pair(src, dst, name, a.dry_run)
@@ -136,6 +140,19 @@ def main():
         n = len([f for f in files if f.endswith(".wav")])
         rest = len(files) - n
         print("%-32s %5d clips, %d other files" % (d, n, rest))
+
+    # What the two folders MEAN, checked rather than assumed. Everything downstream rests on it:
+    # only a clip with a note may be transposed to the note being played.
+    wrong = 0
+    for folder, want in ((TEX, True), (FLD, False)):
+        bad = [f for f in os.listdir(folder) if f.endswith(".wav") and bool(PITCHED.search(f)) != want]
+        if bad:
+            wrong += len(bad)
+            print("WRONG: %d clips in %s are on the wrong shelf, e.g. %s"
+                  % (len(bad), os.path.basename(folder), bad[0]))
+    if wrong and not a.dry_run:
+        return 1
+    print("check: Textures is tonal, FieldRecordings is not" if not wrong else "check FAILED")
     return 0
 
 

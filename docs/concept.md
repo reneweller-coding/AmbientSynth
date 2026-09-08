@@ -597,6 +597,62 @@ loads and plays. A learned latent space (WaveSpace-style) was considered
 and left out: the tables are spectra already, and the three sources cover
 the space from sound, language and rules without a checkpoint.
 
+**The shelf, rebuilt (1.11.0).** Rene looked at the folder and said the wavetables seemed fewer
+than they looked, and full of variations of one thing. The arithmetic agreed: 608 tables were 19
+recipes × 32 variants, so nineteen ideas with neighbours. Three separate things kept it that way,
+and looking for the third turned up a bug that had been there the whole life of the library.
+
+*Nineteen ideas became forty-three.* Fourteen recipes written for what a drone wants out of a
+table -- Singing bowl, Gong wash, Bowed string, Bowed cymbal, Prepared piano, Stretched string
+(the Railsback stiffness of a real piano wire), Formant beat, PPG digital, Lo-fi bits, Resonator
+bank, Bi-phase, Pink resonance, Bohlen-Pierce, Sub bloom -- and ten more after that: Shepard stack,
+Fibonacci, Organ mixture, Three vowels, Stopped pipe, Beating pairs, Ring bell, Stretched octave
+(2.02^n, the same stretched octave the instrument tunes with), Waterphone, Spectral erosion.
+
+*And the frame grew a second half.* A single cycle is periodic, so its spectrum is harmonic whether
+one likes it or not: a wavetable cannot hold an inharmonic partial. What it can hold is a harmonic
+set the EAR hears as inharmonic -- the sparse, widely spaced pattern struck metal actually has --
+and partials that turn against each other as the table is scanned. A recipe may now return
+`(magnitudes, phases)`, and Singing bowl puts two twin partials beside the bowl's own set whose
+phase turns once across the table: swept slowly they beat against their neighbours. That is the
+shimmer a drone lives on, and no fixed spectrum can give it.
+
+Two traps came with the phases, both of them the continuity rule in a new costume. Three recipes
+drew their scatter from the rng -- which advances every frame, so each frame got a different set,
+consecutive cycles stopped being related, and scanning would have been a noise burst instead of a
+movement (frame step 0.32; with a scatter that is deterministic in the partial index, 0.011, at
+the same spectral travel). And a partial set computed from a ratio has to be rounded somewhere:
+rounding INSIDE the table is a step, the partial jumping from 7 to 8 as t grows. The energy now
+sits as a narrow bell around the unrounded position and slides from one partial to the next
+(`_peaks`), which took Stretched octave from 0.137 to 0.054.
+
+*A thousand tables out of the library's own material.* WavetableGen has always been able to slice
+single cycles out of a recording; nobody had ever pointed it at our own shelves. Every tonal clip
+with a steady pitch becomes a table, at most two per prompt idea -- grouping by idea rather than by
+file, or four seeds of one prompt would be four neighbours again. They are chosen by what they are
+of, not taken wholesale: struck metal, bowed strings, voices, glass, reeds, organs, prepared piano.
+A siren has a pitch too, but sliced it is a sine with extra steps. Of 2218 pitched clips, 1163 from
+736 ideas qualified and 1064 produced a table (the rest were not steady enough, and a table built
+from frames that were never the same note is noise with a period). A table is named
+`clip_<the clip>`, so it inherits that clip's place in the CLAP affinity map: a table made from a
+recording the model put near Permafrost is drawn there.
+
+*Why so few were reached for.* The 42 styles named eight recipes between them -- and one of those
+eight, "Harmonic drawbars", does not exist (it is "Organ drawbars"). Four styles pointed at
+nothing, and the slug match simply never fired: a dead name costs nothing, says nothing and is
+invisible. The twelve drone recipes added in an earlier round were named by nobody at all. Every
+style now names five of the forty-three, all forty-three are named by someone, `make_presets`
+refuses to run if a style names a recipe that does not exist, and the module weight for the
+wavetable slot went from 0.20 to 0.35. Measured on a 840-preset sample: the wavetable is the
+primary source in 29.9 % of presets rather than 23.6 %, and 46 % rather than 35 % name a table at
+all. The shelf is 2096 tables over about 780 ideas.
+
+*And the scanning itself.* A wavetable's position is the one control where a rigid eight-second
+sine is audibly wrong -- scanning a table is a slow walk through a spectrum, and a stiff LFO turns
+the drone into an LFO with a spectrum attached. A route aimed at a position now takes a chaotic
+source (Lorenz, Rössler, Lenia) 55 % of the time rather than 34 %, and when it does get an LFO the
+period is 30 to 180 seconds and the shape is one that does not jump.
+
 ## Foundation, Bloom, Hold, Macros
 
 * **Foundation** (`Engine::renderChunk`, after the mid/side stage so the

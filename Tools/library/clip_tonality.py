@@ -45,7 +45,8 @@ def measure(path):
         return os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path), None, "too short"
     lo, hi = int(sr / 2000.0), int(sr / 40.0)    # lags for 2 kHz .. 40 Hz
     win = np.hanning(FRAME).astype(np.float32)
-    harms, flats = [], []
+    freqs = np.fft.rfftfreq(FRAME * 2, 1.0 / sr)
+    harms, flats, cents, highs = [], [], [], []
     for s in range(0, len(x) - FRAME, HOP):
         fr = x[s:s + FRAME]
         if np.max(np.abs(fr)) < 1e-4:
@@ -59,12 +60,19 @@ def measure(path):
             continue
         ac = ac / ac[0]
         harms.append(float(np.max(ac[lo:hi])))
-        p = power[:FRAME // 2 + 1] + 1e-12
+        p = power + 1e-12
         flats.append(float(np.exp(np.mean(np.log(p))) / np.mean(p)))
+        # Where the energy sits: the centroid in Hz, and the share above 4 kHz. Periodic is not
+        # the same as pleasant -- a referee's whistle is as periodic as a cello -- and what made
+        # a slot harsh was material whose weight lies up there.
+        tot = float(np.sum(p))
+        cents.append(float(np.sum(freqs * p) / tot))
+        highs.append(float(np.sum(p[freqs >= 4000.0]) / tot))
     if not harms:
         return os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path), None, "silent"
     rel = os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path)
-    return rel, {"harm": round(float(np.mean(harms)), 4), "flat": round(float(np.mean(flats)), 4)}, None
+    return rel, {"harm": round(float(np.mean(harms)), 4), "flat": round(float(np.mean(flats)), 5),
+                 "centroid": round(float(np.median(cents)), 1), "high": round(float(np.mean(highs)), 4)}, None
 
 
 def main():
@@ -85,20 +93,27 @@ def main():
                 out[rel] = m
             if i % 500 == 0:
                 print(f"  {i}/{len(files)}", flush=True)
-    json.dump({"clips": out}, open(a.out, "w", encoding="utf-8"), indent=0, sort_keys=True)
-    print(f"wrote {a.out}: {len(out)} clips, {len(bad)} unreadable", flush=True)
+    # A clip that measures silent is a dud, and the generator's own list of duds is where those go.
+    json.dump({"clips": out, "silent": sorted(rel for rel, err in bad if err == "silent")},
+              open(a.out, "w", encoding="utf-8"), indent=0, sort_keys=True)
+    print(f"wrote {a.out}: {len(out)} clips, {len(bad)} unreadable or silent", flush=True)
     for rel, err in bad[:10]:
         print("  ", rel, err)
     # The census, so the numbers say something at once.
     for folder in ("Textures", "FieldRecordings"):
-        h = np.array([m["harm"] for k, m in out.items() if k.startswith(folder + "/")])
-        f = np.array([m["flat"] for k, m in out.items() if k.startswith(folder + "/")])
-        if len(h) == 0:
+        ms = [m for k, m in out.items() if k.startswith(folder + "/")]
+        if not ms:
             continue
-        print(f"{folder}: {len(h)} clips  harm median {np.median(h):.2f}  (p10 {np.percentile(h, 10):.2f}, p90 {np.percentile(h, 90):.2f})"
-              f"  flat median {np.median(f):.3f}")
-        for th in (0.5, 0.6, 0.7, 0.8):
+        h = np.array([m["harm"] for m in ms]); c = np.array([m["centroid"] for m in ms]); hi = np.array([m["high"] for m in ms])
+        print(f"{folder}: {len(h)} clips  harm median {np.median(h):.2f} (p10 {np.percentile(h, 10):.2f}, p90 {np.percentile(h, 90):.2f})"
+              f"  centroid median {np.median(c):.0f} Hz (p10 {np.percentile(c, 10):.0f}, p90 {np.percentile(c, 90):.0f})"
+              f"  share above 4 kHz median {np.median(hi):.3f} (p90 {np.percentile(hi, 90):.3f})")
+        for th in (0.6, 0.7, 0.8):
             print(f"   harm >= {th}: {int((h >= th).sum()):5d}  ({100.0 * (h >= th).mean():.0f} %)")
+        for th in (1500.0, 2500.0, 4000.0):
+            print(f"   centroid <= {th:.0f} Hz: {int((c <= th).sum()):5d}  ({100.0 * (c <= th).mean():.0f} %)")
+        both = (h >= 0.7) & (c <= 2500.0)
+        print(f"   harm >= 0.7 and centroid <= 2500 Hz: {int(both.sum()):5d}  ({100.0 * both.mean():.0f} %)")
     return 0
 
 

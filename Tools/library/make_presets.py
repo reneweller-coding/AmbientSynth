@@ -734,6 +734,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         p[key] = draw(rng, spec)
     mod = apply_shade(p, style["modules"], shade)
     on = lambda k: rng.random() < mod.get(k, 0.0)
+    field = style["name"] in FIELD_STYLES     # an environment style: swamps allowed everywhere
     texture_file = wavetable_file = ""
     # One clip per slot where the slots differ (the Stretch type draws its own per slot); the
     # pack's texture field then carries them ';'-separated, one per slot, empty for a slot
@@ -763,7 +764,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         p["keys_depth"] = u(rng, 0.0, 0.4)
 
     # Source slots ----------------------------------------------------------------------
-    def fill_slot(n):
+    def fill_slot(n, force=None):
         nonlocal texture_file, wavetable_file
         pre = f"src{n}_"
         # The first slot is the instrument's original voice, and its additive controls still carry
@@ -776,7 +777,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         key_of = lambda k: (LEGACY[k] if (n == 1 and k in LEGACY) else pre + k)
         put = lambda k, v: p.__setitem__(key_of(k), v)
         got = lambda k, d=None: p.get(key_of(k), d)
-        want_tex = on("texture") and textures
+        want_tex = on("texture") and textures.has_tonal(field)
         want_tab = on("usertable") and wavetables
         # Stretch: the style's clips read as a continuum. A style asks for it with a "stretch"
         # module weight; the field-recording style asks for it in every slot it fills.
@@ -785,7 +786,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         wb = mod.get("bow", 0.0)
         ws = mod.get("spectral", 0.0)
         want_bow = wb > 0.0 and extra.random() < wb
-        want_spec = ws > 0.0 and bool(textures) and extra.random() < ws
+        want_spec = ws > 0.0 and textures.has_tonal(field) and extra.random() < ws
         if want_bow:
             kind = "Bow"
         elif want_spec:
@@ -814,8 +815,10 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             if n == 1 and rng.random() < mod.get("noiseprimary", 0.0):
                 pool = ["Noise"]
             kind = pool[rng.randrange(len(pool))]
-            if kind == "Texture" and not textures:
+            if kind == "Texture" and not textures.has_tonal(field):
                 kind = "Wavetable"
+        if force is not None:                  # the tonal anchor asks for a type by name
+            kind = force
         put("type", kind)
         put("level", u(rng, 0.15, 0.55))
         if kind != "Noise" and rng.random() < 0.4:   # independent fine drift: sources that beat like an ensemble
@@ -880,7 +883,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("pos_drift", u(extra, 0.05, 0.5))
             put("bright", u(extra, 0.3, 0.85))
             put("level", u(extra, 0.25, 0.6))
-            own = textures[extra.randrange(len(textures))]
+            own = textures.tonal_pick(extra, field)
             slot_textures[n] = own
             if not texture_file:
                 texture_file = own
@@ -903,7 +906,10 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("level", u(rng, 0.3, 0.7))
             if rng.random() < 0.5:
                 put("drift", logu(rng, 0.5, 4.0))
-            own = textures[rng.randrange(len(textures))]
+            # The stretched bed is where the environments belong: a recording read as a
+            # continuum wants no pitch, and the field recordings are drawn here and nowhere else
+            # (except by an environment style, whose Texture slots may hold them too).
+            own = textures.bed_pick(rng)
             slot_textures[n] = own
             if not texture_file:
                 texture_file = own
@@ -926,8 +932,12 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             # A texture slot is now level-matched to the other two, so it needs less than before.
             put("level", u(rng, 0.12, 0.42))
             if not texture_file and textures:
-                texture_file = textures[rng.randrange(len(textures))]
+                texture_file = textures.tonal_pick(rng, field)
             slot_textures[n] = texture_file
+            # A bed in a grain slot (an environment style only) gets longer grains: sixty
+            # milliseconds of traffic is gravel, whatever the rest of the preset does.
+            if textures.is_bed(texture_file) and grain_ms < 150.0:
+                put("grain", logu(rng, 150.0, 340.0))
             # Only a clip with a detected pitch (TextureGen puts the note in the name) can be
             # transposed to the played note; the rest are played free, as a bed.
             # Only a clip whose pitch was detected can be transposed to the played note -- and
@@ -962,6 +972,33 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         fill_slot(3)
     if on("src4"):
         fill_slot(4)
+
+    # The tonal anchor: unless the style is an environment, something sits on the note. A
+    # preset whose sounding slots are all samples played Free is a bed with nothing in it --
+    # the key, the just scale, the conductor's chords all fall on deaf ears. First choice is
+    # the slot that already holds a pitched clip, played to the note; failing that a wavetable
+    # in a free slot; failing that the bank back in the first slot.
+    if not field:
+        def slot_type(n):
+            return p.get("src1_type", "Additive") if n == 1 else p.get(f"src{n}_type", "Off")
+
+        def on_note(n):
+            t = slot_type(n)
+            if t in ("Additive", "Wavetable", "FM", "Bow"):
+                return True
+            return t in ("Texture", "Stretch", "Spectral") and p.get(f"src{n}_follow", "Note") == "Note"
+
+        if not any(on_note(n) for n in range(1, 5)):
+            pitched_slot = next((n for n in range(1, 5)
+                                 if slot_type(n) in ("Texture", "Spectral")
+                                 and not textures.is_bed(slot_textures.get(n, texture_file))), None)
+            free_slot = next((n for n in range(2, 5) if slot_type(n) == "Off"), None)
+            if pitched_slot is not None:
+                p[f"src{pitched_slot}_follow"] = "Note"
+            elif free_slot is not None:
+                fill_slot(free_slot, force="Wavetable")
+            else:
+                p["src1_type"] = "Additive"
     apply_shade_granular(p, shade)
 
     # Z-plane morphing filter -------------------------------------------------------------
@@ -1319,46 +1356,121 @@ def rejected_clips(dirname):
     return out
 
 
-def texture_pool(dirname, style_name, rejected, fielddir=None, fieldshare=0.5):
-    """Clips whose file name starts with this style's slug (make_textures.py names them that
-    way), falling back to everything in the folder. Duds are left out.
+# Which styles are environments first: their grain and spectral slots may carry a swamp, and a
+# preset of theirs need not sit on any note. Everyone else gets tone in the tonal slots and the
+# environments only as stretched beds. Measured before this rule: the packs were tagged Noisy
+# twice as often and Tonal half as often as the built-ins, 58 % of all sample references were
+# field recordings (the pool weighted them double for every style), and 1061 presets had no slot
+# on the note at all -- the pitch played was irrelevant, the just scale with it.
+FIELD_STYLES = {"Field Recordings"}
+# What "tonal material" is, measured (Tools/library/clip_tonality.py): periodic enough to have
+# a pitch, and with its weight below the region where periodic turns into piercing -- a
+# referee's whistle at F6 is as periodic as a cello and was in the tonal slots.
+TONAL_HARM_MIN = 0.7
+TONAL_CENTROID_MAX = 2500.0
+_TONALITY = {}
 
-    Two folders now: Textures holds material with a tone in it -- struck objects, strings,
-    voices, machines -- and FieldRecordings holds environments. Each clip travels as
-    "Folder/name.wav" so the pack reference and the note-following decision both know which it
-    is; a field recording is never transposed to the played note."""
+
+def tonality():
+    """Per-clip measurements, or an empty dict when the file was never written (then the folder
+    line alone decides, as it did before)."""
+    if not _TONALITY:
+        _TONALITY["_"] = {}
+        _TONALITY["silent"] = set()
+        path = os.path.join(ROOT, "Library", "tonality.json")
+        if os.path.exists(path):
+            try:
+                blob = json.load(open(path, encoding="utf-8"))
+                _TONALITY["_"] = blob.get("clips", {})
+                _TONALITY["silent"] = set(blob.get("silent", []))
+            except (ValueError, OSError):
+                pass
+    return _TONALITY["_"]
+
+
+def is_tonal_clip(rel):
+    """A clip that may carry a tonal slot: from the pitched folder, and measured tonal when a
+    measurement exists."""
+    if not rel.startswith("Textures/"):
+        return False
+    m = tonality().get(rel)
+    if m is None:
+        return True
+    return m.get("harm", 1.0) >= TONAL_HARM_MIN and m.get("centroid", 0.0) <= TONAL_CENTROID_MAX
+
+
+class ClipPools:
+    """The clips a style may draw from, in two shelves: `tonal` for the slots that play a note
+    (Texture, Spectral) and `beds` for the ones that read a recording as a continuum (Stretch).
+    `everything` is both, for a style that is an environment and for the checks that only ask
+    whether there are clips at all."""
+
+    def __init__(self, tonal, beds, everything):
+        self.tonal, self.beds, self.everything = tonal, beds, everything
+        self._tonal_set = set(tonal)
+
+    def __len__(self):
+        return len(self.everything)
+
+    def __getitem__(self, i):
+        return self.everything[i]
+
+    def has_tonal(self, field):
+        return bool(self.everything) if field else bool(self.tonal)
+
+    def tonal_pick(self, rng, field):
+        pool = self.everything if field else (self.tonal or self.everything)
+        return pool[rng.randrange(len(pool))]
+
+    def bed_pick(self, rng):
+        pool = self.beds or self.everything
+        return pool[rng.randrange(len(pool))]
+
+    def is_bed(self, rel):
+        return bool(rel) and rel not in self._tonal_set
+
+
+def texture_pool(dirname, style_name, rejected, fielddir=None, fieldshare=0.5):
+    """The style's clips, as two shelves (see ClipPools). Duds are left out.
+
+    Two folders: Textures holds material with a detected pitch and FieldRecordings holds
+    environments. Each clip travels as "Folder/name.wav" so the pack reference and the
+    note-following decision both know which it is; a field recording is never transposed to the
+    played note. The tonal shelf is the pitched folder filtered by measurement; the bed shelf is
+    everything else, with the environments weighted by the style's appetite for them."""
     slug = re.sub(r"[^a-z0-9]+", "_", style_name.lower()).strip("_")[:20]
+    tonality()
+    skip = set(rejected) | {os.path.basename(s) for s in _TONALITY.get("silent", set())}
 
     def listing(d, folder):
         if not d or not os.path.isdir(d):
             return []
         return sorted(folder + "/" + os.path.basename(f) for f in glob.glob(os.path.join(d, "*.wav"))
-                      if os.path.basename(f) not in rejected)
+                      if os.path.basename(f) not in skip)
 
     tex = listing(dirname, "Textures")
     fld = listing(fielddir, "FieldRecordings")
     own = [f for f in tex + fld if os.path.basename(f).startswith(slug + "_")]
     if own:
-        return own
-    # No clips of its own: the shelves, with the environments weighted by the style's appetite.
-    if not fld:
-        base = tex
-    elif not tex:
-        base = fld
-    else:
-        base = tex + fld * max(1, int(round(fieldshare * 4)))
-    # Most of the library now comes from prompt lists rather than per-style generation, so the
-    # file name no longer says which style a clip belongs to. Tools/library/clip_affinity.py
-    # answers that by listening: CLAP scores every clip against every style's own sentences. The
-    # style's clips are weighted heavily and the whole shelf is left in behind them, because a
-    # library where every style only ever hears its own material is a library of forty islands.
+        tonal = [f for f in own if is_tonal_clip(f)]
+        return ClipPools(tonal, [f for f in own if f not in set(tonal)], own)
+    tonal = [f for f in tex if is_tonal_clip(f)]
+    rest = [f for f in tex if f not in set(tonal)]
+    beds = rest + fld * max(1, int(round(fieldshare * 4))) if fld else rest
+    everything = tex + fld * max(1, int(round(fieldshare * 4))) if fld else tex
+    # Most of the library comes from prompt lists rather than per-style generation, so the file
+    # name no longer says which style a clip belongs to. Tools/library/clip_affinity.py answers
+    # that by listening: CLAP scores every clip against every style's own sentences. The style's
+    # clips are weighted heavily and the whole shelf is left in behind them, because a library
+    # where every style only ever hears its own material is a library of forty islands.
     close = affinity_for(style_name)
     if close:
-        have = set(base)
-        picked = [c for c in close if c in have]
-        if picked:
-            return picked * 3 + base
-    return base
+        def weighted(pool):
+            have = set(pool)
+            picked = [c for c in close if c in have]
+            return (picked * 3 + pool) if picked else pool
+        tonal, beds, everything = weighted(tonal), weighted(beds), weighted(everything)
+    return ClipPools(tonal, beds, everything)
 
 
 _AFFINITY = {}

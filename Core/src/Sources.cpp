@@ -762,7 +762,13 @@ void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p,
     const float posN = clampv(p.position + 0.35f * wander, 0.0f, 1.0f);
     double centre = 40.0 * std::pow(300.0, static_cast<double>(posN));      // 40 Hz .. 12 kHz
     if (p.follow) centre = clampv(hz * (0.5 + 8.0 * posN), 30.0, 0.45 * sr_);
-    centre = clampv(centre, 20.0, 0.45 * sr_);
+    // The band pass below is a Chamberlin state-variable filter, and that one is only stable
+    // with its centre below a sixth of the sample rate (f <= 1). Above that it need not blow up
+    // at once -- two presets in eight thousand ran clean for forty-five seconds and then went
+    // non-finite: a Wind slot following the note an octave up, Position drifting, the centre
+    // pinned at 0.45 sr with f near 2. The clamp is the difference between a filter that is
+    // stable and one that usually is.
+    centre = clampv(centre, 20.0, std::min(0.45 * sr_, sr_ / 6.0));
 
     // State-variable band pass; q from Noise Q, wider for Wind so it breathes rather than whistles.
     const float f = 2.0f * std::sin(static_cast<float>(kPi * centre / sr_));
@@ -861,6 +867,12 @@ void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p,
             default: break;
             }
             dst[i] = v;
+        }
+        // Whatever the filter did, it does not get to poison the mix for the rest of the session:
+        // a state that has gone non-finite is a state that starts again.
+        if (!std::isfinite(st.bp1) || !std::isfinite(st.bp2)) {
+            st.bp1 = st.bp2 = 0.0f;
+            std::memset(dst, 0, sizeof(float) * static_cast<size_t>(n));
         }
     }
 

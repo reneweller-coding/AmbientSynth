@@ -223,7 +223,9 @@ def load_batch(path, defaults):
     if path.lower().endswith(".json"):
         with open(path, encoding="utf-8") as f:
             for j in json.load(f):
-                job = dict(defaults); job.update(j); jobs.append(job)
+                job = dict(defaults); job.update(j)
+                if "model" in j: job["_model_set"] = True
+                jobs.append(job)
         return jobs
     with open(path, encoding="utf-8") as f:
         for raw in f:
@@ -239,7 +241,9 @@ def load_batch(path, defaults):
                     k, v = tok.split("=", 1)
                     if k in ("seconds", "guidance"): job[k] = float(v)
                     elif k in ("steps", "seed"): job[k] = int(v)
-                    elif k in ("model", "name", "negative", "out_dir"): job[k] = v
+                    elif k in ("model", "name", "negative", "out_dir"):
+                        job[k] = v
+                        if k == "model": job["_model_set"] = True
             job["prompt"] = line.strip()
             jobs.append(job)
     return jobs
@@ -260,7 +264,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--serve", action="store_true", help="read jobs from stdin (used by the GUI)")
     ap.add_argument("--batch", help="prompts.txt (one per line) or jobs.json; --count variations per prompt")
-    ap.add_argument("--model", default="sao", choices=sorted(MODELS))
+    ap.add_argument("--model", default="sao",
+                    help="one model, or several separated by commas to spread a batch over them "
+                         "(see --list for the names)")
     ap.add_argument("--prompt")
     ap.add_argument("--negative", default="")
     ap.add_argument("--seconds", type=float, default=20.0)
@@ -280,7 +286,15 @@ def main():
         return
     if a.serve:
         serve(); return
-    defaults = {"model": a.model, "negative": a.negative, "seconds": a.seconds, "steps": a.steps,
+    # --model takes a list: "sao,musicgen-large" spreads a batch's variations over both. A text
+    # batch used to run entirely on whichever single model was named, which is how four thousand
+    # clips came to carry _sao_ in their file name -- one model has one house sound, and the
+    # library's whole point is that its material does not.
+    models = [m.strip() for m in a.model.split(",") if m.strip()]
+    for m in models:
+        if m not in MODELS:
+            ap.error(f"unknown model '{m}' (see --list)")
+    defaults = {"model": models[0], "negative": a.negative, "seconds": a.seconds, "steps": a.steps,
                 "guidance": a.guidance, "seed": a.seed, "out_dir": a.out_dir}
     if a.batch:
         jobs = load_batch(a.batch, defaults)
@@ -288,6 +302,22 @@ def main():
         jobs = [dict(defaults, prompt=a.prompt)]
     else:
         ap.error("--prompt or --batch is required")
+    if len(models) > 1:
+        # One job per model, with the variations shared out: --count 4 over two models is two
+        # each. A job that names its own model (a jobs.json) is left alone.
+        spread = []
+        for job in jobs:
+            if job.get("_model_set"):
+                spread.append(job)
+                continue
+            for k, m in enumerate(models):
+                share = a.count // len(models) + (1 if k < a.count % len(models) else 0)
+                if share > 0:
+                    # The seeds of the two halves must not overlap, or the same seed would be
+                    # spent twice on the same model when one is dropped later.
+                    spread.append(dict(job, model=m, count=share,
+                                       seed=int(job.get("seed", a.seed)) + 100 * k))
+        jobs = spread
     if a.nice:
         try:      # a batch of thousands must not make the machine unusable
             import psutil
@@ -302,7 +332,7 @@ def main():
     deadline = time.time() + a.max_minutes * 60.0 if a.max_minutes > 0 else None
     for i in order:
         job = jobs[i]
-        for v in range(a.count):
+        for v in range(int(job.get("count", a.count))):
             j = dict(job); j["seed"] = int(job.get("seed", a.seed)) + v
             if a.resume and already_done(j):
                 skipped += 1

@@ -180,6 +180,16 @@ def _scatter(h, salt=0.0):
     return (x - np.floor(x)) * 2.0 * np.pi - np.pi
 
 
+def _peaks(h, centres, width=0.75, tilt=0.5):
+    """Energy at a set of positions that need not be whole numbers. A partial can only sit on an
+    integer, so a set computed from a ratio has to be rounded somewhere -- and rounding INSIDE a
+    table is a step: as t moves, a partial jumps from 7 to 8 and the frame jumps with it. Placing
+    a narrow bump instead lets the energy cross from one partial to the next, which is a slide.
+    Everything in this instrument is a rate or an amplitude, never a step."""
+    c = np.asarray(centres, dtype=np.float64)
+    return (np.exp(-((h[:, None] - c[None, :]) / width) ** 2) * c[None, :] ** -tilt).sum(axis=1)
+
+
 RECIPES = {
     # name: function(partial index array 1..N, t in 0..1, rng) -> magnitudes, or (magnitudes,
     # phases) for a recipe that moves its partials against each other across the table
@@ -263,9 +273,8 @@ RECIPES = {
                                        np.where(h > 12, np.pi * t, 0.0)),
     # A real piano's partials are stretched by the stiffness of the string (Railsback): the nth
     # sits at n*sqrt(1 + B n^2), rounded to where a periodic cycle can put it.
-    "Stretched string": lambda h, t, r: np.where(
-        np.isin(h, np.unique(np.round(np.arange(1, 17) * np.sqrt(1.0 + (0.0004 + 0.0016 * t) * np.arange(1, 17) ** 2)))),
-        h ** -0.9, 0.01 / h),
+    "Stretched string": lambda h, t, r: _peaks(
+        h, np.arange(1, 17) * np.sqrt(1.0 + (0.0004 + 0.0016 * t) * np.arange(1, 17) ** 2), 0.7, 0.9) + 0.01 / h,
     # Two formants a hair apart, one of them turning in phase: vowel interference rather than a
     # vowel. Two of these detuned against each other is the choir nobody sang.
     "Formant beat":  lambda h, t, r: ((1.0 / np.sqrt(h)) * (0.05
@@ -293,13 +302,58 @@ RECIPES = {
                                        _scatter(h, 3.0)),
     # Bohlen-Pierce: the tritave divided in thirteen, so nothing lands on an octave and the ear
     # never finds the series it is looking for.
-    "Bohlen-Pierce": lambda h, t, r: np.where(
-        np.isin(h, np.unique(np.round(3.0 ** (np.arange(0, 14) / 13.0) * (3 + 9 * t)))),
-        h ** -0.7, 0.01 / h),
+    "Bohlen-Pierce": lambda h, t, r: _peaks(
+        h, 3.0 ** (np.arange(0, 14) / 13.0) * (3 + 9 * t), 0.7, 0.7) + 0.01 / h,
     # A sub with one odd partial at a time coming up out of it.
     "Sub bloom":     lambda h, t, r: np.where(h == 1, 1.0,
                                               np.where(h % 2 == 1,
                                                        0.35 * np.exp(-((h - (3 + 20 * t)) / 2.5) ** 2), 0.005 / h)),
+
+    # Octaves under a window that climbs: scanned slowly, the table rises for ever without ever
+    # leaving. Shepard's illusion, baked into a wavetable instead of played as one.
+    "Shepard stack": lambda h, t, r: np.where(np.isin(h, [1, 2, 4, 8, 16, 32]),
+                                              np.exp(-((np.log2(h) - 5.0 * t) / 1.6) ** 2), 0.006 / h),
+    # 1 2 3 5 8 13 21 34: the ear keeps almost finding a series and never quite does.
+    "Fibonacci":     lambda h, t, r: np.where(np.isin(h, [1, 2, 3, 5, 8, 13, 21, 34]),
+                                              h ** -(0.35 + 0.75 * t), 0.008 / h),
+    # A cathedral plenum rather than a Hammond: principals, then the mutation ranks -- quint,
+    # tierce, larigot, septime -- drawn one after another as t rises.
+    "Organ mixture": lambda h, t, r: (np.where(np.isin(h, [1, 2, 4, 8, 16]), 1.0, 0.0)
+                                      + np.where(np.isin(h, [3, 6, 12]), np.clip(3 * t, 0, 1), 0.0)
+                                      + np.where(np.isin(h, [5, 10]), np.clip(3 * t - 1, 0, 1), 0.0)
+                                      + np.where(np.isin(h, [7, 9, 14]), np.clip(3 * t - 2, 0, 1), 0.0)
+                                      + 0.006) / np.sqrt(h),
+    # A vowel that actually travels: ah -> oh -> ee, both formants on their real path rather than
+    # walking apart in a straight line.
+    "Three vowels":  lambda h, t, r: (1.0 / np.sqrt(h)) * (0.05
+                                     + 0.9 * np.exp(-((h - np.interp(t, [0, 0.5, 1], [7.0, 4.5, 3.0])) / 1.5) ** 2)
+                                     + 0.8 * np.exp(-((h - np.interp(t, [0, 0.5, 1], [12.0, 8.0, 24.0])) / 3.0) ** 2)
+                                     + 0.3 * np.exp(-((h - np.interp(t, [0, 0.5, 1], [26.0, 22.0, 30.0])) / 5.0) ** 2)),
+    # A pipe stopped at one end has odd partials only. It opens as t rises, which is the moment a
+    # clarinet turns into a flute.
+    "Stopped pipe":  lambda h, t, r: (1.0 / h ** 1.1) * np.where(h % 2 == 1, 1.0, t ** 2)
+                                     * (1.0 + 1.5 * np.exp(-((h - 3) / 1.2) ** 2)),
+    # Every partial gets a neighbour, and which pair beats walks up the series: the whole table is
+    # one slow interference pattern.
+    "Beating pairs": lambda h, t, r: ((1.0 / h ** 0.9)
+                                      + 0.8 * np.exp(-((h - (2 + 30 * t)) / 1.2) ** 2),
+                                      np.where(np.abs(h - (2 + 30 * t)) < 3.0, 2.0 * np.pi * t * 2.0, 0.0)),
+    # The bell's sparse set through a comb that shifts: clangour that changes colour rather than
+    # decaying, which is what a bell cannot do and a drone can.
+    "Ring bell":     lambda h, t, r: np.where(np.isin(h, [1, 2, 5, 9, 14, 20, 27, 35, 44]),
+                                              h ** -0.5 * (0.15 + np.abs(np.cos(h * (0.2 + 1.1 * t)))), 0.008 / h),
+    # Partials at 2.02^n instead of 2^n -- the stretched octave the instrument tunes with -- so a
+    # table and the tuning agree about what an octave is.
+    "Stretched octave": lambda h, t, r: _peaks(
+        h, 2.02 ** np.arange(0, 6) * (1 + 2 * t), 0.8, 0.55) + 0.008 / h,
+    # Rubbed metal: a dense band in the middle, slowly moving, with twin partials turning inside
+    # it. A waterphone, or a sheet of steel with a bow on its edge.
+    "Waterphone":    lambda h, t, r: ((h ** -0.4) * np.exp(-((np.log(h) - np.log(5 + 14 * t)) / 0.5) ** 2)
+                                      + 0.01 / h,
+                                      _scatter(h, 4.0) * 0.6 + np.pi * t * (h % 3 == 0)),
+    # The opposite of building up: a full series with holes opening in it, one partial at a time.
+    "Spectral erosion": lambda h, t, r: (1.0 / h ** 0.85) * np.clip(
+        1.0 - np.exp(-((h - (1 + 46 * t)) / 3.0) ** 2) * 1.4, 0.02, 1.0),
 }
 
 

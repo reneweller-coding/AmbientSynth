@@ -1386,6 +1386,24 @@ def impulse_pool(dirname, style):
     return own or files
 
 
+def check_style_tables():
+    """Every recipe a style names has to exist. Four styles asked for "Harmonic drawbars", which
+    is not what the recipe is called ("Organ drawbars"), and the slug match simply never fired --
+    a dead name costs nothing, says nothing and is invisible, which is why it sat there for the
+    whole life of the library."""
+    sys.path.insert(0, os.path.join(ROOT, "Tools", "WavetableGen"))
+    try:
+        from wavetablegen_core import RECIPES
+    except ImportError:
+        return []                      # no numpy here: the generator still works, just unchecked
+    bad = []
+    for st in STYLES:
+        for t in st.get("tables", []):
+            if t not in RECIPES:
+                bad.append((st["name"], t))
+    return bad
+
+
 def wavetable_pool(dirname, style):
     """The style's own recipes first, and the rest of the shelf behind them.
 
@@ -1432,6 +1450,11 @@ def name_for(style, rng, used):
 
 def main():
     global PARAMS
+    bad = check_style_tables()
+    if bad:
+        for name, t in bad:
+            print(f"style {name}: no wavetable recipe called '{t}'")
+        return 1
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--per-style", type=int, default=200)
     ap.add_argument("--styles", default="", help="comma-separated style names; default is all of them")

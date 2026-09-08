@@ -105,7 +105,10 @@ BASE = {
 MODULES_BASE = {
     "zplane": 0.35, "cosmos": 0.20, "cloud": 0.15, "feedback": 0.12,
     "src2": 0.45, "src3": 0.25, "sub": 0.45, "stack": 0.35, "room": 0.45,
-    "texture": 0.20, "usertable": 0.20, "keys": 0.10, "delay2": 0.20,
+    # usertable raised from 0.20 with the shelf: it held nineteen ideas with thirty-two variants
+    # each, and no style named more than three of them. It now holds forty-three recipes and a
+    # thousand tables sliced from recorded material, which is worth reaching for more often.
+    "texture": 0.20, "usertable": 0.35, "keys": 0.10, "delay2": 0.20,
     "coherence": 0.15, "portamento": 0.10,
     # the Rich refinements: how often a preset of this style reaches for them
     "phase": 0.45, "blur": 0.15, "filtermodel": 0.35, "strike": 0.12, "absorb": 0.5, "tide": 0.3, "rotate": 0.35,
@@ -243,7 +246,7 @@ STYLES = [
                "bowed glass harmonica sustained chord, breathing slowly",
                "deep binaural sine bed with faint overtone shimmer",
                "gentle overtone singing bowl cloud, very slow"],
-      tables=["Glass thinning", "Odd breathing", "Formant sweep"],
+      tables=["Glass thinning", "Odd breathing", "Formant sweep", "Singing bowl", "Stretched string"],
       granular={"spread": (0.004, 0.05), "grains": 1.3},
       impulses=['tuned', 'room_cathedral', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
 
@@ -265,7 +268,7 @@ STYLES = [
                "vast dark cave tone, low pressure hum, dread",
                "monolithic bass drone, black and slow",
                "tectonic low frequency shudder, long decay"],
-      tables=["Tilt walk", "Random walk", "Comb"],
+      tables=["Tilt walk", "Sub fold", "Sub bloom", "Gong wash", "Pink resonance"],
       granular={"spread": (0.006, 0.08), "grains": 1.2},
       impulses=['room_cavern', 'room_bunker', 'spectral'], noise=['Brown', 'Pink']),
 
@@ -289,7 +292,7 @@ STYLES = [
                "distant ice sheet groaning under pressure",
                "muffled low rumble under snow, no melody",
                "black glacial drone, barely moving"],
-      tables=["Random walk", "Tilt walk"],
+      tables=["Random walk", "Tilt walk", "Pink resonance", "Breath band", "Spectral erosion"],
       granular={"spread": (0.2, 0.8), "grains": 1.4},
       impulses=['room_cavern', 'room_bunker', 'spectral', 'scatter'], noise=['Brown', 'Wind', 'Pink']),
 
@@ -310,7 +313,7 @@ STYLES = [
                "tropical night field recording, layered noise, no melody",
                "granular noise bed, unidentifiable source, very quiet",
                "hum of a large empty building, air conditioning"],
-      tables=["Random walk", "Comb", "Glass thinning"],
+      tables=["Random walk", "Comb", "Pink resonance", "Waterphone", "Spectral erosion"],
       granular={"spread": (0.35, 1.0), "grains": 1.8},
       impulses=['scatter', 'comb', 'spectral', 'room_chamber'], noise=['White', 'Crackle', 'Digital', 'Wind']),
 
@@ -330,7 +333,7 @@ STYLES = [
                "resonant bronze bowl cluster in an enormous hall",
                "dark ceremonial drone with distant choir",
                "interstellar wind with ringing metal"],
-      tables=["Glass thinning", "Comb", "Formant sweep"],
+      tables=["Glass thinning", "Bell partials", "Ring bell", "Shepard stack", "Bohlen-Pierce"],
       granular={"spread": (0.02, 0.3), "grains": 1.2},
       impulses=['modal', 'tuned', 'room_cathedral'], noise=['Brown', 'Wind', 'Pink']),
 
@@ -351,7 +354,7 @@ STYLES = [
                "rusted factory drone with feedback",
                "slow mechanical churn, saturated and dirty",
                "ominous metal scrape over a low hum"],
-      tables=["Comb", "Saw to square", "Random walk"],
+      tables=["Comb", "Saw to square", "Metal bar", "Lo-fi bits", "Ring cluster"],
       granular={"spread": (0.05, 0.4), "grains": 1.1},
       impulses=['comb', 'modal', 'scatter'], noise=['White', 'Crackle', 'Digital']),
 
@@ -371,7 +374,7 @@ STYLES = [
                "sacred wide chorus of metallic strings, cinematic",
                "solar wind choir, bright and endless",
                "huge harmonic series pad with slow shimmer"],
-      tables=["Formant sweep", "Glass thinning", "Odd breathing"],
+      tables=["Shepard stack", "Bell partials", "Stretched octave", "Harmonic gate", "Glass thinning"],
       granular={"spread": (0.01, 0.15), "grains": 1.4},
       impulses=['shimmer', 'tuned', 'room_cathedral'], noise=['Violet', 'Blue', 'Grey']),
 
@@ -395,7 +398,7 @@ STYLES = [
                "slow bowed cymbal wash, sacred and still",
                "glass bowl choir, immaculate and unmoving",
                "deep ceremonial breath tone, no vibrato"],
-      tables=["Glass thinning", "Odd breathing", "Formant sweep"],
+      tables=["Organ mixture", "Vowel choir", "Three vowels", "Formant beat", "Breath band"],
       granular={"spread": (0.003, 0.04), "grains": 1.5},
       impulses=['tuned', 'room_cathedral', 'shimmer'], noise=['Grey', 'Pink', 'Blue']),
 
@@ -416,7 +419,7 @@ STYLES = [
                "immense consonant pad, no attack, no end",
                "thick overtone chord, slowly beating",
                "warm analog string mass, cathedral sized"],
-      tables=["Odd breathing", "Formant sweep", "Tilt walk"],
+      tables=["Vowel choir", "Three vowels", "Organ drawbars", "Formant beat", "Fifth stack"],
       granular={"spread": (0.004, 0.06), "grains": 1.6},
       impulses=['tuned', 'room_cathedral', 'room_hall'], noise=['Pink', 'Grey']),
 
@@ -437,7 +440,7 @@ STYLES = [
                "sun-bleached analog pad with echoing percussion tails",
                "slow tribal ambient bed, no beat, warm",
                "dry desert wind with distant flute"],
-      tables=["Tilt walk", "Saw to square", "Odd breathing"],
+      tables=["Reed", "Breath band", "Tilt walk", "Bowed string", "Pluck point"],
       granular={"spread": (0.03, 0.35), "grains": 1.1},
       impulses=['room_hall', 'tuned', 'room_plate'], noise=['Brown', 'Pink', 'Wind']),
 
@@ -457,7 +460,7 @@ STYLES = [
                "voltage controlled pad with echoing sequences",
                "cold analog bell tones in a long delay",
                "buchla-like burbling texture, sparse and dark"],
-      tables=["Saw to square", "Formant sweep", "Comb", "Tilt walk"],
+      tables=["Saw to square", "Harmonic gate", "PPG digital", "Bi-phase", "Comb"],
       granular={"spread": (0.05, 0.45), "grains": 1.0},
       impulses=['comb', 'reverse', 'room_plate'], noise=['White', 'Digital', 'Band']),
 
@@ -478,7 +481,7 @@ STYLES = [
                "muffled mechanical rotation with granular debris",
                "burning wood crackle stretched into a drone",
                "low acoustic hum with rough granular surface"],
-      tables=["Random walk", "Comb", "Tilt walk"],
+      tables=["Metal bar", "Gong wash", "Waterphone", "Prepared piano", "Spectral erosion"],
       granular={"spread": (0.25, 0.9), "grains": 1.5},
       impulses=['scatter', 'comb', 'modal'], noise=['Crackle', 'Brown', 'White']),
 
@@ -498,7 +501,7 @@ STYLES = [
                "faded carousel organ, wobbling tape",
                "gentle bell loop under a blanket of hiss",
                "old reel to reel loop of a small ensemble"],
-      tables=["Odd breathing", "Glass thinning", "Comb"],
+      tables=["Ring cluster", "Comb", "Beating pairs", "Bi-phase", "Ring bell"],
       granular={"spread": (0.008, 0.12), "grains": 1.2},
       impulses=['reverse', 'comb', 'room_plate'], noise=['Crackle', 'Pink']),
 
@@ -518,7 +521,7 @@ STYLES = [
                "distant orchestra heard through a wall, hazy",
                "hiss and faint bowed glass, spectral",
                "victorian parlour recording, degraded and ghostly"],
-      tables=["Glass thinning", "Random walk", "Formant sweep"],
+      tables=["Glass thinning", "Singing bowl", "Bowed cymbal", "Resonator bank", "Bell partials"],
       granular={"spread": (0.1, 0.6), "grains": 1.3},
       impulses=['reverse', 'shimmer', 'room_chamber'], noise=['Pink', 'Crackle', 'Grey']),
 
@@ -538,7 +541,7 @@ STYLES = [
                "muted piano resonance in an empty flat",
                "close bowed object in a dry room, intimate",
                "gentle indoor hum with distant traffic"],
-      tables=["Tilt walk", "Odd breathing"],
+      tables=["Prepared piano", "Stretched string", "Pluck point", "Resonator bank", "Bowed string"],
       granular={"spread": (0.1, 0.5), "grains": 1.0},
       impulses=['room_chamber', 'room_bunker'], noise=['Grey', 'Pink', 'Crackle']),
 
@@ -559,7 +562,7 @@ STYLES = [
                "gentle bowed strings smeared into a haze",
                "warm analog wash with soft hiss, pastoral",
                "slow melting chord, gauzy and bright"],
-      tables=["Odd breathing", "Formant sweep", "Tilt walk"],
+      tables=["Random walk", "Pink resonance", "Breath band", "Waterphone", "Tilt walk"],
       granular={"spread": (0.006, 0.1), "grains": 1.4},
       impulses=['shimmer', 'room_hall', 'tuned'], noise=['Pink', 'Grey']),
 
@@ -578,7 +581,7 @@ STYLES = [
                "layered loop of bowed metal, repeating and decaying",
                "old spring reverb over a slow synth loop",
                "reel to reel feedback loop, growing and dying"],
-      tables=["Comb", "Saw to square", "Random walk"],
+      tables=["Tilt walk", "Lo-fi bits", "PPG digital", "Comb", "Spectral erosion"],
       granular={"spread": (0.02, 0.25), "grains": 1.1},
       impulses=['comb', 'reverse', 'room_plate'], noise=['White', 'Crackle', 'Pink']),
 
@@ -597,7 +600,7 @@ STYLES = [
                "smeared spectral cloud from a stringed instrument",
                "dark widescreen drone with grain and hiss",
                "reversed cymbal wash stretched to a minute"],
-      tables=["Random walk", "Glass thinning", "Comb"],
+      tables=["Lo-fi bits", "PPG digital", "Pink resonance", "Spectral erosion", "Harmonic gate"],
       granular={"spread": (0.2, 0.9), "grains": 1.7},
       impulses=['scatter', 'spectral', 'comb'], noise=['White', 'Wind', 'Digital']),
 
@@ -619,7 +622,7 @@ STYLES = [
                "minimal drone, no events, thirty minutes",
                "stretched cello note, endless",
                "smooth wide pad, imperceptible change"],
-      tables=["Tilt walk", "Odd breathing"],
+      tables=["Vowel choir", "Tilt walk", "Sub fold", "Stretched string", "Organ mixture"],
       granular={"spread": (0.003, 0.03), "grains": 1.5},
       impulses=['tuned', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
 
@@ -642,7 +645,7 @@ STYLES = [
                "low ventilation hum in a sealed corridor",
                "static machine bass with faint metallic ring",
                "submarine hull under pressure, deep and constant"],
-      tables=["Tilt walk", "Random walk"],
+      tables=["Sub fold", "Sub bloom", "Gong wash", "Pink resonance", "Metal bar"],
       granular={"spread": (0.004, 0.05), "grains": 1.1},
       impulses=['room_bunker', 'room_cavern', 'spectral'], noise=['Brown', 'Pink']),
 
@@ -663,7 +666,7 @@ STYLES = [
                "dark ambient room with faint machinery below",
                "hollow reverberant drone, sparse and uneasy",
                "distant door slam tail in a huge concrete space"],
-      tables=["Random walk", "Comb", "Tilt walk"],
+      tables=["Pink resonance", "Waterphone", "Bowed cymbal", "Resonator bank", "Random walk"],
       granular={"spread": (0.15, 0.7), "grains": 1.3},
       impulses=['room_cavern', 'room_bunker', 'comb', 'scatter'], noise=['Brown', 'Wind', 'Crackle']),
 
@@ -683,7 +686,7 @@ STYLES = [
                "vast icy atmosphere with slow bass pulses",
                "brooding orchestral drone, low and wide",
                "aurora shimmer over deep bass, cinematic"],
-      tables=["Tilt walk", "Formant sweep", "Glass thinning"],
+      tables=["Sub bloom", "Tilt walk", "Gong wash", "Spectral erosion", "Bell partials"],
       granular={"spread": (0.02, 0.3), "grains": 1.3},
       impulses=['room_cavern', 'room_cathedral', 'spectral'], noise=['Brown', 'Wind', 'Pink']),
 
@@ -703,7 +706,7 @@ STYLES = [
                "slowly sweeping filtered drone, alien and empty",
                "vacuum hum with faint radio artefacts",
                "deep space monitoring room, quiet and tense"],
-      tables=["Comb", "Formant sweep", "Random walk"],
+      tables=["Shepard stack", "Harmonic gate", "Bi-phase", "PPG digital", "Bohlen-Pierce"],
       granular={"spread": (0.1, 0.6), "grains": 1.2},
       impulses=['comb', 'spectral', 'modal'], noise=['Band', 'Digital', 'Wind']),
 
@@ -725,7 +728,7 @@ STYLES = [
                "warm cello and viola chord, endlessly held",
                "soft brass and string pad, elegiac",
                "gentle string quartet stretched into ambience"],
-      tables=["Odd breathing", "Formant sweep", "Tilt walk"],
+      tables=["Bowed string", "Stretched string", "Three vowels", "Formant beat", "Fifth stack"],
       granular={"spread": (0.004, 0.06), "grains": 1.5},
       impulses=['room_hall', 'tuned', 'shimmer'], noise=['Pink', 'Grey']),
 
@@ -747,7 +750,7 @@ STYLES = [
                "overdriven harmonium loop, beautiful and damaged",
                "clipped orchestral swell smeared into noise",
                "loud degraded drone, bright saturated haze"],
-      tables=["Saw to square", "Comb", "Formant sweep", "Random walk"],
+      tables=["Lo-fi bits", "PPG digital", "Pink resonance", "Tilt walk", "Comb"],
       granular={"spread": (0.03, 0.4), "grains": 1.4},
       impulses=['comb', 'scatter', 'modal', 'room_plate'], noise=['White', 'Violet', 'Digital']),
 
@@ -775,7 +778,7 @@ STYLES = [
       prompts=["struck metal bar ringing in a stone room, very slow decay",
                "wooden bars and soft mallets, sparse, breathing",
                "distant temple bells over a low drone"],
-      tables=["Odd breathing", "Comb", "Glass thinning"],
+      tables=["Prepared piano", "Metal bar", "Bell partials", "Waterphone", "Ring bell"],
       granular={"spread": (0.01, 0.15), "grains": 1.0},
       impulses=['modal', 'tuned', 'room_chamber'], noise=['Brown', 'Pink']),
 
@@ -794,7 +797,7 @@ STYLES = [
       prompts=["three identical drones a just fifth apart, very slow",
                "layered sine banks beating against each other, endless",
                "triple organ drone, no attack, no end"],
-      tables=["Tilt walk", "Odd breathing", "Formant sweep"],
+      tables=["Fifth stack", "Prime sieve", "Sub fold", "Beating pairs", "Formant beat"],
       granular={"spread": (0.006, 0.08), "grains": 1.4},
       impulses=['room_hall', 'room_cathedral', 'tuned'], noise=['Pink', 'Brown', 'Grey']),
 
@@ -813,7 +816,7 @@ STYLES = [
       prompts=["a chord that changes one note at a time over minutes",
                "slow just-intoned progression, voices exchanged one by one",
                "deep sustained harmony, never repeating"],
-      tables=["Glass thinning", "Tilt walk"],
+      tables=["Singing bowl", "Beating pairs", "Formant beat", "Fifth stack", "Three vowels"],
       granular={"spread": (0.01, 0.2), "grains": 1.2},
       impulses=['room_cathedral', 'room_hall', 'tuned'], noise=['Pink', 'Brown']),
 
@@ -832,7 +835,7 @@ STYLES = [
       prompts=["a filter sweeping through impossible shapes over a cold drone",
                "resonant formant structures morphing slowly, metallic",
                "precise digital drone with a moving resonance"],
-      tables=["Saw to square", "Comb", "Formant sweep", "Random walk"],
+      tables=["PPG digital", "Lo-fi bits", "Harmonic gate", "Bi-phase", "Saw to square"],
       granular={"spread": (0.02, 0.3), "grains": 1.1},
       impulses=['modal', 'comb', 'spectral', 'room_plate'], noise=['White', 'Grey', 'Digital']),
 
@@ -852,7 +855,7 @@ STYLES = [
       prompts=["a just-intoned drone slowly losing and finding its tuning",
                "sustained harmonium chord with audible beating between partials",
                "endless chord breathing in time with its own mistuning"],
-      tables=["Odd breathing", "Tilt walk", "Glass thinning"],
+      tables=["Prime sieve", "Bohlen-Pierce", "Stretched octave", "Fifth stack", "Fibonacci"],
       granular={"spread": (0.005, 0.09), "grains": 1.3},
       impulses=['tuned', 'room_cathedral', 'modal'], noise=['Pink', 'Brown', 'Grey']),
 
@@ -880,7 +883,7 @@ STYLES = [
       prompts=["steady rain on a tin roof, far thunder",
                "a harbour in fog at night",
                "wind over a high moor"],
-      tables=["Tilt walk", "Odd breathing"],
+      tables=["Pink resonance", "Breath band", "Random walk", "Waterphone", "Spectral erosion"],
       granular={"spread": (0.02, 0.2), "grains": 1.0},
       impulses=['room_cathedral', 'room_hall', 'room_chamber'], noise=['Pink', 'Brown', 'Grey']),
 
@@ -913,7 +916,7 @@ STYLES = [
       prompts=["a flooded concrete cistern, distant machinery",
                "an abandoned hangar in wind, iron settling",
                "a bell struck once in a stone vault"],
-      tables=["Tilt walk", "Odd breathing"],
+      tables=["Gong wash", "Metal bar", "Sub bloom", "Ring bell", "Resonator bank"],
       granular={"spread": (0.02, 0.25), "grains": 1.0},
       impulses=['struck', 'room_bunker', 'room_cavern', 'modal'],
       noise=['Brown', 'Pink', 'Grey']),
@@ -946,7 +949,7 @@ STYLES = [
       prompts=["a bowed double bass held for a minute, rosin audible",
                "a bowed metal wire stretched across a hall",
                "two bowed strings a fifth apart, beating slowly"],
-      tables=["Tilt walk", "Odd breathing"],
+      tables=["Bowed string", "Bowed cymbal", "Stretched string", "Beating pairs", "Resonator bank"],
       impulses=['room_hall', 'room_chamber', 'modal', 'struck'],
       noise=['Pink', 'Brown', 'Wind']),
 
@@ -973,7 +976,7 @@ STYLES = [
       prompts=["a single second of a cathedral held for an hour",
                "the spectrum of rain, stopped and sustained",
                "one frame of a choir, frozen and transposed"],
-      tables=["Tilt walk", "Random walk"],
+      tables=["Resonator bank", "Spectral erosion", "Stretched string", "Singing bowl", "Harmonic gate"],
       impulses=['room_hall', 'room_cavern', 'spectral'],
       noise=['Pink', 'Brown', 'Grey', 'Wind']),
 
@@ -1001,7 +1004,7 @@ STYLES = [
              COMMON_SECOND + ["Cluster", "Handful", "Burst", "Chain", "Silence"]),
       prompts=["distant thunder that answers itself", "a swarm of small bells, then nothing",
                "stones dropped into a cistern at irregular intervals"],
-      tables=["Tilt walk", "Formant sweep"],
+      tables=["Pluck point", "Prepared piano", "Ring cluster", "Beating pairs", "Fibonacci"],
       impulses=['room_hall', 'room_plate', 'tuned'],
       noise=['Crackle', 'Digital', 'Pink', 'Band']),
 
@@ -1024,7 +1027,7 @@ STYLES = [
              COMMON_SECOND + ["Interval", "Ratio", "Comma", "Lattice", "Consonance"]),
       prompts=["a choir tuning itself to a bell", "beatless fifths in a stone room",
                "an organ in seventh-limit intonation"],
-      tables=["Harmonic drawbars", "Tilt walk"],
+      tables=["Fifth stack", "Prime sieve", "Stretched octave", "Organ mixture", "Fibonacci"],
       impulses=['room_cathedral', 'room_hall', 'tuned'],
       noise=['Pink', 'Grey', 'Brown']),
 
@@ -1046,7 +1049,7 @@ STYLES = [
       prompts=["something alive under a microscope, breathing",
                "a colony of small organisms drifting and dividing",
                "warm liquid seen through glass, slowly moving"],
-      tables=["Random walk", "Formant sweep"],
+      tables=["Random walk", "Waterphone", "Ring cluster", "Fibonacci", "Spectral erosion"],
       impulses=['room_cavern', 'spectral', 'room_hall'],
       noise=['Grey', 'Wind', 'Band', 'Pink']),
 
@@ -1066,7 +1069,7 @@ STYLES = [
              COMMON_SECOND + ["Orbit", "Lobe", "Trajectory", "Phase", "Attractor"]),
       prompts=["a path that never crosses itself", "weather over a long night",
                "a slow spiral that suddenly climbs"],
-      tables=["Random walk", "Tilt walk"],
+      tables=["Random walk", "Bohlen-Pierce", "Ring cluster", "Shepard stack", "Beating pairs"],
       impulses=['room_hall', 'room_cavern', 'tuned'],
       noise=['Brown', 'Pink', 'Violet', 'Wind']),
 
@@ -1089,7 +1092,7 @@ STYLES = [
       prompts=["someone breathing beside you in the dark",
                "a string touched, not bowed, very close",
                "small wooden objects moved on a table by your ear"],
-      tables=["Formant sweep", "Harmonic drawbars"],
+      tables=["Breath band", "Stopped pipe", "Three vowels", "Bowed string", "Prepared piano"],
       impulses=['room_chamber', 'room_plate', 'struck'],
       noise=['Grey', 'Pink', 'Crackle', 'Band']),
 
@@ -1125,7 +1128,7 @@ STYLES = [
       prompts=["a tape loop of a choir, worn soft by the tenth pass",
                "an empty terminal at six in the morning",
                "a piano recorded in the next room and left running"],
-      tables=["Harmonic drawbars", "Tilt walk"],
+      tables=["Organ drawbars", "Stopped pipe", "Vowel choir", "Odd breathing", "Fibonacci"],
       impulses=['room_hall', 'room_chamber', 'room_plate'],
       noise=['Pink', 'Grey', 'Brown']),
 
@@ -1155,7 +1158,7 @@ STYLES = [
       prompts=["wind over a frozen plateau, a long way from anything",
                "meltwater under a metre of ice",
                "a distant engine across a fjord at night"],
-      tables=["Tilt walk", "Random walk"],
+      tables=["Pink resonance", "Sub fold", "Spectral erosion", "Breath band", "Stretched octave"],
       impulses=['room_cavern', 'room_bunker', 'spectral'],
       noise=['Wind', 'Brown', 'Grey', 'Pink']),
 
@@ -1186,7 +1189,7 @@ STYLES = [
       prompts=["a bell struck once in a stone crypt and left to ring",
                "a choir heard through a wall, very slowed",
                "iron and rust, a cathedral, a long way down"],
-      tables=["Harmonic drawbars", "Formant sweep", "Tilt walk"],
+      tables=["Organ mixture", "Gong wash", "Singing bowl", "Bell partials", "Three vowels"],
       impulses=['room_cathedral', 'room_cavern', 'modal', 'struck'],
       noise=['Brown', 'Pink', 'Grey', 'Wind']),
 ]

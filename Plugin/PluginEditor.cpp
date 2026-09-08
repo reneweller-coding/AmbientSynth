@@ -3,19 +3,31 @@
 using namespace ambient;
 
 namespace {
-// The library runs to thousands of presets, so a flat list is unreadable: group the box by
-// family (the built-in families first, then one heading per loaded pack).
+// The library runs to thousands of presets. As one flat list with headings between the families
+// this was 8596 rows in a single popup -- unreadable, and past some size unusable: the menu opened
+// and a click on a row did nothing at all, the box kept the name it had, and the sound with it.
+// One submenu per family instead. The root holds sixty entries, each of them a few dozen, and the
+// ComboBox still reports the chosen id through onChange exactly as before.
 void fillPresetBox(juce::ComboBox& box)
 {
     const bool grouped = numPresetMeta() >= numPresets() && numPresetFamilies() > 1;
+    if (!grouped) {
+        for (int i = 0; i < numPresets(); ++i) box.addItem(preset(i).name, i + 1);
+        return;
+    }
+    juce::PopupMenu* root = box.getRootMenu();
+    juce::PopupMenu family;
     int lastFamily = -1;
     for (int i = 0; i < numPresets(); ++i) {
-        if (grouped) {
-            const int fam = presetMeta(i).family;
-            if (fam != lastFamily) { box.addSectionHeading(presetFamilyName(fam)); lastFamily = fam; }
+        const int fam = presetMeta(i).family;
+        if (fam != lastFamily) {
+            if (lastFamily >= 0) root->addSubMenu(presetFamilyName(lastFamily), family);
+            family.clear();
+            lastFamily = fam;
         }
-        box.addItem(preset(i).name, i + 1);
+        family.addItem(i + 1, preset(i).name);
     }
+    if (lastFamily >= 0) root->addSubMenu(presetFamilyName(lastFamily), family);
 }
 } // namespace
 

@@ -21,6 +21,8 @@ clipped, and said so. The core's WAV reader takes 8/16/24/32-bit PCM and 32-bit 
 (Core/src/WavFile.cpp), so nothing has to change to read them.
 """
 import argparse
+import time
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -198,6 +200,8 @@ def main():
     ap.add_argument("--max-part-mb", type=int, default=1800,
                     help="largest archive to write; GitHub refuses a release asset over 2 GB")
     ap.add_argument("--check-only", action="store_true")
+    ap.add_argument("--jobs", type=int, default=12,
+                    help="files encoded at a time; libsndfile releases the lock, so these are real cores")
     ap.add_argument("--wav", action="store_true",
                     help="ship 24-bit WAV as before instead of FLAC (twice the download)")
     ap.add_argument("--add-new", action="store_true",
@@ -245,10 +249,15 @@ def main():
         return
 
     os.makedirs(OUT, exist_ok=True)
-    staged, why_count, saved = [], {}, 0
-    for i, ((kind, name), src) in enumerate(sorted(want.items())):
-        dst_dir = os.path.join(OUT, kind)
-        os.makedirs(dst_dir, exist_ok=True)
+    items = sorted(want.items())
+    for kind in {k for (k, _), _ in items}:
+        os.makedirs(os.path.join(OUT, kind), exist_ok=True)
+
+    # Encoding five thousand files is the long half of this, it is the same work five thousand
+    # times over, and libsndfile lets go of the interpreter lock while it does it -- so threads
+    # really do run side by side here. Twelve of the machine's twenty-four, which leaves it usable.
+    def convert(item):
+        (kind, name), src = item
         conv, out_name, why = (None, None, "") if a.wav else to_flac(src)
         if conv is None:
             out_name = name
@@ -256,14 +265,25 @@ def main():
             if conv is None:
                 with open(src, "rb") as f:
                     conv = f.read()
-        dst = os.path.join(dst_dir, out_name)
-        why_count[why] = why_count.get(why, 0) + 1
-        saved += os.path.getsize(src) - len(conv)
+        dst = os.path.join(OUT, kind, out_name)
         with open(dst, "wb") as f:
             f.write(conv)
-        staged.append((kind, out_name, dst))
-        if (i + 1) % 200 == 0:
-            print("  %d/%d" % (i + 1, len(want)), flush=True)
+        return kind, out_name, dst, why, os.path.getsize(src) - len(conv)
+
+    staged, why_count, saved = [], {}, 0
+    done = 0
+    t0 = time.time()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, a.jobs)) as ex:
+        for kind, out_name, dst, why, gain in ex.map(convert, items):
+            why_count[why] = why_count.get(why, 0) + 1
+            saved += gain
+            staged.append((kind, out_name, dst))
+            done += 1
+            if done % 200 == 0:
+                el = time.time() - t0
+                print("  %d/%d  %.0f s, noch etwa %.0f s"
+                      % (done, len(items), el, el / done * (len(items) - done)), flush=True)
+    staged.sort()
     print("%s -- saved %.2f GB" % (", ".join("%s: %d" % kv for kv in sorted(why_count.items())), saved / 1e9))
 
     # ---------------------------------------------------------------- archives

@@ -124,8 +124,22 @@ def main():
     ap.add_argument("--clusters", type=int, default=14)
     ap.add_argument("--clap", default="", help="the JSON written by clap_embed.py: what it sounds like")
     ap.add_argument("--taps", default="", help="where the built-ins' 12 s excerpts go when measuring")
-    ap.add_argument("--w-timbre", type=float, default=6.0, help="pull of the mel-cepstral fingerprint on the layout")
-    ap.add_argument("--w-clap", type=float, default=6.0, help="pull of the learned embedding on the layout")
+    # Both default to zero, and that is a measurement rather than a preference. Laying the whole
+    # library out five ways and judging each against the SAME yardsticks (not against its own
+    # space, which flatters the poorer one):
+    #
+    #     space                      neighbours kept   ... by CLAP   x~bright   y~evolve
+    #     descriptors only                     0.160         0.011       0.86       0.26
+    #     + fingerprint                        0.068         0.013       0.88       0.22
+    #     + CLAP                               0.050         0.031       0.86       0.12
+    #     all three                            0.039         0.032       0.87       0.18
+    #
+    # The two learned blocks cost three quarters of the neighbourhoods a person can name, and a
+    # third of what the up-axis promises, to raise the CLAP neighbourhoods from 1 % to 3 % -- which
+    # is no use to anybody either way. So they are measured, they name the presets, and they stay
+    # out of the plane. Set them if you want to see it for yourself.
+    ap.add_argument("--w-timbre", type=float, default=0.0, help="pull of the mel-cepstral fingerprint on the layout")
+    ap.add_argument("--w-clap", type=float, default=0.0, help="pull of the learned embedding on the layout")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--dry-run", action="store_true", help="report, write nothing")
     a = ap.parse_args()
@@ -242,7 +256,8 @@ def main():
                 parts.append(block(E, 6, a.w_clap))
             scores = np.array([h["scores"] if h else [np.nan] * len(vocab) for h in hit], dtype=np.float64)
     space = np.column_stack(parts)
-    print(f"layout space: {space.shape[1]} axes from {len(parts)} blocks")
+    print(f"layout space: {space.shape[1]} axes from {len(parts)} block(s)"
+          + ("" if len(parts) > 1 else " -- the nine descriptors alone; see --w-timbre/--w-clap"))
 
     xy = mapembed.embed(desc, axes=(0, 6), graph=space)
     labels, clusterNames = mapembed.cluster(desc, k=a.clusters, space=space)

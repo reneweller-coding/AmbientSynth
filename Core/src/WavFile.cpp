@@ -115,15 +115,20 @@ bool exists(const std::string& path)
 
 } // namespace
 
+std::string resolveAudioFile(const char* path)
+{
+    if (path == nullptr || *path == 0) return {};
+    if (exists(path)) return path;
+    const std::string alt = withFlacExtension(path);
+    return exists(alt) ? alt : std::string();
+}
+
 bool readWavChannels(const char* path, std::vector<std::vector<float>>& channelsOut, int& sampleRate)
 {
     channelsOut.clear();
-    if (path == nullptr) return false;
-    if (!exists(path)) {
-        const std::string alt = withFlacExtension(path);
-        if (exists(alt)) return readFlacChannels(alt.c_str(), channelsOut, sampleRate);
-        return false;
-    }
+    const std::string real = resolveAudioFile(path);
+    if (real.empty()) return false;
+    path = real.c_str();
     if (looksLikeFlac(path)) return readFlacChannels(path, channelsOut, sampleRate);
     FILE* f = openRead(path);
     if (!f) return false;

@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "ambient/WavFile.h"
 // For the standalone's settings file: the same one JUCE saves the state into when the window is
 // closed. Reaching it here is what lets the session be written while the app is still running.
 #if JucePlugin_Build_Standalone
@@ -403,20 +404,30 @@ void AmbientSynthProcessor::loadPresetFiles(int index)
     // ';', one per slot, an empty one meaning that slot has none. The per-slot form is explicit
     // about every slot, so a slot it leaves empty is cleared rather than left holding whatever
     // the previous preset put there.
+    // What arrives on a user's machine is FLAC, while the pack names the .wav it was made from.
+    // Every one of these lines used to ask the file system for the name in the pack and give up
+    // when it was not there -- so with the shipped library installed, not one preset loaded its
+    // sample. resolveAudioFile answers with whichever of the two is actually on disk.
+    auto onDisk = [](const juce::String& ref) {
+        const std::string got = ambient::resolveAudioFile(ref.toRawUTF8());
+        return got.empty() ? juce::File() : juce::File(juce::String(juce::CharPointer_UTF8(got.c_str())));
+    };
     if (tex.isNotEmpty()) {
         if (!tex.containsChar(';')) {
-            if (juce::File(tex).existsAsFile()) loadTextureFile(juce::File(tex));
+            const juce::File f = onDisk(tex);
+            if (f != juce::File()) loadTextureFile(f);
         } else {
             const juce::StringArray parts = juce::StringArray::fromTokens(tex, ";", "");
             for (int k = 0; k < ambient::kSlots; ++k) {
                 const juce::String p = k < parts.size() ? parts[k].trim() : juce::String();
-                if (p.isNotEmpty() && juce::File(p).existsAsFile()) loadTextureFile(k, juce::File(p));
+                const juce::File f = p.isNotEmpty() ? onDisk(p) : juce::File();
+                if (f != juce::File()) loadTextureFile(k, f);
                 else { engine_.clearTexture(k); textureFile_[k] = juce::File(); }
             }
         }
     }
-    if (tab.isNotEmpty() && juce::File(tab).existsAsFile()) loadWavetableFile(juce::File(tab));
-    if (imp.isNotEmpty() && juce::File(imp).existsAsFile()) loadImpulseFile(juce::File(imp));
+    if (tab.isNotEmpty()) { const juce::File f = onDisk(tab); if (f != juce::File()) loadWavetableFile(f); }
+    if (imp.isNotEmpty()) { const juce::File f = onDisk(imp); if (f != juce::File()) loadImpulseFile(f); }
 }
 
 void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
@@ -825,12 +836,18 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeProperty("cosmosPreset", nullptr);
             apvts.replaceState(tree);
             if (text.isNotEmpty()) loadScalaText(text, name);
-            if (texPath.isNotEmpty() && juce::File(texPath).existsAsFile()) loadTextureFile(juce::File(texPath));
+            // A saved state names the file the way it was when it was saved; the same two
+            // spellings apply (see loadPresetFiles), so the same rule answers here.
+            auto onDisk = [](const juce::String& ref) {
+                const std::string got = ambient::resolveAudioFile(ref.toRawUTF8());
+                return got.empty() ? juce::File() : juce::File(juce::String(juce::CharPointer_UTF8(got.c_str())));
+            };
+            if (texPath.isNotEmpty()) { const juce::File f = onDisk(texPath); if (f != juce::File()) loadTextureFile(f); }
             for (int k = 0; k < ambient::kSlots; ++k)
-                if (texPaths[k].isNotEmpty() && juce::File(texPaths[k]).existsAsFile()) loadTextureFile(k, juce::File(texPaths[k]));
-            if (tabPath.isNotEmpty() && juce::File(tabPath).existsAsFile()) loadWavetableFile(juce::File(tabPath));
-            if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile()) loadImpulseFile(juce::File(irPath));
-            if (irBPath.isNotEmpty() && juce::File(irBPath).existsAsFile()) loadImpulseFile(juce::File(irBPath), true);
+                if (texPaths[k].isNotEmpty()) { const juce::File f = onDisk(texPaths[k]); if (f != juce::File()) loadTextureFile(k, f); }
+            if (tabPath.isNotEmpty()) { const juce::File f = onDisk(tabPath); if (f != juce::File()) loadWavetableFile(f); }
+            if (irPath.isNotEmpty())  { const juce::File f = onDisk(irPath);  if (f != juce::File()) loadImpulseFile(f); }
+            if (irBPath.isNotEmpty()) { const juce::File f = onDisk(irBPath); if (f != juce::File()) loadImpulseFile(f, true); }
         }
     }
 }

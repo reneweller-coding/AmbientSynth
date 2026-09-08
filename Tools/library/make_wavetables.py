@@ -137,8 +137,16 @@ def build(per_recipe, frames, out_dir, seed, int16):
             table = table_procedural(recipe, frames=frames, partials=partials, seed=tseed,
                                      noise=noise, phase_scatter=scatter)
             path = os.path.join(out_dir, f"{slug(recipe)}_{k:03d}.wav")
-            save_table(path, table, {"recipe": recipe, "partials": partials, "noise": noise,
-                                     "phase_scatter": scatter, "seed": tseed}, float32=not int16)
+            # save_table writes the table and a little note beside it. The note is expendable --
+            # sort_clips folds them all into one index anyway -- so a scanner holding one open
+            # must not take a thousand tables down with it.
+            try:
+                save_table(path, table, {"recipe": recipe, "partials": partials, "noise": noise,
+                                         "phase_scatter": scatter, "seed": tseed}, float32=not int16)
+            except OSError as e:
+                print(f"  note not written for {os.path.basename(path)}: {e}")
+                if not os.path.exists(path):
+                    continue
             written.append(path)
     return written, names
 

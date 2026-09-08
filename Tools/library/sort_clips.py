@@ -65,10 +65,17 @@ def fold(folder, dry):
         if not name.endswith(".txt") or name in KEEP:
             continue
         wav = os.path.splitext(name)[0] + ".wav"
+        # The file can be gone by now (a generator writing into the same folder, a scanner) --
+        # the listing was taken a moment ago. A note that is not there is not worth an abort.
         try:
             meta = json.load(open(os.path.join(folder, name), encoding="utf-8"))
-        except (ValueError, OSError):
-            meta = {"raw": open(os.path.join(folder, name), encoding="utf-8", errors="replace").read()}
+        except ValueError:
+            try:
+                meta = {"raw": open(os.path.join(folder, name), encoding="utf-8", errors="replace").read()}
+            except OSError:
+                continue
+        except OSError:
+            continue
         if os.path.exists(os.path.join(folder, wav)):
             index[wav] = meta
         elif other is not None and os.path.exists(os.path.join(other, wav)):
@@ -77,7 +84,10 @@ def fold(folder, dry):
             orphans += 1                 # the clip was rejected or deleted; its note goes with it
         folded += 1
         if not dry:
-            os.remove(os.path.join(folder, name))
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
     # Anything in the index whose clip is gone goes too, so the file counts what is there.
     index = {k: v for k, v in index.items() if os.path.exists(os.path.join(folder, k))}
     if not dry:

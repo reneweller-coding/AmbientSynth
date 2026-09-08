@@ -6,6 +6,7 @@
 #include "ambient/Modulation.h"
 #include "ambient/ZPlane.h"
 #include "ambient/Sources.h"
+#include "ambient/PresetMeta.h"
 #include <vector>
 #include <memory>
 #include <functional>
@@ -87,6 +88,58 @@ private:
         }
     };
     UndoHook undoHook_;
+    // Dragging a modulation card onto a knob. The gesture crosses half the panel, and the strip
+    // could only draw inside itself, so as soon as the hand left the lane there was nothing to
+    // see: no line, no card, no sign of which modulator was in flight. This is drawn on top of
+    // everything instead -- the line from the card, the card under the cursor, and a ring around
+    // the knob it would land on, named.
+    struct DragOverlay : juce::Component {
+        DragOverlay() { setInterceptsMouseClicks(false, false); setAlwaysOnTop(true); }
+        void paint(juce::Graphics&) override;
+        bool active = false;
+        juce::Point<float> from, to;
+        juce::String name, targetName;
+        juce::Colour colour { 0xffffffff };
+        juce::Rectangle<float> target;
+    };
+    DragOverlay dragOverlay_;
+    // Pigments' little knob: after the drop, the depth of the route that was just made, in the
+    // modulator's own colour and named after both ends of it. The next click anywhere else puts
+    // it away.
+    struct DepthPopup : juce::Component {   // a Component is already a MouseListener: inheriting it twice is ambiguous
+        DepthPopup(AmbientSynthEditor& o, ambient::ModSource s, ambient::ParamId t, juce::Colour c);
+        ~DepthPopup() override;
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        // One callback serves both roles: the component's own presses and, because this is
+        // registered as a global listener while it lives, everybody else's. A press inside keeps
+        // it; a press anywhere else puts it away -- posted, since a component may not be deleted
+        // from inside its own mouse callback.
+        void mouseDown(const juce::MouseEvent& e) override
+        {
+            if (e.eventComponent == this || isParentOf(e.eventComponent)) return;
+            juce::MessageManager::callAsync([w = juce::Component::SafePointer<DepthPopup>(this)] {
+                if (w != nullptr) w->owner.hideDepthPopup();
+            });
+        }
+        AmbientSynthEditor& owner;
+        ambient::ModSource source;
+        ambient::ParamId target;
+        juce::Colour colour;
+        juce::Slider depth;
+        juce::TextButton remove{ "x" };
+    };
+    std::unique_ptr<DepthPopup> depthPopup_;
+public:
+    void showModDrag(juce::Point<int> screenFrom, juce::Point<int> screenTo, const juce::String& name, juce::Colour);
+    void hideModDrag();
+    void showDepthPopup(ambient::ModSource, ambient::ParamId, juce::Colour, juce::Point<int> screenAt);
+    void hideDepthPopup();
+    // Rewrites one route's depth (the matrix travels as text, as everywhere else here).
+    bool setRouteDepth(ambient::ModSource, ambient::ParamId, float depth);
+    bool removeRoute(ambient::ModSource, ambient::ParamId);
+    float routeDepth(ambient::ModSource, ambient::ParamId) const;
+private:
     // The two section layers that live inside their own sections rather than in the header:
     // 156 filters and 41 plucks are lists you go looking for, not things you keep on the toolbar.
     // Not owned: the cell owns the component, the editor only needs to read the selection back.
@@ -387,6 +440,30 @@ private:
         // Five thousand presets include some that barely move. Their measurements say so, and
         // this hides them: nothing is deleted, the list simply stops offering them.
         juce::ToggleButton hideDull{ "hide the still ones" };
+        // A preset change as a journey rather than a cut, and how long it takes.
+        juce::ToggleButton morphOnSelect{ "morph into it" };
+        juce::Slider morphSeconds;
+        // What u-he's browsers put beside the list: what this preset is, how it paces itself,
+        // what your hands are wired to in it, and where it is filed. Generated from the
+        // measurements, the settings and its own matrix (ambient::presetInfoText).
+        struct InfoPanel : juce::Component {
+            void paint(juce::Graphics&) override;
+            juce::String title, body;
+        };
+        InfoPanel info2;
+        int infoFor = -2;              // which preset the panel currently describes
+        void updateInfo();
+        // The cloud's colour: the measured groups, or where a preset came from. Groups by
+        // default -- what a browser is for is finding a sound, and the pack a sound was written
+        // in is a fact about its author.
+        juce::ToggleButton colourByGroup{ "groups" };
+        // The four macro sliders. Each is a range over one measured descriptor, wide open by
+        // default; narrowing one thins the cloud to what is left, and the view closes in on it.
+        struct Macro { juce::Slider slider; juce::Label label; float ambient::PresetMeta::* field; };
+        Macro macros[4];
+        bool  macroActive() const;
+        void  fitToFilter();      // zoom the map onto what survived the filter
+        bool  fitPending = false;
 
         AmbientSynthProcessor& proc;
         juce::TextEditor search;

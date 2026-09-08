@@ -14,6 +14,8 @@ add_library(AmbientCore STATIC
     src/Sources.cpp
     src/WavFile.cpp
     src/PresetMeta.cpp
+    src/PresetClusters.cpp
+    src/PresetText.cpp
     src/PresetPacks.cpp
     src/PresetMap.cpp
     src/Modulation.cpp

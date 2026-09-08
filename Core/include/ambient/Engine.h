@@ -121,6 +121,9 @@ public:
     void  captureMorphSlot(int slot);                    // copy the live parameters into a slot
     void  morphSlot(int slot, float* out) const;
     float morphPosition() const { return morphCur_.load(std::memory_order_relaxed); }
+    // Put the gliding position somewhere without waiting for the glide: a preset change
+    // that travels has to start at A even if the morph was standing somewhere else.
+    void  resetMorphPosition(float p) { morphCur_.store(p, std::memory_order_relaxed); }
     float effectiveParam(ParamId id) const;              // what is actually playing
     // Preset map (MapActive / MapX / MapY / MapRadius): the engine blends the presets around
     // the cursor at control rate and glides every parameter toward the blend with the Morph

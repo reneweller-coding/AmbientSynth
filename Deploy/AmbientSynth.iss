@@ -121,7 +121,8 @@ Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{code:LibDir}\Packs"; \
 #if HaveContent
 ; The sample library: fetched by the [Code] section below (which can survive a failure), checked
 ; against its hash on the way in, and unpacked here into the library folder beside the packs --
-; the archives hold Textures\, Wavetables\ and Impulses\, which is exactly what the packs'
+; the archives hold Textures\, FieldRecordings\, Wavetables\ and Impulses\, which is exactly
+; what the packs'
 ; relative paths expect.
 #include "content-files.iss"
 #endif
@@ -142,11 +143,13 @@ Filename: "{app}\AmbientSynth.exe"; Description: "{cm:LaunchProgram,{#AppName}}"
 Type: filesandordirs; Name: "{autocf}\VST3\AmbientSynth.vst3"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Packs"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Textures"
+Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\FieldRecordings"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Wavetables"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Impulses"
 Type: dirifempty;     Name: "{commonappdata}\AmbientSynth"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Packs"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Textures"
+Type: filesandordirs; Name: "{localappdata}\AmbientSynth\FieldRecordings"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Wavetables"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Impulses"
 Type: dirifempty;     Name: "{localappdata}\AmbientSynth"

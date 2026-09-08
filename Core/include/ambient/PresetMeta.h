@@ -13,8 +13,12 @@ enum PresetTag : uint32_t {
     TagDense = 1u << 8, TagSparse = 1u << 9, TagKeys = 1u << 10, TagGenerative = 1u << 11,
     TagCosmos = 1u << 12, TagFeedback = 1u << 13, TagSources = 1u << 14, TagJustIntonation = 1u << 15,
     TagSub = 1u << 16, TagStack = 1u << 17, TagAir = 1u << 18,
+    // What a drone is: whether it goes anywhere, whether its partials grind, and how far away it
+    // stands. Added in 1.11.0 with the descriptors behind them.
+    TagStill = 1u << 19, TagEvolving = 1u << 20, TagSmooth = 1u << 21, TagRough = 1u << 22,
+    TagNear = 1u << 23, TagFar = 1u << 24,
 };
-constexpr int kNumPresetTags = 19;
+constexpr int kNumPresetTags = 25;
 
 struct PresetMeta {
     float x, y;                 // map position, 0..1
@@ -27,7 +31,36 @@ struct PresetMeta {
     int   family;               // index into familyName()
     uint32_t tags;              // PresetTag bits
     float loudDb;               // measured RMS of a 12 s render, dBFS; 0 = never measured
+    // Three descriptors that say what a DRONE is like rather than what a note is like. Flux and
+    // centroid describe a moment; these describe a minute, a spectrum's friction and a distance.
+    float evolve;               // 0..1 rank: how far the sound travels over the render
+    float rough;                // 0..1 rank: Plomp-Levelt roughness of its own spectrum
+    float wet;                  // 0..1 rank: what comes back from the far planes, against the near
+    // What a model that listened to the render says it sounds like: two indices into the phrase
+    // table, best first, or -1. CLAP scores a written vocabulary against every preset (see
+    // Tools/library/clap_embed.py); it cannot invent a phrase, only choose one, which is what
+    // makes the line honest -- a person wrote the words, a measurement picked them.
+    short phrase[2];
+    // The group this preset was put in when the whole library was laid out, or -1. It is stored
+    // rather than recomputed because the grouping sees more than the nine numbers above -- the
+    // fingerprint and the learned embedding have a say -- so a nearest-centroid guess would put
+    // some presets in a different group than the map draws them in.
+    short cluster;
 };
+constexpr int kNumMapDescriptors = 9;   // bright motion width noisy bass density evolve rough wet
+
+// The measured groups: presets that sound alike, found by k-means over those nine descriptors
+// across the whole library. The centroids are generated; a preset's group is the nearest one,
+// worked out here rather than stored per preset, so a built-in and a pack preset are grouped by
+// the same yardstick even though two different tools measured them.
+int               numPresetClusters();
+const char*       presetClusterName(int cluster);
+const float*      presetClusterCentre(int cluster);   // kNumMapDescriptors values
+int               presetClusterOf(const PresetMeta&);  // the stored group, else the nearest centroid, else -1
+
+// The vocabulary CLAP chose from, and one preset's phrases.
+int               numPresetPhrases();
+const char*       presetPhrase(int index);          // "" when out of range or not generated
 
 // Public view: the built-in table followed by the loaded packs (see Presets.h).
 int               numPresetMeta();          // equals numPresets() once generated, 0 for the stub

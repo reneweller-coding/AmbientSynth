@@ -93,6 +93,20 @@ public:
     int  cosmosPresetIndex() const { return cosmosIndex_; }
 
     // Morph slots A (0) and B (1).
+    // Choosing a preset while another one is playing: instead of the cut, the instrument travels.
+    // The state now becomes slot A, the chosen preset slot B, and the morph position glides from
+    // 0 to 1 over `seconds`; when it arrives, the preset's own values are written into the
+    // parameters and the morph switches itself off, so what is left is the preset and not a
+    // blend. Off, or with the browser's switch off, a preset still lands the moment it is chosen.
+    void selectPreset(int index, bool viaMorph);
+    bool morphOnSelect() const { return morphOnSelect_; }
+    void setMorphOnSelect(bool on) { morphOnSelect_ = on; }
+    float morphSelectSeconds() const { return morphSelectSeconds_; }
+    void setMorphSelectSeconds(float s) { morphSelectSeconds_ = juce::jlimit(0.5f, 600.0f, s); }
+    // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
+    // come (0..1) -- the browser draws both.
+    int   morphingTo() const { return morphTarget_; }
+    float morphProgress() const { return engine_.morphPosition(); }
     void setMorphSlotFromPreset(int slot, int presetIndex);
     void setMorphSlotFromCurrent(int slot);
     juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
@@ -154,6 +168,10 @@ private:
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_[ambient::kSlots], wavetableFile_, impulseFile_, impulseBFile_;
     bool       levelMatch_ = false, compact_ = false;
+    // The travelling preset change (selectPreset): the target, and what the browser last set.
+    int        morphTarget_ = -1;
+    bool       morphOnSelect_ = true;
+    float      morphSelectSeconds_ = 20.0f;
     int        layoutMode_ = 0;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;

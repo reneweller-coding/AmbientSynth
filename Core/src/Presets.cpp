@@ -9,6 +9,8 @@ namespace {
 
 const Preset kPresets[] = {
 
+
+    // ---------------------------------------------------------------- 0..9 originals
     { "Init", "" },
     { "Sleep Concert",
       "brain_density=6;brain_rate=35;brain_hold_min=60;brain_hold_max=240;depth=0.85;far_decay=35;"
@@ -93,6 +95,8 @@ const Preset kPresets[] = {
       "lfo1>resonance:0.147;lfo2>ens_depth:0.103;lfo3>z_y:0.231;lfo4>shimmer:0.170;beat>depth:0.148;wheel>filter_fold:0.404:u;pressure>far_level:0.190:u" },
 
 
+
+    // ---------------------------------------------------------------- 10..19 sleep / night
     { "Midnight Pentatonic",
       "scale=JI Pentatonic;root=F#;brain_density=4;brain_low=40;brain_high=76;air=0.25;far_decay=30;attack=8;"
       "release=20;lfo1_rate=0.020604;lfo1_depth=0.42;lfo2_rate=0.012734;lfo2_depth=0.40;lfo3_rate=0.00787;"
@@ -177,6 +181,8 @@ const Preset kPresets[] = {
       "lfo1>arc:-0.172;lfo2>shimmer:0.148;lfo3>spread:0.147;lfo4>cutoff:0.120;beat>purity:0.110;slide>tilt:0.345:u" },
 
 
+
+    // ---------------------------------------------------------------- 20..29 cathedral / glass
     { "Ice Cathedral",
       "partials=32;tilt=0.7;brightness=1;inharmonic=0.25;cutoff=9000;far_size=3;far_decay=60;far_highcut=9000;"
       "far_damp=0.2;brain_density=5;brain_low=55;brain_high=96;lfo1_rate=0.021853;lfo1_depth=0.53;"
@@ -261,6 +267,8 @@ const Preset kPresets[] = {
       "lfo1>brightness:0.157;lfo2>resonance:-0.235;lfo3>detune:-0.126;lfo4>air:-0.224;beat>cosmos_smear:0.147;slide>inharmonic:0.240:u" },
 
 
+
+    // ---------------------------------------------------------------- 30..39 deep / sub / dark
     { "Abyss",
       "scale=Subharmonic 16-8;root=E;brain_low=24;brain_high=50;tilt=2.2;cutoff=500;partials=8;far_decay=45;"
       "far_highcut=900;bass_mono=250;brain_density=4;lfo1_rate=0.027389;lfo1_depth=0.48;lfo2_rate=0.016928;"
@@ -342,6 +350,8 @@ const Preset kPresets[] = {
       "lfo1>arc:0.196;lfo2>brightness:0.176;lfo3>spread:0.236;lfo4>resonance:0.178;beat>z_y:0.160;slide>inharmonic:0.383:u;wheel>filter_fold:0.214:u" },
 
 
+
+    // ---------------------------------------------------------------- 40..49 breath / flute / voice
     { "Shakuhachi Air",
       "air=0.7;air_color=1;air_q=6;partials=5;tilt=1.8;keys_depth=0;brain_low=60;brain_high=88;brain_density=3;"
       "brain_rate=10;brain_hold_min=8;brain_hold_max=30;attack=1.5;release=5;far_decay=12;master_gain=-8;"
@@ -427,6 +437,8 @@ const Preset kPresets[] = {
       "lfo1>brightness:-0.163;lfo2>spread:0.104;lfo3>cutoff:0.197;lfo4>pan_drift:0.115;beat>air:0.148;wheel>filter_fold:0.363:u" },
 
 
+
+    // ---------------------------------------------------------------- 50..59 exotic scales
     { "Slendro Dusk",
       "scale=Slendro (JI);root=D;brain_density=5;brain_low=48;brain_high=84;partials=10;inharmonic=0.2;"
       "attack=0.3;decay=10;sustain=0.4;release=15;brain_rate=6;brain_hold_min=5;brain_hold_max=25;far_decay=20;"
@@ -507,6 +519,8 @@ const Preset kPresets[] = {
       "lfo1>z_y:0.235;lfo2>ens_depth:-0.170;lfo3>resonance:-0.192;lfo4>tilt:0.167;beat>purity:0.136;slide>odd_even:0.370:u;pressure>cutoff:0.444:u" },
 
 
+
+    // ---------------------------------------------------------------- 60..69 shimmer / delay / motion
     { "Shimmer Rise",
       "cosmos_shimmer=0.7;cosmos_shimmer_pitch=+12;far_decay=20;far_level=0.9;depth=0.6;brain_density=4;"
       "lfo1_rate=0.015573;lfo1_depth=0.58;lfo2_rate=0.0096246;lfo2_depth=0.52;lfo3_rate=0.0059483;"
@@ -587,6 +601,8 @@ const Preset kPresets[] = {
       "lfo1>ens_depth:-0.162;lfo2>tilt:-0.104;lfo3>air:0.170;lfo4>z_y:0.174;beat>cutoff:0.081;slide>odd_even:0.340:u;pressure>resonance:0.104:u" },
 
 
+
+    // ---------------------------------------------------------------- 70..99 cosmos / science fiction
     { "Nebula Drift",
       "cosmos_send=1;cosmos_nebula=1;cosmos_smear=0.8;cosmos_return=0.7;cosmos_to_far=0.5;far_decay=30;"
       "brain_density=5;cloud_send=0.6;cloud_pitch=0.4;lfo1_rate=0.018179;lfo1_depth=0.43;lfo2_rate=0.011235;"
@@ -843,6 +859,8 @@ const Preset kPresets[] = {
       "lfo1>detune:-0.194;lfo2>tilt:0.106;lfo3>resonance:-0.170;lfo4>cutoff:0.113;beat>air:0.081;slide>inharmonic:0.396:u;wheel>far_level:0.399:u" },
 
 
+
+    // ---------------------------------------------------------------- 100..109 playable keys (brain off)
     { "Warm Keys",
       "brain_on=off;keys_depth=0;attack=0.8;decay=4;sustain=0.7;release=5;near_mix=0.3;near_decay=2;"
       "far_level=0.4;ens_mix=0.4;partials=12;tilt=1.4;lfo1_rate=0.020585;lfo1_depth=0.51;lfo2_rate=0.012722;"
@@ -924,6 +942,8 @@ const Preset kPresets[] = {
       "lfo1>air:0.193;lfo2>pan_drift:-0.220;lfo3>z_y:-0.177;lfo4>tilt:-0.175;beat>sub_level:0.099;slide>inharmonic:0.286:u" },
 
 
+
+    // ---------------------------------------------------------------- 110..119 long-form night arcs
     { "All Night Arc",
       "arc=1;arc_period=240;brain_density=5;brain_rate=40;brain_hold_min=90;brain_hold_max=400;far_decay=40;"
       "depth=0.85;scale=JI 7-limit;root=D;sub_level=0.3;sub_binaural=3;bloom=0.6;bloom_time=120;"
@@ -1006,6 +1026,8 @@ const Preset kPresets[] = {
       "lfo1>air:-0.182;lfo2>resonance:-0.140;lfo3>tilt:-0.225;lfo4>cutoff:0.108;beat>brightness:0.131;pressure>far_level:0.216:u;wheel>filter_fold:0.517:u" },
 
 
+
+    // ---------------------------------------------------------------- 120..127 storm / cluster / texture
     { "Cluster Storm",
       "brain_consonance=0;brain_density=10;brain_rate=6;brain_hold_min=10;brain_hold_max=40;scale=12-TET;"
       "far_decay=40;depth=0.9;strands=5;detune=25;fb_bus=0.2;fb_fm=0.2;lfo1_rate=0.019882;lfo1_depth=0.60;"
@@ -1071,6 +1093,8 @@ const Preset kPresets[] = {
       "lfo1>detune:0.174;lfo2>z_y:0.140;lfo3>ens_depth:-0.234;lfo4>shimmer:0.152;beat>sub_level:0.154;slide>odd_even:0.353:u;wheel>filter_fold:0.528:u" },
 
 
+
+    // ---------------------------------------------------------------- 128..135 sources (wavetable, FM, feedback)
     { "Vocal Morph Choir",
       "src2_type=Wavetable;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
       "src3_type=Wavetable;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;"
@@ -1140,6 +1164,8 @@ const Preset kPresets[] = {
       "lfo1>detune:-0.127;lfo2>shimmer:-0.102;lfo3>ens_depth:0.100;lfo4>cutoff:0.126;beat>resonance:0.080;wheel>far_level:0.319:u;slide>inharmonic:0.386:u" },
 
 
+
+    // ---------------------------------------------------------------- 136..147 z-plane / morphing filter
     { "Morphing Vowels",
       "z_mode=Replace;z_shape=Vowel Morph;z_x=0.3;z_y=0.4;z_rate=0.02;z_depth=1;z_res=0.5;z_mix=1;"
       "z_keytrack=0.2;partials=24;tilt=0.9;brightness=0.9;brain_density=4;brain_rate=30;far_decay=30;attack=8;"
@@ -1247,6 +1273,8 @@ const Preset kPresets[] = {
 
 
 
+
+    // ---------------------------------------------------------------- 148..157 granular
     { "Frozen Grain",
       "src3_type=Texture;src3_level=0.55;src3_grain=600;src3_density=8;src3_grains=12;src3_spread=0.004;"
       "src3_follow=Note;src3_pan=0.2;src3_pos=0.35;src3_pos_drift=0.05;osc_level=0.55;partials=12;"
@@ -1339,6 +1367,8 @@ const Preset kPresets[] = {
 
 
 
+
+    // ---------------------------------------------------------------- 158..167 noise
     { "Pink Bed",
       "src3_type=Noise;src3_noise=Pink;src3_level=0.5;src3_pan=0.2;src3_pos=0.4;src3_pos_drift=0.3;"
       "osc_level=0.6;partials=12;brightness=0.5;attack=14;release=30;far_decay=40;depth=0.85;master_gain=-11;"
@@ -1421,6 +1451,8 @@ const Preset kPresets[] = {
 
 
 
+
+    // ---------------------------------------------------------------- 168..177 rich studies
     { "Breathing Room",
       "phase_width=0.7;phase_rate=0.02;breath=0.3;breath_rate=0.02;doppler=0.6;depth=0.8;osc_level=0.7;"
       "partials=14;brightness=0.55;shimmer=0.45;attack=12;release=30;far_decay=40;master_gain=-11;"
@@ -1519,6 +1551,8 @@ const Preset kPresets[] = {
 
 
 
+
+    // ---------------------------------------------------------------- 178..186 body and place
     { "Soundboard",
       "body_level=0.8;body_material=Wood;body_pitch=0.5;body_decay=3;body_tone=0.3;body_spread=0.7;"
       "osc_level=0.6;partials=16;tilt=1.4;brightness=0.5;attack=10;release=30;far_decay=35;depth=0.8;"
@@ -1607,6 +1641,8 @@ const Preset kPresets[] = {
 
 
 
+
+    // ---------------------------------------------------------------- 187..195 autoplay / progressions
     { "Slow Progression",
       "auto_mode=Chords;auto_rate=60;auto_lead=3;auto_tension=0.15;auto_root_move=0.25;brain_density=5;"
       "brain_low=45;brain_high=76;brain_consonance=0.8;osc_level=0.55;partials=18;tilt=1.3;brightness=0.5;"

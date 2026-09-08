@@ -19,6 +19,7 @@
 #include "ambient/PresetMap.h"
 #include "ambient/Timeline.h"
 #include "ambient/Score.h"
+#include "ambient/ClusterBrain.h"   // peakRoughness: one Plomp-Levelt curve for the conductor and the map
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -87,8 +88,12 @@ void fft(std::vector<float>& re, std::vector<float>& im)
     }
 }
 
-// Centroid, flatness, flux, low-band share, stereo width and level of the settled half.
-void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, int voices)
+// Centroid, flatness, flux, low-band share, stereo width and level of the settled half -- and,
+// for the preset map, three descriptors that say what a drone is like rather than what a note is
+// like: how much it changes over a minute, how rough its spectrum is, and how wet it stands.
+// stemE holds the energy of the four buses (near, far, cosmos, room) or is null.
+void printMeasurements(const std::vector<float>& L, const std::vector<float>& R, int sr, int voices,
+                       const double* stemE = nullptr)
 {
     const size_t n = L.size();
     if (n < 4096) { std::printf("measure: rms=-120 centroid=0 flatness=0 flux=0 bass=0 width=0 voices=%d peak=0 jump=0 dc=0 monoloss=0\n", voices); return; }
@@ -98,6 +103,7 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
     for (int i = 0; i < win; ++i) hann[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(6.28318530718f * i / (win - 1));
     double centroid = 0.0, flatness = 0.0, flux = 0.0, bass = 0.0;
     int frames = 0;
+    std::vector<double> avgMag(static_cast<size_t>(win / 2 + 1), 0.0);   // for the roughness
     for (size_t start = half; start + static_cast<size_t>(win) < n; start += static_cast<size_t>(hop)) {
         for (int i = 0; i < win; ++i) {
             re[static_cast<size_t>(i)] = 0.5f * (L[start + static_cast<size_t>(i)] + R[start + static_cast<size_t>(i)]) * hann[static_cast<size_t>(i)];
@@ -121,6 +127,7 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
             flux += d;
         }
         prev = mag;
+        for (int k = 0; k <= win / 2; ++k) avgMag[static_cast<size_t>(k)] += mag[static_cast<size_t>(k)];
         centroid += wsum / std::max(sum, 1e-20);
         flatness += std::exp(logsum / (win / 2 + 1)) / std::max(sum > 0.0 ? std::sqrt(sum / (win / 2 + 1)) : 1e-12, 1e-12);
         bass += low / std::max(sum, 1e-20);
@@ -159,11 +166,142 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
         for (int k = 0; k < 2; ++k)
             for (int b = 0; b < 4; ++b) { h ^= static_cast<uint64_t>((q[k] >> (b * 8)) & 0xff); h *= 1099511628211ull; }
     }
+    // ---- what a drone is like -------------------------------------------------------------
+    // Evolution: how far the sound travels over the whole render, not from one block to the next.
+    // A second at a time, the level in decibels and the centroid in octaves; the spread of those
+    // two series is what separates a preset that stands still from one that goes somewhere.
+    // Flux cannot say this -- a fast tremolo has flux and goes nowhere.
+    double evoTone = 0.0, evoLevel = 0.0;
+    {
+        const size_t sec = static_cast<size_t>(sr);
+        const int fftN = 4096;
+        std::vector<double> tone, level;
+        std::vector<float> fr(static_cast<size_t>(fftN)), fi(static_cast<size_t>(fftN));
+        for (size_t s = 0; s + sec <= n; s += sec) {
+            double e = 0.0;
+            for (size_t i = s; i < s + sec; ++i) e += static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i];
+            level.push_back(10.0 * std::log10(e / (2.0 * static_cast<double>(sec)) + 1e-20));
+            if (s + static_cast<size_t>(fftN) > n) continue;
+            for (int i = 0; i < fftN; ++i) {
+                const double w = 0.5 - 0.5 * std::cos(6.28318530718 * i / (fftN - 1));
+                fr[static_cast<size_t>(i)] = static_cast<float>(0.5 * (L[s + static_cast<size_t>(i)] + R[s + static_cast<size_t>(i)]) * w);
+                fi[static_cast<size_t>(i)] = 0.0f;
+            }
+            fft(fr, fi);
+            double su = 0.0, ws = 0.0;
+            for (int k = 1; k <= fftN / 2; ++k) {
+                const double m = std::sqrt(static_cast<double>(fr[static_cast<size_t>(k)]) * fr[static_cast<size_t>(k)] + static_cast<double>(fi[static_cast<size_t>(k)]) * fi[static_cast<size_t>(k)]);
+                const double p = m * m, f = static_cast<double>(k) * sr / fftN;
+                su += p; ws += p * f;
+            }
+            tone.push_back(std::log2(std::max(ws / std::max(su, 1e-20), 20.0)));
+        }
+        auto spread = [](const std::vector<double>& v) {
+            if (v.size() < 3) return 0.0;
+            double m = 0.0;
+            for (double x : v) m += x;
+            m /= static_cast<double>(v.size());
+            double s = 0.0;
+            for (double x : v) s += (x - m) * (x - m);
+            return std::sqrt(s / static_cast<double>(v.size()));
+        };
+        // The loudest second is dropped from the level series: a preset whose first note arrives
+        // late otherwise reads as "evolving" when all it did was start.
+        evoTone = spread(tone);
+        evoLevel = spread(level);
+    }
+    // Roughness: the Plomp-Levelt curve over the peaks of the average spectrum, the same one the
+    // conductor judges its chords with (ambient::peakRoughness). Smooth and fused against
+    // beating and grinding -- the axis a drone lives on.
+    double rough = 0.0;
+    {
+        double pf[32] = {}, pa[32] = {};
+        int np = 0;
+        double loudest = 0.0;
+        for (int k = 1; k < win / 2; ++k) loudest = std::max(loudest, avgMag[static_cast<size_t>(k)]);
+        for (int k = 2; k < win / 2 - 1 && np < 32; ++k) {
+            const double m = avgMag[static_cast<size_t>(k)];
+            if (m < loudest * 0.02) continue;
+            if (m <= avgMag[static_cast<size_t>(k - 1)] || m < avgMag[static_cast<size_t>(k + 1)]) continue;
+            pf[np] = static_cast<double>(k) * sr / win;
+            pa[np] = m;
+            ++np;
+        }
+        rough = ambient::peakRoughness(pf, pa, np);
+    }
+    // ---- the fingerprint --------------------------------------------------------------------
+    // Nine numbers say what a preset is LIKE -- dark, still, wide, far. They cannot say what it
+    // IS: a goods yard and a beehive can agree on every one of them. This is the usual answer to
+    // that in the literature, a mel-cepstral fingerprint: forty bands on a mel scale, the log of
+    // their energy, a discrete cosine transform of that, and the first sixteen coefficients kept
+    // with their spread over the render. Thirty-two numbers that carry the shape of the spectrum
+    // rather than its averages, computed from the frames the descriptors already cost.
+    constexpr int kMel = 40, kCeps = 16;
+    double mfccMean[kCeps] = {}, mfccVar[kCeps] = {};
+    {
+        auto hzToMel = [](double f) { return 2595.0 * std::log10(1.0 + f / 700.0); };
+        auto melToHz = [](double m) { return 700.0 * (std::pow(10.0, m / 2595.0) - 1.0); };
+        const double melLo = hzToMel(30.0), melHi = hzToMel(std::min(16000.0, sr * 0.45));
+        int centre[kMel + 2];
+        for (int b = 0; b < kMel + 2; ++b) {
+            const double hz = melToHz(melLo + (melHi - melLo) * b / (kMel + 1));
+            centre[b] = std::max(1, std::min(win / 2, static_cast<int>(hz * win / sr + 0.5)));
+        }
+        std::vector<double> ceps(static_cast<size_t>(kCeps), 0.0);
+        std::vector<float> fre(static_cast<size_t>(win)), fim(static_cast<size_t>(win));
+        int used = 0;
+        for (size_t start = half; start + static_cast<size_t>(win) < n; start += static_cast<size_t>(hop) * 2) {
+            for (int i = 0; i < win; ++i) {
+                fre[static_cast<size_t>(i)] = 0.5f * (L[start + static_cast<size_t>(i)] + R[start + static_cast<size_t>(i)]) * hann[static_cast<size_t>(i)];
+                fim[static_cast<size_t>(i)] = 0.0f;
+            }
+            fft(fre, fim);
+            double band[kMel];
+            for (int b = 0; b < kMel; ++b) {
+                double e = 0.0;
+                for (int k = centre[b]; k <= centre[b + 2]; ++k) {
+                    const double m = std::sqrt(static_cast<double>(fre[static_cast<size_t>(k)]) * fre[static_cast<size_t>(k)]
+                                             + static_cast<double>(fim[static_cast<size_t>(k)]) * fim[static_cast<size_t>(k)]);
+                    const double w = k <= centre[b + 1] ? (k - centre[b] + 1.0) / (centre[b + 1] - centre[b] + 1.0)
+                                                        : (centre[b + 2] - k + 1.0) / (centre[b + 2] - centre[b + 1] + 1.0);
+                    e += m * m * w;
+                }
+                band[b] = std::log(e + 1e-12);
+            }
+            for (int c = 0; c < kCeps; ++c) {
+                double s2 = 0.0;
+                for (int b = 0; b < kMel; ++b)
+                    s2 += band[b] * std::cos(3.14159265358979323846 * (c + 1) * (b + 0.5) / kMel);
+                ceps[static_cast<size_t>(c)] = s2 / kMel;
+                mfccMean[c] += ceps[static_cast<size_t>(c)];
+                mfccVar[c] += ceps[static_cast<size_t>(c)] * ceps[static_cast<size_t>(c)];
+            }
+            ++used;
+        }
+        const double inv2 = 1.0 / std::max(used, 1);
+        for (int c = 0; c < kCeps; ++c) {
+            mfccMean[c] *= inv2;
+            mfccVar[c] = std::sqrt(std::max(0.0, mfccVar[c] * inv2 - mfccMean[c] * mfccMean[c]));
+        }
+    }
+    // Wet: how much of what is heard comes back from the far reverb, the room and the Cosmos
+    // rather than standing in the near plane. The spatial model's own axis, near to far.
+    double wet = 0.0;
+    if (stemE != nullptr) {
+        const double all = stemE[0] + stemE[1] + stemE[2] + stemE[3];
+        if (all > 1e-18) wet = (stemE[1] + stemE[2] + stemE[3]) / all;
+    }
     std::printf("measure: rms=%.3f centroid=%.1f flatness=%.6f flux=%.6f bass=%.6f width=%.6f voices=%d "
-                "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f hash=%016llx\n",
+                "peak=%.4f jump=%.4f dc=%.5f monoloss=%.3f evo_tone=%.5f evo_level=%.4f rough=%.6f wet=%.5f hash=%016llx\n",
                 20.0 * std::log10(rms + 1e-12), centroid * inv, flatness * inv,
                 frames > 1 ? flux / (frames - 1) : 0.0, bass * inv, 1.0 - std::fabs(corr), voices,
-                peak, jump, dc, monoLoss, static_cast<unsigned long long>(h));
+                peak, jump, dc, monoLoss, evoTone, evoLevel, rough, wet, static_cast<unsigned long long>(h));
+    // The fingerprint on its own line, so nothing that parses the measure line has to learn a
+    // new field: 16 cepstral means, then their 16 spreads.
+    std::printf("timbre:");
+    for (int c = 0; c < kCeps; ++c) std::printf(" %.4f", mfccMean[c]);
+    for (int c = 0; c < kCeps; ++c) std::printf(" %.4f", mfccVar[c]);
+    std::printf("\n");
 }
 
 } // namespace
@@ -174,6 +312,7 @@ int main(int argc, char** argv)
     double seconds = 60.0;
     int sr = 48000, block = 256;
     bool stats = false, dump = false, useMap = false, measure = false, loudness = false;
+    std::string tapPath;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
@@ -195,6 +334,10 @@ int main(int argc, char** argv)
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
         else if (a == "--measure") measure = true;   // print descriptors instead of writing a file
+        // A short mono excerpt of the settled part, for whatever wants to listen to the render
+        // rather than read its numbers -- a learned audio embedding, say. 22.05 kHz is plenty for
+        // that and keeps a whole library's worth of excerpts to a few gigabytes.
+        else if (a == "--tap") tapPath = next();
         else if (a == "--loudness") loudness = true; // and a second line to BS.1770 (its own line so
                                                      // nothing that parses the measure line has to change)
         else if (a == "--dump") dump = true;
@@ -312,6 +455,13 @@ int main(int argc, char** argv)
             if (found < 0) { std::fprintf(stderr, "unknown %s preset '%s'\n", cosmos ? "cosmos" : "sound", name.c_str()); return 2; }
             if (cosmos) engine.applyCosmosPreset(found); else engine.applySoundPreset(found);
             std::printf("%s preset: %s\n", cosmos ? "cosmos" : "sound", name.c_str());
+        }
+        else if (a == "--describe") {   // the browser's line of prose for a preset, or for all of them
+            const std::string want = next();
+            for (int p = 0; p < numPresets(); ++p)
+                if (want == "all" || want == preset(p).name)
+                    std::printf("%-30s %s\n", preset(p).name, presetDescription(p).c_str());
+            return 0;
         }
         else if (a == "--list-presets") {
             for (int p = 0; p < numPresets(); ++p) std::printf("%s\n", preset(p).name);
@@ -447,7 +597,10 @@ int main(int argc, char** argv)
     std::vector<std::vector<float>> stemOut(static_cast<size_t>(Engine::kNumStems) * 2);
     std::vector<float> stemChunk(static_cast<size_t>(Engine::kNumStems) * 2 * static_cast<size_t>(block), 0.0f);
     float* stemPtr[Engine::kNumStems * 2] = {};
-    if (!stemPrefix.empty()) {
+    // The measurement wants them too, though it writes no files: the near / far / room / cosmos
+    // energies are how wet a preset stands, which is the spatial model's own axis on the map.
+    double stemE[Engine::kNumStems] = {};
+    if (!stemPrefix.empty() || measure) {
         for (int c = 0; c < Engine::kNumStems * 2; ++c)
             stemPtr[c] = stemChunk.data() + static_cast<size_t>(c) * static_cast<size_t>(block);
         engine.setStemBuffers(stemPtr);
@@ -479,6 +632,11 @@ int main(int argc, char** argv)
         if (!stemPrefix.empty())
             for (int c = 0; c < Engine::kNumStems * 2; ++c)
                 stemOut[static_cast<size_t>(c)].insert(stemOut[static_cast<size_t>(c)].end(), stemPtr[c], stemPtr[c] + n);
+        if (measure && done >= total / 2)   // the settled half, as every other descriptor
+            for (int st = 0; st < Engine::kNumStems; ++st)
+                for (int i = 0; i < n; ++i)
+                    stemE[st] += static_cast<double>(stemPtr[st * 2][i]) * stemPtr[st * 2][i]
+                               + static_cast<double>(stemPtr[st * 2 + 1][i]) * stemPtr[st * 2 + 1][i];
         for (int i = 0; i < n; ++i) {
             const float l = L[static_cast<size_t>(i)], r = R[static_cast<size_t>(i)];
             if (std::isnan(l) || std::isnan(r) || std::isinf(l) || std::isinf(r)) ++nans;
@@ -511,10 +669,26 @@ int main(int argc, char** argv)
                     ld.integrated, ld.shortTerm, ld.momentary, ld.range, ld.truePeak, ld.crest,
                     ld.sones, ld.sonesN5, ld.sonesMax, ld.seconds);
     }
+    if (!tapPath.empty()) {
+        // The last twelve seconds, mono, decimated to about 22 kHz by averaging -- a plain box
+        // filter, which is enough for an embedding and costs nothing.
+        const int step = std::max(1, sr / 22050);
+        const long want = std::min<long>(total, static_cast<long>(12.0 * sr));
+        const size_t frames = wav.size() / 2;
+        const size_t from = frames > static_cast<size_t>(want) ? frames - static_cast<size_t>(want) : 0;
+        std::vector<float> tap;
+        tap.reserve((frames - from) / static_cast<size_t>(step) + 1);
+        for (size_t i = from; i + static_cast<size_t>(step) <= frames; i += static_cast<size_t>(step)) {
+            float acc = 0.0f;
+            for (int k = 0; k < step; ++k) acc += 0.5f * (wav[(i + static_cast<size_t>(k)) * 2] + wav[(i + static_cast<size_t>(k)) * 2 + 1]);
+            tap.push_back(acc / static_cast<float>(step));
+        }
+        if (!writeWav(tapPath, tap, 1, sr / step)) std::fprintf(stderr, "cannot write tap %s\n", tapPath.c_str());
+    }
     if (measure) {   // descriptors straight from the buffer: no temporary file at all
         std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);
         for (size_t k = 0; k + 1 < wav.size(); k += 2) { ml[k / 2] = wav[k]; mr[k / 2] = wav[k + 1]; }
-        printMeasurements(ml, mr, sr, engine.activeVoices());
+        printMeasurements(ml, mr, sr, engine.activeVoices(), stemE);
         return nans == 0 ? 0 : 1;
     }
     if (!writeWav(out, wav, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", out.c_str()); return 1; }

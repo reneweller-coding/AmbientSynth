@@ -24,6 +24,7 @@ target_sources(AmbientSynth PRIVATE
     EditorMatrix.cpp
     EditorModStrip.cpp
     EditorBrowse.cpp
+    EditorDrag.cpp
     AmbientLookAndFeel.cpp)
 
 target_compile_definitions(AmbientSynth PUBLIC

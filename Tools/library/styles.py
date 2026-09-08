@@ -122,6 +122,65 @@ MODULES_BASE = {
     # generator byte for byte as it did -- six thousand four hundred presets are keyed on the
     # sequence of draws, and one extra rng.random() anywhere in the path moves all of them.
     "bow": 0.0, "spectral": 0.0,
+
+    # ---- what the library never touched -------------------------------------------------
+    # Measured over the finished library: 177 of the instrument's 498 parameters appeared in not
+    # one of its 6800 presets. The first slot was additive in every single one of them, and
+    # everything built after the library was generated -- the cascade, the fields, the attractors,
+    # the second conductor, adaptive tuning, the near field, the newer room axes -- was in nothing
+    # at all. These weights are how a preset reaches for them. They are drawn from the `extra`
+    # stream, like bow and spectral, so a style that leaves them alone is untouched.
+    "slot1": 0.72,          # the first slot is something other than the additive bank
+    "noiseprimary": 0.0,    # ... and may be noise: only where a style asks for it by name
+    "cascade": 0.28,        # the conductor's clock as a Hawkes process: events breed events
+    "surprise": 0.22,       # entropy held to a target (Surprise + Homeostat)
+    "dejavu": 0.24,         # the ring that brings figures back and lets them mutate
+    "spreadbias": 0.30,     # the shape of its draws: grey average or soft-or-loud
+    "blend": 0.20,          # a chord arriving as one object inside the fusion window
+    "keyfind": 0.26,        # it finds the key it has drifted into
+    "evensmooth": 0.22,     # how evenly spread and how smoothly voiced it wants its chords
+    "timbre": 0.18,         # consonance judged from the spectrum actually sounding (Sethares)
+    "quantize": 0.14,       # events on the clock's grid
+    "brain2": 0.20,         # a second conductor for the background plane
+    "adaptive": 0.22,       # each arriving note tuned pure against what is sounding
+    "guard": 0.20,          # drifting beats kept out of the wobble band
+    "match": 0.10,          # the partials bent onto the scale instead of the other way round
+    "transpose": 0.08,      # the whole instrument a fourth, fifth or octave away, gliding
+    "keysfilter": 0.10,     # which of the conductor's planes your keys land on
+    "nearfield": 0.16,      # voices within reach: the low-frequency level difference
+    "comod": 0.22,          # the whole background breathing as one
+    "envelop": 0.28,        # the low lateral energy that says "inside a room"
+    "depthlaw": 0.30,       # the depth knob made linear in heard distance
+    "elev": 0.24,           # the planes given a height, heard through the pinna notch
+    "binaural": 0.12,       # headphone modes, including the head-tracked one
+    "farmode": 0.30,        # the far reverb's algorithm, including the rotating matrix
+    "earlyroom": 0.22,      # the early-reflection room in front of the tail
+    "arcclock": 0.06,       # the hour-long arc locked to the time of day
+    "archarmony": 0.16,     # the arc loosening and tightening the harmony
+    "presence": 0.20,       # the near plane's presence lift
+    "externalise": 0.12,    # crossfeed for headphones
+    "lenia": 0.18,          # a continuous cellular automaton as four modulation sources
+    "chaos": 0.18,          # the Lorenz and Roessler attractors, minutes long
+    "sympathy": 0.16,       # how hard the coherence ring pulls on the voices
+    "pulse": 0.12,          # the sub as a slow amplitude pulse
+    "fbbias": 0.10,         # even-order colour in the feedback loop
+    "partialspread": 0.16,  # the bank's partials fanned across the field one at a time
+    "cosmosswell": 0.35,    # the Cosmos following the cascade (only where there is a Cosmos)
+    "transport": 0.14,      # how a wavetable's frames morph: fade or optimal transport
+    "bodychar": 0.55,       # the body's material, pitch, tone and spread (where a body is on)
+    "patina": 0.18,         # wow, hiss and age
+    "roommorph": 0.14,      # two impulse responses, morphed between
+    "farfreeze": 0.05,      # the far reverb held open for ever
+    "fardiffuse": 0.22,     # how diffuse the tail is
+    "lfomodes": 0.28,       # per-voice and retriggered LFOs, and the tempo-synced ones
+    "banks": 0.45,          # a preset from the Cosmos, Strike or Z-plane banks as a layer
+    "vector": 0.30,         # the four slots read as the corners of one square, the point moving
+    "mastertilt": 0.18,     # the master's tilt and its pivot
+    "sync": 0.16,           # delays, arcs and the conductor on the host's bars
+    "expression": 0.35,     # what aftertouch and the slide do, as fixed routing
+    # How much of this style's grain material is environment rather than tone. The field
+    # recordings are a folder of their own now; a style that wants a swamp says so.
+    "environment": 0.5,
 }
 
 # Word pools the preset names are built from: "<first> <second>".
@@ -135,7 +194,11 @@ GRANULAR_BASE = {"spread": (0.02, 0.35), "grains": 1.0}
 # Which of the 200 generated impulses suit a style (name prefixes, see Tools/library/make_impulses.py)
 # and which noise colours belong to it.
 IMPULSES_BASE = ["room_hall", "room_chamber", "spectral"]
-NOISE_BASE = ["Pink", "Brown", "White", "Wind"]
+# All ten colours, not the four the library used to draw from. Pink and Brown stay likeliest --
+# they are what a bed is made of -- but Blue, Violet, Grey, Band, Crackle and Digital are in the
+# instrument and were in no preset at all.
+NOISE_BASE = ["Pink", "Pink", "Brown", "Brown", "White", "Wind", "Band", "Grey", "Blue", "Violet",
+              "Crackle", "Digital"]
 
 
 def S(name, inspiration, params, modules=None, words=None, prompts=None, tables=None, granular=None,
@@ -482,7 +545,7 @@ STYLES = [
        "ens_mix": (0.3, 0.7), "far_decay": ("log", 18.0, 50.0), "far_damp": (0.4, 0.75),
        "air": (0.15, 0.45), "brain_density": ("int", 3, 6), "brain_consonance": (0.65, 0.95),
        "depth": (0.55, 0.9), "shimmer": (0.2, 0.5)},
-      {"usertable": 0.4, "texture": 0.4, "zplane": 0.3, "sub": 0.4, "cloud": 0.2, "cosmos": 0.15,
+      {"noiseprimary": 0.30, "usertable": 0.4, "texture": 0.4, "zplane": 0.3, "sub": 0.4, "cloud": 0.2, "cosmos": 0.15,
        "feedback": 0.08},
       words=(["Skyline", "Violin", "Ferry", "Cloud", "Wood", "Painted", "Fenn", "Sun", "Meadow"],
              COMMON_SECOND + ["Green", "Morning", "Water", "Light"]),
@@ -520,7 +583,7 @@ STYLES = [
        "far_decay": ("log", 20.0, 60.0), "far_asym": (0.5, 1.0),
        "brain_consonance": (0.25, 0.7), "brain_rate": ("log", 15.0, 60.0),
        "sub_level": (0.2, 0.5), "depth": (0.6, 0.95), "shimmer": (0.2, 0.55)},
-      {"cloud": 0.65, "texture": 0.5, "sub": 0.7, "zplane": 0.5, "cosmos": 0.4, "feedback": 0.25,
+      {"noiseprimary": 0.50, "cloud": 0.65, "texture": 0.5, "sub": 0.7, "zplane": 0.5, "cosmos": 0.4, "feedback": 0.25,
        "src2": 0.7, "src3": 0.45},
       words=(["Ghost", "Molotov", "Haze", "Cenotaph", "Pacific", "Drift", "Litany", "Signal", "Atmospherics"],
              COMMON_SECOND + ["Transmission", "Static", "Smoke", "Wave"]),
@@ -565,7 +628,7 @@ STYLES = [
        "sub_level": (0.4, 0.75), "sub_octave": ["-1", "-2"], "sub_tone": (0.0, 0.2),
        "bass_mono": ("log", 150.0, 300.0), "shimmer": (0.0, 0.15), "air": (0.0, 0.1),
        "drift": (0.5, 2.5), "ens_mix": (0.0, 0.2), "depth": (0.8, 1.0)},
-      {"sub": 1.0, "cloud": 0.3, "zplane": 0.2, "cosmos": 0.15, "feedback": 0.15, "texture": 0.3,
+      {"noiseprimary": 0.45, "sub": 1.0, "cloud": 0.3, "zplane": 0.2, "cosmos": 0.15, "feedback": 0.15, "texture": 0.3,
        "stack": 0.2},
       words=(["Nostromo", "Hull", "Deck", "Stasis", "Cargo", "Engine", "Vessel", "Bulkhead", "Dead"],
              COMMON_SECOND + ["Hum", "Watch", "Hold", "Sleep"]),
@@ -626,7 +689,7 @@ STYLES = [
        "brain_density": ("int", 2, 5), "brain_rate": ("log", 40.0, 160.0), "brain_consonance": (0.2, 0.6),
        "sub_level": (0.2, 0.5), "air": (0.1, 0.35), "depth": (0.7, 1.0),
        "scale": ["Bohlen-Pierce (JI)", "Subharmonic 16-8", "JI 7-limit", "Slendro (JI)"]},
-      {"zplane": 0.75, "cosmos": 0.5, "sub": 0.7, "cloud": 0.3, "src2": 0.6, "src3": 0.3,
+      {"noiseprimary": 0.30, "zplane": 0.75, "cosmos": 0.5, "sub": 0.7, "cloud": 0.3, "src2": 0.6, "src3": 0.3,
        "texture": 0.3, "coherence": 0.3},
       words=(["Void", "Station", "Derelict", "Cygnus", "Orbit", "Hollow", "Signal", "Cold", "Drift"],
              COMMON_SECOND + ["Station", "Vector", "Silence", "Node"]),
@@ -670,7 +733,7 @@ STYLES = [
        "dly_feedback": (0.5, 0.85), "dly_mix": (0.2, 0.45),
        "brain_rate": ("log", 8.0, 40.0), "brain_consonance": (0.35, 0.8),
        "far_decay": ("log", 12.0, 40.0), "width": (1.1, 1.8), "depth": (0.4, 0.8)},
-      {"feedback": 1.0, "cloud": 0.45, "zplane": 0.5, "texture": 0.4, "usertable": 0.4,
+      {"noiseprimary": 0.35, "feedback": 1.0, "cloud": 0.45, "zplane": 0.5, "texture": 0.4, "usertable": 0.4,
        "cosmos": 0.3, "delay2": 0.35},
       words=(["Harmony", "Ravedeath", "Virgins", "Radio", "Amps", "Hatred", "Music", "Analog", "Chimeras"],
              COMMON_SECOND + ["Decay", "Ruin", "Sunburn", "Wash"]),
@@ -908,4 +971,217 @@ STYLES = [
       tables=["Tilt walk", "Random walk"],
       impulses=['room_hall', 'room_cavern', 'spectral'],
       noise=['Pink', 'Brown', 'Grey', 'Wind']),
+
+    # ---------------------------------------------------------------- five packs for what the
+    # library never used. Each one is built around a family of the instrument that appeared in
+    # none of its 6800 presets, because the library was generated before those existed. They are
+    # not demonstrations: a pack is two hundred pieces of music that happen to lean on one thing.
+
+    S("Cascade", "the Hawkes clock: events that breed events, after Koelsch, Vuust and Friston",
+      {"brain_rate": ("log", 6.0, 40.0), "brain_density": ("int", 3, 8),
+       "brain_hold_min": ("log", 12.0, 60.0), "brain_hold_max": ("log", 60.0, 240.0),
+       "attack": ("log", 1.5, 12.0), "release": ("log", 6.0, 30.0),
+       "strike_level": (0.25, 0.7), "strike_decay": ("log", 0.15, 2.0), "strike_damp": (0.1, 0.8),
+       "far_decay": ("log", 8.0, 40.0), "far_size": (1.8, 3.0),
+       "depth": (0.5, 0.9), "keys_depth": (0.0, 0.3), "air": (0.05, 0.3),
+       "master_gain": (-13.0, -8.0)},
+      # Everything about this pack is the clock: the cascade always, the strike thinned and
+      # clustered with it, the Cosmos swelling where the events crowd.
+      {"cascade": 1.0, "surprise": 0.6, "spreadbias": 0.7, "dejavu": 0.45, "quantize": 0.2,
+       "strike": 1.0, "cosmos": 0.55, "cosmosswell": 0.9, "slot1": 0.5, "brain2": 0.3,
+       "src2": 0.7, "src3": 0.35, "texture": 0.35, "usertable": 0.35, "zplane": 0.4,
+       "room": 0.4, "sub": 0.5, "hands": 0.7, "lenia": 0.2, "chaos": 0.2},
+      words=(["Cascade", "Chain", "Branching", "Aftershock", "Trigger", "Ripple", "Relay",
+              "Sequence", "Volley", "Flurry", "Onset", "Break", "Rush", "Swarm"],
+             COMMON_SECOND + ["Cluster", "Handful", "Burst", "Chain", "Silence"]),
+      prompts=["distant thunder that answers itself", "a swarm of small bells, then nothing",
+               "stones dropped into a cistern at irregular intervals"],
+      tables=["Tilt walk", "Formant sweep"],
+      impulses=['room_hall', 'room_plate', 'tuned'],
+      noise=['Crackle', 'Digital', 'Pink', 'Band']),
+
+    S("True Intonation", "adaptive just intonation, after Hermode and Sethares",
+      {"scale": ["JI 7-limit", "JI Major (Ptolemy)", "JI Minor", "Otonality 1-11", "Harmonic 8-16",
+                 "Pythagorean", "Timbre (Sethares)"],
+       "purity": (0.9, 1.0), "purity_drift": (0.0, 0.35), "purity_rate": ("log", 0.004, 0.05),
+       "brain_density": ("int", 3, 6), "brain_rate": ("log", 20.0, 90.0),
+       "brain_consonance": (0.4, 0.85), "brain_hold_min": ("log", 30.0, 120.0),
+       "brain_hold_max": ("log", 120.0, 420.0),
+       "partials": ("int", 10, 28), "inharmonic": (0.0, 0.35), "detune": ("log", 1.0, 8.0),
+       "attack": ("log", 4.0, 20.0), "release": ("log", 10.0, 40.0),
+       "far_decay": ("log", 15.0, 50.0), "master_gain": (-13.0, -8.0)},
+      {"adaptive": 0.95, "guard": 0.8, "match": 0.55, "timbre": 0.7, "keyfind": 0.7,
+       "evensmooth": 0.6, "blend": 0.5, "transpose": 0.25, "slot1": 0.3,
+       "src2": 0.6, "src3": 0.3, "stack": 0.6, "sub": 0.6, "zplane": 0.25,
+       "cosmos": 0.15, "room": 0.45, "hands": 0.6, "partialspread": 0.4},
+      words=(["Pure", "Comma", "Just", "Untempered", "Ratio", "Septimal", "Syntonic", "Otonal",
+              "Undertone", "Beatless", "Lattice", "Whole", "Exact", "Drifting"],
+             COMMON_SECOND + ["Interval", "Ratio", "Comma", "Lattice", "Consonance"]),
+      prompts=["a choir tuning itself to a bell", "beatless fifths in a stone room",
+               "an organ in seventh-limit intonation"],
+      tables=["Harmonic drawbars", "Tilt walk"],
+      impulses=['room_cathedral', 'room_hall', 'tuned'],
+      noise=['Pink', 'Grey', 'Brown']),
+
+    S("Lenia Fields", "continuous cellular automata, after Bert Chan",
+      {"brain_rate": ("log", 20.0, 120.0), "brain_density": ("int", 3, 7),
+       "attack": ("log", 6.0, 25.0), "release": ("log", 12.0, 45.0),
+       "shimmer": (0.3, 0.8), "shimmer_rate": ("log", 0.02, 0.2),
+       "cloud_send": (0.15, 0.6), "cloud_density": ("log", 2.0, 14.0),
+       "far_decay": ("log", 20.0, 60.0), "far_size": (2.2, 3.0),
+       "depth": (0.6, 0.95), "width": (1.0, 1.5), "master_gain": (-13.0, -8.0)},
+      # The field is the piece: its four readings drive whatever the preset has.
+      {"lenia": 1.0, "chaos": 0.45, "sympathy": 0.5, "coherence": 0.6,
+       "slot1": 0.55, "src2": 0.75, "src3": 0.45, "src4": 0.2,
+       "cloud": 0.7, "texture": 0.4, "usertable": 0.4, "zplane": 0.5, "cosmos": 0.4,
+       "room": 0.35, "sub": 0.45, "hands": 0.6, "comod": 0.4, "envelop": 0.4},
+      words=(["Lenia", "Colony", "Bloom", "Culture", "Membrane", "Orbium", "Spore", "Drifting",
+              "Dividing", "Living", "Cell", "Tissue", "Growth", "Pulsing"],
+             COMMON_SECOND + ["Field", "Colony", "Membrane", "Culture", "Bloom"]),
+      prompts=["something alive under a microscope, breathing",
+               "a colony of small organisms drifting and dividing",
+               "warm liquid seen through glass, slowly moving"],
+      tables=["Random walk", "Formant sweep"],
+      impulses=['room_cavern', 'spectral', 'room_hall'],
+      noise=['Grey', 'Wind', 'Band', 'Pink']),
+
+    S("Strange Attractor", "Lorenz and Roessler, integrated over minutes",
+      {"brain_rate": ("log", 25.0, 150.0), "brain_density": ("int", 2, 6),
+       "brain_wander": (0.2, 0.7), "brain_hold_min": ("log", 40.0, 160.0),
+       "brain_hold_max": ("log", 160.0, 520.0),
+       "attack": ("log", 5.0, 25.0), "release": ("log", 15.0, 60.0),
+       "arc": (0.3, 0.8), "arc_period": ("log", 30.0, 180.0),
+       "far_decay": ("log", 25.0, 70.0), "tide": (0.0, 8.0), "tide_period": ("log", 4.0, 20.0),
+       "master_gain": (-13.0, -8.0)},
+      {"chaos": 1.0, "lenia": 0.35, "archarmony": 0.5, "spreadbias": 0.5, "dejavu": 0.3,
+       "slot1": 0.5, "src2": 0.7, "src3": 0.4, "zplane": 0.55, "cosmos": 0.45,
+       "cloud": 0.3, "room": 0.4, "sub": 0.5, "hands": 0.6, "farmode": 0.6, "rotate": 0.6},
+      words=(["Lorenz", "Roessler", "Attractor", "Lobe", "Trajectory", "Orbit", "Divergent",
+              "Unrepeating", "Sensitive", "Wandering", "Butterfly", "Phase", "Strange", "Chaotic"],
+             COMMON_SECOND + ["Orbit", "Lobe", "Trajectory", "Phase", "Attractor"]),
+      prompts=["a path that never crosses itself", "weather over a long night",
+               "a slow spiral that suddenly climbs"],
+      tables=["Random walk", "Tilt walk"],
+      impulses=['room_hall', 'room_cavern', 'tuned'],
+      noise=['Brown', 'Pink', 'Violet', 'Wind']),
+
+    S("Within Reach", "the near field: sound closer than a metre",
+      {"depth": (0.05, 0.4), "keys_depth": (0.0, 0.25), "presence": (1.0, 4.0),
+       "near_mix": (0.15, 0.5), "near_decay": ("log", 0.5, 3.0),
+       "far_level": (0.1, 0.45), "far_decay": ("log", 6.0, 25.0),
+       "attack": ("log", 0.5, 8.0), "release": ("log", 4.0, 20.0),
+       "strike_level": (0.15, 0.55), "strike_decay": ("log", 0.1, 1.2),
+       "air": (0.15, 0.45), "width": (0.9, 1.35), "master_gain": (-12.0, -7.0)},
+      # Everything that says "an arm's length away": the near-field level difference, the elevation
+      # of the planes, the head model, and a strike that is touched now and then rather than played.
+      {"nearfield": 0.95, "elev": 0.7, "binaural": 0.6, "presence": 0.8, "depthlaw": 0.7,
+       "earlyroom": 0.65, "strike": 0.7, "slot1": 0.6, "src2": 0.7, "src3": 0.3,
+       "texture": 0.45, "bow": 0.35, "usertable": 0.4, "zplane": 0.35,
+       "room": 0.5, "sub": 0.4, "hands": 0.85, "haas": 0.4, "narrow": 0.2},
+      words=(["Near", "Close", "Within", "Arm", "Breath", "Whisper", "Beside", "Against",
+              "Touching", "Held", "Intimate", "Hand", "Cheek", "Skin"],
+             COMMON_SECOND + ["Reach", "Distance", "Whisper", "Touch", "Presence"]),
+      prompts=["someone breathing beside you in the dark",
+               "a string touched, not bowed, very close",
+               "small wooden objects moved on a table by your ear"],
+      tables=["Formant sweep", "Harmonic drawbars"],
+      impulses=['room_chamber', 'room_plate', 'struck'],
+      noise=['Grey', 'Pink', 'Crackle', 'Band']),
+
+    # ---------------------------------------------------------------- and three that were asked
+    # for by name. Nothing here is sampled from or affiliated with anybody: the ranges were set by
+    # ear towards the sound world each name stands for.
+
+    S("Discreet Loops", "Brian Eno",
+      # Music for Airports and Discreet Music: a handful of gentle voices on tape loops of
+      # different lengths, so they drift apart and never repeat the same combination. Diatonic,
+      # unhurried, and deliberately unremarkable -- as ignorable as it is interesting.
+      {"scale": ["JI Major (Ptolemy)", "JI 7-limit", "Pythagorean", "JI Pentatonic"],
+       "stack": ["Major", "Fifths", "Octaves"],
+       "brain_density": ("int", 3, 6), "brain_rate": ("log", 18.0, 70.0),
+       "brain_consonance": (0.55, 0.9), "brain_wander": (0.05, 0.3),
+       "brain_hold_min": ("log", 20.0, 70.0), "brain_hold_max": ("log", 70.0, 240.0),
+       "attack": ("log", 3.0, 14.0), "release": ("log", 8.0, 30.0),
+       "partials": ("int", 6, 16), "tilt": (1.2, 2.4), "brightness": (0.35, 0.65),
+       "odd_even": (-0.1, 0.35), "inharmonic": (0.0, 0.06), "detune": ("log", 1.0, 6.0),
+       "dly_time_l": ("log", 2.0, 9.0), "dly_time_r": ("log", 3.0, 14.0),
+       "dly_feedback": (0.35, 0.7), "dly_mix": (0.15, 0.4), "dly_damp": (0.4, 0.8),
+       "far_decay": ("log", 8.0, 30.0), "far_level": (0.4, 0.8), "far_highcut": ("log", 2000.0, 6000.0),
+       "room_level": (0.15, 0.5), "air": (0.05, 0.25), "depth": (0.4, 0.75),
+       "sub_level": (0.0, 0.25), "master_gain": (-13.0, -8.0)},
+      {"delay2": 0.55, "room": 0.7, "sub": 0.35, "stack": 0.7, "zplane": 0.15, "cosmos": 0.1,
+       "cloud": 0.1, "texture": 0.15, "usertable": 0.45, "src2": 0.6, "src3": 0.25, "slot1": 0.35,
+       "keys": 0.2, "strike": 0.25, "keyfind": 0.5, "evensmooth": 0.55, "blend": 0.45,
+       "adaptive": 0.35, "guard": 0.3, "depthlaw": 0.35, "envelop": 0.3, "presence": 0.25,
+       "phase": 0.5, "microshift": 0.4, "hands": 0.5, "banks": 0.3, "cascade": 0.12},
+      words=(["Discreet", "Airport", "Unhurried", "Plain", "Ignorable", "Ambient", "Patient",
+              "Gentle", "Lateral", "Oblique", "Quiet", "Music", "Another", "Everyday"],
+             COMMON_SECOND + ["Loop", "Room", "Airport", "Music", "Afternoon", "Window"]),
+      prompts=["a tape loop of a choir, worn soft by the tenth pass",
+               "an empty terminal at six in the morning",
+               "a piano recorded in the next room and left running"],
+      tables=["Harmonic drawbars", "Tilt walk"],
+      impulses=['room_hall', 'room_chamber', 'room_plate'],
+      noise=['Pink', 'Grey', 'Brown']),
+
+    S("Permafrost North", "Biosphere",
+      # Substrata: the Arctic. A cold, narrow band of sound, sub bass a long way under it, small
+      # bright details a long way off, and a dub delay that is more space than rhythm.
+      {"scale": ["JI Minor", "JI 7-limit", "Slendro (JI)", "Pythagorean"],
+       "brain_density": ("int", 2, 5), "brain_rate": ("log", 30.0, 140.0),
+       "brain_hold_min": ("log", 40.0, 160.0), "brain_hold_max": ("log", 160.0, 600.0),
+       "brain_low": ("int", 26, 40), "brain_high": ("int", 52, 76),
+       "attack": ("log", 5.0, 22.0), "release": ("log", 12.0, 45.0),
+       "brightness": (0.25, 0.55), "tilt": (1.4, 2.6), "shimmer": (0.1, 0.4),
+       "sub_level": (0.3, 0.6), "sub_tone": (0.1, 0.4), "sub_binaural": (2.0, 6.0),
+       "dly_time_l": ("log", 0.8, 4.0), "dly_time_r": ("log", 1.2, 6.0),
+       "dly_feedback": (0.45, 0.75), "dly_damp": (0.5, 0.85), "dly_mix": (0.1, 0.35),
+       "far_decay": ("log", 20.0, 60.0), "far_highcut": ("log", 1200.0, 3500.0),
+       "far_size": (2.4, 3.0), "depth": (0.7, 0.95), "width": (1.1, 1.5),
+       "air": (0.1, 0.35), "master_gain": (-14.0, -9.0)},
+      {"noiseprimary": 0.30, "texture": 0.7, "stretch": 0.5, "cloud": 0.4, "sub": 0.95, "delay2": 0.5,
+       "src2": 0.8, "src3": 0.5, "slot1": 0.5, "room": 0.4, "zplane": 0.3, "cosmos": 0.2,
+       "narrow": 0.55, "comod": 0.45, "envelop": 0.45, "elev": 0.4, "nearfield": 0.2,
+       "depthlaw": 0.5, "farmode": 0.4, "chaos": 0.3, "lenia": 0.25, "dejavu": 0.3,
+       "cascade": 0.2, "hands": 0.5, "absorb": 0.7, "tide": 0.4, "banks": 0.35},
+      words=(["Permafrost", "Tundra", "Ice", "Kobresia", "Hyperborea", "Circumpolar", "Glacial",
+              "Meltwater", "Snow", "Aurora", "Fjord", "Frozen", "Northern", "Silent"],
+             COMMON_SECOND + ["North", "Plateau", "Shelf", "Crossing", "Latitude", "Winter"]),
+      prompts=["wind over a frozen plateau, a long way from anything",
+               "meltwater under a metre of ice",
+               "a distant engine across a fjord at night"],
+      tables=["Tilt walk", "Random walk"],
+      impulses=['room_cavern', 'room_bunker', 'spectral'],
+      noise=['Wind', 'Brown', 'Grey', 'Pink']),
+
+    S("Ritual Stone", "Raison d'etre",
+      # Dark ritual ambient: a cathedral, a bell, a choir at the edge of hearing, and a long
+      # metallic drone under all of it. Consonance kept low on purpose -- this is the one style
+      # where the beating between partials is the point.
+      {"scale": ["JI Minor", "Pythagorean", "Harmonic 8-16", "Otonality 1-11"],
+       "brain_density": ("int", 3, 7), "brain_rate": ("log", 25.0, 110.0),
+       "brain_consonance": (0.1, 0.45), "brain_wander": (0.2, 0.6),
+       "brain_hold_min": ("log", 30.0, 120.0), "brain_hold_max": ("log", 120.0, 480.0),
+       "attack": ("log", 4.0, 20.0), "release": ("log", 15.0, 60.0),
+       "partials": ("int", 12, 30), "inharmonic": (0.15, 0.5), "tilt": (0.7, 1.6),
+       "odd_even": (-0.5, 0.1), "detune": ("log", 6.0, 24.0),
+       "far_decay": ("log", 35.0, 90.0), "far_size": (2.6, 3.0), "far_level": (0.6, 0.95),
+       "far_highcut": ("log", 1500.0, 4500.0), "room_level": (0.3, 0.7),
+       "sub_level": (0.35, 0.65), "depth": (0.75, 0.98), "air": (0.05, 0.2),
+       "master_gain": (-14.0, -9.0)},
+      {"room": 0.85, "sub": 0.9, "strike": 0.55, "cosmos": 0.45, "zplane": 0.55, "feedback": 0.3,
+       "src2": 0.75, "src3": 0.5, "slot1": 0.45, "texture": 0.45, "usertable": 0.35,
+       "bow": 0.25, "spectral": 0.2, "roommorph": 0.35, "farmode": 0.45, "fardiffuse": 0.4,
+       "envelop": 0.5, "elev": 0.35, "bodychar": 0.7, "patina": 0.35, "timbre": 0.4,
+       "spreadbias": 0.4, "cascade": 0.3, "dejavu": 0.3, "banks": 0.6, "hands": 0.6,
+       "archarmony": 0.3, "brain2": 0.35},
+      words=(["Ritual", "Reliquary", "Ossuary", "Procession", "Vigil", "Sanctum", "Crypt",
+              "Liturgy", "Requiem", "Stone", "Iron", "Ash", "Votive", "Solemn"],
+             COMMON_SECOND + ["Stone", "Rite", "Vigil", "Procession", "Chamber", "Bell"]),
+      prompts=["a bell struck once in a stone crypt and left to ring",
+               "a choir heard through a wall, very slowed",
+               "iron and rust, a cathedral, a long way down"],
+      tables=["Harmonic drawbars", "Formant sweep", "Tilt walk"],
+      impulses=['room_cathedral', 'room_cavern', 'modal', 'struck'],
+      noise=['Brown', 'Pink', 'Grey', 'Wind']),
 ]

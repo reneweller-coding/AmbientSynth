@@ -639,6 +639,15 @@ void AmbientSynthEditor::ModView::mouseDoubleClick(const juce::MouseEvent& e)
 
 void AmbientSynthEditor::ModView::mouseDrag(const juce::MouseEvent& e)
 {
+    if (dragCard >= 0) {
+        // The strip can only draw inside itself, and this gesture leaves it at once: the editor
+        // draws the lead, the card and the knob it is over, on top of everything.
+        dragPos = e.getPosition();
+        const Card& c = cards[static_cast<size_t>(dragCard)];
+        owner.showModDrag(localPointToGlobal(c.bounds.getCentre()), e.getScreenPosition(), c.label, c.colour);
+        repaint();
+        return;
+    }
     if (dragEnv >= 0 && dragPoint >= 0) {
         ambient::ModEnv src = envCopy(dragEnv);
         ambient::EnvPoint pts[ambient::kMaxEnvPoints];
@@ -672,7 +681,10 @@ void AmbientSynthEditor::ModView::mouseUp(const juce::MouseEvent& e)
     if (dragEnv >= 0) { dragEnv = dragPoint = -1; repaint(); return; }
     if (dragCard >= 0) {
         const int param = owner.cellParamAt(e.getScreenPosition());
-        if (param >= 0) addRoute(cards[static_cast<size_t>(dragCard)].source, static_cast<ParamId>(param));
+        const Card& c = cards[static_cast<size_t>(dragCard)];
+        owner.hideModDrag();
+        if (param >= 0 && addRoute(c.source, static_cast<ParamId>(param)))
+            owner.showDepthPopup(c.source, static_cast<ParamId>(param), c.colour, e.getScreenPosition());
         dragCard = -1;
         repaint();
     }

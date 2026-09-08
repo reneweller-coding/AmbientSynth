@@ -1906,6 +1906,102 @@ pass so no two points overlap. The stub tool mode writes an empty table so
 the core compiles before the first measurement; the self test accepts the
 stub and checks the measured table.
 
+**The map as a cloud (1.11.0).** Rene sent a description of Absynth 6's sound browser -- a free
+point cloud, no grid, dense where the sounds are alike, an axis of brightness across and one of
+"static to evolving" up, and macro sliders that condense the field -- and asked whether that was
+something for us, with other descriptors, "da wir ja praktisch nur Drones haben". It was, and the
+diagnosis fitted exactly what our map got wrong. Four things came of it.
+
+*The descriptors.* Absynth's vertical axis is attack: plucks and keys below, evolving pads above.
+Every preset here is a pad, so that axis is empty for us. Three measurements were added to
+`--measure` in their place, all of them things a drone can differ in. **Evolution**: the render is
+cut into seconds and the spread of the per-second centroid (in octaves) and of the per-second
+level (in decibels) is taken -- how far the sound travels over a minute, which flux cannot say
+because a fast tremolo has flux and goes nowhere. **Roughness**: the peaks of the average spectrum
+put through the Plomp-Levelt curve (`ambient::peakRoughness`, the same curve the conductor judges
+its chords with, so there is one implementation and not two) -- smooth and fused against beating
+and grinding. **Wetness**: the four buses the renderer already carries, far plus room plus cosmos
+against the near plane -- the spatial model's own axis. The measurement runs a minute per preset
+now rather than twelve seconds, which is what an evolution figure needs; the whole library takes
+about four hours at four renders in parallel, cached to JSON so the layout can be re-run in
+seconds afterwards.
+
+*The cloud.* `Tools/library/mapembed.py`: a k-nearest-neighbour graph in the descriptor space laid
+out with springs -- neighbours attract, a grid-approximated repulsion pushes everything apart --
+then the whole cloud is rotated and flipped to whichever orientation correlates best with
+brightness across and evolution up, because a cloud you cannot orient yourself in is a worse
+browser than a grid. The old layout's rank-flattening and its de-collision grid are gone; both
+existed to spread the library evenly, which is precisely what destroyed the information. Measured
+on a synthetic library of five blobs, the share of each preset's ten nearest neighbours that
+survive as one of its twenty nearest on the plane: rank grid 0.065, plain PCA 0.08, springs 0.16.
+
+*One map instead of two.* `Tools/preset_map.py` embedded the 191 built-ins and
+`Tools/library/measure_packs.py` the 6800 pack presets, each standardising its own descriptors,
+and the browser drew both on one square -- so a built-in and a pack preset at the same spot had
+nothing to do with each other. `Tools/library/map_all.py` now ranks and lays out the union and
+writes all three products: `Core/src/PresetMeta.cpp`, the packs' meta fields, and
+`Core/src/PresetClusters.inc`.
+
+*Groups, and the sliders.* k-means over the nine descriptors; each group is named after the two
+descriptors furthest from the library's middle ("Dark Smooth", "Wide Far"). Only the centroids are
+generated -- `presetClusterOf()` decides a preset's group in the core from its own descriptors, so
+a built-in and a pack preset are grouped by the same yardstick although two tools measured them.
+The map colours by group with a switch back to the pack families, and four two-value sliders
+(dark-bright, still-moving, smooth-rough, near-far) narrow the cloud to a range of each descriptor;
+the view then closes in on what survived, which is Absynth's "die Punktewolke verdichtet sich"
+from the other side -- our points cannot move, since where they are is what they mean. Six tags
+came with them (Still, Evolving, Smooth, Rough, Near, Far), so the Columns view filters on the
+same things.
+
+**What it is like, what it is, what it sounds like (1.12.0).** The nine descriptors have a blind
+spot that no tenth descriptor of the same kind would close. Two presets can agree on brightness,
+motion, width, noisiness, bass, density, evolution, roughness and wetness and still be, to an ear,
+a goods yard and a beehive. Rene put it back to us after reading that sentence in a report: "Können
+wir das nicht irgendwie erfassen?" Two more layers were added, and they are kept apart on purpose,
+because they know different things.
+
+*The fingerprint.* `--measure` prints a second line now, `timbre:` -- sixteen mel-cepstral means
+and their sixteen spreads over the render. That is not a property anybody can name; it is the shape
+of the spectrum itself, and it separates the yard from the hive when every named property agrees.
+It costs nothing: the render was already being analysed.
+
+*What a model hears.* `--tap` writes a twelve-second mono excerpt beside the numbers, and
+`Tools/library/clap_embed.py` puts every excerpt through CLAP (`laion/clap-htsat-unfused`), which
+places audio and language in one space. Out of it come a 512-number embedding and, scored against
+a written vocabulary of ninety-two phrases in six groups, what the library sounds like in words.
+CLAP cannot write a sentence, only choose one that a person wrote, which is the honest half of the
+bargain: every line the browser shows can be traced to a phrase in `clap_embed.py` and a distance
+a model measured.
+
+Choosing the phrase is where this goes wrong twice. Ranked by raw score, four thousand drones are
+told they are "smooth and fused, one single body of sound", because CLAP is quite right that a
+drone is a drone. Ranked by the lift over the library instead -- how far above the library's mean
+this preset scores for that phrase -- a soft pad is called a bronze gong for being a hair more
+gong-like than average. So both are used: a phrase must be plausible for the preset at all (its raw
+score in the top quarter of the vocabulary) and is then chosen from those by the lift, and the
+second phrase must come from another group, so the line says two things rather than one thing
+twice. It appears in the info panel under SOUNDS LIKE, kept apart from the sentence above it: the
+sentence is written from the settings and knows what is switched on, the phrase knows only the
+sound.
+
+*What the layout uses.* All three: the nine descriptors standardised, six principal components of
+the fingerprint, six of the CLAP embedding, weighted 9 : 6 : 6 so the descriptors still dominate
+and the orientation promise (dark to bright across, still to evolving up) survives. `mapembed.embed`
+takes that space as its `graph` argument while the two named descriptors still decide which way
+round the finished cloud is turned. The groups are formed in the same space -- which means they
+can no longer be recomputed from the nine numbers, so the group index is stored in `PresetMeta`
+and `presetClusterOf()` returns it, falling back to the nearest centroid for anything that has
+none. `Tools/library/rebuild_all.py` runs the seven steps in order, since the order matters: the
+excerpts have to exist before CLAP listens, and the built-ins' excerpts are written by a `--dry-run`
+pass of `map_all.py` before the real one.
+
+One thing had to be repaired on the way, and the self test found it: `PresetMap::neighbours` was
+given a radius that follows the local density, because a cloud has gaps where a fixed radius
+collapses the blend onto whichever point is nearest. That broke the guarantee that the cursor
+standing on a preset's own point plays that preset and nothing else. The radius now grows only
+when the nearest point is already further away than the radius itself -- when the cursor really is
+in the empty space -- and not one pixel sooner.
+
 The **Browse** page of the plugin has two views. **Columns** is the
 classic browser (Omnisphere / Absynth style): Family | Character (dark,
 bright, tonal, noisy, wide, bass) | Motion (calm, moving, dense, sparse) |

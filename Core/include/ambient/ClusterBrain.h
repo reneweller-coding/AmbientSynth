@@ -53,6 +53,26 @@ inline double spectralRoughness(double f1, double f2, const BrainSpectrum& sp)
     return d;
 }
 
+// The same curve over a spectrum that was measured rather than one that was assumed: n peaks at
+// f[i] with amplitude a[i]. Normalised by the square of the total amplitude, so it describes the
+// shape of the sound and not how loud it is -- 0 for a single tone or a pure octave, and up where
+// partials sit a few tens of hertz apart and beat. The library's map reads a preset's roughness
+// with it; the conductor uses the template form above, and both are the same Plomp-Levelt curve.
+inline double peakRoughness(const double* f, const double* a, int n)
+{
+    double d = 0.0, sum = 0.0;
+    for (int i = 0; i < n; ++i) sum += a[i];
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j) {
+            const double lo = f[i] < f[j] ? f[i] : f[j];
+            const double x = std::fabs(f[j] - f[i]);
+            const double u = 0.24 / (0.021 * lo + 19.0) * x;
+            if (u > 2.0) continue;
+            d += a[i] * a[j] * (std::exp(-3.5 * u) - std::exp(-5.75 * u));
+        }
+    return sum > 1.0e-12 ? 2.0 * d / (sum * sum) : 0.0;
+}
+
 // The scale a timbre asks for.
 //
 // This is the central claim of Sethares (Tuning, Timbre, Spectrum, Scale, 2005), and it runs the

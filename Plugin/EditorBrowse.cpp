@@ -16,6 +16,16 @@ const juce::Colour kFamilyColours[] = {
 // the golden angle so neighbouring packs never look alike.
 }
 namespace edt {
+// A colour per measured group. The families are hues by index; the groups get their own ramp so
+// the two colourings cannot be confused with one another at a glance.
+juce::Colour clusterColour(int c)
+{
+    if (c < 0) return juce::Colour(0xff707880);
+    const int n = juce::jmax(1, numPresetClusters());
+    const float h = std::fmod(0.08f + 0.61803398f * static_cast<float>(c), 1.0f);
+    return juce::Colour::fromHSV(h, 0.55f, 0.92f, 1.0f).withMultipliedBrightness(0.85f + 0.3f * (static_cast<float>(c % 3) / 3.0f) * (n > 1 ? 1.0f : 0.0f));
+}
+
 juce::Colour familyColour(int f)
 {
     constexpr int kBuiltIn = static_cast<int>(sizeof(kFamilyColours) / sizeof(kFamilyColours[0]));
@@ -38,6 +48,7 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     addAndMakeVisible(family);
     sort.addItem("by number", 1); sort.addItem("by name", 2); sort.addItem("dark -> bright", 3); sort.addItem("calm -> moving", 4);
     sort.addItem("narrow -> wide", 5); sort.addItem("tonal -> noisy", 6); sort.addItem("sparse -> dense", 7);
+    sort.addItem("still -> evolving", 8); sort.addItem("smooth -> rough", 9); sort.addItem("near -> far", 10);
     sort.setSelectedId(1, juce::dontSendNotification);
     sort.onChange = [this] { applyFilter(); };
     addAndMakeVisible(sort);
@@ -59,9 +70,40 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     radius.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 18);
     addAndMakeVisible(radius);
     radiusAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.apvts, paramDesc(ParamId::MapRadius).key, radius);
+
+    // The four macro sliders: one measured axis each, as a range rather than a point, so "show me
+    // the dark half" and "show me the darkest tenth" are the same gesture. Wide open they filter
+    // nothing. Narrow one and the cloud thins to what is left and the view closes in on it -- the
+    // thing an even field could never show, that a hundred presets here are nearly one sound.
+    static const char* const kMacroNames[4] = { "dark - bright", "still - moving", "smooth - rough", "near - far" };
+    float PresetMeta::* const kMacroFields[4] = { &PresetMeta::bright, &PresetMeta::evolve, &PresetMeta::rough, &PresetMeta::wet };
+    static const char* const kMacroTips[4] = {
+        "Where the spectrum's weight sits: left the dark presets, right the bright ones.",
+        "How far the sound travels over a minute -- the drone's own axis, in place of the attack an ambient patch does not have.",
+        "The roughness of its partials against each other (Plomp-Levelt): smooth and fused, or beating and grinding.",
+        "How much of what you hear comes back from the far planes rather than standing in the near one." };
+    for (int i = 0; i < 4; ++i) {
+        macros[i].field = kMacroFields[i];
+        macros[i].slider.setSliderStyle(juce::Slider::TwoValueHorizontal);
+        macros[i].slider.setRange(0.0, 1.0, 0.01);
+        macros[i].slider.setMinAndMaxValues(0.0, 1.0, juce::dontSendNotification);
+        macros[i].slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        macros[i].slider.setTooltip(kMacroTips[i]);
+        macros[i].slider.onValueChange = [this] { fitPending = true; applyFilter(); };
+        macros[i].label.setText(kMacroNames[i], juce::dontSendNotification);
+        macros[i].label.setFont(juce::FontOptions(10.5f));
+        macros[i].label.setColour(juce::Label::textColourId, kDim);
+        macros[i].label.setJustificationType(juce::Justification::centredRight);
+        addAndMakeVisible(macros[i].slider);
+        addAndMakeVisible(macros[i].label);
+    }
+    colourByGroup.setToggleState(true, juce::dontSendNotification);
+    colourByGroup.setTooltip("Colour the cloud by the measured groups -- presets that sound alike -- rather than by the pack a preset was written for.");
+    colourByGroup.onClick = [this] { map.repaint(); };
+    addAndMakeVisible(colourByGroup);
     info.setFont(juce::FontOptions(12.0f)); info.setColour(juce::Label::textColourId, kDim);
     addAndMakeVisible(info);
-    load.onClick = [this] { if (selected >= 0) proc.setCurrentProgram(selected); };
+    load.onClick = [this] { if (selected >= 0) proc.selectPreset(selected, morphOnSelect.getToggleState()); };
     toA.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(0, selected); };
     toB.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(1, selected); };
     star.onClick = [this] { if (selected >= 0) { proc.setFavourite(selected, !proc.isFavourite(selected)); applyFilter(); } };
@@ -91,14 +133,30 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     addAndMakeVisible(similar);
     addAndMakeVisible(onlyFavourites);
     addAndMakeVisible(hideDull);
+    addAndMakeVisible(info2);
+    // Choosing a preset as a journey. On by default: an instrument that plays for hours has no
+    // business cutting from one world to another because somebody clicked a name.
+    morphOnSelect.setToggleState(proc.morphOnSelect(), juce::dontSendNotification);
+    morphOnSelect.setTooltip("Choosing a preset morphs the whole instrument into it over the time beside this, instead of switching to it at once. What is playing becomes A, the chosen preset B; when it arrives, the preset is simply loaded.");
+    morphOnSelect.onClick = [this] { proc.setMorphOnSelect(morphOnSelect.getToggleState()); };
+    addAndMakeVisible(morphOnSelect);
+    morphSeconds.setSliderStyle(juce::Slider::LinearHorizontal);
+    morphSeconds.setRange(0.5, 600.0, 0.5);
+    morphSeconds.setSkewFactor(0.4);
+    morphSeconds.setValue(proc.morphSelectSeconds(), juce::dontSendNotification);
+    morphSeconds.setTextBoxStyle(juce::Slider::TextBoxRight, false, 56, 18);
+    morphSeconds.setTextValueSuffix(" s");
+    morphSeconds.setTooltip("How long that journey takes: half a second to ten minutes.");
+    morphSeconds.onValueChange = [this] { proc.setMorphSelectSeconds(static_cast<float>(morphSeconds.getValue())); };
+    addAndMakeVisible(morphSeconds);
 
     // Classic columns: Family | Character | Motion & density | Features. A click narrows,
     // several rows in one column combine with OR, columns combine with AND, "All" clears.
     struct Def { const char* title; std::vector<int> tags; bool families; };
     const Def defs[4] = {
         { "Family", {}, true },
-        { "Character", { 0, 1, 4, 5, 6, 7 }, false },            // Dark Bright Tonal Noisy Wide Bass
-        { "Motion", { 2, 3, 8, 9 }, false },                      // Calm Moving Dense Sparse
+        { "Character", { 0, 1, 4, 5, 6, 7, 21, 22, 23, 24 }, false },   // Dark Bright Tonal Noisy Wide Bass Smooth Rough Near Far
+        { "Motion", { 2, 3, 8, 9, 19, 20 }, false },              // Calm Moving Dense Sparse Still Evolving
         { "Features", { 10, 11, 12, 13, 14, 15, 16, 17, 18 }, false },   // Keys Generative Cosmos Feedback Sources JI Sub Stack Air
     };
     for (int c = 0; c < 4; ++c) {
@@ -164,6 +222,8 @@ void AmbientSynthEditor::BrowseView::setMode(int m)
     for (auto& b : tagButtons) b->setVisible(m == 1);
     family.setVisible(m == 1);
     map.setVisible(m == 1); mapActive.setVisible(m == 1); radius.setVisible(m == 1);
+    colourByGroup.setVisible(m == 1);
+    for (auto& mc : macros) { mc.slider.setVisible(m == 1); mc.label.setVisible(m == 1); }
     for (juce::Component* c : { static_cast<juce::Component*>(&routeBox), static_cast<juce::Component*>(&routePlay), static_cast<juce::Component*>(&routeLoop),
                                 static_cast<juce::Component*>(&routeSpeed), static_cast<juce::Component*>(&routeAdd), static_cast<juce::Component*>(&routeClear), static_cast<juce::Component*>(&routeEdit) })
         c->setVisible(m == 1);
@@ -237,6 +297,15 @@ void AmbientSynthEditor::BrowseView::applyFilter()
         // Dull, measured rather than judged: in the bottom fifth for movement and for width, and
         // not carrying the sparseness that would make that a deliberate character.
         if (hideDull.getToggleState() && m.motion < 0.2f && m.width < 0.2f && m.density < 0.5f) continue;
+        if (mode == 1) {   // the macro ranges
+            bool inRange = true;
+            for (const auto& mc : macros) {
+                const float v = m.*(mc.field);
+                const float lo = static_cast<float>(mc.slider.getMinValue()), hi = static_cast<float>(mc.slider.getMaxValue());
+                if (lo > 0.0f || hi < 1.0f) if (v < lo - 1.0e-4f || v > hi + 1.0e-4f) { inRange = false; break; }
+            }
+            if (!inRange) continue;
+        }
         if (mode == 1) {
             if (fam >= 0 && m.family != fam) continue;
             if ((m.tags & need) != need) continue;
@@ -250,14 +319,112 @@ void AmbientSynthEditor::BrowseView::applyFilter()
     const int s = sort.getSelectedId();
     auto key = [s](int i) -> float {
         const PresetMeta& m = presetMeta(i);
-        switch (s) { case 3: return m.bright; case 4: return m.motion; case 5: return m.width; case 6: return m.noisy; case 7: return m.density; default: return 0.0f; }
+        switch (s) { case 3: return m.bright; case 4: return m.motion; case 5: return m.width; case 6: return m.noisy; case 7: return m.density;
+                     case 8: return m.evolve; case 9: return m.rough; case 10: return m.wet; default: return 0.0f; }
     };
     if (s == 2) std::sort(filtered.begin(), filtered.end(), [](int a, int b) { return juce::String(preset(a).name).compareIgnoreCase(preset(b).name) < 0; });
     else if (s >= 3) std::stable_sort(filtered.begin(), filtered.end(), [&](int a, int b) { return key(a) < key(b); });
     list.updateContent();
     info.setText(juce::String(static_cast<int>(filtered.size())) + " of " + juce::String(numPresets()) + " presets" +
-                 (numPresetMeta() == 0 ? "   (map not measured yet: run Tools/preset_map.py)" : ""), juce::dontSendNotification);
+                 (numPresetMeta() == 0 ? "   (map not measured yet: run Tools/library/map_all.py)" : ""), juce::dontSendNotification);
+    if (fitPending) fitToFilter();
     map.repaint();
+}
+
+// The info panel. Headings in the accent colour, the prose under them, wrapped -- the same shape
+// u-he uses, because it is the right one: name at the top, then what it is, then what your hands
+// do, then where it is filed.
+void AmbientSynthEditor::BrowseView::InfoPanel::paint(juce::Graphics& g)
+{
+    auto r = getLocalBounds();
+    g.setColour(ui::card.withAlpha(0.55f));
+    g.fillRoundedRectangle(r.toFloat(), 6.0f);
+    r = r.reduced(12, 10);
+    if (title.isEmpty()) {
+        g.setColour(kDim); g.setFont(juce::FontOptions(11.5f));
+        g.drawText("PRESET INFO", r.removeFromTop(16), juce::Justification::topLeft);
+        g.setColour(ui::faint); g.setFont(juce::FontOptions(11.0f));
+        g.drawText("choose a preset to read what it is", r, juce::Justification::topLeft);
+        return;
+    }
+    g.setColour(kText); g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+    g.drawText(title, r.removeFromTop(18), juce::Justification::topLeft);
+    r.removeFromTop(4);
+    g.setFont(juce::FontOptions(11.5f));
+    juce::StringArray lines;
+    lines.addLines(body);
+    for (const auto& line : lines) {
+        if (r.getHeight() <= 0) break;
+        const juce::String t = line.trim();
+        if (t.isEmpty()) { r.removeFromTop(5); continue; }
+        // A heading is a line in capitals: draw it as one, with a rule under it.
+        const bool heading = t == t.toUpperCase() && t.containsOnly("ABCDEFGHIJKLMNOPQRSTUVWXYZ -");
+        if (heading) {
+            r.removeFromTop(5);
+            auto h = r.removeFromTop(14);
+            g.setColour(kAccent.withAlpha(0.85f)); g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+            g.drawText(t, h, juce::Justification::topLeft);
+            g.setColour(kAccent.withAlpha(0.25f));
+            g.drawLine(static_cast<float>(h.getX()), static_cast<float>(h.getBottom()),
+                       static_cast<float>(h.getRight()), static_cast<float>(h.getBottom()), 1.0f);
+            g.setFont(juce::FontOptions(11.5f));
+            continue;
+        }
+        // Prose wraps; the arrow rows do not need to.
+        juce::GlyphArrangement ga;
+        ga.addFittedText(juce::FontOptions(11.5f), t, static_cast<float>(r.getX()), static_cast<float>(r.getY()),
+                         static_cast<float>(r.getWidth()), static_cast<float>(juce::jmin(r.getHeight(), 44)),
+                         juce::Justification::topLeft, 3, 1.0f);
+        g.setColour(t.contains("->") ? kDim : kText.withAlpha(0.92f));
+        ga.draw(g);
+        const auto bb = ga.getBoundingBox(0, -1, true);
+        r.removeFromTop(juce::jmax(14, static_cast<int>(bb.getHeight()) + 2));
+    }
+}
+
+void AmbientSynthEditor::BrowseView::updateInfo()
+{
+    const int want = selected >= 0 ? selected : proc.getCurrentProgram();
+    if (want == infoFor) return;
+    infoFor = want;
+    if (want < 0 || want >= numPresets()) { info2.title = {}; info2.body = {}; }
+    else {
+        info2.title = preset(want).name;
+        info2.body = juce::String(ambient::presetInfoText(want));
+    }
+    info2.repaint();
+}
+
+bool AmbientSynthEditor::BrowseView::macroActive() const
+{
+    for (const auto& mc : macros)
+        if (mc.slider.getMinValue() > 0.0 || mc.slider.getMaxValue() < 1.0) return true;
+    return false;
+}
+
+// What Absynth's browser does when a tag is chosen: the cloud condenses. Ours cannot move the
+// points -- their places are what they mean -- so the view closes in on what is left instead,
+// which is the same gesture from the other side. Only on the filter's own action, never while
+// the mouse is panning or zooming, so the view never fights the hand.
+void AmbientSynthEditor::BrowseView::fitToFilter()
+{
+    fitPending = false;
+    if (mode != 1) return;
+    const int shown = juce::jmin(numPresetMeta(), numPresets());
+    if (!macroActive()) { map.zoomTo(0.5f, 0.5f, 1.0f); return; }
+    float x0 = 1.0f, x1 = 0.0f, y0 = 1.0f, y1 = 0.0f;
+    int n = 0;
+    for (int i : filtered) {
+        if (i >= shown) continue;
+        const PresetMeta& m = presetMeta(i);
+        x0 = juce::jmin(x0, m.x); x1 = juce::jmax(x1, m.x);
+        y0 = juce::jmin(y0, m.y); y1 = juce::jmax(y1, m.y);
+        ++n;
+    }
+    if (n < 2) return;
+    const float w = juce::jmax(0.02f, x1 - x0), h = juce::jmax(0.02f, y1 - y0);
+    const float z = juce::jlimit(1.0f, 40.0f, 0.85f / juce::jmax(w, h));
+    map.zoomTo(0.5f * (x0 + x1), 0.5f * (y0 + y1), z);
 }
 
 void AmbientSynthEditor::BrowseView::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool sel)
@@ -288,7 +455,7 @@ void AmbientSynthEditor::BrowseView::listBoxItemClicked(int row, const juce::Mou
     if (row < 0 || row >= static_cast<int>(filtered.size())) return;
     selected = filtered[static_cast<size_t>(row)];
     if (e.x >= 16 && e.x < 36) { proc.setFavourite(selected, !proc.isFavourite(selected)); list.repaint(); return; }   // the star
-    if (e.getNumberOfClicks() >= 2 || e.mods.isLeftButtonDown()) proc.setCurrentProgram(selected);
+    if (e.getNumberOfClicks() >= 2 || e.mods.isLeftButtonDown()) proc.selectPreset(selected, morphOnSelect.getToggleState());
     if (mapActive.getToggleState()) {   // the cursor jumps to the preset's point
         const PresetMeta& m = presetMeta(selected);
         if (auto* px = proc.apvts.getParameter(paramDesc(ParamId::MapX).key)) px->setValueNotifyingHost(m.x);
@@ -299,7 +466,7 @@ void AmbientSynthEditor::BrowseView::listBoxItemClicked(int row, const juce::Mou
 
 void AmbientSynthEditor::BrowseView::timerCallback()
 {
-    map.repaint(); list.repaint();
+    map.repaint(); list.repaint(); updateInfo();
     if (routeEditOpen) {   // same pattern as the gesture editor: mirror while open, apply when gone
         if (routeEditor != nullptr) routeEditText = routeEditor->getText();
         else {
@@ -373,6 +540,9 @@ void AmbientSynthEditor::BrowseView::resized()
     toA.setBounds(buttons.removeFromLeft(60)); buttons.removeFromLeft(6);
     toB.setBounds(buttons.removeFromLeft(60)); buttons.removeFromLeft(6);
     star.setBounds(buttons.removeFromLeft(90)); buttons.removeFromLeft(12);
+    morphOnSelect.setBounds(buttons.removeFromLeft(130));
+    morphSeconds.setBounds(buttons.removeFromLeft(juce::jmin(190, juce::jmax(110, buttons.getWidth() / 3))));
+    buttons.removeFromLeft(12);
     if (mode == 1) {
         auto mapControls = buttons.removeFromRight(juce::jmax(300, buttons.getWidth() * 3 / 5));
         mapActive.setBounds(mapControls.removeFromLeft(220)); mapControls.removeFromLeft(12);
@@ -380,6 +550,18 @@ void AmbientSynthEditor::BrowseView::resized()
     }
     info.setBounds(buttons);
     area.removeFromBottom(6);
+    if (mode == 1) {   // the macro sliders: two pairs across the bottom of the map side
+        auto strip = area.removeFromBottom(24);
+        strip.removeFromLeft(juce::jmax(420, (getLocalBounds().reduced(16).getWidth()) * 2 / 5) + 12);
+        colourByGroup.setBounds(strip.removeFromRight(90));
+        const int each = juce::jmax(90, strip.getWidth() / 4);
+        for (int i = 0; i < 4; ++i) {
+            auto cell = strip.removeFromLeft(each);
+            macros[i].label.setBounds(cell.removeFromLeft(juce::jmin(86, each / 2)));
+            macros[i].slider.setBounds(cell);
+        }
+        area.removeFromBottom(4);
+    }
     if (mode == 1) {   // route strip above the bottom row, on the map side
         auto strip = area.removeFromBottom(26);
         strip.removeFromLeft(juce::jmax(420, (getLocalBounds().reduced(16).getWidth()) * 2 / 5) + 12);
@@ -394,7 +576,8 @@ void AmbientSynthEditor::BrowseView::resized()
     }
 
     if (mode == 0) {
-        // Omnisphere-style: four columns on top, the results below.
+        // Omnisphere-style: four columns on top, the results below, and the preset's own card on
+        // the right of them -- Zebra puts it exactly there, and it is where the eye goes next.
         auto cols = area.removeFromTop(juce::jmax(160, area.getHeight() * 2 / 5));
         const int colW = cols.getWidth() / 4;
         for (int c = 0; c < 4; ++c) {
@@ -403,6 +586,10 @@ void AmbientSynthEditor::BrowseView::resized()
             columns[c].box.setBounds(r.reduced(c == 0 ? 0 : 4, 0).withTrimmedRight(4));
         }
         area.removeFromTop(24);    // column header of the result list
+        {   // the list, and the preset's card beside it
+            auto card = area.removeFromRight(juce::jlimit(240, 420, area.getWidth() / 3));
+            info2.setBounds(card.withTrimmedLeft(12));
+        }
         list.setBounds(area);
     } else {
         auto left = area.removeFromLeft(juce::jmax(420, area.getWidth() * 2 / 5));
@@ -410,6 +597,7 @@ void AmbientSynthEditor::BrowseView::resized()
         const int perRow = 5, tagH = 22;
         const int rows = (kNumPresetTags + perRow - 1) / perRow;
         auto tags = left.removeFromTop(rows * tagH);
+        info2.setBounds(left.removeFromBottom(juce::jmin(190, left.getHeight() / 2)).withTrimmedTop(8));
         for (int t = 0; t < kNumPresetTags; ++t) {
             const int r = t / perRow, c = t % perRow;
             tagButtons[static_cast<size_t>(t)]->setBounds(tags.getX() + c * (tags.getWidth() / perRow), tags.getY() + r * tagH, tags.getWidth() / perRow, tagH);
@@ -503,6 +691,7 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         g.setColour(kAccent.withAlpha(0.25f)); g.drawEllipse(cursor.x - rr, cursor.y - rr, 2 * rr, 2 * rr, 1.0f);
     }
     // dimmed points first, then the filtered ones, then the current program
+    const bool groups = owner.colourByGroup.getToggleState() && numPresetClusters() > 0;
     const int current = owner.proc.getCurrentProgram();
     std::vector<bool> inFilter(static_cast<size_t>(numPresets()), false);
     for (int i : owner.filtered) inFilter[static_cast<size_t>(i)] = true;
@@ -521,13 +710,50 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
             const auto s = toScreen(m.x, m.y);
             if (!screen.contains(s)) continue;
             const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
-            juce::Colour c = familyColour(m.family);
+            juce::Colour c = groups ? clusterColour(presetClusterOf(m)) : familyColour(m.family);
             if (pass == 0) c = c.withAlpha(0.18f);
             g.setColour(c);
             if (pass == 0 && many) g.fillRect(s.x - size / 2, s.y - size / 2, size, size);
             else                   g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
-            if (i == owner.selected || i == current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
+            if (i == owner.selected && i != current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
         }
+    }
+    // What is playing, marked so it can be found at a glance: everything else on this plane is a
+    // dot of a few pixels, and "where am I" is the first question a map has to answer. A ring, a
+    // crosshair, and the name -- at every zoom, whether or not it survived the filter. While a
+    // preset change is travelling (the browser's "morph into it"), a line runs from where the
+    // sound started to where it is going, filled in as far as it has come.
+    if (current >= 0 && current < shown) {
+        const PresetMeta& m = presetMeta(current);
+        const auto s = toScreen(m.x, m.y);
+        const int to = owner.proc.morphingTo();
+        if (to >= 0 && to < shown) {
+            const PresetMeta& mt = presetMeta(to);
+            const auto d = toScreen(mt.x, mt.y);
+            const float t = juce::jlimit(0.0f, 1.0f, owner.proc.morphProgress());
+            g.setColour(kAccent.withAlpha(0.35f));
+            g.drawLine(juce::Line<float>(s, d), 1.4f);
+            const juce::Point<float> at = s + (d - s) * t;
+            g.setColour(kAccent);
+            g.drawLine(juce::Line<float>(s, at), 2.2f);
+            g.fillEllipse(at.x - 4.0f, at.y - 4.0f, 8.0f, 8.0f);
+            g.setColour(kText); g.setFont(juce::FontOptions(10.5f));
+            g.drawText(juce::String(juce::roundToInt(t * 100.0f)) + " % -> " + preset(to).name,
+                       static_cast<int>(d.x) + 10, static_cast<int>(d.y) - 6, 260, 14, juce::Justification::centredLeft);
+        }
+        const float r = 13.0f;
+        g.setColour(kAccent.withAlpha(0.16f)); g.fillEllipse(s.x - r, s.y - r, 2 * r, 2 * r);
+        g.setColour(kAccent);                  g.drawEllipse(s.x - r, s.y - r, 2 * r, 2 * r, 2.0f);
+        g.setColour(kAccent.withAlpha(0.55f)); g.drawEllipse(s.x - r - 4.0f, s.y - r - 4.0f, 2 * r + 8.0f, 2 * r + 8.0f, 1.0f);
+        for (int k = 0; k < 4; ++k) {   // a crosshair, so it is found even inside a dense ball
+            const float a = k * 1.57079633f;
+            const float c1 = std::cos(a), s1 = std::sin(a);
+            g.drawLine(s.x + c1 * (r + 3.0f), s.y + s1 * (r + 3.0f), s.x + c1 * (r + 9.0f), s.y + s1 * (r + 9.0f), 1.6f);
+        }
+        g.setColour(kText); g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(preset(current).name, static_cast<int>(s.x) + 18, static_cast<int>(s.y) - 8, 240, 15, juce::Justification::centredLeft);
+        g.setColour(kAccent.withAlpha(0.8f)); g.setFont(juce::FontOptions(9.5f));
+        g.drawText("playing", static_cast<int>(s.x) + 18, static_cast<int>(s.y) + 6, 120, 12, juce::Justification::centredLeft);
     }
     // Names, once there is room for them. Zoomed in past four, every preset in the filter whose
     // label would not sit on another's gets its name; the check is a coarse grid of the label's
@@ -604,13 +830,16 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         g.setColour(kDim); g.setFont(juce::FontOptions(10.5f));
         g.drawText(juce::String(presetFamilyName(m.family)) + "  -  " + tags.trim(), static_cast<int>(s.x) + 10, static_cast<int>(s.y) - 6, 360, 14, juce::Justification::centredLeft);
     }
-    // legend
+    // legend: the groups if the cloud is coloured by them, otherwise where the presets came from
     g.setFont(juce::FontOptions(10.5f));
     int lx = 10, ly = getHeight() - 16;
-    for (int f = 0; f < numPresetFamilies(); ++f) {
-        g.setColour(familyColour(f)); g.fillEllipse(static_cast<float>(lx), static_cast<float>(ly) + 3.0f, 7.0f, 7.0f);
-        g.setColour(kDim); g.drawText(presetFamilyName(f), lx + 10, ly, 120, 13, juce::Justification::centredLeft);
-        lx += 14 + 7 * juce::jmin(16, static_cast<int>(std::strlen(presetFamilyName(f))));
+    const int legendCount = groups ? numPresetClusters() : numPresetFamilies();
+    for (int f = 0; f < legendCount; ++f) {
+        const char* nm = groups ? presetClusterName(f) : presetFamilyName(f);
+        g.setColour(groups ? clusterColour(f) : familyColour(f));
+        g.fillEllipse(static_cast<float>(lx), static_cast<float>(ly) + 3.0f, 7.0f, 7.0f);
+        g.setColour(kDim); g.drawText(nm, lx + 10, ly, 120, 13, juce::Justification::centredLeft);
+        lx += 14 + 7 * juce::jmin(16, static_cast<int>(std::strlen(nm)));
         if (lx > getWidth() - 120) break;
     }
 }
@@ -632,7 +861,7 @@ void AmbientSynthEditor::BrowseView::MapView::mouseDown(const juce::MouseEvent& 
     }
     const int h = nearestPreset(e.position, 10.0f);
     if (h >= 0 && !owner.mapActive.getToggleState()) {   // plain click on a point loads it
-        owner.selected = h; owner.proc.setCurrentProgram(h); owner.list.repaint(); repaint(); return;
+        owner.selected = h; owner.proc.selectPreset(h, owner.morphOnSelect.getToggleState()); owner.list.repaint(); repaint(); return;
     }
     if (!owner.mapActive.getToggleState()) { panning = true; panFrom = e.position; centreFrom = centre; return; }
     mouseDrag(e);

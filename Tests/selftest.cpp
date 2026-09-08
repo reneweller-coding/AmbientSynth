@@ -867,6 +867,28 @@ void testRoom()
 }
 
 // Preset map: neighbours, blend, and the engine's map mode.
+// A line of prose for every preset (Core/src/PresetText.cpp): the browser shows it, so it has to
+// exist for all of them, say something, and never claim a section that the preset does not use.
+void testPresetText()
+{
+    int empty = 0, longest = 0;
+    for (int i = 0; i < numPresets(); ++i) {
+        const std::string d = presetDescription(i);
+        if (d.empty()) ++empty;
+        longest = std::max(longest, static_cast<int>(d.size()));
+        // What it says about the sections has to be true of the settings it was made from.
+        const std::string st = preset(i).settings != nullptr ? preset(i).settings : "";
+        if (d.find("the Cosmos open") != std::string::npos)
+            CHECK(st.find("cosmos_send=") != std::string::npos, "a preset described with the Cosmos has a cosmos send");
+        if (d.find("played from the keys") != std::string::npos)
+            CHECK(st.find("brain_on=off") != std::string::npos, "a preset described as played has its conductor off");
+    }
+    for (int i = 0; i < std::min(3, numPresets()); ++i)
+        std::printf("  [probe] \"%s\": %s\n", preset(i).name, presetDescription(i).c_str());
+    CHECK(empty == 0, "every preset has a description");
+    CHECK(longest < 300, "and none of them is a paragraph");
+}
+
 void testPresetMap()
 {
     PresetMap::warmup();
@@ -877,6 +899,51 @@ void testPresetMap()
         const PresetMeta& m = presetMeta(i);
         CHECK(m.x >= 0.0f && m.x <= 1.0f && m.y >= 0.0f && m.y <= 1.0f, "map position inside the plane");
         CHECK(m.family >= 0 && m.family < numPresetFamilies(), "family index valid");
+        CHECK(m.evolve >= 0.0f && m.evolve <= 1.0f && m.rough >= 0.0f && m.rough <= 1.0f
+              && m.wet >= 0.0f && m.wet <= 1.0f, "the drone descriptors are ranks in 0..1");
+    }
+    // The cloud, once it has been laid out (Tools/library/map_all.py): the groups have to cover
+    // every preset, and the plane has to look like a cloud rather than a field. A grid gives
+    // every point almost the same distance to its nearest neighbour; a cloud does not, and that
+    // spread is the difference between "similar presets sit together" and "nothing overlaps".
+    if (numPresetClusters() > 0) {
+        const int n = std::min(numPresetMeta(), numPresets());
+        std::vector<int> perCluster(static_cast<size_t>(numPresetClusters()), 0);
+        for (int i = 0; i < n; ++i) {
+            const int c = presetClusterOf(presetMeta(i));
+            CHECK(c >= 0 && c < numPresetClusters(), "every preset falls into a measured group");
+            if (c >= 0 && c < numPresetClusters()) ++perCluster[static_cast<size_t>(c)];
+        }
+        int empty = 0;
+        for (int c : perCluster) if (c == 0) ++empty;
+        CHECK(empty == 0, "no group is empty");
+        std::vector<double> nn(static_cast<size_t>(n), 1.0);
+        for (int i = 0; i < n; ++i) {
+            const PresetMeta& a = presetMeta(i);
+            double best = 1.0e9;
+            for (int j = 0; j < n; ++j) {
+                if (j == i) continue;
+                const PresetMeta& b = presetMeta(j);
+                const double d = (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+                if (d < best) best = d;
+            }
+            nn[static_cast<size_t>(i)] = std::sqrt(best);
+        }
+        double m1 = 0.0;
+        for (double d : nn) m1 += d;
+        m1 /= static_cast<double>(n);
+        double v = 0.0;
+        for (double d : nn) v += (d - m1) * (d - m1);
+        const double cv = std::sqrt(v / static_cast<double>(n)) / std::max(m1, 1e-12);
+        std::printf("  [probe] map: %d presets in %d groups, %d empty; nearest-neighbour distance %.4f, variation %.2f\n",
+                    n, numPresetClusters(), empty, m1, cv);
+        CHECK(cv > 0.35, "the plane is a cloud, not a field: the gaps between presets differ");
+        // A cursor in the empty space blends a handful of presets rather than snapping to one.
+        // ("far" is still a keyword to MSVC, sixteen-bit memory models and all.)
+        const PresetMap::Blend inGap = PresetMap::neighbours(0.5f, 0.5f, 0.001f);
+        int used = 0;
+        for (int k = 0; k < inGap.count; ++k) if (inGap.weight[k] > 0.02f) ++used;
+        CHECK(used >= 1, "the blend always has something to play");
     }
     {   // On a preset's point the blend is that preset (within the radius the others fade out).
         const int p = 1;   // Sleep Concert
@@ -5355,6 +5422,7 @@ int main()
     testFeedback();
     testStackAndWander();
     testSources();
+    testPresetText();
     testPresetMap();
     testRoom();
     testRoute();

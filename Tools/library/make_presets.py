@@ -226,6 +226,37 @@ MOD_TARGETS = [
     ("cloud_pitch",   0.08, 0.25, "cloud"),
     ("fb_tone",       0.06, 0.20, "feedback"),
     ("room_level",    0.05, 0.18, "room"),
+    # Everything the library never modulated. The instrument has had these for rounds; not one
+    # preset moved them, because the target list was written before they existed.
+    ("far_rotate",    0.08, 0.25, None),
+    ("far_spread",    0.08, 0.28, None),
+    ("far_envelop",   0.08, 0.30, None),
+    ("far_comod",     0.08, 0.30, None),
+    ("early_size",    0.08, 0.30, None),
+    ("elev_far",      0.08, 0.30, None),
+    ("near_ild",      0.08, 0.30, None),
+    ("presence",      0.06, 0.22, None),
+    ("time_width",    0.06, 0.22, None),
+    ("doppler",       0.06, 0.20, None),
+    ("partial_spread", 0.10, 0.35, None),
+    ("sub_pulse",     0.08, 0.25, None),
+    ("brain_consonance", 0.06, 0.22, None),
+    ("brain_spread",  0.08, 0.30, None),
+    ("brain_bias",    0.08, 0.30, None),
+    ("brain_dejavu",  0.08, 0.30, None),
+    ("brain_cascade", 0.08, 0.28, None),
+    ("brain_wander",  0.06, 0.22, None),
+    ("tide",          0.06, 0.22, None),
+    ("purity_drift",  0.06, 0.22, None),
+    ("purity_adapt",  0.08, 0.28, None),
+    ("body_tone",     0.08, 0.28, None),
+    ("patina",        0.08, 0.28, None),
+    ("blur_smear",    0.08, 0.30, None),
+    ("cosmos_swell",  0.10, 0.35, "cosmos"),
+    ("cosmos_vowel",  0.10, 0.35, "cosmos"),
+    ("cosmos_shimmer", 0.08, 0.28, "cosmos"),
+    ("fb_bias",       0.08, 0.28, "feedback"),
+    ("fb_drive",      0.06, 0.22, "feedback"),
 ]
 # Targets that only make sense for a slot that is actually running, keyed by the slot's type.
 MOD_SLOT_TARGETS = {
@@ -234,8 +265,50 @@ MOD_SLOT_TARGETS = {
     "Texture":   [("{p}pos", 0.10, 0.40), ("{p}density", 0.08, 0.25), ("{p}spread", 0.10, 0.35),
                   ("{p}level", 0.08, 0.25)],
     "Noise":     [("{p}pos", 0.12, 0.45), ("{p}level", 0.08, 0.25), ("{p}noise_q", 0.10, 0.35)],
+    "Stretch":   [("{p}pos", 0.10, 0.40), ("{p}stretch", 0.08, 0.30), ("{p}level", 0.08, 0.25)],
+    "Bow":       [("{p}bow_force", 0.10, 0.35), ("{p}bow_speed", 0.10, 0.35), ("{p}level", 0.08, 0.25)],
+    "Spectral":  [("{p}spec_rate", 0.10, 0.35), ("{p}spec_breath", 0.12, 0.40), ("{p}pos", 0.10, 0.35)],
+    "Additive":  [("{p}bright", 0.10, 0.30), ("{p}shimmer", 0.10, 0.30), ("{p}level", 0.08, 0.25)],
 }
+# The first slot's additive controls answer to their old names; the other three do not have them.
+MOD_SLOT1_ADDITIVE = [("brightness", 0.08, 0.28), ("shimmer", 0.10, 0.35), ("partials", 0.10, 0.30),
+                      ("odd_even", 0.10, 0.35), ("inharmonic", 0.08, 0.30), ("detune", 0.05, 0.25)]
+# Sources that are not a clock: the instrument listening to itself, a field, an attractor. Drawn
+# for a share of the routes, which is what turns a modulation matrix into weather.
+OTHER_SOURCES = ["beat", "kura1", "kura2", "kura3", "kura4",
+                 "lenia1", "lenia2", "lenia3", "lenia4",
+                 "lorenz_x", "lorenz_y", "lorenz_z", "rossler_x", "rossler_y", "rossler_z",
+                 "cascade", "cascade", "amp", "note", "velocity", "distance", "random"]
 LFO_SHAPES = ["Sine", "Sine", "Sine", "Triangle", "Random", "Random", "Steps", "Table", "Ramp Up"]
+
+# A route that SWITCHES instead of moving. The instrument is continuous by construction -- every
+# movement a rate or an amplitude, never a step -- so these are rare and only ever aimed at
+# parameters that take effect at the next note. A scale that changes while nothing new is played
+# changes nothing; a filter model that changes mid-tail is a click, and is not in this list.
+SWITCH_TARGETS = ["scale", "stack", "root", "strike_type", "brain_quantize", "keys_filter"]
+
+
+def bank_presets(path, first_is_off=True):
+    """The settings strings of one of the core's own preset banks (Cosmos, Strike, Z-plane),
+    read straight out of the .inc file it is generated into. A pack preset that draws one gets
+    exactly the layer the plugin's own bank menu would load."""
+    out = []
+    try:
+        for line in open(path, encoding="utf-8"):
+            line = line.strip()
+            if not line.startswith("{ \""):
+                continue
+            parts = [x for x in line.split("\"") if x]
+            if len(parts) >= 4 and "=" in parts[3]:
+                out.append((parts[1], parts[3]))
+    except OSError:
+        return []
+    return out[1:] if (first_is_off and out) else out
+
+
+COSMOS_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "CosmosPresets.inc"))
+STRIKE_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "StrikePresets.inc"))
+Z_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "ZPlanePresets.inc"))
 
 
 def modulation_for(p, style, rng, shade_name):
@@ -250,10 +323,17 @@ def modulation_for(p, style, rng, shade_name):
         "room":    float(p.get("room_level", 0) or 0) > 0.02,
     }.get(key, True)
     pool = [(t, lo, hi) for t, lo, hi, need in MOD_TARGETS if need is None or on(need)]
-    for n in (2, 3):
-        kind = p.get(f"src{n}_type", "Off")
+    for n in (1, 2, 3, 4):
+        kind = p.get(f"src{n}_type", "Additive" if n == 1 else "Off")
         for tpl, lo, hi in MOD_SLOT_TARGETS.get(kind, []):
-            pool.append((tpl.format(p=f"src{n}_"), lo, hi))
+            t = tpl.format(p=f"src{n}_")
+            if n == 1 and t == "src1_level":
+                t = "osc_level"
+            if n == 1 and t in ("src1_bright", "src1_shimmer"):
+                continue                       # the first slot's own names are added below
+            pool.append((t, lo, hi))
+    if p.get("src1_type", "Additive") == "Additive":
+        pool.extend(MOD_SLOT1_ADDITIVE)
 
     # A still preset gets fewer and slower routes, an astir one more and faster.
     count = {"still": (1, 3), "sparse": (1, 3), "clean": (2, 4), "deep": (2, 4),
@@ -270,18 +350,26 @@ def modulation_for(p, style, rng, shade_name):
     PHI = 1.6180339887
     for i in range(min(n_routes, len(pool), 8)):
         target, lo, hi = pool[i]
-        lfo = i % 8 + 1
+        lfo = i + 1 if i < 8 else (i % 8 + 1)
         # Now and then the source is not an LFO at all: BEAT is the chord listening to how far
         # out of tune it is, and the coherence ring is four oscillators that pull on each other.
         # Both make the modulation come from the instrument rather than from a clock.
         other = None
-        if rng.random() < 0.12:
-            other = "beat"
-        elif rng.random() < 0.10:
-            other = "kura%d" % (rng.randrange(4) + 1)
+        if rng.random() < 0.34:
+            other = OTHER_SOURCES[rng.randrange(len(OTHER_SOURCES))]
         if other is not None:
             depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
-            rows.append(f"{other}>{target}:{depth:.3f}")
+            if other.startswith("lenia"):
+                p.setdefault("lenia_rate", round(math.exp(u(rng, math.log(0.5), math.log(8.0))), 3))
+                p.setdefault("lenia_growth", round(u(rng, 0.1, 0.28), 3))
+            if other.startswith(("lorenz", "rossler")):
+                p.setdefault("chaos_period", round(math.exp(u(rng, math.log(20.0), math.log(400.0))), 1))
+            if other == "cascade":
+                p.setdefault("brain_cascade", round(u(rng, 0.3, 0.8), 3))
+            # A source that rests at zero (the hands, the fields' corners) reaches the sound only
+            # through the 0..1 flag; the two-sided ones are left bipolar.
+            flag = ":none:u" if other in ("amp", "velocity", "random") and rng.random() < 0.5 else ""
+            rows.append(f"{other}>{target}:{depth:.3f}{flag}")
             continue
         if lfo not in used_lfo:
             used_lfo.append(lfo)
@@ -292,6 +380,13 @@ def modulation_for(p, style, rng, shade_name):
             p[f"lfo{lfo}_depth"] = round(u(rng, 0.6, 1.0), 3)
             if p[f"lfo{lfo}_shape"] == "Table":
                 p[f"lfo{lfo}_table"] = rng.randrange(0, 32)
+            # Per Voice gives every note its own phase -- a cluster then breathes in parts rather
+            # than as one block; Retrigger starts it at the note. Neither was ever used.
+            if rng.random() < 0.30:
+                p[f"lfo{lfo}_mode"] = "Per Voice" if rng.random() < 0.7 else "Retrigger"
+            # And now and then a rate from the clock instead of from seconds.
+            if rng.random() < 0.12:
+                p[f"lfo{lfo}_sync"] = rng.choice(["64 bars", "32 bars", "16 bars", "8 bars", "4 bars"])
         depth = u(rng, lo, hi) * (1.0 if rng.random() < 0.65 else -1.0)
         row = f"lfo{lfo}>{target}:{depth:.3f}"
         # Now and then a macro decides how much of the route gets through. Sparingly: a macro is
@@ -341,9 +436,22 @@ def modulation_for(p, style, rng, shade_name):
         p[f"env{e+1}_time"] = round(base_time * PHI ** e, 3)
         p[f"env{e+1}_mode"] = mode
         p[f"env{e+1}_depth"] = round(u(rng, 0.5, 1.0), 3)
+        if rng.random() < 0.12:
+            p[f"env{e+1}_sync"] = rng.choice(["32 bars", "16 bars", "8 bars", "4 bars"])
         if pool:
             target, lo, hi = pool[rng.randrange(len(pool))]
             rows.append(f"env{e+1}>{target}:{u(rng, lo, hi) * (1.0 if rng.random() < 0.7 else -1.0):.3f}")
+
+    # And, rarely, one route that switches rather than moves -- a scale that changes every few
+    # minutes, a stack that turns over. Slow and stepped on purpose, and only at targets that are
+    # read when the next note starts, so nothing in the sound can click.
+    if rows and rng.random() < 0.06:
+        lfo = 8 if 8 not in used_lfo else (used_lfo[0] if used_lfo else 1)
+        p[f"lfo{lfo}_shape"] = "Steps"
+        p[f"lfo{lfo}_rate"] = round(1.0 / math.exp(u(rng, math.log(90.0), math.log(900.0))), 6)
+        p[f"lfo{lfo}_depth"] = round(u(rng, 0.5, 1.0), 3)
+        target = SWITCH_TARGETS[rng.randrange(len(SWITCH_TARGETS))]
+        rows.append(f"lfo{lfo}>{target}:{u(rng, 0.15, 0.5):.3f}")
 
     return ";".join(rows), "~".join(envs).rstrip("~")
 
@@ -380,6 +488,224 @@ def add_hands(p, style, rng, matrix):
         rows.append("%s>%s:%.3f:u" % (source, target, u(rng, lo, hi)))
         used.add(target)
     return ";".join(rows)
+
+
+# The instrument's own reach, as the library never used it. Everything here is drawn from the
+# `extra` stream and gated on a weight, so a style that asks for none of it is untouched, and a
+# preset that asks for all of it is still a preset and not a demonstration: each block sets the
+# few parameters that make its feature audible and leaves the rest alone.
+def open_up(p, mod, extra, rng):
+    def want(key):
+        return extra.random() < mod.get(key, 0.0)
+
+    # ---- the conductor ----------------------------------------------------------------
+    if p.get("brain_on", "on") != "off":
+        if want("cascade"):
+            # A Hawkes clock: events breed events, so the piece arrives in handfuls and then
+            # leaves long holes. The branching stays under one or it would never stop.
+            p["brain_cascade"] = round(u(extra, 0.25, 0.85), 3)
+        if want("surprise"):
+            p["brain_surprise"] = round(u(extra, 0.2, 0.8), 3)
+            if extra.random() < 0.7:
+                p["brain_homeostat"] = round(u(extra, 0.3, 0.9), 3)
+        if want("dejavu"):
+            p["brain_dejavu"] = round(u(extra, 0.35, 0.95), 3)
+            if extra.random() < 0.6:
+                p["brain_loop"] = round(u(extra, 0.2, 0.8), 3)
+        if want("spreadbias"):
+            p["brain_spread"] = round(u(extra, 0.0, 1.0), 3)
+            p["brain_bias"] = round(u(extra, -0.7, 0.7), 3)
+        if want("blend"):
+            p["brain_blend"] = round(u(extra, 0.25, 0.9), 3)
+        if want("keyfind"):
+            p["brain_key"] = round(u(extra, 0.3, 0.9), 3)
+        if want("evensmooth"):
+            p["brain_even"] = round(u(extra, 0.2, 0.8), 3)
+            p["brain_smooth"] = round(u(extra, 0.2, 0.8), 3)
+        if want("timbre"):
+            p["brain_timbre"] = round(u(extra, 0.3, 1.0), 3)
+            if extra.random() < 0.5:
+                p["brain_harmonic"] = round(u(extra, 0.2, 0.8), 3)
+        if want("quantize"):
+            p["brain_quantize"] = extra.choice(["8 bars", "4 bars", "2 bars", "1 bar", "1/2"])
+        if extra.random() < 0.25:
+            p["brain_spacing"] = round(u(extra, 0.2, 0.9), 3)
+    # A second conductor for the background plane: its own slower clock, its own register.
+    if want("brain2"):
+        p["brain2_on"] = "on"
+        p["brain2_density"] = extra.randint(2, 5)
+        p["brain2_rate"] = round(logu(extra, 40.0, 240.0), 2)
+        p["brain2_hold_min"] = round(logu(extra, 40.0, 180.0), 1)
+        p["brain2_hold_max"] = round(logu(extra, 180.0, 600.0), 1)
+        p["brain2_low"] = extra.randint(24, 40)
+        p["brain2_high"] = p["brain2_low"] + extra.randint(10, 30)
+        p["brain2_depth"] = round(u(extra, 0.55, 1.0), 3)
+        p["brain2_consonance"] = round(u(extra, 0.2, 0.8), 3)
+        if extra.random() < 0.4:
+            p["brain2_interval"] = round(u(extra, 0.1, 0.7), 3)
+
+    # ---- tuning -----------------------------------------------------------------------
+    if want("adaptive"):
+        p["purity_adapt"] = round(u(extra, 0.4, 1.0), 3)
+    if want("guard"):
+        p["purity_guard"] = round(u(extra, 0.3, 0.9), 3)
+    if want("match"):
+        p["match"] = round(u(extra, 0.3, 0.9), 3)
+    if want("transpose"):
+        p["transpose"] = extra.choice(["Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down"])
+    if want("keysfilter"):
+        p["keys_filter"] = "One Euro"
+    if extra.random() < 0.06:
+        p["hold"] = "on"          # a switch: the tuning stops following the conductor
+
+    # ---- the room ---------------------------------------------------------------------
+    if want("nearfield"):
+        p["near_ild"] = round(u(extra, 0.3, 0.9), 3)
+    if want("comod"):
+        p["far_comod"] = round(u(extra, 0.25, 0.8), 3)
+    if want("envelop"):
+        p["far_envelop"] = round(u(extra, 0.25, 0.9), 3)
+    if want("depthlaw"):
+        p["depth_law"] = round(u(extra, 0.3, 1.0), 3)
+    if want("elev"):
+        p["elev_near"] = round(u(extra, -0.4, 0.5), 3)
+        p["elev_far"] = round(u(extra, 0.1, 0.9), 3)
+    if want("binaural"):
+        p["binaural"] = "Headphones"
+        if extra.random() < 0.5:
+            p["externalise"] = round(u(extra, 0.2, 0.7), 3)
+    if want("presence"):
+        p["presence"] = round(u(extra, 0.5, 3.5), 2)
+    if want("farmode"):
+        p["far_mode"] = extra.choice(["Scattering", "Colourless", "Rotating", "Rotating"])
+        if p["far_mode"] == "Rotating":
+            p["far_rotate"] = round(u(extra, 0.25, 0.8), 3)
+    if want("fardiffuse"):
+        p["far_diffuse"] = round(u(extra, 0.2, 0.9), 3)
+    if want("farfreeze"):
+        p["far_freeze"] = "on"
+    if want("earlyroom"):
+        p["early_level"] = round(u(extra, 0.15, 0.6), 3)
+        p["early_size"] = round(logu(extra, 3.0, 30.0), 2)
+        p["early_absorb"] = round(u(extra, 0.2, 0.8), 3)
+        p["early_width"] = round(u(extra, 0.4, 1.0), 3)
+    if want("roommorph") and float(p.get("room_level", 0) or 0) > 0.02:
+        p["room_morph"] = round(u(extra, 0.15, 0.85), 3)
+    if want("archarmony") and float(p.get("arc", 0) or 0) > 0.05:
+        p["arc_harmony"] = round(u(extra, 0.2, 0.8), 3)
+    if want("arcclock"):
+        p["arc_clock"] = "on"
+
+    # ---- the fields, and chaos ---------------------------------------------------------
+    if want("lenia"):
+        p["lenia_rate"] = round(logu(extra, 0.5, 8.0), 3)
+        p["lenia_growth"] = round(u(extra, 0.1, 0.28), 3)
+    if want("chaos"):
+        p["chaos_period"] = round(logu(extra, 20.0, 400.0), 1)
+    if want("sympathy"):
+        p["sympathy"] = round(u(extra, 0.15, 0.7), 3)
+        p.setdefault("coherence", round(u(extra, 0.2, 0.7), 3))
+
+    # ---- the details -------------------------------------------------------------------
+    if want("pulse") and float(p.get("sub_level", 0) or 0) > 0.05:
+        p["sub_pulse"] = round(logu(extra, 0.02, 0.4), 4)
+    if want("fbbias") and float(p.get("fb_bus", 0) or 0) > 0.02:
+        p["fb_bias"] = round(u(extra, -0.6, 0.6), 3)
+    if want("partialspread"):
+        p["partial_spread"] = round(u(extra, 0.3, 1.0), 3)
+    if float(p.get("strike_level", 0) or 0) > 0.02 and p.get("brain_on", "on") != "off":
+        # A strike that fires on every note of a conducted piece is a plucked instrument. Most of
+        # these want it now and then instead, and in the clusters rather than evenly.
+        if extra.random() < 0.7:
+            p["strike_who"] = "Keys + Brain"
+            p["strike_chance"] = round(u(extra, 0.08, 0.5), 3)
+            if float(p.get("brain_cascade", 0) or 0) > 0.05 and extra.random() < 0.7:
+                p["strike_cluster"] = round(u(extra, 0.4, 1.0), 3)
+    if float(p.get("cosmos_send", 0) or 0) > 0.05 and want("cosmosswell"):
+        p["cosmos_swell"] = round(u(extra, 0.3, 1.0), 3)
+    for n in (1, 2, 3, 4):
+        if p.get("src%d_type" % n) == "Wavetable" and want("transport"):
+            p["src%d_transport" % n] = round(u(extra, 0.3, 1.0), 3)
+
+    # ---- the body, and the patina ------------------------------------------------------
+    # The Body was switched on by some styles but always with its default character: one
+    # material, one pitch, one tone. Six thousand presets, one struck object.
+    if float(p.get("body_level", 0) or 0) > 0.02 and want("bodychar"):
+        p["body_material"] = extra.choice(["Wood", "Plate", "Bell", "String"])
+        p["body_pitch"] = round(logu(extra, 0.35, 3.0), 3)
+        p["body_tone"] = round(u(extra, 0.15, 0.85), 3)
+        p["body_spread"] = round(u(extra, 0.1, 0.8), 3)
+    if want("patina"):
+        # Wow, hiss and age: the sound of the medium rather than of the instrument. Gentle by
+        # default -- this is a patina, not a lo-fi effect.
+        p["patina"] = round(u(extra, 0.1, 0.5), 3)
+        p["patina_wow"] = round(u(extra, 0.1, 0.6), 3)
+        p["patina_hiss"] = round(u(extra, 0.05, 0.4), 3)
+        p["patina_age"] = round(u(extra, 0.1, 0.7), 3)
+
+    # ---- the Vector --------------------------------------------------------------------
+    # Four slots read as the corners of one square, and the point in it moved slowly. Nothing in
+    # the library ever set it, so the four slots always played at their own fixed levels.
+    live = sum(1 for n in (1, 2, 3, 4) if p.get("src%d_type" % n, "Additive" if n == 1 else "Off") != "Off")
+    if live >= 3 and want("vector"):
+        p["vec_amount"] = round(u(extra, 0.35, 1.0), 3)
+        p["vec_x"] = round(u(extra, 0.15, 0.85), 3)
+        p["vec_y"] = round(u(extra, 0.15, 0.85), 3)
+        if extra.random() < 0.7:
+            p["vec_wander"] = round(u(extra, 0.15, 0.7), 3)
+            p["vec_rate"] = round(logu(extra, 0.004, 0.06), 5)
+
+    # ---- the master, and a few corners -------------------------------------------------
+    if want("mastertilt"):
+        p["master_tilt"] = round(u(extra, -3.0, 3.0), 2)
+        p["tilt_pivot"] = round(logu(extra, 300.0, 1600.0), 0)
+    if extra.random() < 0.10:
+        p["mono_guard"] = "on"          # the mono-safety net, for presets that widen hard
+    if extra.random() < 0.12:
+        p["near_lowcut"] = round(logu(extra, 25.0, 120.0), 1)
+    if float(p.get("dly2_mix", 0) or 0) > 0.02 and extra.random() < 0.35:
+        p["dly2_to_far"] = round(u(extra, 0.15, 0.7), 3)
+    if p.get("z_mode", "Off") in ("Series", "Replace") and extra.random() < 0.25:
+        p["z_route"] = "Parallel"
+    if extra.random() < 0.06:
+        p["freeze"] = "on"              # the tuning table held where it stands
+
+    # ---- what a hand does to it --------------------------------------------------------
+    # The Expression section is fixed routing: how far aftertouch pushes a voice forward, opens
+    # it, lifts it; what the slide does to the two filters. The library had matrix routes from
+    # the hands but never these, so every preset answered a key press the same way.
+    if want("expression"):
+        p["press_bright"] = round(u(extra, 0.15, 0.7), 3)
+        if extra.random() < 0.6:
+            p["press_distance"] = round(u(extra, 0.1, 0.6), 3)
+        if extra.random() < 0.5:
+            p["press_level"] = round(u(extra, 0.1, 0.5), 3)
+        if extra.random() < 0.5:
+            p["slide_cutoff"] = round(u(extra, 0.15, 0.7), 3)
+        if extra.random() < 0.35 and p.get("z_mode", "Off") in ("Series", "Replace"):
+            p["slide_z"] = round(u(extra, 0.15, 0.7), 3)
+        if extra.random() < 0.3:
+            p["bend_range"] = extra.choice([2, 5, 7, 12])
+
+    # ---- on the clock ------------------------------------------------------------------
+    # Tempo sync exists everywhere and was used nowhere: a drone has no beat, but a delay whose
+    # time is four bars and an arc that turns over every sixty-four are the two places where a
+    # host's tempo actually helps.
+    if want("sync"):
+        if float(p.get("dly_mix", 0) or 0) > 0.02:
+            p["dly_sync_l"] = extra.choice(["4 bars", "2 bars", "1 bar", "8 bars"])
+            p["dly_sync_r"] = extra.choice(["8 bars", "4 bars", "2 bars", "1 bar"])
+        if float(p.get("dly2_mix", 0) or 0) > 0.02 and extra.random() < 0.6:
+            p["dly2_sync_l"] = extra.choice(["8 bars", "4 bars", "2 bars"])
+            p["dly2_sync_r"] = extra.choice(["16 bars", "8 bars", "4 bars"])
+        if float(p.get("arc", 0) or 0) > 0.05 and extra.random() < 0.5:
+            p["arc_sync"] = extra.choice(["64 bars", "32 bars", "16 bars"])
+        if float(p.get("ens_mix", 0) or 0) > 0.02 and extra.random() < 0.35:
+            p["ensemble_sync"] = extra.choice(["16 bars", "8 bars", "4 bars"])
+        if float(p.get("cloud_send", 0) or 0) > 0.05 and extra.random() < 0.4:
+            p["cloud_sync"] = extra.choice(["1/4", "1/8", "1/2"])
+        if p.get("brain_on", "on") != "off" and extra.random() < 0.4:
+            p["brain_sync"] = extra.choice(["8 bars", "4 bars", "16 bars"])
 
 
 def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
@@ -427,6 +753,16 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     def fill_slot(n):
         nonlocal texture_file, wavetable_file
         pre = f"src{n}_"
+        # The first slot is the instrument's original voice, and its additive controls still carry
+        # the names they had before there were four slots. Everything type-specific does have a
+        # src1_ name. A key that does not exist is dropped by the parser without a word -- that is
+        # how five thousand presets once lost their impulses -- so the mapping is written out.
+        LEGACY = {"level": "osc_level", "partials": "partials", "tilt": "tilt",
+                  "bright": "brightness", "odd_even": "odd_even", "inharmonic": "inharmonic",
+                  "shimmer": "shimmer", "shimmer_rate": "shimmer_rate"}
+        key_of = lambda k: (LEGACY[k] if (n == 1 and k in LEGACY) else pre + k)
+        put = lambda k, v: p.__setitem__(key_of(k), v)
+        got = lambda k, d=None: p.get(key_of(k), d)
         want_tex = on("texture") and textures
         want_tab = on("usertable") and wavetables
         # Stretch: the style's clips read as a continuum. A style asks for it with a "stretch"
@@ -448,126 +784,165 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         elif want_tab:
             kind = "Wavetable"
         else:
-            kind = SOURCE_TYPES[rng.randrange(len(SOURCE_TYPES))]
+            # The first slot is the voice the piece is built on, and noise is a colour rather
+            # than a voice: a drone whose primary source is noise is a bed with nothing in it,
+            # and four hundred of those in a library is three hundred too many. Noise stays in
+            # the pool for the supporting slots and is drawn only for a style that asks for it
+            # by name (the noise pack) when it is the first slot.
+            # Measured in the mel-cepstral fingerprint over fifty presets of each: a texture in
+            # the first slot spreads 6.1 against the additive bank's 4.5, and its nearest
+            # neighbour is a third further away. The bank is the instrument's signature and keeps
+            # the presets that do not draw a type at all; where a type IS drawn, it is one of the
+            # ones that carry their own material.
+            pool = SOURCE_TYPES if n > 1 else ["Wavetable", "Wavetable", "FM", "Texture", "Texture", "Texture"]
+            # A style whose sound world really is noise -- tape hiss, a bunker, a signal that
+            # decayed -- may lead with it; the rest may not, and that is the difference between
+            # a colour and a voice.
+            if n == 1 and rng.random() < mod.get("noiseprimary", 0.0):
+                pool = ["Noise"]
+            kind = pool[rng.randrange(len(pool))]
             if kind == "Texture" and not textures:
                 kind = "Wavetable"
-        p[pre + "type"] = kind
-        p[pre + "level"] = u(rng, 0.15, 0.55)
+        put("type", kind)
+        put("level", u(rng, 0.15, 0.55))
         if kind != "Noise" and rng.random() < 0.4:   # independent fine drift: sources that beat like an ensemble
-            p[pre + "drift"] = logu(rng, 0.8, 10.0)
-        p[pre + "octave"] = rng.choice([-2, -1, 0, 0, 0, 1])
-        p[pre + "ratio"] = SLOT_RATIOS[rng.randrange(len(SLOT_RATIOS))]
-        p[pre + "pan"] = u(rng, -0.8, 0.8)
+            put("drift", logu(rng, 0.8, 10.0))
+        put("octave", rng.choice([-2, -1, 0, 0, 0, 1]))
+        put("ratio", SLOT_RATIOS[rng.randrange(len(SLOT_RATIOS))])
+        put("pan", u(rng, -0.8, 0.8))
         if kind == "Wavetable":
             if want_tab and not wavetable_file:
-                p[pre + "table"] = "User"
+                put("table", "User")
                 wavetable_file = wavetables[rng.randrange(len(wavetables))]
             else:
-                p[pre + "table"] = TABLES[rng.randrange(len(TABLES) - 1)]
-            p[pre + "pos"] = u(rng, 0.0, 1.0)
-            p[pre + "pos_drift"] = u(rng, 0.05, 0.7)
+                put("table", TABLES[rng.randrange(len(TABLES) - 1)])
+            put("pos", u(rng, 0.0, 1.0))
+            put("pos_drift", u(rng, 0.05, 0.7))
         elif kind == "Noise":
-            p[pre + "noise"] = style["noise"][rng.randrange(len(style["noise"]))]
-            p[pre + "noise_q"] = u(rng, 0.15, 0.85)
-            p[pre + "pos"] = u(rng, 0.05, 0.9)          # band centre / colour
-            p[pre + "pos_drift"] = u(rng, 0.05, 0.8)
-            p[pre + "level"] = u(rng, 0.12, 0.45)
-            if p[pre + "noise"] == "Crackle":
-                p[pre + "density"] = logu(rng, 1.5, 30.0)
-            p[pre + "follow"] = "Note" if (p[pre + "noise"] in ("Band", "Wind") and rng.random() < 0.4) else "Free"
+            put("noise", style["noise"][rng.randrange(len(style["noise"]))])
+            put("noise_q", u(rng, 0.15, 0.85))
+            put("pos", u(rng, 0.05, 0.9))          # band centre / colour
+            put("pos_drift", u(rng, 0.05, 0.8))
+            put("level", u(rng, 0.12, 0.45))
+            if got("noise") == "Crackle":
+                put("density", logu(rng, 1.5, 30.0))
+            put("follow", "Note" if (got("noise") in ("Band", "Wind") and rng.random() < 0.4) else "Free")
         elif kind == "FM":
-            p[pre + "fm_ratio"] = rng.choice([0.5, 1.0, 1.5, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0])
-            p[pre + "fm_index"] = logu(rng, 0.3, 3.5)
+            put("fm_ratio", rng.choice([0.5, 1.0, 1.5, 2.0, 2.0, 3.0, 4.0, 5.0, 7.0]))
+            put("fm_index", logu(rng, 0.3, 3.5))
         elif kind == "Additive":
             # a second (or third) additive bank on its own just ratio: the classic Rich stack, but
             # with its own spectrum and its own slow pitch drift
-            p[pre + "partials"] = rng.randint(6, 28)
-            p[pre + "tilt"] = u(rng, 0.8, 2.2)
-            p[pre + "bright"] = u(rng, 0.3, 0.9)
-            p[pre + "odd_even"] = u(rng, -0.5, 0.5) if rng.random() < 0.5 else 0.0
+            put("partials", rng.randint(6, 28))
+            put("tilt", u(rng, 0.8, 2.2))
+            put("bright", u(rng, 0.3, 0.9))
+            put("odd_even", u(rng, -0.5, 0.5) if rng.random() < 0.5 else 0.0)
             if rng.random() < 0.3:
-                p[pre + "inharmonic"] = u(rng, 0.05, 0.4)
-            p[pre + "shimmer"] = u(rng, 0.2, 0.6)
-            p[pre + "shimmer_rate"] = logu(rng, 0.03, 0.4)
-            p[pre + "drift"] = logu(rng, 1.0, 8.0)
+                put("inharmonic", u(rng, 0.05, 0.4))
+            put("shimmer", u(rng, 0.2, 0.6))
+            put("shimmer_rate", logu(rng, 0.03, 0.4))
+            put("drift", logu(rng, 1.0, 8.0))
         elif kind == "Bow":
             # The gesture is Force against Speed, and the two are worth setting against each other
             # rather than both up: light and fast is breath, heavy and slow is tone. Position is
             # where the bow sits along the string, Bright the loop filter that decides how long
             # the upper partials last.
             heavy = extra.random() < 0.5
-            p[pre + "bow_force"] = u(extra, 0.45, 0.9) if heavy else u(extra, 0.1, 0.45)
-            p[pre + "bow_speed"] = u(extra, 0.12, 0.4) if heavy else u(extra, 0.35, 0.85)
-            p[pre + "pos"] = u(extra, 0.1, 0.8)
-            p[pre + "bright"] = u(extra, 0.35, 0.9)
-            p[pre + "level"] = u(extra, 0.2, 0.5)
+            put("bow_force", u(extra, 0.45, 0.9) if heavy else u(extra, 0.1, 0.45))
+            put("bow_speed", u(extra, 0.12, 0.4) if heavy else u(extra, 0.35, 0.85))
+            put("pos", u(extra, 0.1, 0.8))
+            put("bright", u(extra, 0.35, 0.9))
+            put("level", u(extra, 0.2, 0.5))
             if extra.random() < 0.6:
-                p[pre + "drift"] = logu(extra, 1.0, 7.0)
+                put("drift", logu(extra, 1.0, 7.0))
         elif kind == "Spectral":
             # A recording rebuilt rather than replayed. Rate is mostly slow and sometimes stopped
             # dead -- at zero the clip becomes one held chord, which is the thing this type can do
             # and nothing else in the instrument can. Breath leans towards the noisy half more
             # often than the tonal one: a bed wants air in it.
             r = extra.random()
-            p[pre + "spec_rate"] = 0.0 if r < 0.22 else (u(extra, 0.05, 0.6) if r < 0.75 else u(extra, 0.6, 2.5))
-            p[pre + "spec_breath"] = u(extra, -0.8, 0.8)
-            p[pre + "pos"] = u(extra, 0.0, 1.0)
-            p[pre + "pos_drift"] = u(extra, 0.05, 0.5)
-            p[pre + "bright"] = u(extra, 0.3, 0.85)
-            p[pre + "level"] = u(extra, 0.25, 0.6)
+            put("spec_rate", 0.0 if r < 0.22 else (u(extra, 0.05, 0.6) if r < 0.75 else u(extra, 0.6, 2.5)))
+            put("spec_breath", u(extra, -0.8, 0.8))
+            put("pos", u(extra, 0.0, 1.0))
+            put("pos_drift", u(extra, 0.05, 0.5))
+            put("bright", u(extra, 0.3, 0.85))
+            put("level", u(extra, 0.25, 0.6))
             own = textures[extra.randrange(len(textures))]
             slot_textures[n] = own
             if not texture_file:
                 texture_file = own
             pitched = bool(PITCHED.search(own))
-            p[pre + "follow"] = "Note" if (pitched or extra.random() < 0.5) else "Free"
+            put("follow", "Note" if (pitched or extra.random() < 0.5) else "Free")
             if extra.random() < 0.5:
-                p[pre + "drift"] = logu(extra, 0.5, 4.0)
+                put("drift", logu(extra, 0.5, 4.0))
         elif kind == "Stretch":
             # The clip as a continuum. The window (Grain) sits where Paulstretch is smooth, the
             # factor is log-spread from "slowed" to "geological", and each Stretch slot draws its
             # own clip so four slots are four places. Free unless the clip carries a pitch, and
             # even then mostly Free: a field recording pitched to the note is a choice, not a rule.
-            p[pre + "grain"] = logu(rng, 150.0, 340.0)
-            p[pre + "stretch"] = logu(rng, 6.0, 300.0)
-            p[pre + "xfade"] = u(rng, 0.05, 0.25)
-            p[pre + "pos"] = u(rng, 0.0, 1.0)
-            p[pre + "pos_drift"] = u(rng, 0.1, 0.6)
+            put("grain", logu(rng, 150.0, 340.0))
+            put("stretch", logu(rng, 6.0, 300.0))
+            put("xfade", u(rng, 0.05, 0.25))
+            put("pos", u(rng, 0.0, 1.0))
+            put("pos_drift", u(rng, 0.1, 0.6))
             # Higher than a Texture slot: a stretched recording has no attacks to carry it, and at
             # the Texture slot's range a four-slot field preset measured -47 dBFS.
-            p[pre + "level"] = u(rng, 0.3, 0.7)
+            put("level", u(rng, 0.3, 0.7))
             if rng.random() < 0.5:
-                p[pre + "drift"] = logu(rng, 0.5, 4.0)
+                put("drift", logu(rng, 0.5, 4.0))
             own = textures[rng.randrange(len(textures))]
             slot_textures[n] = own
             if not texture_file:
                 texture_file = own
             pitched = bool(PITCHED.search(own))
-            p[pre + "follow"] = "Note" if (pitched and rng.random() < 0.35) else "Free"
+            put("follow", "Note" if (pitched and rng.random() < 0.35) else "Free")
         else:                                            # Texture
             grain_ms = logu(rng, 60.0, 800.0)
             density = logu(rng, 3.0, 40.0)
-            p[pre + "grain"] = grain_ms
-            p[pre + "density"] = density
+            put("grain", grain_ms)
+            put("density", density)
             # Grains: enough for the overlap the density and length ask for, plus headroom and the
             # style's bias. Too few and the slot drops grains, which made more density quieter
             # instead of denser -- the ceiling used to be eight for everyone.
             gran = style["granular"]
             overlap = max(1.0, density * grain_ms / 1000.0)
-            p[pre + "grains"] = int(min(64, max(4, math.ceil(overlap * 1.8 * gran["grains"]) + 4)))
+            put("grains", int(min(64, max(4, math.ceil(overlap * 1.8 * gran["grains"]) + 4))))
             # Spread: the window the start points are drawn from. Near zero the same fragment
             # repeats and the clip freezes into a drone; near one a grain may come from anywhere.
-            p[pre + "spread"] = math.exp(u(rng, math.log(gran["spread"][0]), math.log(gran["spread"][1])))
+            put("spread", math.exp(u(rng, math.log(gran["spread"][0]), math.log(gran["spread"][1]))))
             # A texture slot is now level-matched to the other two, so it needs less than before.
-            p[pre + "level"] = u(rng, 0.12, 0.42)
+            put("level", u(rng, 0.12, 0.42))
             if not texture_file and textures:
                 texture_file = textures[rng.randrange(len(textures))]
             slot_textures[n] = texture_file
             # Only a clip with a detected pitch (TextureGen puts the note in the name) can be
             # transposed to the played note; the rest are played free, as a bed.
-            pitched = bool(texture_file) and bool(PITCHED.search(texture_file))
-            p[pre + "follow"] = "Note" if (pitched and rng.random() < 0.75) else "Free"
+            # Only a clip whose pitch was detected can be transposed to the played note -- and
+            # not a field recording even then: fifty-seven of them carry a note in the name
+            # because something in the room happened to hum, and playing a swamp at concert
+            # pitch is not tonal granular synthesis, it is a mistake with a fundamental.
+            own_clip = slot_textures.get(n, texture_file)
+            pitched = (bool(own_clip) and bool(PITCHED.search(own_clip))
+                       and not own_clip.startswith("FieldRecordings/"))
+            put("follow", "Note" if (pitched and rng.random() < 0.75) else "Free")
 
+    # The first slot: for six thousand eight hundred presets it was the additive bank and nothing
+    # else -- src1_type appears in not one of them. It is the same slot as the other three, so it
+    # can be a wavetable, an FM pair, a grain texture, a noise colour, a stretched recording, a
+    # bowed string or a spectral model, and now it is, in the share of presets a style asks for.
+    if extra.random() < mod.get("slot1", 0.0):
+        fill_slot(1)
+        p.setdefault("strands", 1)      # the strand bank belongs to the additive type alone
+        # A slot that is not the bank wants something beside it more often than not: two thirds
+        # of the sound is then the type the style chose, and a third is what it is set against.
+        if p.get("src1_type", "Additive") != "Additive" and p.get("src2_type", "Off") == "Off" and extra.random() < 0.55:
+            fill_slot(2)
+    # An additive bank with nothing beside it is the instrument's signature -- Rich's stack, the
+    # thing it was built to do -- and it is also the least varied preset it can make. A share of
+    # them keep it; the rest get something set against the bank.
+    if (p.get("src1_type", "Additive") == "Additive" and p.get("src2_type", "Off") == "Off"
+            and p.get("src3_type", "Off") == "Off" and extra.random() < 0.62):
+        fill_slot(2)
     if on("src2"):
         fill_slot(2)
     if on("src3"):
@@ -732,6 +1107,33 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         p["ens_rate"] = round(logu(rng, 0.02, 0.09), 4)  # and how slowly it wanders (0.02 is the knob's floor)
     if on("fold"):
         p["filter_fold"] = round(u(rng, 0.08, 0.45), 3)
+    open_up(p, mod, extra, rng)
+    # The instrument's own banks -- 257 Cosmos presets, 41 Strikes, 156 filter shapes -- were
+    # written for its sections and nothing in the library ever used one. A preset that has the
+    # section open takes one now and then, which is a whole character in one draw.
+    if extra.random() < mod.get("banks", 0.0):
+        for bank, key, gate in ((COSMOS_BANK, "cosmos_send", float(p.get("cosmos_send", 0) or 0) > 0.05),
+                                (STRIKE_BANK, "strike_level", float(p.get("strike_level", 0) or 0) > 0.02),
+                                (Z_BANK, "z_mode", p.get("z_mode", "Off") in ("Series", "Replace"))):
+            if not (bank and gate and extra.random() < 0.6):
+                continue
+            name, settings = bank[extra.randrange(len(bank))]
+            for kv in settings.split(";"):
+                if "=" not in kv:
+                    continue
+                k, v = kv.split("=", 1)
+                k = k.strip()
+                if k not in PARAMS:
+                    continue
+                # The send and the level belong to the preset that is taking the layer, not to
+                # the layer: a bank entry sets them for a demonstration, and here they would
+                # overwrite a balance the style already chose.
+                if k in ("cosmos_send", "cosmos_return", "strike_level", "z_mix"):
+                    continue
+                # Kept as the bank wrote it. A choice parameter accepts a name OR an index,
+                # so turning "+12" into a number would silently pick the twelfth entry: that is
+                # how a shimmer pitch of five semitones came back as two octaves.
+                p[k] = v.strip()
     p["seed"] = rng.randrange(1, 9999)
 
     # brain_high must stay above brain_low, and hold_max above hold_min
@@ -904,14 +1306,33 @@ def rejected_clips(dirname):
     return out
 
 
-def texture_pool(dirname, style_name, rejected):
+def texture_pool(dirname, style_name, rejected, fielddir=None, fieldshare=0.5):
     """Clips whose file name starts with this style's slug (make_textures.py names them that
-    way), falling back to everything in the folder. Duds are left out."""
+    way), falling back to everything in the folder. Duds are left out.
+
+    Two folders now: Textures holds material with a tone in it -- struck objects, strings,
+    voices, machines -- and FieldRecordings holds environments. Each clip travels as
+    "Folder/name.wav" so the pack reference and the note-following decision both know which it
+    is; a field recording is never transposed to the played note."""
     slug = re.sub(r"[^a-z0-9]+", "_", style_name.lower()).strip("_")[:20]
-    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav"))
-                   if os.path.basename(f) not in rejected)
-    own = [f for f in files if f.startswith(slug + "_")]
-    return own or files
+
+    def listing(d, folder):
+        if not d or not os.path.isdir(d):
+            return []
+        return sorted(folder + "/" + os.path.basename(f) for f in glob.glob(os.path.join(d, "*.wav"))
+                      if os.path.basename(f) not in rejected)
+
+    tex = listing(dirname, "Textures")
+    fld = listing(fielddir, "FieldRecordings")
+    own = [f for f in tex + fld if os.path.basename(f).startswith(slug + "_")]
+    if own:
+        return own
+    # The style has no clips of its own: both shelves, with the environments weighted by the
+    # style's own appetite for them.
+    if not fld:
+        return tex
+    reps = max(1, int(round(fieldshare * 4)))
+    return tex + fld * reps if tex else fld
 
 
 def impulse_pool(dirname, style):
@@ -922,12 +1343,19 @@ def impulse_pool(dirname, style):
 
 
 def wavetable_pool(dirname, style):
+    """The style's own recipes first, and the rest of the shelf behind them.
+
+    A style names two or three of the nineteen wavetable recipes, and with the pool limited to
+    those, 384 of the 608 tables in the library were never once loaded -- the shelf was full and
+    the generator kept reaching for the same corner of it. The style's recipes are weighted three
+    to one, so a pack still sounds like itself while every table can turn up somewhere."""
     slugs = [re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_") for t in style["tables"]]
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
     own = [f for f in files if any(f.startswith(s + "_") for s in slugs)]
-    return own or files
+    return (own * 3 + files) if own else files
 
 
+_NUMBER = re.compile(r"^[-+]?[0-9.]+$")
 ROMAN = ["", " II", " III", " IV", " V", " VI", " VII", " VIII", " IX", " X"]
 
 
@@ -956,13 +1384,14 @@ def main():
     ap.add_argument("--seed", type=int, default=23)
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "Library", "Packs"))
     ap.add_argument("--textures", default=os.path.join(ROOT, "Library", "Textures"))
+    ap.add_argument("--fields", default=os.path.join(ROOT, "Library", "FieldRecordings"))
     ap.add_argument("--wavetables", default=os.path.join(ROOT, "Library", "Wavetables"))
     ap.add_argument("--impulses", default=os.path.join(ROOT, "Library", "Impulses"))
     a = ap.parse_args()
     PARAMS = param_table()
     os.makedirs(a.out_dir, exist_ok=True)
 
-    rejects = rejected_clips(a.textures)
+    rejects = rejected_clips(a.textures) | rejected_clips(a.fields)
     if rejects:
         print(f"{len(rejects)} clips skipped (see {os.path.join(a.textures, 'rejected.txt')})")
     packs = []
@@ -1009,7 +1438,8 @@ def main():
         if wanted and st["name"].lower() not in wanted:
             continue
         rng = random.Random(a.seed * 104729 + si)
-        textures = texture_pool(a.textures, st["name"], rejects)
+        textures = texture_pool(a.textures, st["name"], rejects, a.fields,
+                                st["modules"].get("environment", 0.5))
         tables = wavetable_pool(a.wavetables, st)
         impulses = impulse_pool(a.impulses, st)
         rows = []
@@ -1021,7 +1451,9 @@ def main():
                          "settings": settings_string(p),
                          # one path, or up to four ';'-separated (one per slot): each non-empty
                          # part gets the folder, an empty part stays empty and means "no clip"
-                         "texture": ";".join(f"../Textures/{part}" if part else "" for part in tex.split(";")) if tex else "",
+                         # The clip already carries its folder ("Textures/x.wav"), so the
+                         # reference is one level up from the pack and then that.
+                         "texture": ";".join(f"../{part}" if part else "" for part in tex.split(";")) if tex else "",
                          "wavetable": f"../Wavetables/{tab}" if tab else "",
                          "impulse": f"../Impulses/{imp}" if imp else "",
                          "mod": matrix, "envs": envs,

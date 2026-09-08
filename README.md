@@ -105,10 +105,17 @@ since 2013), a VST3 host if you want the plugin.
   the genre, every one rendered, measured and gain-matched; 1700 samples, 608
   wavetables and 240 impulse responses (forty of them struck objects cut from
   the field recordings, for convolving a pad with a piece of the world). A
-  browser that filters by measured character, a **preset map** that zooms and
-  pans -- names appear as you close in, and "more like this" narrows the list to
-  a preset's measured neighbours -- whose empty space between presets is
-  playable, and routes that walk it by themselves.
+  browser that filters by measured character, and a **preset map**: a free
+  cloud, dense where the library repeats itself and empty where it is thin,
+  laid out from nine measured descriptors -- three of them about what a *drone*
+  is, namely how far it travels over a minute, how rough its partials are
+  against each other, and how far away it stands. Dark is left and evolving is
+  up; the points are coloured by measured **groups**, each named after what
+  makes it itself; four sliders narrow the cloud to a range of brightness,
+  evolution, roughness or distance and the view closes in on what is left. It
+  zooms and pans, names appear as you close in, "more like this" narrows to a
+  preset's measured neighbours, the empty space between presets is playable,
+  and routes walk it by themselves.
 * **No compressor anywhere.** A BS.1770 loudness meter instead, and a mono
   guard: everything here is built to widen, and it is measured to survive a
   mono sum.

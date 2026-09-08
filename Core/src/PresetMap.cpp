@@ -57,8 +57,20 @@ PresetMap::Blend PresetMap::neighbours(float x, float y, float radius)
         dist[pos] = d; b.index[pos] = i;
         if (b.count < kNeighbours) ++b.count;
     }
+    // The radius follows the local density. On a map laid out as a free cloud the presets are
+    // not evenly spread any more: in a ball of forty near-identical sounds a fixed radius takes
+    // all of them, and in the empty space between two clusters it takes nothing and the blend
+    // collapses onto whichever point is nearest. Never smaller than the knob says, and never so
+    // small that the third neighbour is already out of reach.
+    // Only in a gap, though: standing on a preset's own point still plays that preset and nothing
+    // else, whatever the neighbours are doing. The radius grows when the nearest point is already
+    // further away than the radius itself -- which is what "the cursor is in the empty space"
+    // means -- and not one pixel sooner.
+    const float d0 = b.count > 0 ? std::sqrt(dist[0]) : 0.0f;
+    const float d3 = std::sqrt(dist[b.count >= 3 ? 2 : 0]);
+    const float sig = (b.count > 0 && d0 > sigma) ? std::max(sigma, 0.7f * d3) : sigma;
     float sum = 0.0f;
-    for (int k = 0; k < b.count; ++k) { b.weight[k] = std::exp(-dist[k] / (2.0f * sigma * sigma)); sum += b.weight[k]; }
+    for (int k = 0; k < b.count; ++k) { b.weight[k] = std::exp(-dist[k] / (2.0f * sig * sig)); sum += b.weight[k]; }
     if (sum <= 1e-12f) {   // far from everything: the nearest point alone
         for (int k = 0; k < b.count; ++k) b.weight[k] = (k == 0) ? 1.0f : 0.0f;
     } else {

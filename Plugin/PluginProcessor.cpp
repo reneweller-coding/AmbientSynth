@@ -200,6 +200,23 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 
     // Leaving the preset map: the sound stays where the map left it, so the gliding blend
     // values become the live parameters (through the host, like a controller would).
+    // The travelling preset change has arrived: write the target's own values into the parameters
+    // and switch the morph off. The engine is already playing exactly those values, so nothing
+    // moves -- what changes is that the state is a preset again and not a blend of two.
+    if (morphTarget_ >= 0 && engine_.morphPosition() >= 0.999f) {
+        const int target = morphTarget_;
+        morphTarget_ = -1;
+        currentProgram_ = target;
+        soundIndex_ = target;
+        soundName_ = preset(target).name;
+        zIndex_ = -1; strikeIndex_ = -1; cosmosIndex_ = -1;
+        applyScoped(preset(target), PresetScope::Full);
+        applyLevelMatch(target);
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(ParamId::MorphActive)].key))
+            p->setValueNotifyingHost(0.0f);
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(ParamId::MorphPos)].key))
+            p->setValueNotifyingHost(0.0f);
+    }
     const bool mapNow = raw_[static_cast<size_t>(ParamId::MapActive)]->load() >= 0.5f;
     if (!mapNow && engine_.mapActive()) {
         for (const ParamDesc& d : paramTable()) {
@@ -617,6 +634,36 @@ bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
     copyXmlToBinary(*xml, block);
     setStateInformation(block.getData(), static_cast<int>(block.getSize()));
     return true;
+}
+
+// Choosing a preset as a journey rather than a cut. A is what is playing, B is where we are
+// going, and the position glides from one to the other; processBlock lands it when it arrives.
+void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
+{
+    if (index < 0 || index >= numPresets()) return;
+    if (!viaMorph || !morphOnSelect_) { morphTarget_ = -1; setCurrentProgram(index); return; }
+    // The files a preset brings (its texture, its impulse, its wavetable) cannot be blended --
+    // they are loaded, and they belong to the target. They arrive at the start of the journey,
+    // which is audible only where the preset that is leaving used the same slot for something
+    // else; the alternative, loading them at the end, puts a click exactly where the travelling
+    // was supposed to hide one.
+    setMorphSlotFromCurrent(0);
+    setMorphSlotFromPreset(1, index);
+    loadPresetFiles(index);
+    engine_.applyPresetModulation(preset(index));
+    slotName_[0] = soundName_.isNotEmpty() ? soundName_ : juce::String("(playing)");
+    auto set = [this](ParamId id, float v) {
+        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
+            p->setValueNotifyingHost(p->convertTo0to1(v));
+    };
+    set(ParamId::MorphGlide, morphSelectSeconds_);
+    set(ParamId::MorphPos, 0.0f);
+    set(ParamId::MorphActive, 1.0f);
+    engine_.setParam(ParamId::MorphPos, 0.0f);       // start at A, whatever the position was
+    engine_.setParam(ParamId::MorphActive, 1.0f);
+    engine_.resetMorphPosition(0.0f);
+    set(ParamId::MorphPos, 1.0f);
+    morphTarget_ = index;
 }
 
 void AmbientSynthProcessor::setMorphSlotFromPreset(int slot, int presetIndex)

@@ -19,6 +19,8 @@ Nothing else in the settings is touched, and the run is idempotent: measuring an
 measured library changes the gains by fractions of a dB.
 """
 import argparse
+import json
+import time
 import concurrent.futures
 import math
 import os
@@ -71,6 +73,10 @@ def write_pack(path, head, rows):
 
 
 MEASURE = re.compile(r"^measure: (.*)$", re.M)
+# The mel-cepstral fingerprint: 16 means and 16 spreads. Nine descriptors say what a preset
+# is like; this says what it is, which is the difference between "dark and wide" and "a
+# goods yard" -- two presets can agree on every descriptor and share no material at all.
+TIMBRE = re.compile(r"^timbre:\s*(.*)$", re.M)
 
 
 # Renders run below normal priority. Five of them at full speed on a 24-thread machine still
@@ -78,15 +84,29 @@ MEASURE = re.compile(r"^measure: (.*)$", re.M)
 LOW_PRIORITY = {"creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {}
 
 
-def render(name, packs, seconds):
+# The engine loads its default pack folders unless AMBIENT_PACKS says otherwise, and a stale copy
+# of an older library in ProgramData then wins every name collision -- which is how a measurement
+# pass came to measure last week's presets under this week's names. Every render here is told
+# exactly which folder to read.
+def _packs_env(packs):
+    env = dict(os.environ)
+    env["AMBIENT_PACKS"] = os.path.abspath(packs)
+    return env
+
+def render(name, packs, seconds, tapdir=None):
     """The synth measures its own render and prints one line. It used to write a twelve-second
     stereo WAV to a temporary file and read it straight back -- five thousand presets is
     twenty-three gigabytes written and read for nothing, and every byte stayed in the file cache
     afterwards, which is what made the machine unusable."""
-    res = subprocess.run([RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
-                          "--notes", "45,52,59", "--set", "brain_rate=6", "--measure"],
+    cmd = [RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
+           "--notes", "45,52,59", "--set", "brain_rate=6", "--measure"]
+    if tapdir:
+        # A twelve-second mono excerpt beside the numbers, for a learned embedding to listen to.
+        safe = re.sub(r"[^A-Za-z0-9]+", "_", name)[:80]
+        cmd += ["--tap", os.path.join(tapdir, safe + ".wav")]
+    res = subprocess.run(cmd,
                          capture_output=True, text=True, encoding="utf-8", errors="replace",
-                         **LOW_PRIORITY)
+                         env=_packs_env(packs), **LOW_PRIORITY)
     if res.returncode != 0:
         return None
     m = MEASURE.search(res.stdout or "")
@@ -109,6 +129,12 @@ def render(name, packs, seconds):
     if not {"rms", "centroid", "flatness", "flux", "bass", "width", "voices"} <= set(d):
         return None
     d["rms_db"] = d.pop("rms")
+    t = TIMBRE.search(res.stdout or "")
+    if t:
+        try:
+            d["timbre"] = [float(x) for x in t.group(1).split()]
+        except ValueError:
+            pass
     return d
 
 
@@ -166,8 +192,21 @@ def main():
                     help="renders in parallel; three leaves a 24-thread machine usable")
     ap.add_argument("--seconds", type=float, default=12.0)
     ap.add_argument("--limit", type=int, default=0, help="only the first N presets (a dry run)")
+    # The render pass is the expensive part -- three hours for the whole library at a minute a
+    # preset -- and the layout on top of it is seconds. So the measurements are cached: render
+    # once into a JSON, then iterate on the embedding from that file as often as it takes.
+    ap.add_argument("--cache", default="", help="write the raw measurements here after rendering")
+    ap.add_argument("--from-cache", default="", help="read them from here instead of rendering")
+    ap.add_argument("--no-write", action="store_true", help="stop after the cache; leave the packs alone")
+    # The gain correction moves master_gain and therefore changes the SOUND. A round that is only
+    # about where a preset sits on the map has no business doing that: pass this and the pass
+    # rewrites positions, descriptors and tags, and not one sample of what the library plays.
+    ap.add_argument("--no-gain", action="store_true", help="do not touch master_gain")
+    ap.add_argument("--taps", default="", help="also write a 12 s mono excerpt of every preset here")
     a = ap.parse_args()
 
+    if a.taps:
+        os.makedirs(a.taps, exist_ok=True)
     files = sorted(f for f in os.listdir(a.packs) if f.endswith(".ambientpack"))
     packs = [(f, *read_pack(os.path.join(a.packs, f))) for f in files]
     rows = [r for _, _, rr in packs for r in rr]
@@ -175,13 +214,27 @@ def main():
         rows = rows[:a.limit]
     print(f"{len(rows)} presets in {len(packs)} packs, {a.jobs} renders in parallel")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
-        done = 0
-        for r, m in zip(rows, ex.map(lambda r: render(r["name"], a.packs, a.seconds), rows)):
-            r["m"] = m
-            done += 1
-            if done % 250 == 0:
-                print(f"  {done}/{len(rows)}")
+    if a.from_cache:
+        cached = json.load(open(a.from_cache, encoding="utf-8"))
+        for r in rows:
+            r["m"] = cached.get(r["name"])
+        print(f"  read {sum(1 for r in rows if r['m'])} measurements from {a.from_cache}")
+    else:
+        t0 = time.time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
+            done = 0
+            for r, m in zip(rows, ex.map(lambda r: render(r["name"], a.packs, a.seconds, a.taps or None), rows)):
+                r["m"] = m
+                done += 1
+                if done % 250 == 0:
+                    el = time.time() - t0
+                    print(f"  {done}/{len(rows)}  {el/60:.0f} min, noch etwa {el/done*(len(rows)-done)/60:.0f} min", flush=True)
+        if a.cache:
+            json.dump({r["name"]: r["m"] for r in rows if r["m"]}, open(a.cache, "w", encoding="utf-8"))
+            print(f"  cached {sum(1 for r in rows if r['m'])} measurements in {a.cache}")
+        if a.no_write:
+            print("cache only (--no-write): the pack files were not touched")
+            return 0
     bad = [r["name"] for r in rows if r["m"] is None]
     if bad:
         print(f"{len(bad)} presets failed to render: {', '.join(bad[:5])}")
@@ -191,7 +244,7 @@ def main():
 
     # Loudness: move each preset's master gain by exactly the distance to the window.
     moved = 0
-    for r in good:
+    for r in [] if a.no_gain else good:
         rms = r["m"]["rms_db"]
         delta = 0.0
         if rms > TARGET_HI:

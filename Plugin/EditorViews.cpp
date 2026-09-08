@@ -660,19 +660,43 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         // as its length, fading as it ages -- the loudest voice's slot, live.
         ambient::SourceSlot::GrainInfo gi[ambient::kSlotGrains];
         const int gn = proc.engine().displayGrains(slot - 1, gi, ambient::kSlotGrains);
+        // Each grain as what it actually is: a window travelling through the clip. The bar spans
+        // the piece it has read so far, its height is its level times where the Hann window
+        // stands, the head marks the sample it is on this instant, and the vertical place is its
+        // pan. A grain of two hundred milliseconds in a minute of tape is a third of a pixel
+        // wide, so the bar is what makes it visible at all -- as a single mark it was a hair.
         const float grainMs = rawParam(proc, (pre + "grain").toRawUTF8());
         const float clipSec = static_cast<float>(tex->mono.size() / juce::jmax(1.0, tex->sampleRate));
-        const float gw = juce::jmax(3.0f, grainMs * 0.001f / juce::jmax(0.05f, clipSec) * plot.getWidth());
+        const float gw = grainMs * 0.001f / juce::jmax(0.05f, clipSec) * plot.getWidth();
         for (int i = 0; i < gn; ++i) {
-            const float gx = plot.getX() + juce::jlimit(0.0f, 1.0f, gi[i].pos) * plot.getWidth();
-            const float w = std::sin(juce::MathConstants<float>::pi * juce::jlimit(0.0f, 1.0f, gi[i].age));   // the Hann window's height now
-            const float gh = (0.25f + 0.75f * w) * plot.getHeight() * 0.5f;
-            const float gy = cy - gh * 0.5f + gi[i].pan * plot.getHeight() * 0.18f;
-            g.setColour(ui::accent.withAlpha(0.10f + 0.45f * w));
-            g.fillRoundedRectangle(gx - gw * 0.5f, gy, gw, gh, 2.0f);
+            const float age = juce::jlimit(0.0f, 1.0f, gi[i].age);
+            const float w = std::sin(juce::MathConstants<float>::pi * age);        // the window, now
+            const float level = juce::jlimit(0.0f, 1.0f, gi[i].gain) * w;
+            const float x1 = plot.getX() + juce::jlimit(0.0f, 1.0f, gi[i].pos) * plot.getWidth();
+            const float x0 = juce::jmax(plot.getX(), x1 - gw * age);               // where it began
+            const float gh = juce::jmax(2.0f, (0.12f + 0.88f * level) * plot.getHeight() * 0.44f);
+            const float gy = cy - gh * 0.5f + gi[i].pan * plot.getHeight() * 0.20f;
+            const juce::Colour c = ui::accent.withRotatedHue(0.06f * gi[i].pan);   // left and right differ a little
+            g.setColour(c.withAlpha(0.10f + 0.35f * level));
+            g.fillRoundedRectangle(x0, gy, juce::jmax(2.0f, x1 - x0), gh, 2.0f);
+            g.setColour(c.withAlpha(0.35f + 0.55f * level));                       // the head: where it reads now
+            g.fillRoundedRectangle(x1 - 1.5f, gy, 3.0f, gh, 1.5f);
+            if (gh > 8.0f) {   // the window's own shape, so a grain reads as a grain and not a bar
+                juce::Path win;
+                const int steps = 12;
+                win.startNewSubPath(x0, gy + gh);
+                for (int k2 = 0; k2 <= steps; ++k2) {
+                    const float t = static_cast<float>(k2) / steps;
+                    const float e = std::sin(juce::MathConstants<float>::pi * t * age);
+                    win.lineTo(x0 + (x1 - x0) * t, gy + gh - gh * juce::jlimit(0.0f, 1.0f, e));
+                }
+                g.setColour(c.withAlpha(0.5f));
+                g.strokePath(win, juce::PathStrokeType(1.0f));
+            }
         }
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
-        g.drawText(juce::String(gn) + " grains", r.reduced(9, 5).withTrimmedTop(12), juce::Justification::topRight, false);
+        g.drawText(juce::String(gn) + " grains   " + juce::String(juce::roundToInt(grainMs)) + " ms",
+                   r.reduced(9, 5).withTrimmedTop(12), juce::Justification::topRight, false);
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText(juce::String(tex->mono.size() / juce::jmax(1.0, tex->sampleRate), 1) + " s   base " + juce::String(tex->baseHz, 1) + " Hz",
                    r.reduced(9, 5), juce::Justification::topRight, false);

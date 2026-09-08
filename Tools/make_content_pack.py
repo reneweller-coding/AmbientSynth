@@ -34,7 +34,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PACKS = os.path.join(ROOT, "Library", "Packs")
 OUT = os.path.join(ROOT, "Deploy", "content")
-KINDS = ("Textures", "Wavetables", "Impulses")
+# Four now: the field recordings sit apart from the tonal material, because a swamp and a
+# bowed cymbal are not the same kind of clip and only one of them may be transposed.
+KINDS = ("Textures", "FieldRecordings", "Wavetables", "Impulses")
 
 
 def referenced():

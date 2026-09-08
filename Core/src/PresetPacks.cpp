@@ -16,7 +16,7 @@ namespace {
 
 struct PackEntry {
     std::string name, settings, texture, wavetable, impulse, mod, envs;
-    PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f };
+    PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f, 0.5f, 0.5f, 0.5f, { -1, -1 }, -1 };
 };
 struct Pack {
     std::string name;
@@ -117,6 +117,12 @@ bool loadPresetPack(const char* path)
                 if (j < 8) v[j] = static_cast<float>(std::atof(tok.c_str()));
                 else if (j == 8) e.meta.tags = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 0));
                 else if (j == 9) e.meta.loudDb = static_cast<float>(std::atof(tok.c_str()));   // optional: older packs have none
+                else if (j == 10) e.meta.evolve = static_cast<float>(std::atof(tok.c_str()));  // the drone descriptors, added in 1.11.0
+                else if (j == 11) e.meta.rough = static_cast<float>(std::atof(tok.c_str()));
+                else if (j == 12) e.meta.wet = static_cast<float>(std::atof(tok.c_str()));
+                else if (j == 13) e.meta.phrase[0] = static_cast<short>(std::atoi(tok.c_str()));   // what it sounds like,
+                else if (j == 14) e.meta.phrase[1] = static_cast<short>(std::atoi(tok.c_str()));   // chosen by CLAP
+                else if (j == 15) e.meta.cluster = static_cast<short>(std::atoi(tok.c_str()));      // the group it was laid out in
                 ++j;
             }
             e.meta.x = v[0]; e.meta.y = v[1]; e.meta.bright = v[2]; e.meta.motion = v[3];
@@ -214,7 +220,7 @@ int numPresetMeta() { return builtinPresetMetaCount() > 0 ? numPresets() : 0; }
 
 const PresetMeta& presetMeta(int index)
 {
-    static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };
+    static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f, 0.5f, 0.5f, 0.5f, { -1, -1 }, -1 };
     const int b = builtinPresetCount();
     if (index < b) return builtinPresetMeta(index);
     int i = index - b;

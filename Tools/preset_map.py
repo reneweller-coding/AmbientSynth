@@ -27,7 +27,9 @@ OUT_CPP = os.path.join(ROOT, "Core", "src", "PresetMeta.cpp")
 PRESETS_CPP = os.path.join(ROOT, "Core", "src", "Presets.cpp")
 
 TAGS = ["Dark", "Bright", "Calm", "Moving", "Tonal", "Noisy", "Wide", "Bass", "Dense", "Sparse", "Keys", "Generative",
-        "Cosmos", "Feedback", "Sources", "JustIntonation", "Sub", "Stack", "Air"]
+        "Cosmos", "Feedback", "Sources", "JustIntonation", "Sub", "Stack", "Air",
+        # The drone tags (1.11.0), in the same order as PresetTag in PresetMeta.h.
+        "Still", "Evolving", "Smooth", "Rough", "Near", "Far"]
 
 
 def families():
@@ -145,12 +147,15 @@ def write_cpp(rows, fams, stub=False):
     lines.append("    " + ", ".join(f'"{t}"' for t in TAGS))
     lines += ["};", "const PresetMeta kMeta[] = {"]
     for r in rows:
-        lines.append("    { %.4ff, %.4ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %d, 0x%xu, %.1ff },   // %s" %
+        lines.append("    { %.4ff, %.4ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %.3ff, %d, 0x%xu, %.1ff, %.3ff, %.3ff, %.3ff, { %d, %d }, %d },   // %s" %
                      (r["x"], r["y"], r["bright"], r["motion"], r["width"], r["noisy"], r["bass"], r["density"],
-                      r["family"], r["tags"], r.get("rms", 0.0), r["name"]))
+                      r["family"], r["tags"], r.get("rms", 0.0),
+                      r.get("evolve", 0.5), r.get("rough", 0.5), r.get("wet", 0.5),
+                      r.get("phrase", [-1, -1])[0], r.get("phrase", [-1, -1])[1],
+                      r.get("cluster", -1), r["name"]))
     lines += ["};", "}", "",
               "int builtinPresetMetaCount() { return %s; }" % ("0" if stub else "static_cast<int>(sizeof(kMeta) / sizeof(kMeta[0]))"),
-              "const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f };"
+              "const PresetMeta& builtinPresetMeta(int index) { static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f, 0.5f, 0.5f, 0.5f, { -1, -1 }, -1 };"
               " return (index >= 0 && index < builtinPresetMetaCount()) ? kMeta[index] : none; }",
               "int builtinPresetFamilyCount() { return static_cast<int>(sizeof(kFamilies) / sizeof(kFamilies[0])); }",
               "const char* builtinPresetFamilyName(int family) { return (family >= 0 && family < builtinPresetFamilyCount()) ? kFamilies[family] : \"\"; }",

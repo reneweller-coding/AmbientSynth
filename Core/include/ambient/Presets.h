@@ -7,6 +7,7 @@
 // The 168 full presets carry both layers (they are the DAW programs); the Cosmos
 // bank carries Cosmos-only settings.
 #pragma once
+#include <string>
 #include "Params.h"
 #include <cstring>
 
@@ -31,6 +32,14 @@ enum class PresetScope { Full, Sound, Cosmos, ZPlane, Strike };
 // The preset list is the 168 built-in presets followed by every loaded pack, so everything that
 // walks presets by index (DAW programs, the map, routes, the browser) sees packs automatically.
 int numPresets();
+// A line of prose about a preset, in the manner of u-he's browsers: what it sounds like (from the
+// measured descriptors) and what is in it (from its own settings). Generated, never stored, and
+// never a guess -- see Core/src/PresetText.cpp.
+std::string presetDescription(int index);
+// The whole card, in the manner of u-he's PRESET INFO: the description, how it paces itself, what
+// the macros and the wheel are wired to in this preset, and where it is filed. Lines, not a
+// paragraph -- the browser draws the headings.
+std::string presetInfoText(int index);
 const Preset& preset(int index);
 int builtinPresetCount();                 // the compiled-in presets (the first ones)
 const Preset& builtinPreset(int index);

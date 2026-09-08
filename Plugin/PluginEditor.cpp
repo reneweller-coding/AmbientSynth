@@ -77,6 +77,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, false);
     addAndMakeVisible(viewport_);
+    addAndMakeVisible(dragOverlay_);
     buildCells();
     colourCellsByGroup();
     updateSourceCells();   // which cells the types use, before the first layout measures the page
@@ -858,6 +859,9 @@ void AmbientSynthEditor::resized()
 
     // Everything else scrolls below the header.
     viewport_.setBounds(0, kHeaderH, W, H - kHeaderH - stripH);
+    // The drag overlay covers everything and catches nothing: it is only ever drawn on.
+    dragOverlay_.setBounds(0, 0, W, H);
+    dragOverlay_.toFront(false);
 
     content_.setSize(std::max(bodyW_, viewport_.getMaximumVisibleWidth()),
                      std::max(bodyH_, viewport_.getMaximumVisibleHeight()));

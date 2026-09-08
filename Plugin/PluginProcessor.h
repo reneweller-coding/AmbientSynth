@@ -105,8 +105,10 @@ public:
     void setMorphSelectSeconds(float s) { morphSelectSeconds_ = juce::jlimit(0.5f, 600.0f, s); }
     // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
     // come (0..1) -- the browser draws both.
-    int   morphingTo() const { return morphTarget_; }
-    float morphProgress() const { return engine_.morphPosition(); }
+    // What the map draws as the travelling line: the preset the sound is on its way to, and how
+    // far it has come. During a transition that is the crossfade; otherwise nothing is travelling.
+    int   morphingTo() const { return fading_ >= 0 ? soundIndex_ : -1; }
+    float morphProgress() const { return fading_ >= 0 ? fadePos_ : 1.0f; }
     void setMorphSlotFromPreset(int slot, int presetIndex);
     void setMorphSlotFromCurrent(int slot);
     juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
@@ -142,22 +144,48 @@ public:
     bool isPlayingSet() const { return setPlaying_.load(); }
     double setTime() const { return setTime_.load(); }
     // Route over the map (text form, see ambient/Route.h), kept in the plugin state.
-    bool setRouteText(const juce::String& text) { if (!engine_.setRouteText(text.toRawUTF8())) return false; routeText_ = text; return true; }
+    bool setRouteText(const juce::String& text) { if (!live().setRouteText(text.toRawUTF8())) return false; routeText_ = text; return true; }
     juce::String routeText() const { return routeText_; }
-    void clearRoute() { engine_.clearRoute(); routeText_.clear(); }
-    bool addRoutePoint(const ambient::Waypoint& w) { if (!engine_.addRoutePoint(w)) return false; char buf[4096]; engine_.writeRoute(buf, sizeof(buf)); routeText_ = buf; return true; }
+    void clearRoute() { live().clearRoute(); routeText_.clear(); }
+    bool addRoutePoint(const ambient::Waypoint& w) { if (!live().addRoutePoint(w)) return false; char buf[4096]; live().writeRoute(buf, sizeof(buf)); routeText_ = buf; return true; }
     // Favourite presets (browser stars), kept in the plugin state.
     // juce::BigInteger grows on demand, so the library's size is not a limit here.
     bool isFavourite(int preset) const { return preset >= 0 && favourites_[preset]; }
     void setFavourite(int preset, bool on) { if (preset >= 0) favourites_.setBit(preset, on); }
 
     juce::AudioProcessorValueTreeState apvts;
-    ambient::Engine& engine() { return engine_; }
+    // The instrument that is sounding. There are two of them (see selectPreset): a preset change
+    // that is meant to be heard as a transition lets the old one keep playing while the new one
+    // fades in, and the two swap roles when it has arrived. Everything that means "the synth"
+    // -- parameters, notes, the editor's displays -- means the live one.
+    ambient::Engine& engine() { return live(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
-    ambient::Engine engine_;
+    ambient::Engine engines_[2];
+    int  live_ = 0;                          // which of the two is the instrument right now
+    ambient::Engine& live()  { return engines_[live_]; }
+    ambient::Engine& other() { return engines_[live_ ^ 1]; }
+    // A transition in flight: the engine on its way out, and how far the crossfade has come.
+    // -1 when nothing is fading. Equal-power, so the sum never dips in the middle.
+    int   fading_  = -1;
+    float fadePos_ = 0.0f;
+    // Before the ramp starts, the incoming engine is given time to speak: a brain preset's first
+    // note comes when the brain decides to play it, a sample preset's clip may still be loading,
+    // a drone's attack may be ten seconds long. Until the incoming engine is audible (or
+    // kFadeHeadStart seconds have passed) the ramp stands at zero and the outgoing one plays on
+    // at full level -- otherwise the old sound fades into silence and the new one arrives into it.
+    float fadeHead_ = 0.0f;
+    static constexpr float kFadeHeadStart = 8.0f;
+    // The notes held right now, from MIDI, OSC and the set timeline alike. They are handed to the
+    // incoming engine of a transition: a chord held through a preset change stays held.
+    std::array<float, 128> heldVel_{};
+    void noteOn(int note, float vel);
+    void noteOff(int note);
+    void allNotesOff();
+    double sampleRate_ = 48000.0;   // from prepareToPlay; the fade cannot trust getSampleRate() before the host sets it
+    juce::AudioBuffer<float> fadeBuf_;
     // Output muted at the device: set by AMBIENT_MUTE=1, and implied by AMBIENT_MANUAL (the
     // export plays a chord for its pictures; nobody asked to hear it). Read once, at start.
     const bool muteOutput_ = juce::SystemStats::getEnvironmentVariable("AMBIENT_MUTE", "").isNotEmpty()
@@ -206,7 +234,7 @@ private:
     void setParam(ambient::ParamId id, float value) override;
     void setParamNormalised(ambient::ParamId id, float norm) override;
     void event(const ambient::ControlEvent& e) override;
-    void setHeadYaw(float degrees) override { engine_.setHeadYaw(degrees); }
+    void setHeadYaw(float degrees) override { live().setHeadYaw(degrees); }
     ambient::GestureLayer gestures_;
     ambient::OscServer    osc_;
     ambient::EventQueue   events_;

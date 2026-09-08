@@ -161,10 +161,14 @@ juce::String AmbientSynthProcessor::gestureMappings() const
 
 void AmbientSynthProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    for (int i = 0; i < kNumParams; ++i)
-        engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
-    engine_.prepare(sampleRate, samplesPerBlock);
+    for (auto& e : engines_) {
+        for (int i = 0; i < kNumParams; ++i)
+            e.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+        e.prepare(sampleRate, samplesPerBlock);
+    }
     scratch_.setSize(2, samplesPerBlock);
+    fadeBuf_.setSize(2, samplesPerBlock);
+    sampleRate_ = sampleRate > 0.0 ? sampleRate : 48000.0;
 }
 
 bool AmbientSynthProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -191,8 +195,8 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     ControlEvent ev;
     while (events_.pop(ev)) {
         switch (ev.type) {
-        case ControlEvent::Type::NoteOn:       engine_.noteOn(ev.a, ev.b); break;
-        case ControlEvent::Type::NoteOff:      engine_.noteOff(ev.a); break;
+        case ControlEvent::Type::NoteOn:       noteOn(ev.a, ev.b); break;
+        case ControlEvent::Type::NoteOff:      noteOff(ev.a); break;
         case ControlEvent::Type::Preset:       setCurrentProgram(ev.a); break;
         case ControlEvent::Type::SoundPreset:  applySoundPreset(ev.a); break;
         case ControlEvent::Type::CosmosPreset: applyCosmosPreset(ev.a); break;
@@ -204,7 +208,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     // The travelling preset change has arrived: write the target's own values into the parameters
     // and switch the morph off. The engine is already playing exactly those values, so nothing
     // moves -- what changes is that the state is a preset again and not a blend of two.
-    if (morphTarget_ >= 0 && engine_.morphPosition() >= 0.999f) {
+    if (morphTarget_ >= 0 && live().morphPosition() >= 0.999f) {
         const int target = morphTarget_;
         morphTarget_ = -1;
         currentProgram_ = target;
@@ -219,15 +223,15 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
             p->setValueNotifyingHost(0.0f);
     }
     const bool mapNow = raw_[static_cast<size_t>(ParamId::MapActive)]->load() >= 0.5f;
-    if (!mapNow && engine_.mapActive()) {
+    if (!mapNow && live().mapActive()) {
         for (const ParamDesc& d : paramTable()) {
             if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) continue;
-            if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(engine_.blendValue(d.id)));
+            if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(live().blendValue(d.id)));
         }
     }
 
     for (int i = 0; i < kNumParams; ++i)
-        engine_.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+        live().setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
 
     // The host's play head, when there is one (the standalone has none and the engine then runs
     // its own clock).
@@ -235,7 +239,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         if (const auto pos = ph->getPosition()) {
             const double bpm = pos->getBpm().hasValue() ? *pos->getBpm() : 0.0;
             const double ppq = pos->getPpqPosition().hasValue() ? *pos->getPpqPosition() : 0.0;
-            engine_.setHostClock(bpm, ppq, pos->getIsPlaying());
+            live().setHostClock(bpm, ppq, pos->getIsPlaying());
         }
     }
 
@@ -244,11 +248,11 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     {
         float rx, ry, rr;
         const bool wasActive = raw_[static_cast<size_t>(ParamId::RouteActive)]->load() >= 0.5f;
-        engine_.routeStep(buffer.getNumSamples() / getSampleRate(), rx, ry, rr);
+        live().routeStep(buffer.getNumSamples() / getSampleRate(), rx, ry, rr);
         if (wasActive) {
             auto mirror = [this](ParamId id) {
                 if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key)) {
-                    const float v = engine_.getParam(id);
+                    const float v = live().getParam(id);
                     if (std::fabs(p->convertFrom0to1(p->getValue()) - v) > 1e-6f) p->setValueNotifyingHost(p->convertTo0to1(v));
                 }
             };
@@ -265,10 +269,10 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
             switch (e.type) {
             case TimelineEvent::Type::Param:
                 if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(e.a)].key)) p->setValueNotifyingHost(p->convertTo0to1(e.v));
-                engine_.setParam(static_cast<ParamId>(e.a), e.v);
+                live().setParam(static_cast<ParamId>(e.a), e.v);
                 break;
-            case TimelineEvent::Type::NoteOn:  engine_.noteOn(e.a, e.v); break;
-            case TimelineEvent::Type::NoteOff: engine_.noteOff(e.a); break;
+            case TimelineEvent::Type::NoteOn:  noteOn(e.a, e.v); break;
+            case TimelineEvent::Type::NoteOff: noteOff(e.a); break;
             }
         });
         setClock_ = t1;
@@ -296,27 +300,27 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         // With MPE every finger has its own channel; without it, expression addresses every
         // sounding voice, which is what channel pressure and the wheel mean on a plain keyboard.
         const int expressed = mpe ? mpeNote_[ch] : -1;
-        if (m.isNoteOn())            { if (mpe) mpeNote_[ch] = m.getNoteNumber(); engine_.noteOn(m.getNoteNumber(), m.getFloatVelocity()); }
-        else if (m.isNoteOff())      { if (mpe && mpeNote_[ch] == m.getNoteNumber()) mpeNote_[ch] = -1; engine_.noteOff(m.getNoteNumber()); }
-        else if (m.isPitchWheel())   engine_.setBend(expressed, (m.getPitchWheelValue() - 8192) / 8192.0f);
-        else if (m.isChannelPressure()) engine_.setPressure(expressed, m.getChannelPressureValue() / 127.0f);
-        else if (m.isAftertouch())   engine_.setPressure(m.getNoteNumber(), m.getAfterTouchValue() / 127.0f);
-        else if (m.isController() && m.getControllerNumber() == 74) engine_.setSlide(expressed, m.getControllerValue() / 127.0f);
-        else if (m.isAllNotesOff() || m.isAllSoundOff()) engine_.allNotesOff();
+        if (m.isNoteOn())            { if (mpe) mpeNote_[ch] = m.getNoteNumber(); noteOn(m.getNoteNumber(), m.getFloatVelocity()); }
+        else if (m.isNoteOff())      { if (mpe && mpeNote_[ch] == m.getNoteNumber()) mpeNote_[ch] = -1; noteOff(m.getNoteNumber()); }
+        else if (m.isPitchWheel())   live().setBend(expressed, (m.getPitchWheelValue() - 8192) / 8192.0f);
+        else if (m.isChannelPressure()) live().setPressure(expressed, m.getChannelPressureValue() / 127.0f);
+        else if (m.isAftertouch())   live().setPressure(m.getNoteNumber(), m.getAfterTouchValue() / 127.0f);
+        else if (m.isController() && m.getControllerNumber() == 74) live().setSlide(expressed, m.getControllerValue() / 127.0f);
+        else if (m.isAllNotesOff() || m.isAllSoundOff()) allNotesOff();
         else if (m.isMidiClock()) {   // 24 a quarter; the interval between two carries the tempo
             const double t = clockSamples_ + meta.samplePosition;
-            engine_.midiClockTick(lastClockSample_ >= 0.0 ? (t - lastClockSample_) / getSampleRate() : 0.0);
+            live().midiClockTick(lastClockSample_ >= 0.0 ? (t - lastClockSample_) / getSampleRate() : 0.0);
             lastClockSample_ = t;
         }
-        else if (m.isMidiStart())    engine_.midiClockStart();
-        else if (m.isMidiContinue()) engine_.midiClockContinue();
-        else if (m.isMidiStop())     engine_.midiClockStop();
+        else if (m.isMidiStart())    live().midiClockStart();
+        else if (m.isMidiContinue()) live().midiClockContinue();
+        else if (m.isMidiStop())     live().midiClockStop();
         else if (m.isController()) {
             const int cc = m.getControllerNumber();
             if (cc < 0 || cc >= 128) continue;
             // The wheel is a modulation source in its own right. It is not an "else": a player
             // may also have learned CC 1 onto a knob, and both should work.
-            if (cc == 1) engine_.setWheel(m.getControllerValue() / 127.0f);
+            if (cc == 1) live().setWheel(m.getControllerValue() / 127.0f);
             const int learn = learnTarget_.exchange(-1);
             if (learn >= 0) {
                 for (auto& c : ccMap_) if (c.load() == learn) c.store(-1);   // one controller per parameter
@@ -333,10 +337,51 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 
     const int n = buffer.getNumSamples();
     if (scratch_.getNumSamples() < n) scratch_.setSize(2, n, false, false, true);
+    if (fadeBuf_.getNumSamples() < n) fadeBuf_.setSize(2, n, false, false, true);
+    // Always into scratch_, so the two-engine mix and the mono fold-down read the same place.
+    live().process(scratch_.getWritePointer(0), scratch_.getWritePointer(1), n);
+    if (fading_ >= 0) {
+        // A preset transition: the preset that is leaving is still playing, on its own engine,
+        // with every parameter it had -- nothing in it moves. It goes out under a cosine and the
+        // new one comes in under a sine, so the sum keeps its power the whole way and there is
+        // no dip in the middle and no moment where anything switches. A parameter morph between
+        // two unrelated presets cannot do this: its ninety-three switches all flipped at half way
+        // and every source restarted, and that is what it sounded like -- a cut in the middle.
+        const float secs = std::max(morphSelectSeconds_, 0.25f);
+        const float t0 = fadePos_;
+        // The ramp does not start before there is something to ramp in. Measured on the incoming
+        // engine's own output, before any gain: -60 dBFS is audible, and a brain that has not
+        // played its first note yet is not. The head start is capped, so a preset that is silent
+        // by design still arrives.
+        bool ramping = t0 > 0.0f;
+        if (!ramping) {
+            float e = 0.0f;
+            for (int ch = 0; ch < 2; ++ch) {
+                const float* s = scratch_.getReadPointer(ch);
+                for (int i = 0; i < n; ++i) e += s[i] * s[i];
+            }
+            fadeHead_ += static_cast<float>(n / sampleRate_);
+            ramping = std::sqrt(e / static_cast<float>(2 * n)) > 1e-3f || fadeHead_ >= kFadeHeadStart;
+        }
+        const float t1 = ramping ? std::min(1.0f, t0 + static_cast<float>(n) / static_cast<float>(sampleRate_ * secs)) : 0.0f;
+        engines_[fading_].process(fadeBuf_.getWritePointer(0), fadeBuf_.getWritePointer(1), n);
+        const float inA = std::sin(juce::MathConstants<float>::halfPi * t0), inB = std::sin(juce::MathConstants<float>::halfPi * t1);
+        const float outA = std::cos(juce::MathConstants<float>::halfPi * t0), outB = std::cos(juce::MathConstants<float>::halfPi * t1);
+        for (int ch = 0; ch < 2; ++ch) {
+            scratch_.applyGainRamp(ch, 0, n, inA, inB);
+            scratch_.addFromWithRamp(ch, 0, fadeBuf_.getReadPointer(ch), n, outA, outB);
+        }
+        fadePos_ = t1;
+        if (t1 >= 1.0f) {   // arrived: the old one is silent by now and goes to sleep
+            engines_[fading_].allNotesOff();
+            engines_[fading_].reset();
+            fading_ = -1;
+        }
+    }
     if (buffer.getNumChannels() >= 2) {
-        engine_.process(buffer.getWritePointer(0), buffer.getWritePointer(1), n);
+        buffer.copyFrom(0, 0, scratch_, 0, 0, n);
+        buffer.copyFrom(1, 0, scratch_, 1, 0, n);
     } else if (buffer.getNumChannels() == 1) {
-        engine_.process(scratch_.getWritePointer(0), scratch_.getWritePointer(1), n);
         buffer.copyFrom(0, 0, scratch_, 0, 0, n);
         buffer.addFrom(0, 0, scratch_, 1, 0, n);
         buffer.applyGain(0.5f);
@@ -422,7 +467,7 @@ void AmbientSynthProcessor::loadPresetFiles(int index)
                 const juce::String p = k < parts.size() ? parts[k].trim() : juce::String();
                 const juce::File f = p.isNotEmpty() ? onDisk(p) : juce::File();
                 if (f != juce::File()) loadTextureFile(k, f);
-                else { engine_.clearTexture(k); textureFile_[k] = juce::File(); }
+                else { live().clearTexture(k); textureFile_[k] = juce::File(); }
             }
         }
     }
@@ -438,7 +483,7 @@ void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
     }, scope);
     // The matrix rows and the envelope shapes are data, not parameters, so they do not travel
     // through the parameter tree: the engine takes them straight from the preset.
-    if (scope != PresetScope::Cosmos) engine_.applyPresetModulation(pr);
+    if (scope != PresetScope::Cosmos) live().applyPresetModulation(pr);
 }
 
 void AmbientSynthProcessor::setCurrentProgram(int index)
@@ -482,7 +527,7 @@ void AmbientSynthProcessor::applyLevelMatch(int index)
     if (loud >= -0.5f || loud < -80.0f) return;         // 0 means "never measured"
     constexpr float kTarget = -20.5f;                   // the measured median of the built-in presets
     if (auto* p = apvts.getParameter(paramDesc(ParamId::MasterGain).key)) {
-        const float now = engine_.getParam(ParamId::MasterGain);
+        const float now = live().getParam(ParamId::MasterGain);
         const float want = juce::jlimit(-40.0f, 12.0f, now + juce::jlimit(-12.0f, 12.0f, kTarget - loud));
         p->setValueNotifyingHost(p->convertTo0to1(want));
     }
@@ -519,7 +564,7 @@ bool AmbientSynthProcessor::loadScalaText(const juce::String& text, const juce::
 {
     FixedScale s;
     if (!parseScala(text.toRawUTF8(), s)) return false;
-    engine_.setUserScale(s);
+    live().setUserScale(s);
     scalaText_ = text;
     userScaleName_ = displayName.isNotEmpty() ? displayName : juce::String(s.name);
     if (auto* p = apvts.getParameter("scale")) {
@@ -557,7 +602,7 @@ bool AmbientSynthProcessor::loadTextureFile(int slot, const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
-    engine_.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+    live().setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
                        ambient::loopFromName(file.getFileName().toRawUTF8()));
     textureFile_[slot] = file;
     return true;
@@ -568,7 +613,7 @@ bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());
-    engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+    live().setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
                        ambient::loopFromName(file.getFileName().toRawUTF8()));
     for (auto& f : textureFile_) f = file;
     return true;
@@ -585,8 +630,8 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
     if (!reader->read(&buf, 0, n, 0, true, true)) return false;
     const float* L = buf.getReadPointer(0);
     const float* R = buf.getNumChannels() > 1 ? buf.getReadPointer(1) : nullptr;
-    if (second) { engine_.setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
-    else        { engine_.setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
+    if (second) { live().setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
+    else        { live().setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
     return true;
 }
 
@@ -594,7 +639,7 @@ bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
 {
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
-    if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
+    if (!live().loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
     wavetableFile_ = file;
     return true;
 }
@@ -657,29 +702,52 @@ bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
 void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
 {
     if (index < 0 || index >= numPresets()) return;
-    if (!viaMorph || !morphOnSelect_) { morphTarget_ = -1; setCurrentProgram(index); return; }
-    // The files a preset brings (its texture, its impulse, its wavetable) cannot be blended --
-    // they are loaded, and they belong to the target. They arrive at the start of the journey,
-    // which is audible only where the preset that is leaving used the same slot for something
-    // else; the alternative, loading them at the end, puts a click exactly where the travelling
-    // was supposed to hide one.
-    setMorphSlotFromCurrent(0);
-    setMorphSlotFromPreset(1, index);
-    loadPresetFiles(index);
-    engine_.applyPresetModulation(preset(index));
-    slotName_[0] = soundName_.isNotEmpty() ? soundName_ : juce::String("(playing)");
-    auto set = [this](ParamId id, float v) {
-        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
-            p->setValueNotifyingHost(p->convertTo0to1(v));
-    };
-    set(ParamId::MorphGlide, morphSelectSeconds_);
-    set(ParamId::MorphPos, 0.0f);
-    set(ParamId::MorphActive, 1.0f);
-    engine_.setParam(ParamId::MorphPos, 0.0f);       // start at A, whatever the position was
-    engine_.setParam(ParamId::MorphActive, 1.0f);
-    engine_.resetMorphPosition(0.0f);
-    set(ParamId::MorphPos, 1.0f);
-    morphTarget_ = index;
+    if (!viaMorph || !morphOnSelect_) { fading_ = -1; setCurrentProgram(index); return; }
+    // A transition, not a morph. The preset that is playing keeps playing, untouched, on the
+    // engine it is on; the new one is loaded onto the other engine, which then becomes the
+    // instrument -- parameters, notes and the displays all move to it at once -- and the two are
+    // crossfaded in processBlock over morphSelectSeconds_. Nothing is interpolated, so nothing
+    // has to be interpolable: the two presets may share nothing at all and still meet in the air.
+    // If a transition is already running, the one on its way out is simply dropped -- two
+    // engines is what there is, and a third preset chosen mid-fade wants the one that was
+    // arriving to leave, not the one that already left.
+    const int outgoing = live_;
+    if (fading_ >= 0) { engines_[fading_].allNotesOff(); engines_[fading_].reset(); }
+    live_ = outgoing ^ 1;
+    // The incoming engine starts clean: whatever it played last time is gone, and it takes the
+    // full preset the way a program change would, files included.
+    live().allNotesOff();
+    live().reset();
+    fading_  = outgoing;
+    fadePos_ = 0.0f;
+    fadeHead_ = 0.0f;
+    setCurrentProgram(index);
+    // The chord that is being held is held on the new instrument too. Without this a player
+    // holding a chord through a preset change heard it die with the old preset and nothing take
+    // its place -- the notes had gone to an engine that was on its way out.
+    for (int i = 0; i < 128; ++i)
+        if (heldVel_[static_cast<size_t>(i)] > 0.0f) live().noteOn(i, heldVel_[static_cast<size_t>(i)]);
+}
+
+// Notes go to the live engine and are remembered, so a transition can hand them on.
+void AmbientSynthProcessor::noteOn(int note, float vel)
+{
+    if (note < 0 || note >= 128) return;
+    heldVel_[static_cast<size_t>(note)] = std::max(vel, 1.0f / 127.0f);
+    live().noteOn(note, vel);
+}
+
+void AmbientSynthProcessor::noteOff(int note)
+{
+    if (note < 0 || note >= 128) return;
+    heldVel_[static_cast<size_t>(note)] = 0.0f;
+    live().noteOff(note);
+}
+
+void AmbientSynthProcessor::allNotesOff()
+{
+    heldVel_.fill(0.0f);
+    live().allNotesOff();
 }
 
 void AmbientSynthProcessor::setMorphSlotFromPreset(int slot, int presetIndex)
@@ -688,7 +756,7 @@ void AmbientSynthProcessor::setMorphSlotFromPreset(int slot, int presetIndex)
     float values[kNumParams];
     for (int i = 0; i < kNumParams; ++i) values[i] = raw_[static_cast<size_t>(i)]->load();
     applyPreset(preset(presetIndex), [&](ParamId id, float v) { values[static_cast<int>(id)] = v; });
-    engine_.setMorphSlot(slot, values);
+    live().setMorphSlot(slot, values);
     slotName_[slot & 1] = preset(presetIndex).name;
 }
 
@@ -696,7 +764,7 @@ void AmbientSynthProcessor::setMorphSlotFromCurrent(int slot)
 {
     float values[kNumParams];
     for (int i = 0; i < kNumParams; ++i) values[i] = raw_[static_cast<size_t>(i)]->load();
-    engine_.setMorphSlot(slot, values);
+    live().setMorphSlot(slot, values);
     slotName_[slot & 1] = "(captured)";
 }
 
@@ -722,10 +790,10 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
     {   // modulation: the matrix and the six envelope shapes (see ambient/Modulation.h)
         char buf[4096];
-        if (engine_.writeModMatrix(buf, sizeof(buf)) > 0) state.setProperty("modMatrix", juce::String(buf), nullptr);
+        if (live().writeModMatrix(buf, sizeof(buf)) > 0) state.setProperty("modMatrix", juce::String(buf), nullptr);
         juce::String envs;
         for (int i = 0; i < ambient::kNumModEnvs; ++i) {
-            if (engine_.writeEnvShape(i, buf, sizeof(buf)) > 0) envs += juce::String(buf);
+            if (live().writeEnvShape(i, buf, sizeof(buf)) > 0) envs += juce::String(buf);
             if (i + 1 < ambient::kNumModEnvs) envs += "~";
         }
         state.setProperty("modEnvs", envs, nullptr);
@@ -756,7 +824,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         juce::ValueTree m(slot == 0 ? "morphA" : "morphB");
         m.setProperty("name", slotName_[slot], nullptr);
         float values[kNumParams];
-        engine_.morphSlot(slot, values);
+        live().morphSlot(slot, values);
         for (int i = 0; i < kNumParams; ++i) m.setProperty(paramTable()[static_cast<size_t>(i)].key, values[i], nullptr);
         state.addChild(m, -1, nullptr);
     }
@@ -787,7 +855,7 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
                     const ParamDesc& d = paramTable()[static_cast<size_t>(i)];
                     values[i] = m.hasProperty(d.key) ? static_cast<float>(static_cast<double>(m.getProperty(d.key))) : d.def;
                 }
-                engine_.setMorphSlot(slot, values);
+                live().setMorphSlot(slot, values);
                 slotName_[slot] = m.getProperty("name").toString();
             }
             tree.removeChild(tree.getChildWithName("midi"), nullptr);
@@ -823,11 +891,11 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             const juce::String route = tree.getProperty("route").toString();
             const juce::String modMatrix = tree.getProperty("modMatrix").toString();
             const juce::String modEnvs = tree.getProperty("modEnvs").toString();
-            if (modMatrix.isNotEmpty()) engine_.setModMatrixText(modMatrix.toRawUTF8());
+            if (modMatrix.isNotEmpty()) live().setModMatrixText(modMatrix.toRawUTF8());
             if (modEnvs.isNotEmpty()) {
                 const juce::StringArray parts = juce::StringArray::fromTokens(modEnvs, "~", "");
                 for (int i = 0; i < juce::jmin(parts.size(), ambient::kNumModEnvs); ++i)
-                    if (parts[i].isNotEmpty()) engine_.setEnvShape(i, parts[i].toRawUTF8());
+                    if (parts[i].isNotEmpty()) live().setEnvShape(i, parts[i].toRawUTF8());
             }
             if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             if (route.isNotEmpty()) setRouteText(route);

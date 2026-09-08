@@ -13,6 +13,8 @@
 #include "PluginProcessor.h"
 #include <atomic>
 #include <cstdio>
+#include <cstring>
+#include <cmath>
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -219,6 +221,79 @@ int main()
         stop.store(true);
         audio.join();
         check(!bad.load(), "the output stays finite while parameters are written from another thread");
+        p->releaseResources();
+    }
+
+    {   // A preset transition is a crossfade between two engines, not a parameter morph. The
+        // morph flipped every switch at half way and every source restarted -- audibly a cut in
+        // the middle. What is checked here is what the ear checks: that the level never jumps
+        // from one block to the next while the change travels, that the displays know what is
+        // travelling and when it has arrived, and that both engines stay finite throughout.
+        const double sr = 48000.0; const int block = 256;
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(sr, block);
+        p->setMorphSelectSeconds(2.0f);
+        // Two presets that share as little as possible: the first built-in bank, and the first
+        // pack preset with a grain texture in its first slot if a library is loaded.
+        int a = 1, b = -1;
+        for (int i = 0; i < numPresets() && b < 0; ++i) {
+            const char* st = preset(i).settings;
+            if (st != nullptr && std::strstr(st, "src1_type=Texture") != nullptr) b = i;
+        }
+        if (b < 0) b = 2;
+        juce::AudioBuffer<float> buf(2, block);
+        juce::MidiBuffer midi;
+        auto rmsOf = [&]() {
+            double e = 0.0;
+            for (int c = 0; c < 2; ++c) for (int i = 0; i < block; ++i) { const float v = buf.getReadPointer(c)[i]; e += v * v; }
+            return std::sqrt(e / (2.0 * block)) + 1e-9;
+        };
+        p->selectPreset(a, false);
+        midi.addEvent(juce::MidiMessage::noteOn(1, 57, 0.8f), 0);
+        midi.addEvent(juce::MidiMessage::noteOn(1, 64, 0.7f), 0);
+        for (int k = 0; k < 400; ++k) { buf.clear(); p->processBlock(buf, midi); midi.clear(); }   // settle, chord held
+        const double before = rmsOf();
+        p->selectPreset(b, true);
+        check(p->morphingTo() == b, "a travelling preset change names its destination");
+        // The ramp waits for the incoming engine to be audible (up to a capped head start) and only
+        // then runs its two seconds; the checks below count from where it starts.
+        // Level is compared between neighbouring windows of sixteen blocks (85 ms): one block is
+        // shorter than a period of the sub these presets carry, and the block RMS of a 40 Hz tone
+        // swings by several dB on its own. A cut in the middle would still show as a step of many
+        // dB between two 85 ms windows; the same measure on the arrived preset alone, sounding
+        // steadily, is printed beside it as the yardstick for what "no step" looks like here.
+        bool ok = true; double worstJump = 0.0, mid = -1.0, jumpFrom = 0.0, jumpTo = 0.0; int jumpAt = -1, head = 0;
+        double win = 0.0, prevWin = -1.0;
+        auto step = [&](int k, double& worst, int* at, double* from, double* to) {
+            win += rmsOf() * rmsOf();
+            if ((k + 1) % 16 != 0) return;
+            const double now = std::sqrt(win / 16.0); win = 0.0;
+            if (prevWin > 0.0 && std::max(now, prevWin) > 3e-4) {   // a step in the noise floor is not a step
+                const double j = std::fabs(20.0 * std::log10(now / prevWin));
+                if (j > worst) { worst = j; if (at) { *at = k; *from = prevWin; *to = now; } }
+            }
+            prevWin = now;
+        };
+        while (p->morphProgress() <= 0.0f && head < 2000) { buf.clear(); p->processBlock(buf, midi); ++head; }
+        for (int k = 0; k < 416; ++k) {
+            buf.clear(); p->processBlock(buf, midi);
+            ok = ok && finite(buf);
+            step(k, worstJump, &jumpAt, &jumpFrom, &jumpTo);
+            if (k == 187) mid = p->morphProgress();
+        }
+        const double arrived = rmsOf();
+        double steadyJump = 0.0; win = 0.0; prevWin = -1.0;
+        for (int k = 0; k < 800; ++k) { buf.clear(); p->processBlock(buf, midi); step(k, steadyJump, nullptr, nullptr, nullptr); }
+        const double later = rmsOf();
+        std::printf("  [probe] transition %d -> %d: level before %.1f dBFS, head start %d blocks, worst 85 ms step %.2f dB at block %d (%.1f -> %.1f dBFS; steady preset alone %.2f dB), half way at %.2f, on arrival %.1f dBFS, 4 s later %.1f dBFS, voices %d\n",
+                    a, b, 20.0 * std::log10(before), head, worstJump, jumpAt, 20.0 * std::log10(jumpFrom), 20.0 * std::log10(jumpTo), steadyJump, mid,
+                    20.0 * std::log10(arrived), 20.0 * std::log10(later), p->engine().activeVoices());
+        check(ok, "both engines stay finite through a transition");
+        check(head < 2000, "the incoming engine speaks and the ramp starts");
+        check(worstJump < 3.0, "a transition never steps in level from one 85 ms window to the next");
+        check(mid > 0.3 && mid < 0.7, "half way through the time given, the fade is about half way");
+        check(arrived > 1e-3, "when the old preset is gone the new one is already audible");
+        check(p->morphingTo() < 0 && p->morphProgress() >= 1.0f, "when the time is up the change has arrived and nothing travels");
         p->releaseResources();
     }
 

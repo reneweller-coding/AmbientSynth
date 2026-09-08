@@ -15,6 +15,12 @@
 # for people who would rather not run an installer at all.
 param(
     [string]$Version = "",
+    # Which release the sample archives hang on. It is NOT always the release being built: the
+    # content is 8 GB and only changes when the library does, so it stays with the tag that
+    # introduced it and later installers point back at that one. Hardcoding it in the .iss meant
+    # every installer since 1.0.0 asked v1.0.0 for files that had moved -- a 404 in the middle of
+    # somebody's install, which is where this was finally noticed.
+    [string]$ContentTag = "v1.11.0",
     [switch]$SkipBuild,       # reuse whatever is in build-release already
     [switch]$NoSetup,         # stage and zip, but do not call the Inno compiler
     [switch]$SkipManual       # reuse the manual already in docs/manual
@@ -175,7 +181,9 @@ if (-not $NoSetup) {
     $iscc = Get-ChildItem "C:\Program Files\Inno Setup *\ISCC.exe", "C:\Program Files (x86)\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
             Select-Object -First 1 -ExpandProperty FullName
     if (-not $iscc) { throw "Inno Setup not found. winget install JRSoftware.InnoSetup, or run with -NoSetup." }
-    & $iscc "/DVersion=$Version" (Join-Path $root "Deploy\AmbientSynth.iss")
+    $contentUrl = "https://github.com/reneweller-coding/AmbientSynth/releases/download/$ContentTag"
+    Write-Host "  sample library from $contentUrl"
+    & $iscc "/DVersion=$Version" "/DContentBaseUrl=$contentUrl" (Join-Path $root "Deploy\AmbientSynth.iss")
     if ($LASTEXITCODE -ne 0) { throw "the installer failed to build" }
     $setup = Join-Path $out "AmbientSynth-$Version-Setup.exe"
     Write-Host ("  setup: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB)) -ForegroundColor Green

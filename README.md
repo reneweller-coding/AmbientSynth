@@ -101,10 +101,12 @@ since 2013), a VST3 host if you want the plugin.
   conductor's own **cascade** excitation -- the one source that comes from what
   the piece is doing rather than from a clock -- all through one matrix onto any
   knob, including the modulators' own.
-* **6800 presets in 34 packs**, each written in the spirit of an artist of
-  the genre, every one rendered, measured and gain-matched; 1700 samples, 608
-  wavetables and 240 impulse responses (forty of them struck objects cut from
-  the field recordings, for convolving a pad with a piece of the world). A
+* **8400 presets in 42 packs**, each written in the spirit of an artist of
+  the genre, every one rendered, measured and gain-matched; 6355 samples (3030
+  tonal, 3325 environments), 2096 wavetables and 546 impulse responses. Two
+  thirds of the wavetables and half the impulses are cut from the recordings
+  rather than designed: a table sliced out of a bowed cymbal, a reverb whose
+  tail is a minute of rain. A
   browser that filters by measured character, and a **preset map**: a free
   cloud, dense where the library repeats itself and empty where it is thin,
   laid out from nine measured descriptors -- three of them about what a *drone*
@@ -175,11 +177,9 @@ The setup installs, each with its own checkbox:
 
 * the **standalone** (always) into Program Files, with a Start-menu entry,
 * the **VST3** into `Common Files\VST3`,
-* the **preset library** (34 packs, 6800 presets) into `ProgramData\AmbientSynth\Packs`,
-* the **sample library** — 1848 samples, wavetables and impulse responses, 6.1 GB in six
-  archives (467 of them seamless field recordings for the Stretch type, 40 struck objects for the
-  convolution room), downloaded from the release and checked against its hash — into the same
-  folder,
+* the **preset library** (42 packs, 8400 presets) into `ProgramData\AmbientSynth\Packs`,
+* the **sample library** — 8997 samples, wavetables and impulse responses, downloaded from the
+  release and checked against its hash — into the same folder,
 
 all four on by default.
 
@@ -259,7 +259,7 @@ and a wavetable of their own. They appear everywhere the built-in presets do
 -- programs, browser, map, routes -- each pack as its own family. Drop
 `*.ambientpack` files into `Documents/AmbientSynth/Packs`, or point
 `AMBIENT_PACKS` at a folder. [`Library/`](Library/README.md) is a generated
-library of 6800 presets in 34 packs with the samples, wavetables and
+library of 8400 presets in 42 packs with the samples, wavetables and
 impulse responses they play. *Save…* / *Load…* store the whole
 state as an `.ambientsynth` file. Play MIDI notes to add your own voices;
 they sit in the foreground (see *Keys Depth*) and the lowest held key becomes

@@ -1882,9 +1882,9 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 6800 presets in 34 packs, with 1700
-clips (1200 textures and 500 seamless field recordings), 608 wavetables and
-200 impulse responses (see
+`Library/` holds a generated library of 8400 presets in 42 packs, with 6355
+clips (3030 tonal in Textures, 3325 environments in FieldRecordings), 2096
+wavetables and 546 impulse responses (see
 `Library/README.md` and `Tools/library/`). Its descriptors and map positions
 are measured, not estimated: `Tools/library/measure_packs.py` renders all six
 thousand and writes the result back into the pack files, and corrects each

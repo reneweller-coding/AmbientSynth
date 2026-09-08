@@ -151,6 +151,98 @@ def main():
     envs = sum(1 for r in rows if r["envs"])
     print(f"  {envs} presets carry drawn envelopes ({100.0*envs/n:.0f} %)")
 
+    # ---- where the movement comes from ----------------------------------------------------
+    # Sources fall into four kinds, and the mix is the whole character of the library: a clock,
+    # a hand, the instrument listening to itself, or a system with its own dynamics.
+    KIND = {}
+    for k in ("lfo1", "lfo2", "lfo3", "lfo4", "lfo5", "lfo6", "lfo7", "lfo8"):
+        KIND[k] = "clocks (LFOs)"
+    for k in ("macro1", "macro2", "macro3", "macro4", "macro5", "macro6", "macro7", "macro8",
+              "macro_a", "macro_b", "macro_c", "macro_d", "wheel", "pressure", "slide", "velocity",
+              "keytrack", "note"):
+        KIND[k] = "your hands"
+    for k in ("env1", "env2", "env3", "env4", "amp", "beat", "coherence", "tuning", "surprise",
+              "consonance", "keyfind", "voices", "level"):
+        KIND[k] = "itself"
+    for k in ("lorenz_x", "lorenz_y", "lorenz_z", "rossler_x", "rossler_y", "rossler_z",
+              "lenia_a", "lenia_b", "lenia_c", "lenia", "cascade", "random", "field_a", "field_b",
+              "field_c", "field_d", "tide", "wander"):
+        KIND[k] = "its own weather"
+    kinds = collections.Counter()
+    for src, v in srcs.items():
+        kinds[KIND.get(src, KIND.get(src.rstrip("0123456789"), "other"))] += v
+    total = sum(kinds.values())
+    print("\n  WHERE THE MOVEMENT COMES FROM")
+    for k, v in kinds.most_common():
+        print(f"     {k:18s} {v:6d}  {100.0*v/total:5.1f} %  {bar(v, total, 22)}")
+    print("  every source, by how many routes it drives:")
+    for k, v in srcs.most_common():
+        print(f"     {k:14s} {v:6d}  {100.0*v/total:5.1f} %")
+
+    # How many routes a preset carries, and how deep they go.
+    h = collections.Counter(routes)
+    print("\n  ROUTES PER PRESET")
+    for k in sorted(h):
+        print(f"     {k:2d} routes {h[k]:6d}  {100.0*h[k]/n:5.1f} %  {bar(h[k], n, 22)}")
+    depths, negative, unipolar, gated = [], 0, 0, 0
+    for r in rows:
+        for row in r["mod"].split(";"):
+            if ">" not in row or ":" not in row:
+                continue
+            parts = row.split(":")
+            try:
+                d = float(parts[1])
+            except (ValueError, IndexError):
+                continue
+            depths.append(abs(d))
+            negative += d < 0
+            unipolar += any(x == "u" for x in parts[2:])
+            gated += any(x.startswith("macro") for x in parts[2:])
+    if depths:
+        import statistics
+        print(f"\n  DEPTHS\n     median {statistics.median(depths):.3f} of the target's range, "
+              f"{100.0*negative/len(depths):.0f} % pull downwards, "
+              f"{100.0*unipolar/len(depths):.0f} % one-sided, {gated} gated by a macro")
+
+    # The clocks themselves: how slow is slow.
+    rates = []
+    for r in rows:
+        for i in range(1, 9):
+            v = r["set"].get(f"lfo{i}_rate")
+            if v:
+                try:
+                    hz = float(v)
+                except ValueError:
+                    continue
+                if hz > 0:
+                    rates.append(1.0 / hz)
+    if rates:
+        rates.sort()
+        q = lambda f: rates[int(f * (len(rates) - 1))]
+        print(f"  LFO PERIODS\n     {len(rates)} LFOs set; 10 % faster than {q(0.1):.0f} s, "
+              f"median {q(0.5):.0f} s, 10 % slower than {q(0.9):.0f} s, longest {rates[-1]:.0f} s")
+    shapes = collections.Counter(r["set"].get(f"lfo{i}_shape") for r in rows for i in range(1, 9)
+                                 if r["set"].get(f"lfo{i}_shape"))
+    if shapes:
+        print("     shapes: " + ", ".join(f"{k} {v}" for k, v in shapes.most_common()))
+
+    # Targets by the section of the instrument they sit in.
+    sect = {}
+    try:
+        out = subprocess.run([RENDER, "--list"], capture_output=True, text=True,
+                             encoding="utf-8", timeout=120).stdout
+        for m in re.finditer(r"^(\w+)\s{2,}(.+?)\s{2,}\[", out, re.M):
+            sect[m.group(1)] = m.group(2).strip()
+    except Exception:
+        pass
+    if sect:
+        bysec = collections.Counter()
+        for t, v in tgts.items():
+            bysec[sect.get(t, "?")] += v
+        print("\n  WHAT IS MODULATED, BY SECTION")
+        for k, v in bysec.most_common(14):
+            print(f"     {k:20s} {v:6d}  {100.0*v/sum(bysec.values()):5.1f} %  {bar(v, sum(bysec.values()), 22)}")
+
     # ---- parameter coverage ---------------------------------------------------------------
     every = set(all_params())
     if every:

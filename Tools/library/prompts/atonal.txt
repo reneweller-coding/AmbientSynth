@@ -1,0 +1,243 @@
+# Atonal material for Library/FieldRecordings: environments and noise, nothing with a pitch to
+# follow. A grain slot plays these free, as a bed. One line per idea.
+wind over a bare hilltop, steady
+wind through pine forest, high and hissing
+wind through dry grass on a plain
+wind around the corner of a building
+wind in a chimney, gusting
+a gale against a window at night
+a blizzard across an open field
+wind over sand dunes, fine and dry
+a breeze through poplar leaves
+wind through a wire fence in a field
+air moving in a large empty warehouse
+a draught under a door
+rain on a tin roof, steady
+rain on leaves in a wood
+heavy rain on a pavement at night
+drizzle on a still lake
+rain in a courtyard with a drain running
+hail on a car roof
+rain dripping from gutters after a storm
+a thunderstorm rolling away over hills
+distant thunder without rain
+a stream over stones in a wood
+a river in flood, brown and heavy
+a waterfall heard from a hundred metres
+water dripping in a cave
+water lapping under a wooden pier
+waves on a shingle beach
+surf on a rocky headland
+an ocean swell from a boat at anchor
+a harbour at night, water and ropes
+a fountain in a stone courtyard
+water running into a metal sink
+a bath filling in a tiled room
+a kettle coming to the boil
+a radiator gurgling in an old flat
+ice cracking on a frozen lake
+meltwater under a glacier
+snow falling on dry leaves
+footsteps in deep snow
+a frozen rope creaking under load
+an icicle breaking and falling
+a fire crackling in a grate
+a bonfire at a distance
+embers settling in ash
+a gas flame under a pan
+a match struck and burning
+a forest at dawn, birds far off
+a dense insect chorus at dusk
+crickets in a warm night field
+bees in a hive from outside
+a swarm of flies in a barn
+birds settling in a roost at evening
+seabirds on a cliff face
+geese passing overhead at night
+a rookery at dusk
+a swamp at night, frogs and water
+a tropical night, layered insects
+a desert at noon, almost nothing
+an empty field at three in the morning
+a moor in fog, very quiet
+a cave interior, dripping and vast
+a mine tunnel, distant machinery
+a quarry between blasts
+a beach in winter, wind and gulls
+a city square at four in the morning
+distant traffic from a hill above a city
+a motorway heard through trees
+a railway station concourse at night
+a train passing at a level crossing
+a freight train shunting in a yard
+a tram on wet rails
+a subway platform between trains
+an underground tunnel with air moving
+an airport terminal at night
+a jet passing very high overhead
+a propeller aircraft in the distance
+a helicopter crossing a valley
+a ferry engine from the deck
+a fishing boat idling in harbour
+a container ship passing a buoy
+a lock filling on a canal
+a factory floor at low activity
+a printing press running slowly
+old machinery turning in a hall
+a lathe in a workshop, distant
+a conveyor belt running empty
+a compressor cycling in a basement
+a ventilation duct in an office block
+an air conditioning unit on a roof
+a boiler room, several machines
+a refrigeration plant behind a shop
+a cold store with fans running
+a lift motor in a shaft
+an escalator running in an empty mall
+a revolving door turning
+a heavy door closing in a museum
+a metal gate swinging in wind
+a chain against a flagpole
+scaffolding creaking in wind
+a building settling at night
+an attic in a storm
+floorboards in an empty house
+a church interior between services
+a cathedral with distant footsteps
+a library reading room
+a swimming pool hall, empty
+a gymnasium with distant activity
+a school corridor during class
+a hospital corridor at night
+a waiting room with a clock
+an office after hours, machines idle
+a data centre aisle
+a server fan wall
+a laundromat with machines running
+a supermarket aisle, refrigeration
+a car park stairwell
+a multi-storey car park at night
+a petrol station forecourt at night
+a bus station at dawn
+a market packing up
+a fairground after closing
+a stadium empty after a match
+a construction site at lunch
+a road being resurfaced, distant
+a pneumatic drill two streets away
+a chainsaw in a wood, far off
+a tractor crossing a field
+a combine harvester at distance
+sheep in a valley, bells and calls
+a cattle shed at feeding time
+a stable at night
+a dovecote at midday
+horses on gravel
+a dog barking three gardens away
+children playing two streets away
+a crowd murmuring in a hall
+applause dying away in a theatre
+a queue shuffling in a corridor
+a restaurant at the end of service
+a bar with the music off
+a train carriage between stops
+a car interior on a motorway
+a bicycle freewheeling downhill
+skates on outdoor ice
+gravel underfoot, walking
+sand underfoot on a dune
+leaves underfoot in autumn
+mud underfoot in a wood
+a rope bridge in wind
+a wooden hull on a swell
+sails luffing at anchor
+rigging against a mast
+a windmill turning slowly
+a water wheel in a mill race
+a weir in spate
+a drainage pipe after rain
+a storm drain under a street
+a manhole with water below
+a well with a bucket
+a cistern echoing
+an oil drum in wind
+a shipping container in sun, creaking
+a metal roof expanding in heat
+a greenhouse in rain
+a polytunnel in wind
+a tent in a storm
+a caravan in wind
+static between radio stations
+shortwave with ionospheric whistles
+a radio tuned slowly across a band
+a badly earthed amplifier hum
+a guitar amp on standby, hiss
+tape hiss from a blank cassette
+vinyl surface noise, no music
+a needle in a locked groove
+a film projector running
+a slide projector fan
+a cassette mechanism rewinding
+a hard disk seeking
+a dot matrix printer
+a fax machine handshake
+a modem connecting
+a Geiger counter in a quiet room
+an oscilloscope room, several instruments
+a laboratory extractor hood
+a wind tunnel at low speed
+a vacuum chamber pump
+an MRI scanner sequence
+a dentist's suction in the next room
+a hairdryer in a tiled bathroom
+a vacuum cleaner in a corridor
+a washing machine spinning
+a dishwasher mid cycle
+a food mixer in a kitchen
+a coffee grinder
+a fluorescent tube starting badly
+a light bulb filament singing
+a doorbell transformer buzzing
+a fusebox humming in a cupboard
+an electric fence ticking
+a street lamp buzzing at night
+a substation behind a fence
+power lines in damp air
+a wind farm from a kilometre away
+a solar inverter on a wall
+a bee hive in a wall cavity
+woodworm in an old beam
+mice behind a skirting board
+birds nesting under eaves
+a spider on a drum head
+rain starting on a still afternoon
+snow melting off a roof
+frost cracking in a wall
+a thaw in a wood
+a fog bank rolling in
+a still lake at dawn
+a reed bed in wind
+a wheat field before harvest
+an orchard in blossom, insects
+a hedge in high summer
+a churchyard in wind
+a ruin in a valley
+an abandoned factory
+a derelict swimming pool
+an empty reservoir
+a dry riverbed
+a salt flat, no wind
+a tundra plateau
+a boreal forest in winter
+a rainforest floor
+a mangrove at high tide
+a coral reef, hydrophone
+a river bed, hydrophone
+a harbour wall, hydrophone
+under ice, hydrophone
+inside a pipe, contact microphone
+a bridge girder, contact microphone
+a radiator, contact microphone
+a window pane in wind, contact microphone
+a tree trunk in wind, contact microphone
+a fence post in wind, contact microphone

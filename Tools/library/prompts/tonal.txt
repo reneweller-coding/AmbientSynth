@@ -1,0 +1,502 @@
+Gregorian chant on one note, many voices
+Tuvan khoomei drone, two pitches at once
+a 3D printer moving in one axis
+a Burma bell struck
+a CRT flyback whine
+a Hammond drawbar chord with vibrato
+a Karplus-Strong string plucked digitally
+a Leslie speaker slowing to a stop, one chord
+a bagpipe drone without the chanter
+a bagpipe practice chanter note
+a bamboo chime in wind
+a bandoneon chord held
+a bandsaw cutting slowly
+a banjo with the head damped, plucked
+a bansuri flute note held, warm
+a barrel organ chord
+a bass clarinet note held very low
+a bass flute breathy long note
+a bass guitar note with flatwound strings
+a bass kalimba tine
+a bass marimba bar struck
+a bass recorder note
+a bass singer holding a very low note
+a bass trumpet held note
+a bass viol with sympathetic strings ringing
+a bassoon low note, reedy
+a bat detector rendering a call
+a bayan accordion cluster
+a bee against a window
+a beetle in a matchbox
+a bell buoy at sea, rocking
+a bell foundry tuning a bell
+a bell plate hit and left to ring
+a bell struck under water
+a bell tree stroked
+a berimbau with its gourd against the belly
+a bicycle bell struck once
+a bicycle wheel spun against a card
+a bittern boom in a reed bed
+a boat whistle in a lock
+a bottle in wind, a low tone
+a bottle orchestra chord
+a bouzouki string ringing
+a bowed autoharp
+a bowed banjo head
+a bowed bass drum head, low moan
+a bowed cello note held without vibrato, close
+a bowed cymbal, edge, singing
+a bowed double bass harmonic, ghostly
+a bowed dulcimer string
+a bowed gong, the metal groaning into tone
+a bowed lyre string
+a bowed musical saw, wavering
+a bowed piano string inside the case
+a bowed psaltery note
+a bowed vibraphone bar, glassy
+a bowed water glass, wet and pure
+a bowl gong rubbed
+a bowl of water with a singing bowl in it
+a boys choir holding a vowel
+a brass rod bowed at the end
+a bridge deck humming to traffic
+a bullroarer swung
+a cajon struck at the centre
+a call to prayer held on one pitch
+a calliope note, steam and pitch
+a car park with a resonance
+a carillon playing one slow phrase
+a carillon practice keyboard
+a cast iron bath struck
+a cat purring close to the microphone
+a cat's meow, tonal
+a cathedral responding to one shout
+a celesta note, bell like
+a cello and a bowed saw in unison
+a cello played flautando, breathy bowing
+a cello played sul ponticello, glassy and thin
+a ceramic sink struck
+a chamber organ flute stop, soft and wooden
+a chamberlin flute chord
+a chamberlin string chord, warm
+a child singing one note, untrained
+a chimney singing in a storm
+a choir of men humming one chord
+a choir of women humming one chord
+a choir tuning before a concert
+a chorus of voices on one vowel, drifting
+a chromatic harmonica single note
+a church organ pedal note in a cold cathedral
+a cicada chorus at one pitch
+a cimbalom tremolo held
+a cistern with a dripping tone
+a clarinet held note, woody
+a clavichord note, tiny and expressive
+a clavinet note, tight and short
+a clay drum struck, tuned
+a clock chiming the hour in a hall
+a comb filtered noise, pitched by the delay
+a combo organ chord, thin
+a compressor whine in a garage
+a computer fan at constant speed, tonal
+a concertina drone, breathy
+a conch shell blown, one long note
+a congregation singing one note
+a contrabass clarinet low note
+a contrabass trombone pedal
+a contralto holding a low note
+a convolution of a voice with a bell
+a cooling tower fan
+a copper pipe rubbed with rosin
+a cornet held note with a straight mute
+a countertenor holding a note
+a cow lowing in a barn
+a cow's low in a stone byre
+a cowbell struck, tuned
+a cracked bell struck
+a crumhorn held note, buzzing
+a crystal chandelier in a draught
+a cuckoo call in a valley
+a curlew call on a moor
+a dentist drill in the next room
+a didgeridoo circular breathing, low
+a didgeridoo with a high overtone call
+a dilruba bowed with drone strings
+a distant church bell tolling once a minute
+a distant cuckoo in a valley
+a distant helicopter rotor, steady
+a distant train horn, two tones
+a diving bell hum
+a dizi with its membrane buzzing
+a dog howling far away at night
+a dog howling to a siren
+a dolphin whistle, hydrophone
+a donkey bray, harsh
+a double bass bowed at the bridge, low and dark
+a double bass harmonic at the octave, bowed
+a dove cooing in a stone courtyard
+a drill press at low speed
+a duduk long note, plaintive
+a euphonium held note in a hall
+a factory whistle blowing
+a fairground organ chord, tremulant
+a falsetto held note, breathy
+a fan blade struck while spinning
+a feedback tone between two speakers
+a female voice humming a single note
+a fence wire humming in a gale
+a fence wire plucked
+a fife note, thin
+a finger cymbal struck
+a fish drumming, hydrophone
+a flugelhorn soft held note
+a fluorescent ballast humming steadily
+a fluorescent lamp singing at a pitch
+a fly in a bottle
+a foghorn heard across water
+a foghorn seal call on a rock
+a football crowd holding one note
+a formant filter sweeping on a drone
+a fortepiano note, wooden
+a frame drum with a low ring
+a freezer in a garage
+a french horn held note, distant
+a frequency modulated tone with low index
+a fridge compressor, pitched
+a gamelan gong, low and inharmonic
+a gamelan metallophone bar struck
+a garden hose swung, a tone appearing
+a gas cylinder struck
+a generator running at constant load
+a glacier groaning
+a glass armonica, wet fingers on the rim
+a glass harp chord
+a glass jar struck with a spoon
+a glass rod bowed
+a glockenspiel bar struck softly
+a gong lowered into water while ringing
+a grain silo struck from inside
+a grand piano cluster held with the pedal
+a grandfather clock strike
+a granular cloud of a single piano note
+a gudok bowed, medieval and rough
+a guitar amp feeding back at the octave
+a guzheng tremolo, slow
+a hair clipper held steady
+a hammered dulcimer struck once
+a hammond organ drawbar chord with leslie stopped
+a hand bell rung slowly
+a handpan tone field played with fingertips
+a hang drum tone field
+a hard disk array humming
+a hard drive spinning at a steady pitch
+a harmonica chord held with tremolo
+a harmonium chord with the bellows creaking
+a harmonium with two stops out
+a harp glissando left to decay
+a harpsichord note, plucked and dry
+a heckelphone held note
+a hohner pianet note
+a hummed note through a cardboard tube
+a hummed note through closed lips
+a hunting horn call held
+a hurdy-gurdy drone with its buzzing bridge
+a hydrophone recording of a tonal hum underwater
+a jaw harp twanging with a moving mouth cavity
+a jaw harp with a slow mouth sweep
+a jet engine idling on a stand
+a jug blown, a low round tone
+a kalimba tine plucked, close and dry
+a kalimba with a resonator gourd
+a kantele plucked, bright and short
+a keening voice, single pitch
+a kemenche bowed, nasal and close
+a khaen mouth organ drone
+a koto string plucked and bent
+a laboratory centrifuge spinning
+a lamp post struck with a hand
+a large steel plate hit with a soft beater
+a lathe cutting brass
+a lever harp low string, wooden
+a lift shaft humming
+a lithophone stone struck
+a log drum tongue struck
+a long corridor with a hum at the end
+a loon call over water
+a lullaby hummed close to the microphone
+a lyre plucked slowly, sparse
+a male voice humming a single note
+a mandolin tremolo on one note
+a marimba bar struck, wooden and short
+a marimba roll held on one bar
+a marimbula plucked
+a mast humming in a gale
+a mbira with buzzing bottle caps
+a mellotron cello chord, tape wobble
+a mellotron choir chord, worn tape
+a mellotron flute chord, tape and wow
+a melodica note held until the breath runs out
+a metal sheet flexed slowly, thunder and pitch
+a metallophone bar bowed
+a microphone near a monitor, singing
+a microwave oven running
+a milling machine passing
+a modular oscillator drifting slowly in tune
+a monastery bell rolling
+a monk chanting one syllable
+a monosynth drone with slow LFO
+a morin khuur horsehead fiddle drone
+a mosquito close to the ear
+a mouth bow twanged
+a mridangam stroke, pitched
+a muezzin's call heard far across a city
+a music box mechanism turned very slowly
+a musical bow with a resonating pot
+a musical box comb plucked slowly
+a musical saw glissando
+a natural horn harmonic series
+a neon transformer buzzing
+a ney flute note, breath and pitch
+a nightingale phrase, sparse
+a nightjar churring
+a nursery of children on one note
+a nyckelharpa drone with keys
+a nylon string guitar harmonic
+a pan flute note, breathy and open
+a panpipe chord blown together
+a peacock call, piercing
+a person humming while working
+a phone charger singing quietly
+a piano frame struck with a beater
+a piano note held with the pedal down, dying
+a piano with paper on the strings
+a piccolo held note, very high
+a pipe organ 32 foot pedal, felt in the floor
+a pipe organ mixture stop, one chord held
+a plotter drawing a long line
+a plucked harp string ringing out
+a plucked zither string ringing over its soundboard
+a plumbing pipe blown across the end
+a polysynth pad chord, analogue drift
+a porcelain bowl struck
+a portative organ note
+a positive organ flute rank
+a post horn note in a courtyard
+a power line singing in fog
+a power station hum across a field
+a prepared piano string with a screw in it
+a qanun plucked with quarter tones
+a quena note with air
+a rackett low note
+a radiator pipe tapped along a flat
+a radiator struck with a knuckle
+a railing struck along its length
+a ram's horn blown
+a raven croak in a canyon
+a rebab bowed, thin and reedy
+a recorder held note, thin
+a reed organ held chord, dusty
+a refrigerator compressor humming in a kitchen
+a regal organ note, buzzing reed
+a resonant filter self-oscillating, swept slowly
+a resonator guitar slide note held
+a rhodes electric piano note with tines ringing
+a ring modulated sine pair, inharmonic
+a road tunnel with a standing wave
+a rocket engine test, far away
+a rooster crow across a valley
+a roto tom struck
+a sansula thumb piano, floating
+a santoor struck, metallic and shimmering
+a sarangi long note, many sympathetics
+a sarrusophone held note
+a saw blade flexed and struck
+a sawtooth with heavy detune, two voices
+a saxophone subtone held quietly
+a scaffolding pole struck
+a school bell ringing in a corridor
+a school hall singing a hymn
+a seal song under ice
+a serpent held note, ancient brass
+a server room fan wall, tonal
+a sewing machine at constant speed
+a shakuhachi note with strong breath
+a shawm held note, reedy
+a sheep bell in a field
+a sheng mouth organ chord
+a ship's bell struck twice
+a ship's engine room, low tonal rumble
+a ship's horn in fog, long and low
+a ship's hull resonating at anchor
+a shipping container wall struck
+a shouted note in a stairwell, decaying
+a shruti box held open on one chord
+a shō mouth organ cluster, Japanese
+a sine oscillator with slow drift
+a sine wave with slow vibrato, pure
+a singing bowl struck and left for a minute
+a singing bowl with water, moving
+a single soprano holding a note, no vibrato
+a sitar sympathetic string ringing
+a slide flute held at a pitch
+a slide whistle held at one pitch
+a slinky struck, descending tone
+a slit drum note
+a slit gong struck, low
+a small brass bowl rubbed with a mallet
+a solina string ensemble held chord
+a sousaphone low note in a hall
+a spectral freeze of a choir chord
+a spring plucked and left to ring
+a spring reverb tank struck
+a square wave with pulse width moving
+a stairwell with a held note
+a steam whistle held
+a steel bar suspended and struck
+a steel pan note struck softly
+a steel tongue drum struck
+a stone circle, wind and stone
+a street organ held chord
+a string quartet holding one chord, unmoving
+a string section holding a cluster, unmoving
+a string synth chord with chorus
+a struck anvil ringing in a workshop
+a struck ceramic tile, short and bright
+a struck copper pipe, close
+a struck iron rail, long metallic decay
+a struck slate, dull and pitched
+a struck tuning fork left ringing
+a submarine hull creaking under pressure
+a submarine sonar ping and its tail
+a subway tunnel with a distant tone
+a subway ventilation tone in a tunnel
+a suling note, bamboo
+a sung note in a cistern, long reverb
+a suspended cymbal with a violin bow, high
+a suspension bridge cable struck
+a swan's wingbeat and call
+a switched mode supply whistling
+a tabla tuned and struck once
+a talkbox holding a vowel
+a talking drum squeezed and struck
+a tambura drone, four strings, slow
+a tannerin slide tone
+a tape loop of one note, wearing out
+a telharmonium style pure tone
+a temple bell struck at dusk
+a temple block struck, hollow wood
+a terracotta pot struck
+a theatre organ tremulant chord
+a theremin held note wavering
+a theremin slow sweep between notes
+a threaded rod bowed
+a timpani pedal glissando
+a timpani struck softly and left
+a tin whistle held note
+a tonewheel organ full drawbars
+a toy piano note, one hammer
+a train whistle in a valley
+a transformer humming at fifty hertz
+a transformer yard humming in layers
+a trautonium held tone
+a tree creaking in wind, pitched
+a triangle struck and left ringing
+a triangle wave with slow filter opening
+a tromba marina bowed, buzzing bridge
+a trombone pedal note, soft
+a trumpet held with a harmon mute
+a tuba low note, felt more than heard
+a tuning fork on a resonator box
+a tunnel with air moving, tonal
+a turbine spooling up slowly
+a twelve string guitar chord ringing out
+a udu drum bass note
+a ventilation shaft resonating
+a vibraphone bar bowed instead of struck
+a vintage string machine chord
+a viola da gamba drone, rosin and wood
+a viola playing a slow glissando between two notes
+a violin harmonic held very quietly
+a violin played col legno tratto, dry wood on string
+a vocal drone with a rising overtone
+a vocoder holding one vowel on a chord
+a voice into a metal tank
+a voice into a piano with the pedal down
+a washing machine on final spin
+a water tank struck, tonal and long
+a wavetable scan on one note
+a whale call, descending
+a whale song, low and modulated
+a whirly tube spun slowly
+a whistle organ pipe speaking softly
+a whistle register note, very high
+a whistle sustained by a person
+a whistled note, human and pure
+a whistled tune slowed to one note
+a wind chime of long metal tubes, slow air
+a wind harp on a hillside, aeolian
+a wind turbine blade passing, rhythmic tone
+a wind turbine tower resonating
+a window pane resonating to a passing lorry
+a wine bottle blown across its mouth
+a wine glass filled to different levels, rubbed
+a wire fence singing in wind
+a wolf howl, sustained
+a wood block struck, dry
+a wooden xylophone bar bowed
+a woodpecker drumming on a hollow tree
+a wurlitzer electric piano note held
+a xiao flute note, soft
+a xylophone bar struck hard
+a yangqin struck, metallic
+a zurna held note, piercing
+an MRI gradient tone
+an accordion holding a minor chord
+an additive tone with drifting partials
+an aeolian harp on a roof
+an air raid siren winding down
+an aircraft cabin cruise tone
+an aircraft fuselage in cruise
+an alphorn note across a valley
+an alto flute held note, wooden
+an aluminium tube struck at its node
+an analogue synthesiser saw drone, unstable
+an angklung shaken, bamboo pitches
+an angle grinder held on metal
+an e-bow harmonic on a bass string
+an e-bow on an electric guitar string, sustained
+an electric toothbrush against a mirror
+an empty swimming pool with a hum
+an erhu long note with slow vibrato
+an idling diesel engine heard from far away
+an induction hob humming
+an oboe held note, nasal
+an ocarina tone, hollow
+an ocean drum tipped slowly
+an oil drum struck on the head
+an old CRT television whining
+an ondes martenot glissando
+an ondes martenot note with its ribbon
+an ondioline vibrato tone
+an ophicleide held note
+an optigan disc chord, wobbling
+an optigan waltz chord, warped
+an organ pipe blown too softly to speak properly
+an oud string plucked in a small room
+an owl call, low and hooting
+an owl duet at night
+an upright piano note played very softly
+crickets at one steady pitch
+crotales bowed, high and pure
+frogs calling in a chorus of pitches
+ice singing on a frozen lake, tonal
+overtone singing on a low fundamental
+piano strings brushed with a wire brush
+piano strings struck directly with a mallet
+telephone wires singing in wind
+throat singing with a clear overtone
+tubular bells struck softly, long decay
+two oscillators beating half a hertz apart
+two violins a quarter tone apart, beating
+two voices a fifth apart, held
+wine glasses tuned to a chord and rubbed

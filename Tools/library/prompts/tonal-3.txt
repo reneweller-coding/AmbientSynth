@@ -1,0 +1,405 @@
+# Third list of tonal material for Library/Textures. Written against the first two lists so that
+# nothing repeats: about half the generated clips come out with a detected pitch, and only those
+# are usable by the tonal granular voice, so more distinct ideas is the only honest way to more
+# tonal material. One idea per line.
+a violin played with the bow hair loose, breathy
+a violin played behind the bridge, high and thin
+a cello played with a bow made of horsehair and rosin dust
+a cello scordatura, one string tuned very low
+a viola played over the fingerboard, soft
+a double bass played with a heavy bow, close to the frog
+a string trio holding a chord in just intonation
+a string orchestra holding a unison, slightly apart
+a violin tuned in fifths and bowed open
+a fiddle drone on two open strings
+a hardanger fiddle with sympathetic strings
+a baroque violin with gut strings, held note
+a violoncello piccolo bowed high
+a viola d'amore with sympathetics ringing
+a lira da braccio drone
+a crwth bowed, Welsh and rough
+a jouhikko bowed lyre
+a talharpa bowed, Estonian
+a gadulka bowed, Bulgarian
+a lyra bowed, Cretan
+a ghaychak bowed, Persian
+a saw bowed with a violin bow, wavering high
+a bowed marimba bar, low and woody
+a bowed steel string on a guitar neck
+a bowed harp string
+a bowed guqin string
+a bowed tin can lid
+a bowed bicycle wheel rim
+a bowed radiator fin
+a bowed glass bowl rim, singing
+a bowed slate tile
+a bowed ceramic plate
+a bowed metal ruler clamped to a table
+a bowed handsaw held between the knees
+a plucked guqin string, ancient and dry
+a plucked pipa string with a long bend
+a plucked sanxian, dry and buzzing
+a plucked shamisen, snapping
+a plucked biwa string with a plectrum
+a plucked dan bau with its whammy stick
+a plucked dan tranh, Vietnamese zither
+a plucked kacapi string
+a plucked valiha bamboo tube zither
+a plucked ngoni string
+a plucked kora string, one note ringing
+a plucked oud course, two strings together
+a plucked saz string with a long ring
+a plucked tar, Persian
+a plucked setar note
+a plucked dutar string
+a plucked rubab with sympathetics
+a plucked charango, small and bright
+a plucked cuatro string
+a plucked tres, Cuban
+a plucked balalaika string
+a plucked domra tremolo
+a plucked bandura string
+a plucked cittern course
+a plucked theorbo bass string
+a plucked lute course ringing
+a plucked vihuela note
+a plucked archlute open string
+a struck cimbalom bass string
+a struck santur string with light hammers
+a struck yangqin bass course
+a struck piano string with a felt beater, inside the case
+a struck harp soundboard with the strings ringing
+a struck clavichord tangent held down
+a struck dulcitone, tuning forks under hammers
+a struck toy glockenspiel, out of tune
+a struck celeste bar, soft
+a struck almglocken, tuned cowbell
+a struck bell plate, thin steel
+a struck church bell recorded up close
+a struck bell hung in a wooden frame
+a struck Japanese rin bell
+a struck Tibetan tingsha pair
+a struck ghanta bell, Indian
+a struck ship's telegraph bell
+a struck fire bell in a yard
+a struck dinner gong
+a struck brake drum, pitched
+a struck oxygen cylinder, long ring
+a struck propane tank, low tone
+a struck gas bottle with a soft mallet
+a struck steel drum pan, low note
+a struck sheet of titanium
+a struck sheet of copper, warm
+a struck lead sheet, dull and short
+a struck cast iron pan
+a struck aluminium ladder rung
+a struck scaffold clamp
+a struck railway sleeper spike
+a struck concrete block, dull pitch
+a struck marble slab
+a struck granite kerbstone
+a struck flint, tiny and bright
+a struck glass block
+a struck bottle of water, half full
+a struck glass demijohn
+a struck laboratory flask
+a struck porcelain cup with a spoon
+a struck enamel bowl
+a struck clay bell, unfired
+a struck wooden bowl
+a struck bamboo tube, closed at one end
+a struck hollow log
+a struck teak plank
+a struck oak beam in a barn
+a struck door panel, hollow
+a struck packing crate
+a struck cardboard tube, low pop with a tone
+a struck rubber sheet stretched over a frame
+a struck drum head tuned very high
+a struck timpani head with the pedal down
+a struck kettle drum with a felt mallet, soft
+a struck tabla bayan with a hand slide
+a struck ghatam pot
+a struck kanjira frame drum, ringing
+a struck darbuka centre, low
+a struck bendir with its snare
+a struck bodhran with a tipper
+a struck cajon corner, pitched
+a struck djembe bass tone
+a struck dundun with a stick
+a struck taiko, deep and long
+a struck tsuzumi with a squeezed rope
+a struck changgo head
+a struck bongo tuned high
+a struck conga open tone
+a struck timbale rim
+a struck steel tongue drum, two notes
+a struck hang drum edge note
+a struck slit drum tongue, long
+a struck marimbula plate
+a struck array mbira tine
+a struck kalimba tine over a tin
+a struck music box comb tooth
+a struck wind-up mechanism tine
+a struck typewriter bell
+an organ pipe speaking with the wind unsteady
+an organ principal rank held, one note
+an organ vox humana stop, reedy
+an organ celeste, two ranks beating
+an organ bourdon 16 foot held
+an organ tierce and quint together
+an organ tremulant on a soft stop
+a church organ with the blower dying
+a pipe organ note bled through a wall
+a harmonium with one reed slightly flat
+a pump organ chord with the pedals creaking
+a reed organ vox stop, thin
+an accordion bass note held
+an accordion musette tremolo chord
+a diatonic accordion drone
+a bandoneon single note with a slow bellows
+a concertina chord held long
+a melodeon drone note
+a mouth organ single reed held
+a bass harmonica low note
+a chord organ button held
+a stylophone tone with vibrato
+a bass flute overblown to a harmonic
+a flute with the embouchure half covered
+a flute multiphonic held
+a piccolo trill slowed to two notes
+a recorder overblown to the octave
+a whistle blown very softly
+a duct flute with a breathy tone
+a pan flute chord with three pipes
+a nose flute tone
+a fujara overtone flute, low
+a koncovka overtone flute call
+a bamboo flute with a cracked tone
+a bansuri overblown, thin
+a shakuhachi muraiki, breath and pitch
+a hocchiku long note
+a xun ocarina tone
+a whistling jug, low
+a slide whistle stopped at a note
+a swanee whistle held steady
+a train whistle held on one chord
+a steam organ pipe
+a calliope chord, steam and pressure
+a whistling kettle at full boil
+a pressure cooker whistle
+a referee whistle, sustained
+a bosun's pipe held note
+a duck call blown steadily
+a game call held on one pitch
+a hunting whistle, high and pure
+a clarinet multiphonic held
+a clarinet subtone in the low register
+a bass clarinet multiphonic
+a contrabass clarinet pedal tone
+a saxophone growl held
+a saxophone altissimo note
+a baritone saxophone low honk held
+a bass saxophone pedal note
+an oboe multiphonic
+a cor anglais held note
+a bassoon multiphonic held
+a contrabassoon pedal note
+a shawm drone with a bagpipe
+a dulcian held note
+a chalumeau note, warm and low
+a taragot held note
+a mizmar held note, piercing
+a suona long note
+a hichiriki held note, Japanese
+a guanzi held note
+a sorna held note
+a bombarde held note
+a bagpipe drone alone, no chanter
+a smallpipes drone, quiet
+a uilleann pipes regulator chord
+a gaita drone
+a zampogna drone pair
+a launeddas drone, Sardinian
+a horn played into a piano with the pedal down
+a trumpet played into a bucket mute
+a trombone with a plunger held half closed
+a tuba multiphonic, sung and played
+a horn stopped with the hand, held
+a flugelhorn pedal note
+a bass trumpet pedal note
+an alphorn overtone series played slowly
+a natural trumpet high harmonic
+a conch trumpet, two notes
+a didgeridoo drone with vocal calls
+a vuvuzela held note
+a hosepipe horn note
+a plastic tube swung to a pitch
+a cardboard tube blown across
+an oil drum blown across the bung
+a wine cask blown across the hole
+a bottle organ chord of five bottles
+a jug band jug note
+a glass bottle rubbed on the rim
+a crystal glass rubbed until it sings loudly
+a set of tuned glasses played slowly
+a glass harmonica chord
+a glass rod struck and left
+a glass tube struck at its node
+an ice block struck, pitched
+an icicle struck, tiny and bright
+ice in a metal bowl, cracking and ringing
+a frozen lake singing under pressure
+a glacier crack with a tonal tail
+snow compacting with a low tone
+a water pipe singing with the tap half open
+a tap dripping into a resonant sink
+a bathtub filling, the pitch rising
+a bottle filling with water, rising tone
+a hydrophone in a pipe, tonal flow
+a whale call at close range
+a humpback song phrase
+a beluga whistle
+a dolphin click train at one rate
+a walrus call under ice
+a seal call across a bay
+a bittern in reeds, low boom
+a capercaillie call
+a corncrake rasp at one pitch
+a snipe drumming in flight
+a hoopoe call
+a golden oriole whistle
+a blackbird phrase, slowed
+a robin holding a long note
+a wren trill, sustained
+a pigeon cooing in a loft
+a rooster crowing in a yard
+a peahen call
+a guinea fowl call
+a swan whooping on water
+a crane call over marsh
+a goose honking overhead
+a red deer roar in rut
+a bull bellowing in a shed
+a goat bleating in a stone pen
+a camel call in a desert
+a donkey braying across a field
+a horse whinny in a stable
+a cicada wall at one pitch
+a cricket chorus in a warm barn
+a grasshopper stridulating close
+a bee swarm in a chimney
+a wasp nest inside a wall
+a mosquito circling one ear
+a moth against a lampshade
+a beetle wing buzz
+a fly against a jar
+a hummingbird hovering close
+a spinning wheel humming
+a treadle sewing machine at speed
+a hand drill turning
+a bicycle dynamo whining
+a bench grinder spinning down
+a circular saw idling
+a router at constant speed
+a planer passing through wood
+a wood lathe cutting
+a metal lathe at low speed
+a pillar drill boring steel
+a milling head cutting aluminium
+a CNC machine moving one axis
+a stepper motor holding a tone
+a servo motor whining under load
+a drone motor at constant throttle
+a model engine running
+a two stroke engine idling
+a diesel generator under load
+a steam engine at low revs
+a traction engine flywheel
+a water pump running steadily
+a sump pump in a cellar
+a vacuum pump running
+a compressor tank filling
+an air line hissing at a pitch
+a pipe organ blower running alone
+a boiler burner roaring at a pitch
+a gas ring burning under a pan
+a blowtorch held steady
+a kiln burner running
+an extractor fan in a kitchen
+a bathroom fan running
+a desk fan at low speed
+a ceiling fan turning slowly
+a computer fan ramping up and holding
+a graphics card fan under load
+a projector fan in a cinema
+a lift motor running between floors
+an escalator drive humming
+a conveyor motor under load
+a crane motor lifting
+a winch under strain
+a cable car drive
+a tram motor accelerating
+a trolleybus motor at speed
+an electric car motor whine
+an underground train motor
+a diesel railcar idling
+a ferry engine at cruise
+a tug engine under load
+a fishing boat engine at anchor
+an outboard motor idling
+a submarine propeller hum
+a wind turbine gearbox
+a hydroelectric turbine hall
+a substation transformer at close range
+a high voltage line at a pylon
+a neon sign transformer
+a mercury lamp ballast
+a sodium lamp starting
+an old television flyback whine
+a CRT monitor at 15 kilohertz
+an oscilloscope tone generator
+a signal generator sine at 440 hertz
+a test tone through a cheap speaker
+a telephone dial tone held
+a telephone ringback tone
+a fax carrier tone held
+a modem answer tone
+a morse carrier held
+a radio beacon tone
+a time signal pip held long
+a radiosonde tone
+an emergency broadcast tone
+a hearing test tone in a booth
+an MRI scanner holding one pitch
+an ultrasound machine tone
+a heart monitor tone
+a metal detector tone
+a Geiger counter at a steady rate
+a theremin held without vibrato
+an ondes martenot with the diffuseur palme
+a trautonium with a formant filter
+an ondioline with a tremolo
+a Hammond organ with a chorus vibrato
+a Leslie speaker at slow speed, one chord
+a tonewheel organ with one drawbar
+a combo organ with vibrato
+a string machine with a phaser
+a polysynth with slow unison drift
+a monosynth with a slowly opening filter
+a wavetable oscillator scanned very slowly
+a granular cloud of one bowed note
+a spectral freeze of an organ chord
+a phase vocoder stretch of a bell
+a resonator bank tuned to a chord
+a comb filter bank on white noise
+a Karplus-Strong string with long decay
+a waveguide flute model held
+a modal bell model struck
+a physical model of a bowed string
+a feedback delay tuned to a note
+a no-input mixer tone
+a tape loop feeding back at a pitch
+a spring reverb driven into oscillation
+a guitar amp at the edge of feedback
+an organ pipe simulated by a resonant filter

@@ -94,6 +94,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     // construction. Touched here so that they exist before any block is rendered.
     (void)builtinTable(0);
     zWarmTables();
+    zWarmShapes();
     arc_.init(rng_);
     shiftDrift_.init(rng_);
     ensemble_.prepare(sr_);

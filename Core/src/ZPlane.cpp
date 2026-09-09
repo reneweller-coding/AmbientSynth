@@ -1,3 +1,4 @@
+#include <vector>
 #include "ambient/ZPlane.h"
 #include <algorithm>
 
@@ -89,15 +90,66 @@ ZFrame zFrameFromSpec(const ZCornerSpec& c)
     return f;
 }
 
+namespace {
+// The eight corners of a shape, and the logarithms the interpolation takes of them. Both depend
+// on the shape alone -- on a number that changes when somebody turns a knob, and not otherwise --
+// and both used to be computed afresh on every call: eight corner frames rebuilt, and then
+// thirty-two logarithms per section taken of the values that had just been rebuilt. This runs at
+// control rate for every sounding voice, so at eleven voices that was eight thousand times a
+// second of audio, always with the same answer. VTune put it at nine per cent of an entire
+// render, which is roughly what the whole reverb costs.
+//
+// Held here instead, worked out once for each shape the moment it is first asked for. The
+// interpolation itself is untouched -- the same weights over the same logarithms, so the same
+// numbers to the last bit; only the arithmetic that had no reason to be repeated is gone.
+struct ShapeCorners {
+    int  used = 0;
+    struct Sec {
+        float lPole[8] = {}, lBw[8] = {}, lZeroHz[8] = {}, lZeroBw[8] = {}, gain[8] = {};
+        bool  zeros = false;   // a zero in every corner, or none at all
+    } s[kZSections];
+};
+
+const ShapeCorners& shapeCorners(int shape)
+{
+    static const std::vector<ShapeCorners> all = [] {
+        std::vector<ShapeCorners> v(static_cast<size_t>(kZShapes));
+        for (int sh = 0; sh < kZShapes; ++sh) {
+            ZFrame c[8];
+            for (int k = 0; k < 8; ++k) c[k] = zFrameFromSpec(kZCorners[sh][k]);
+            ShapeCorners& out = v[static_cast<size_t>(sh)];
+            out.used = c[0].used;
+            for (int k = 1; k < 8; ++k) out.used = std::min(out.used, c[k].used);
+            for (int i = 0; i < out.used; ++i) {
+                ShapeCorners::Sec& d = out.s[i];
+                d.zeros = true;
+                for (int k = 0; k < 8; ++k) if (c[k].s[i].zeroHz <= 0.0f) d.zeros = false;
+                for (int k = 0; k < 8; ++k) {
+                    d.lPole[k]   = std::log2(std::max(c[k].s[i].poleHz, 1e-3f));
+                    d.lBw[k]     = std::log2(std::max(c[k].s[i].poleBw, 1e-3f));
+                    d.lZeroHz[k] = std::log2(std::max(c[k].s[i].zeroHz, 1e-3f));
+                    d.lZeroBw[k] = std::log2(std::max(c[k].s[i].zeroBw, 1e-3f));
+                    d.gain[k]    = c[k].s[i].gain;
+                }
+            }
+        }
+        return v;
+    }();
+    return all[static_cast<size_t>(shape)];
+}
+}  // namespace
+
+// Builds the shape table now, off the audio thread. Engine::prepare calls it; without that the
+// first voice to reach a filter would build it under the lock the language puts around a static.
+void zWarmShapes() { (void)shapeCorners(0); }
+
 ZFrame zInterpolate(int shape, float x, float y, float z)
 {
     shape = clampv(shape, 0, kZShapes - 1);
     x = clampv(x, 0.0f, 1.0f); y = clampv(y, 0.0f, 1.0f); z = clampv(z, 0.0f, 1.0f);
-    ZFrame c[8];
-    for (int k = 0; k < 8; ++k) c[k] = zFrameFromSpec(kZCorners[shape][k]);
+    const ShapeCorners& c = shapeCorners(shape);
     ZFrame out;
-    out.used = c[0].used;
-    for (int k = 1; k < 8; ++k) out.used = std::min(out.used, c[k].used);
+    out.used = c.used;
     // Trilinear. At z = 0 only the first four terms have any weight, so this is exactly the
     // bilinear interpolation it replaces -- which is what makes the third axis free to add.
     auto lerp3 = [&](const float* v) {
@@ -105,26 +157,15 @@ ZFrame zInterpolate(int shape, float x, float y, float z)
         const float f1 = (v[4] * (1 - x) + v[5] * x) * (1 - y) + (v[6] * (1 - x) + v[7] * x) * y;
         return f0 * (1 - z) + f1 * z;
     };
-    auto logLerp = [&](const float* v) {
-        float l[8];
-        for (int k = 0; k < 8; ++k) l[k] = std::log2(std::max(v[k], 1e-3f));
-        return std::exp2(lerp3(l));
-    };
     for (int i = 0; i < out.used; ++i) {
         ZSection& s = out.s[i];
-        float pole[8], bw[8], zh[8], zb[8], gn[8];
-        bool zeros = true;
-        for (int k = 0; k < 8; ++k) {
-            pole[k] = c[k].s[i].poleHz; bw[k] = c[k].s[i].poleBw;
-            zh[k] = c[k].s[i].zeroHz;   zb[k] = c[k].s[i].zeroBw; gn[k] = c[k].s[i].gain;
-            if (zh[k] <= 0.0f) zeros = false;
-        }
-        s.poleHz = logLerp(pole);
-        s.poleBw = logLerp(bw);
+        const ShapeCorners::Sec& d = c.s[i];
+        s.poleHz = std::exp2(lerp3(d.lPole));
+        s.poleBw = std::exp2(lerp3(d.lBw));
         // A zero that exists in every corner is interpolated; if any corner has none, there is none.
-        s.zeroHz = zeros ? logLerp(zh) : 0.0f;
-        s.zeroBw = zeros ? logLerp(zb) : 0.0f;
-        s.gain   = lerp3(gn);
+        s.zeroHz = d.zeros ? std::exp2(lerp3(d.lZeroHz)) : 0.0f;
+        s.zeroBw = d.zeros ? std::exp2(lerp3(d.lZeroBw)) : 0.0f;
+        s.gain   = lerp3(d.gain);
     }
     return out;
 }

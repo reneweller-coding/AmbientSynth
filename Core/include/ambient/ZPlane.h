@@ -163,7 +163,8 @@ struct ZBiquad {
 // loudest point back to unity. Every section is first normalised to its own maximum over a
 // 16-point logarithmic grid -- normalising at the pole frequency alone fails for a section whose
 // zero sits on its pole (a notch), and the cascade would then be either silent or very loud.
-void zWarmTables();   // build the static tables off the audio thread (Engine::prepare)
+void zWarmTables();    // build the static tables off the audio thread (Engine::prepare)
+void zWarmShapes();    // and the per-shape corner table
 float zBuildCascade(const ZFrame& f, ZBiquad* ch, float sr);
 
 // One two-pole resonator (constant-peak-gain form), used by the Air "Ghost" mode.

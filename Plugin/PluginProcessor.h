@@ -184,14 +184,23 @@ private:
     std::atomic<uint32_t> paramGen_ { 0 };
     ParamWatch paramWatch_ { paramGen_ };
 
-    ambient::Engine engines_[2];
+    // Two engines, but only the one that is playing exists most of the time. A prepared engine is
+    // about 110 MB -- delay lines, two convolution rooms, the cloud, the reverbs -- and keeping a
+    // second one standing doubled what an instance costs for the seconds a transition lasts. The
+    // incoming one is built when a change is asked for (message thread, where allocating is
+    // allowed) and released once the crossfade has ended and nothing else is waiting.
+    std::unique_ptr<ambient::Engine> engines_[2];
+    double lastSampleRate_ = 48000.0;
+    int    lastBlockSize_ = 512;
+    ambient::Engine& engineAt(int i) { return *engines_[i]; }
+    ambient::Engine& ensureEngine(int i);      // message thread: build and prepare it if it is gone
+    void releaseIdleEngine();                  // message thread: give back the one nothing is using
     // Which of the two is the instrument right now. Read by both threads and written only by the
     // audio thread, at a block boundary (see the swap in processBlock): the message thread
     // prepares the other engine in full and then asks for the change, so no engine is ever
     // written by one thread while the other renders it.
     std::atomic<int> live_ { 0 };
-    ambient::Engine& live()  { return engines_[live_.load(std::memory_order_relaxed)]; }
-    ambient::Engine& other() { return engines_[live_.load(std::memory_order_relaxed) ^ 1]; }
+    ambient::Engine& live()  { return *engines_[live_.load(std::memory_order_relaxed)]; }
     // Where the message thread's engine writes go while a transition is being prepared: the
     // incoming engine, which nothing renders yet. Null the rest of the time, when they mean the
     // instrument itself. Message thread only.

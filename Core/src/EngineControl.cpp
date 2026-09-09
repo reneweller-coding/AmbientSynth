@@ -467,6 +467,14 @@ void Engine::readParams()
             return mod != 0.0f ? clampv(target + mod, d.min, d.max) : target;
         }
         const float span = std::max(d.max - d.min, 1e-9f);
+        // A knob that is not moving is not glided. The three powers below were computed for every
+        // float parameter of every block whether or not anything had changed -- and a panel that
+        // is being listened to rather than turned is the normal case. The threshold also lets the
+        // glide arrive: without it the value approaches its target for ever and never reaches it.
+        if (std::fabs(target - inertiaCur_[i]) <= 1.0e-7f * span) {
+            inertiaCur_[i] = target;
+            return mod != 0.0f ? clampv(target + mod, d.min, d.max) : target;
+        }
         const float pc = std::pow(clampv((inertiaCur_[i] - d.min) / span, 0.0f, 1.0f), d.skew);
         const float pt = std::pow(clampv((target - d.min) / span, 0.0f, 1.0f), d.skew);
         inertiaCur_[i] = d.min + span * std::pow(pc + (pt - pc) * inertiaCoef, 1.0f / d.skew);

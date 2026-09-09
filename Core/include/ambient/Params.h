@@ -250,7 +250,13 @@ enum class ParamSection : int {
     Macros, Map, Route, Vector, Unknown
 };
 ParamSection sectionOf(const char* sectionName);
-inline ParamSection sectionOf(ParamId id) { return sectionOf(paramDesc(id).section); }
+// By id it is a lookup, not a search. It used to take the parameter's section NAME and compare it
+// against a table of names, string by string -- and isPerformanceParam asks five of those
+// questions, and the modulation matrix asks it of all two hundred and ninety-three parameters
+// once per block. Measured: forty-four thousand string comparisons per block, 101 microseconds,
+// three quarters of everything the engine did between one block and the next.
+const ParamSection* sectionTable();   // kNumParams entries, built once
+inline ParamSection sectionOf(ParamId id) { return sectionTable()[static_cast<size_t>(id)]; }
 
 constexpr int kNumScaleChoices = 13;
 // The last two are not tables. One is whatever Scala file was loaded; one is computed from

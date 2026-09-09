@@ -173,7 +173,7 @@ void ZwickerLoudness::prepare(double sampleRate)
         binLo_[b] = std::max(1, static_cast<int>(lo / binHz + 0.5));
         binHi_[b] = std::min(kN / 2 - 1, std::max(binLo_[b], static_cast<int>(hi / binHz + 0.5)));
     }
-    history_.reserve(8192);
+    history_.prepare(kHistory);
     reset();
 }
 
@@ -222,13 +222,13 @@ void ZwickerLoudness::frame()
     }
     now_ = fromBandLevels(levels);
     if (now_ > max_) max_ = now_;
-    if (history_.size() < 4000000u) history_.push_back(now_);
+    history_.push(now_);
 }
 
 float ZwickerLoudness::sonesN5() const
 {
     if (history_.empty()) return 0.0f;
-    std::vector<float> v(history_);
+    std::vector<float> v = history_.snapshot();
     const size_t k = v.size() - 1 - static_cast<size_t>(0.05 * static_cast<double>(v.size() - 1));
     std::nth_element(v.begin(), v.begin() + static_cast<long>(k), v.end());
     return v[k];
@@ -244,8 +244,8 @@ void LoudnessMeter::prepare(double sampleRate)
     zwicker_.prepare(sr_);
     sumL_.assign(static_cast<size_t>(kHopsPerShort), 0.0);
     sumR_.assign(static_cast<size_t>(kHopsPerShort), 0.0);
-    blocks_.reserve(4096);
-    shortBlocks_.reserve(4096);
+    blocks_.prepare(kBlockLog);
+    shortBlocks_.prepare(kBlockLog);
     reset();
 }
 
@@ -310,11 +310,11 @@ void LoudnessMeter::pushBlock()
     };
 
     double bl = 0.0, br = 0.0;
-    if (meanOver(kHopsPerBlock, bl, br) == kHopsPerBlock) blocks_.push_back(lufs(bl, br));
+    if (meanOver(kHopsPerBlock, bl, br) == kHopsPerBlock) blocks_.push(lufs(bl, br));
     double sl = 0.0, sr = 0.0;
     if (meanOver(kHopsPerShort, sl, sr) == kHopsPerShort) {
         lastShort_ = lufs(sl, sr);
-        shortBlocks_.push_back(lastShort_);
+        shortBlocks_.push(lastShort_);
     }
 }
 
@@ -361,13 +361,14 @@ LoudnessReading LoudnessMeter::read() const
     // everything more than 10 LU under the mean of what is left is a gap between the loud parts.
     // Without the second gate a piece that is mostly silence measures as mostly silence.
     if (!blocks_.empty()) {
+        const std::vector<float> bl = blocks_.snapshot();
         double sum = 0.0; int count = 0;
-        for (float b : blocks_) if (b > -70.0f) { sum += std::pow(10.0, (b + 0.691) / 10.0); ++count; }
+        for (float b : bl) if (b > -70.0f) { sum += std::pow(10.0, (b + 0.691) / 10.0); ++count; }
         if (count > 0) {
             const float absMean = static_cast<float>(-0.691 + 10.0 * std::log10(sum / count));
             const float gate = absMean - 10.0f;
             double s2 = 0.0; int c2 = 0;
-            for (float b : blocks_) if (b > -70.0f && b > gate) { s2 += std::pow(10.0, (b + 0.691) / 10.0); ++c2; }
+            for (float b : bl) if (b > -70.0f && b > gate) { s2 += std::pow(10.0, (b + 0.691) / 10.0); ++c2; }
             if (c2 > 0) out.integrated = static_cast<float>(-0.691 + 10.0 * std::log10(s2 / c2));
         }
     }
@@ -376,13 +377,14 @@ LoudnessReading LoudnessMeter::read() const
     // those above the usual relative gate. It is the number that says whether a piece still has
     // its dynamics -- ambient wants it wide, and a limiter is what makes it narrow.
     if (shortBlocks_.size() >= 10) {
+        const std::vector<float> sb = shortBlocks_.snapshot();
         std::vector<float> v;
-        v.reserve(shortBlocks_.size());
+        v.reserve(sb.size());
         double sum = 0.0; int count = 0;
-        for (float b : shortBlocks_) if (b > -70.0f) { sum += std::pow(10.0, (b + 0.691) / 10.0); ++count; }
+        for (float b : sb) if (b > -70.0f) { sum += std::pow(10.0, (b + 0.691) / 10.0); ++count; }
         if (count > 0) {
             const float gate = static_cast<float>(-0.691 + 10.0 * std::log10(sum / count)) - 20.0f;
-            for (float b : shortBlocks_) if (b > gate) v.push_back(b);
+            for (float b : sb) if (b > gate) v.push_back(b);
             if (v.size() >= 10) {
                 std::sort(v.begin(), v.end());
                 const size_t lo = static_cast<size_t>(0.10 * (v.size() - 1));

@@ -692,6 +692,17 @@ ParamSection sectionOf(const char* name)
     return ParamSection::Unknown;
 }
 
+const ParamSection* sectionTable()
+{
+    static const std::vector<ParamSection> t = [] {
+        std::vector<ParamSection> v;
+        v.reserve(std::size(kTable));
+        for (const auto& d : kTable) v.push_back(sectionOf(d.section));
+        return v;
+    }();
+    return t.data();
+}
+
 const ParamDesc* findParam(const char* key)
 {
     // Binary search over a sorted index, built once. It used to be a linear strcmp over the whole

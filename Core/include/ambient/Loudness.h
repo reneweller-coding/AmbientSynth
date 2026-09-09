@@ -78,6 +78,38 @@ private:
 // One convention has to be fixed and named, because sones are absolute and a digital signal is
 // not: full scale here is 100 dB SPL. A piece measuring -23 LUFS is then heard at 77 dB, which is
 // about a loud living room, and that is the level the figures below describe.
+// A log of one value per frame that never grows: written to on the audio thread, read on the
+// message thread. It used to be a std::vector that was reserved for a few thousand entries and
+// then push_back'd for as long as the instrument played -- so after a few minutes, every time it
+// doubled, the audio thread stopped to copy up to sixteen megabytes. An instrument meant to run
+// all night cannot do that. What is kept now is a window of the recent past, which is also the
+// more useful thing to report: a meter that describes the last hour rather than the whole night.
+struct LoudnessLog {
+    void prepare(size_t capacity) { buf_.assign(capacity, 0.0f); pos_ = 0; count_ = 0; }
+    void clear() { pos_ = 0; count_ = 0; }
+    void push(float v)                      // audio thread; never allocates
+    {
+        if (buf_.empty()) return;
+        buf_[pos_] = v;
+        pos_ = (pos_ + 1) % buf_.size();
+        if (count_ < buf_.size()) ++count_;
+    }
+    size_t size() const { return count_; }
+    bool  empty() const { return count_ == 0; }
+    // The window in order, oldest first (message thread).
+    std::vector<float> snapshot() const
+    {
+        std::vector<float> out;
+        out.reserve(count_);
+        const size_t from = (count_ < buf_.size()) ? 0 : pos_;
+        for (size_t k = 0; k < count_; ++k) out.push_back(buf_[(from + k) % buf_.size()]);
+        return out;
+    }
+private:
+    std::vector<float> buf_;
+    size_t pos_ = 0, count_ = 0;
+};
+
 class ZwickerLoudness {
 public:
     static constexpr int kBands = 28;      // third octaves, 25 Hz to 12.5 kHz
@@ -108,7 +140,9 @@ private:
     int   pos_ = 0, filled_ = 0;
     int   binLo_[kBands] = {}, binHi_[kBands] = {};
     float now_ = 0.0f, max_ = 0.0f;
-    std::vector<float> history_;           // one value per frame, for the fifth centile
+    // A frame every 2048 samples, so this holds about an hour and a half at 48 kHz.
+    static constexpr size_t kHistory = 1u << 17;
+    LoudnessLog history_;                  // one value per frame, for the fifth centile
 };
 
 class LoudnessMeter {
@@ -134,8 +168,10 @@ private:
     long   hopSamples_ = 0;
     // Gating needs every block's loudness, not a running mean: the relative gate is a threshold
     // computed from all of them and then applied to all of them.
-    std::vector<float> blocks_;                   // block loudness in LUFS
-    std::vector<float> shortBlocks_;              // short-term values, for the range
+    // Ten a second, so these hold about an hour and three quarters.
+    static constexpr size_t kBlockLog = 1u << 16;
+    LoudnessLog blocks_;                          // block loudness in LUFS
+    LoudnessLog shortBlocks_;                     // short-term values, for the range
     double truePeak_ = 0.0;
     double seconds_ = 0.0;
     float  lastShort_ = -120.0f;

@@ -33,7 +33,7 @@ const char* const kRootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", 
 const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" };
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
-const char* const kSubSourceNames[2] = { "Root", "Difference" };
+const char* const kSubSourceNames[3] = { "Root", "Difference", "Lowest" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
@@ -171,7 +171,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::SubGlide,    "sub_glide",    "Glide",         "Foundation", 0.1f,  30.f,   8.f,   0.4f, "s"),
     F(ParamId::SubBinaural, "sub_binaural", "Binaural",      "Foundation", 0.f,   12.f,   0.f,   0.6f, "Hz"),
     F(ParamId::SubTone,     "sub_tone",     "Tone",          "Foundation", 0.f,   1.f,    0.2f,  1.f,  ""),
-    C(ParamId::SubSource,   "sub_source",   "Source",        "Foundation", kSubSourceNames, 2, 0),
+    C(ParamId::SubSource,   "sub_source",   "Source",        "Foundation", kSubSourceNames, 3, 0),
     F(ParamId::PadLowCut,   "pad_low_cut",  "Pad Low Cut",   "Foundation", 0.f,   300.f,  0.f,   0.6f, "Hz"),
 
     F(ParamId::StrikeLevel, "strike_level", "Strike",        "Strike",     0.f,   1.f,    0.f,   1.f,  ""),

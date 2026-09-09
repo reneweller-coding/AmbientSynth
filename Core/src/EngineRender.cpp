@@ -26,6 +26,28 @@ namespace ambient {
 
 // ---------------------------------------------------------------- audio
 
+// Message thread, before this engine is heard: take a cluster over from the one that is leaving.
+// The notes are started exactly as the conductor's own would be, so they carry this preset's
+// depth, its spatial placing and its envelopes -- the same chord, played by another instrument.
+void Engine::adoptCluster(const int* notes, const float* vels, int count, bool second)
+{
+    if (second) {
+        brain2_.adopt(notes, vels, count, [this](const BrainEvent& e) {
+            if (e.type == BrainEvent::Type::NoteOn) startNote(e.note, e.velocity, OwnerBrain2, clampv(depth_ * brain2Depth_, 0.0f, 1.0f));
+            else stopNote(e.note, OwnerBrain2);
+        });
+    } else {
+        brain_.adopt(notes, vels, count, [this](const BrainEvent& e) {
+            if (e.type == BrainEvent::Type::NoteOn) {
+                const float u = rng_.uniform();
+                const float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
+                                           : depth_ * (0.55f + 0.45f * rng_.uniform());
+                startNote(e.note, e.velocity, OwnerBrain, d);
+            } else stopNote(e.note, OwnerBrain);
+        });
+    }
+}
+
 void Engine::process(float* L, float* R, int n)
 {
     blocksBegun_.fetch_add(1, std::memory_order_acq_rel);
@@ -651,7 +673,26 @@ void Engine::renderChunk(float* L, float* R, int n)
     if (subOn) {
         const double rootHz = frequencyOf(brain_.root());
         double subHz = rootHz / (subOctave_ == 1 ? 2.0 : 4.0);
-        if (subGhost_) {
+        if (subSource_ == 2) {
+            // Lowest: the Foundation stands under the note that is actually lowest, an octave or
+            // two below it, and moves when the chord does.
+            //
+            // The other two sources do not move with the music, and that is what made the
+            // instrument sound as though only its additive presets were being played. Root is a
+            // pedal on the conductor's root, and the root wanders only on a draw of 0.35 x Wander
+            // per event -- at the library's rates, once every quarter of an hour. Difference does
+            // follow the voices, but folds its answer back into a fixed octave anchored to the
+            // root, so it tracks the interval and not the pitch: the same chord an octave up came
+            // out at exactly the same frequency, measured to the tenth of a hertz.
+            //
+            // The glide does the rest. It is a one-pole in the log domain and stands at eight
+            // seconds in most of the library, so the bass slides to the new chord over a breath
+            // instead of stepping to it.
+            double lowest = 0.0;
+            for (const auto& v : voices_)
+                if (v.isActive() && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
+            if (lowest > 0.0) subHz = lowest / (subOctave_ == 1 ? 2.0 : 4.0);
+        } else if (subSource_ == 1) {
             // Ghost tone (Rich's combination tones): the difference between the two lowest sounding
             // voices is the tone the ear makes by itself in just intonation (3:2 -> f/2, 5:4 -> f/4,
             // 4:3 -> f/3). The sub doubles it, folded into the register the root mode would use,

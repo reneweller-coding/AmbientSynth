@@ -923,11 +923,22 @@ void AmbientSynthProcessor::beginTransition(int index)
     // is heard, so it is filled in here as well.
     for (int i = 0; i < kNumParams; ++i)
         in.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
-    // The conductor arrives having already made up its mind. Left alone it starts from an empty
-    // chord and grows it one note per event -- an entrance, which is right from silence and wrong
-    // here, because what it is crossfading with is a full cluster. At the library's slower rates
-    // that was minutes of a single note while the old preset faded out underneath it.
-    in.requestBrainFill();
+    // The conductor takes the chord over from the one it is replacing. A crossfade is meant to
+    // change the instrument and not the music: picking its own notes made it two pieces of music
+    // at once for the length of the fade, and picking them at its own event rate -- ninety-nine
+    // seconds in places -- made it minutes of a single note. It inherits the cluster and carries
+    // on with it, letting go of what does not suit it and adding what it wants at its own pace.
+    // With nothing to inherit, from silence or from a preset whose conductor was off, it fills
+    // instead, so a change never lands on an empty instrument either.
+    {
+        int notes[ambient::kSlots]; float vels[ambient::kSlots];
+        for (int which = 0; which < 2; ++which) {
+            const bool second = which == 1;
+            const int n = live().soundingCluster(notes, vels, second);
+            if (n > 0) in.adoptCluster(notes, vels, n, second);
+            else if (!second) in.requestBrainFill();
+        }
+    }
     // The chord that is being held is held on the new instrument too. Without this a player
     // holding a chord through a preset change heard it die with the old preset and nothing take
     // its place -- the notes had gone to an engine that was on its way out.

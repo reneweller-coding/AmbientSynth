@@ -242,6 +242,11 @@ public:
     // Both conductors fill their clusters now rather than at their event rate. Used when this
     // engine takes over from one that was already sounding; see ClusterBrain::requestFill.
     void requestBrainFill() { brain_.requestFill(); brain2_.requestFill(); }
+    // Read out and hand over what the conductors are holding; see ClusterBrain::adopt. The two
+    // are kept apart: the background conductor's cluster belongs to the background.
+    int soundingCluster(int* notes, float* vels, bool second = false) const
+    { return (second ? brain2_ : brain_).soundingNotes(notes, vels); }
+    void adoptCluster(const int* notes, const float* vels, int count, bool second = false);
     KeyEstimate brainKey() const { return brain_.estimatedKey(); }
     // The arc's value when it follows the clock instead of its own drift: the night's bottom at
     // four in the morning, its top at four in the afternoon, a cosine between. Pure, so the
@@ -486,7 +491,9 @@ private:
     float        subPulse_ = 0.0f, subPulseCur_ = 0.0f;
     double       subPulsePhase_ = 0.0;
     int          subOctave_ = 1;
-    bool         subGhost_ = false;   // Source = Difference: follow the ghost tone of the two lowest voices
+    // Where the Foundation takes its pitch: 0 the conductor's root, 1 the ghost tone of the two
+    // lowest voices, 2 the lowest voice that is actually sounding.
+    int          subSource_ = 0;
     bool         hold_ = false;
     float        depth_ = 0.7f, keysDepth_ = 0.0f;
     float        delayMix_ = 0.25f, delayToFar_ = 0.4f, farLevel_ = 0.8f;

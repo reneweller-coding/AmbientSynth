@@ -675,7 +675,7 @@ void Engine::readParams()
     subBinaural_    = g(ParamId::SubBinaural);
     subPulse_       = g(ParamId::SubPulse);
     subTone_        = g(ParamId::SubTone);
-    subGhost_       = std::lround(g(ParamId::SubSource)) == 1;
+    subSource_      = clampv(static_cast<int>(std::lround(g(ParamId::SubSource))), 0, 2);
     vp_.lowCut      = g(ParamId::PadLowCut);
     const bool hold = g(ParamId::Hold) >= 0.5f;
     if (hold_ && !hold) { for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { midiHeld_[i] = false; stopNote(i, OwnerMidi); } }

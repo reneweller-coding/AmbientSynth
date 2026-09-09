@@ -496,6 +496,40 @@ public:
     void requestStep() { stepRequested_ = true; }
     bool stepPending() const { return stepRequested_; }
 
+    // What the conductor is holding, so another one can take it over. Writes at most kSlots
+    // notes and returns how many; a slot that has been chosen but has not started yet counts,
+    // because it is about to sound.
+    int soundingNotes(int* notes, float* vels) const
+    {
+        int n = 0;
+        for (const auto& s : slots_)
+            if (s.note >= 0 && n < kSlots) { notes[n] = s.note; vels[n] = s.vel; ++n; }
+        return n;
+    }
+
+    // Take a cluster over from another conductor and carry on from there.
+    //
+    // A crossfade is meant to change the instrument, not the music. Left to itself the arriving
+    // conductor picks its own notes, so what the listener heard was one chord fading out under a
+    // different chord fading in -- two pieces of music at once for the length of the fade. Here it
+    // inherits the chord instead and goes on with it: what is out of its range or too dense it
+    // lets go of over the next few events, the way it would treat any cluster it was given, and
+    // what is missing it adds at its own pace. Nothing is forced.
+    template <class EmitFn>
+    void adopt(const int* notes, const float* vels, int count, EmitFn&& emit)
+    {
+        for (auto& s : slots_) { if (s.note >= 0) emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f }); s = Slot{}; }
+        for (int i = 0; i < count && i < kSlots; ++i) {
+            slots_[i].note = notes[i];
+            slots_[i].vel = vels[i];
+            slots_[i].remaining = 0.0;
+            slots_[i].startIn = 0.0;
+            remember(notes[i]);
+            emit(BrainEvent{ BrainEvent::Type::NoteOn, notes[i], vels[i] });
+        }
+        filling_ = false;
+    }
+
     // Fill the cluster now rather than at the event rate.
     //
     // An empty chord grows by one note per tick, which is an entrance when the instrument starts
@@ -615,7 +649,16 @@ public:
             if (activeCount() >= density) return;
         }
 
-        if (anchorNote < 0 && rng_.uniform() < p.wander * 0.35f) wanderRoot(low, high, freqOf, p.key);
+        // The root wanders on Wander, and now also on Root Move, which until here did nothing in
+        // this mode: it was read only in Chords, and Free is what every one of the 8400 presets
+        // selects. So the only thing that could move the root was a 0.35 x Wander draw once an
+        // event -- at the library's rates about once a quarter of an hour -- and the Foundation
+        // standing on that root was heard as one bass note all night.
+        //
+        // Still one draw, so a preset that leaves Root Move at zero behaves down to the last bit
+        // as it did. Every preset in the library leaves it at zero.
+        const float moveChance = clampv(p.wander * 0.35f + p.rootMove * 0.5f, 0.0f, 1.0f);
+        if (anchorNote < 0 && rng_.uniform() < moveChance) wanderRoot(low, high, freqOf, p.key);
 
         // Weighted choice of the next note.
         const double rootFreq = freqOf(root_);

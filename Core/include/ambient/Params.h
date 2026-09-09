@@ -268,7 +268,7 @@ extern const char* const kScaleNames[kNumScaleChoices];
 extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
-extern const char* const kSubSourceNames[2];   // "Root", "Difference" (ghost tone of the two lowest voices)
+extern const char* const kSubSourceNames[3];   // "Root", "Difference" (ghost tone), "Lowest" (the lowest voice)
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)

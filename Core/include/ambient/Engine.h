@@ -259,6 +259,12 @@ public:
     float  brainExcitation() const { return static_cast<float>(brain_.excitation()); }
     bool   arcClockOn() const { return arcClock_; }
     double clockHour() const { return clockHour_; }
+    // Pin the hour the arc follows instead of asking the operating system. An instrument that
+    // knows what time it is cannot be measured: five hundred presets in the library have the arc
+    // clock on, and their descriptors came out different every time the pass ran, because the
+    // sound really was different at four in the afternoon and at midnight. The measurement pins
+    // it; playing does not (-1 = the wall clock, as always).
+    void   setClockHourOverride(double h) { clockHourOverride_ = h; }
     // The offset, in cents, that tunes `note` pure against what is sounding now (0 if nothing is).
     float  adaptiveOffset(int note) const;
     // What Match would make of partial h (1-based) against the current scale: the ratio to f0.
@@ -450,6 +456,7 @@ private:
     bool         arcClock_ = false, arcClockWas_ = false;
     float        arcOut_ = 0.0f, arcGlide_ = 0.0f;
     double       clockHour_ = 12.0;
+    double       clockHourOverride_ = -1.0;   // >= 0: use this hour, do not read the clock
     int          clockCheck_ = 0;
     float        guardFactor_ = 1.0f;                     // what the fluctuation guard last did to the drift
     // Foundation sub voice

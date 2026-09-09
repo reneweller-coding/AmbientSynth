@@ -65,7 +65,9 @@ void Engine::process(float* L, float* R, int n)
     // brightness and a jump there is a jump in the sound.
     {
         const float dt = static_cast<float>(n / sr_);
-        if (arcClock_) {
+        if (arcClock_ && clockHourOverride_ >= 0.0) {
+            clockHour_ = clockHourOverride_;
+        } else if (arcClock_) {
             if (++clockCheck_ >= static_cast<int>(sr_ / std::max(1, n))) {
                 clockCheck_ = 0;
                 const std::time_t t = std::time(nullptr);

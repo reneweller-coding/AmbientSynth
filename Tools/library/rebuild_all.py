@@ -137,9 +137,15 @@ def main():
         if run([py, os.path.join(HERE, "make_presets.py")], a.dry_run):
             return 1
         # A new library invalidates every measurement of the old one: same names, other sounds.
+        # The old cache is kept beside the new one rather than deleted: comparing a run against the
+        # one before it is how "did that change help?" gets an answer instead of an opinion, and
+        # the file was simply gone every time the question came up.
+        stamp = time.strftime("%Y%m%d-%H%M%S")
         for f in (cache, bcache, clap):
             if os.path.exists(f) and not a.dry_run:
-                os.remove(f)
+                os.replace(f, f + "." + stamp + ".bak")
+            if os.path.exists(f + ".done") and not a.dry_run:
+                os.remove(f + ".done")
     if want("verify"):
         if run([py, os.path.join(HERE, "verify_packs.py")], a.dry_run):
             return 1
@@ -180,6 +186,13 @@ def main():
         if run([py, os.path.join(HERE, "map_all.py"), "--pack-cache", cache, "--builtin-cache", bcache,
                 "--taps", taps, "--clap", clap, "--clusters", str(a.clusters), "--jobs", str(a.jobs)],
                a.dry_run):
+            return 1
+    if want("map"):
+        # And again afterwards: verify_packs runs before the map is laid out, so it has never once
+        # seen a finished pack file. That is how it came to reject the sixteen metadata fields
+        # map_all had been writing since 1.11 -- the check that was meant to catch a malformed
+        # library had never read one.
+        if run([py, os.path.join(HERE, "verify_packs.py")], a.dry_run):
             return 1
     if want("build"):
         if run(["cmake", "--build", "build", "--config", "Release"], a.dry_run):

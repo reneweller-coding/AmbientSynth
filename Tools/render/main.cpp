@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <cctype>
 #include <sstream>
 #include <chrono>
 
@@ -306,13 +307,16 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
 
 } // namespace
 
-int main(int argc, char** argv)
+// One render, exactly as the command line asks for it. main() below calls this once, or once
+// per preset when --batch is given.
+static int runOnce(int argc, char** argv)
 {
     std::string out = "ambient.wav";
     double seconds = 60.0;
     int sr = 48000, block = 256;
     bool stats = false, dump = false, useMap = false, measure = false, loudness = false;
-    std::string tapPath;
+    std::string tapPath, tapDir;
+    double clockHour = -1.0;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
     std::string routeText; double routeSpeed = 1.0;
@@ -338,6 +342,15 @@ int main(int argc, char** argv)
         // rather than read its numbers -- a learned audio embedding, say. 22.05 kHz is plenty for
         // that and keeps a whole library's worth of excerpts to a few gigabytes.
         else if (a == "--tap") tapPath = next();
+        // --tap-dir <dir>: the same excerpt, named after the preset, so a whole batch can write
+        // its taps without a --tap per preset. The name is the preset's, with everything that is
+        // not a letter or a digit turned into an underscore -- the rule measure_packs.py uses.
+        else if (a == "--tap-dir") tapDir = next();
+        // --hour <0..24>: what time the arc clock thinks it is. Without it a preset with the
+        // clock arc on renders differently at four in the afternoon than at midnight, which is
+        // the point of the feature and the end of any reproducible measurement -- 496 presets in
+        // the library have it on, and their descriptors moved with the time of day.
+        else if (a == "--hour") clockHour = std::atof(next().c_str());
         else if (a == "--loudness") loudness = true; // and a second line to BS.1770 (its own line so
                                                      // nothing that parses the measure line has to change)
         else if (a == "--dump") dump = true;
@@ -572,6 +585,19 @@ int main(int argc, char** argv)
         }
     }
 
+    if (tapPath.empty() && !tapDir.empty() && presetIndex >= 0) {
+        // A RUN of non-alphanumerics becomes ONE underscore, which is what
+        // re.sub(r"[^A-Za-z0-9]+", "_", name) does in measure_packs.py -- the taps are read back
+        // by that name, so the two rules have to be the same one.
+        std::string slug;
+        bool lastWasSep = false;
+        for (const char* c = preset(presetIndex).name; *c && slug.size() < 80; ++c) {
+            if (std::isalnum(static_cast<unsigned char>(*c))) { slug += *c; lastWasSep = false; }
+            else if (!lastWasSep) { slug += '_'; lastWasSep = true; }
+        }
+        tapPath = tapDir + "/" + slug + ".wav";
+    }
+    engine.setClockHourOverride(clockHour);
     engine.prepare(sr, block);
     if (!irChannels.empty()) {   // after prepare: the convolver's buffers exist now
         engine.setImpulse(irChannels[0].data(), irChannels.size() > 1 ? irChannels[1].data() : nullptr, static_cast<int>(irChannels[0].size()), irRate);
@@ -713,4 +739,61 @@ int main(int argc, char** argv)
     }
     std::printf("wrote %s\n", out.c_str());
     return nans == 0 ? 0 : 1;
+}
+
+// --batch <file>: render every preset named in the file (one name per line, '#' comments), one
+// after another, in this one process.
+//
+// It is not a second code path: the command line is used exactly as it stands, with the name
+// after --preset replaced for each line, and runOnce does the rest. So a batch of eight thousand
+// measures every preset the same way eight thousand separate calls would -- checked by comparing
+// the measure lines of both -- while paying the fixed cost of starting a process and reading the
+// pack files once instead of eight thousand times. On this machine that was 0.7 s a preset.
+int main(int argc, char** argv)
+{
+    std::string batchFile;
+    std::vector<std::string> args;
+    for (int i = 0; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--batch" && i + 1 < argc) { batchFile = argv[++i]; continue; }
+        args.push_back(a);
+    }
+    if (batchFile.empty()) return runOnce(argc, argv);
+
+    std::vector<std::string> names;
+    {
+        std::ifstream f(batchFile);
+        if (!f) { std::fprintf(stderr, "cannot read the batch list %s\n", batchFile.c_str()); return 2; }
+        std::string line;
+        while (std::getline(f, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
+            size_t b = line.find_first_not_of(" \t");
+            if (b == std::string::npos) continue;
+            line = line.substr(b);
+            if (line[0] == '#') continue;
+            names.push_back(line);
+        }
+    }
+    if (names.empty()) { std::fprintf(stderr, "the batch list %s names no preset\n", batchFile.c_str()); return 2; }
+
+    // Where the preset name goes. Without a --preset on the line one is inserted at the FRONT,
+    // never appended: a preset applies its own values to every parameter, so one that arrived
+    // after a --set would undo it. Appended, "--set brain_rate=6" was silently lost and the batch
+    // measured a different sound than the same command line one preset at a time.
+    size_t slot = 0;
+    for (size_t i = 1; i + 1 < args.size(); ++i) if (args[i] == "--preset") { slot = i + 1; break; }
+    if (slot == 0) { args.insert(args.begin() + 1, { "--preset", "" }); slot = 2; }
+
+    int worst = 0;
+    for (const std::string& name : names) {
+        args[slot] = name;
+        std::vector<char*> av;
+        av.reserve(args.size());
+        for (std::string& a : args) av.push_back(a.data());
+        std::printf("batch: %s\n", name.c_str());
+        std::fflush(stdout);
+        const int rc = runOnce(static_cast<int>(av.size()), av.data());
+        if (rc != 0) { std::fprintf(stderr, "batch: %s returned %d\n", name.c_str(), rc); worst = rc; }
+    }
+    return worst;
 }

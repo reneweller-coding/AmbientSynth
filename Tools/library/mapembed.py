@@ -156,12 +156,29 @@ def cluster(desc, k=12, seed=3, space=None):
             if name not in parts:
                 parts.append(name)
         names.append(" ".join(parts) if parts else f"Group {j + 1}")
-    # Two clusters can end up with the same two words; number the repeats rather than lie.
-    seen = {}
+    # Two clusters can end up with the same two words. "Sparse Still" and "Sparse Still 2" stood
+    # side by side in the browser's legend, and the number said nothing about either: the one that
+    # collides is given the next descriptor that is furthest from the middle, which is what
+    # actually tells them apart. Numbering is kept only for the case where even that repeats.
+    taken = set()
     out = []
-    for nm in names:
-        seen[nm] = seen.get(nm, 0) + 1
-        out.append(nm if seen[nm] == 1 else f"{nm} {seen[nm]}")
+    for j, nm in enumerate(names):
+        if nm in taken:
+            dev = C[j] - 0.5
+            order = np.argsort(-np.abs(dev))
+            for c in order[2:]:
+                extra = (HIGH if dev[c] > 0 else LOW)[COLS[c]]
+                cand = f"{nm} {extra}"
+                if extra not in nm.split() and cand not in taken:
+                    nm = cand
+                    break
+        if nm in taken:
+            n = 2
+            while f"{nm} {n}" in taken:
+                n += 1
+            nm = f"{nm} {n}"
+        taken.add(nm)
+        out.append(nm)
     return lab, out
 
 

@@ -26,6 +26,7 @@ import math
 import os
 import re
 import subprocess
+import tempfile
 import sys
 
 import numpy as np
@@ -93,23 +94,9 @@ def _packs_env(packs):
     env["AMBIENT_PACKS"] = os.path.abspath(packs)
     return env
 
-def render(name, packs, seconds, tapdir=None):
-    """The synth measures its own render and prints one line. It used to write a twelve-second
-    stereo WAV to a temporary file and read it straight back -- five thousand presets is
-    twenty-three gigabytes written and read for nothing, and every byte stayed in the file cache
-    afterwards, which is what made the machine unusable."""
-    cmd = [RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
-           "--notes", "45,52,59", "--set", "brain_rate=6", "--measure"]
-    if tapdir:
-        # A twelve-second mono excerpt beside the numbers, for a learned embedding to listen to.
-        safe = re.sub(r"[^A-Za-z0-9]+", "_", name)[:80]
-        cmd += ["--tap", os.path.join(tapdir, safe + ".wav")]
-    res = subprocess.run(cmd,
-                         capture_output=True, text=True, encoding="utf-8", errors="replace",
-                         env=_packs_env(packs), **LOW_PRIORITY)
-    if res.returncode != 0:
-        return None
-    m = MEASURE.search(res.stdout or "")
+def parse_measure(text):
+    """The numbers out of one render's output, or None if it did not produce a usable line."""
+    m = MEASURE.search(text or "")
     if not m:
         return None
     d = {}
@@ -129,13 +116,65 @@ def render(name, packs, seconds, tapdir=None):
     if not {"rms", "centroid", "flatness", "flux", "bass", "width", "voices"} <= set(d):
         return None
     d["rms_db"] = d.pop("rms")
-    t = TIMBRE.search(res.stdout or "")
+    t = TIMBRE.search(text or "")
     if t:
         try:
             d["timbre"] = [float(x) for x in t.group(1).split()]
         except ValueError:
             pass
     return d
+
+
+def render_batch(names, packs, seconds, tapdir=None):
+    """One process, many presets: {name: measurements}. The renderer's --batch reuses the command
+    line for every name in a list, so each preset is measured exactly as a single call would
+    measure it -- what is saved is starting a process and reading the 42 pack files, which was
+    0.44 s per preset of an eight-thousand-preset run."""
+    listing = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            listing = f.name
+            f.write("\n".join(names))
+        # --hour pins the arc clock: without it the 496 presets that follow the time of day
+        # measure differently every run, and the map's axes wander with them.
+        cmd = [RENDER, "--packs", packs, "--batch", listing, "--seconds", str(seconds),
+               "--notes", "45,52,59", "--set", "brain_rate=6", "--hour", "21", "--measure"]
+        if tapdir:
+            cmd += ["--tap-dir", tapdir]
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             env=_packs_env(packs), **LOW_PRIORITY)
+    finally:
+        if listing:
+            try:
+                os.remove(listing)
+            except OSError:
+                pass
+    # The output is one "batch: <name>" line followed by that preset's own output. A preset whose
+    # render failed simply has no measure line and comes back as None, exactly as before.
+    out = {}
+    chunks = re.split(r"^batch: (.*)$", res.stdout or "", flags=re.MULTILINE)
+    for i in range(1, len(chunks) - 1, 2):
+        out[chunks[i].strip()] = parse_measure(chunks[i + 1])
+    return out
+
+
+def render(name, packs, seconds, tapdir=None):
+    """The synth measures its own render and prints one line. It used to write a twelve-second
+    stereo WAV to a temporary file and read it straight back -- five thousand presets is
+    twenty-three gigabytes written and read for nothing, and every byte stayed in the file cache
+    afterwards, which is what made the machine unusable."""
+    cmd = [RENDER, "--packs", packs, "--preset", name, "--seconds", str(seconds),
+           "--notes", "45,52,59", "--set", "brain_rate=6", "--hour", "21", "--measure"]
+    if tapdir:
+        # A twelve-second mono excerpt beside the numbers, for a learned embedding to listen to.
+        safe = re.sub(r"[^A-Za-z0-9]+", "_", name)[:80]
+        cmd += ["--tap", os.path.join(tapdir, safe + ".wav")]
+    res = subprocess.run(cmd,
+                         capture_output=True, text=True, encoding="utf-8", errors="replace",
+                         env=_packs_env(packs), **LOW_PRIORITY)
+    if res.returncode != 0:
+        return None
+    return parse_measure(res.stdout)
 
 
 
@@ -203,6 +242,8 @@ def main():
     # rewrites positions, descriptors and tags, and not one sample of what the library plays.
     ap.add_argument("--no-gain", action="store_true", help="do not touch master_gain")
     ap.add_argument("--taps", default="", help="also write a 12 s mono excerpt of every preset here")
+    ap.add_argument("--chunk", type=int, default=25,
+                    help="presets per renderer process (one process for many; 1 = one each)")
     ap.add_argument("--resume", action="store_true",
                     help="skip presets the cache already holds (the cache is written as it goes)")
     a = ap.parse_args()
@@ -246,15 +287,22 @@ def main():
             os.replace(tmp, a.cache)          # never a half-written cache on disk
 
         t0 = time.time()
+        # Chunks, not presets: one process measures a run of them (see render_batch). Small enough
+        # that an interruption loses little and the cache is written often, large enough that the
+        # fixed cost of a process is paid once for many.
+        by_name = {r["name"]: r for r in todo}
+        chunks = [[r["name"] for r in todo[i:i + a.chunk]] for i in range(0, len(todo), a.chunk)]
         with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
             done = 0
-            for r, m in zip(todo, ex.map(lambda r: render(r["name"], a.packs, a.seconds, a.taps or None), todo)):
-                r["m"] = m
-                done += 1
-                if done % 250 == 0:
-                    el = time.time() - t0
-                    print(f"  {done}/{len(todo)}  {el/60:.0f} min, noch etwa {el/done*(len(todo)-done)/60:.0f} min", flush=True)
-                    flush()
+            for got in ex.map(lambda c: render_batch(c, a.packs, a.seconds, a.taps or None), chunks):
+                for name, m in got.items():
+                    if name in by_name:
+                        by_name[name]["m"] = m
+                done += len(got)
+                el = time.time() - t0
+                if done % max(a.chunk, 1) == 0 or done >= len(todo):
+                    print(f"  {done}/{len(todo)}  {el/60:.0f} min, noch etwa {el/max(done,1)*(len(todo)-done)/60:.0f} min", flush=True)
+                flush()
         flush()
         if a.cache:
             print(f"  cached {sum(1 for r in rows if r['m'])} measurements in {a.cache}")

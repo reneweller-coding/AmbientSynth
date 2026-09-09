@@ -28,6 +28,7 @@ std::vector<Pack>& packs() { static std::vector<Pack> p; return p; }
 // Preset objects handed out point into the pack strings, so they stay valid until clearPresetPacks().
 std::vector<Preset>& views() { static std::vector<Preset> v; return v; }
 std::vector<std::string>& paths() { static std::vector<std::string> p; return p; }   // absolute, kPresetFiles per entry
+std::vector<std::string>& loadedPaths() { static std::vector<std::string> p; return p; }   // pack files already read
 
 void rebuildViews()
 {
@@ -92,6 +93,19 @@ std::vector<std::string> split(const std::string& s, char sep)
 bool loadPresetPack(const char* path)
 {
     if (path == nullptr) return false;
+    // Loading the same file twice is doing nothing, not doing it twice. The default folders have
+    // always been documented that way ("a pack found twice loads once") but the guard was only in
+    // the folder scan, so a second call with the same path appended every preset again. It is what
+    // lets one process render preset after preset (ambient_render --batch) without the library
+    // growing under it.
+    {
+        std::error_code ec;
+        std::string key = std::filesystem::weakly_canonical(std::filesystem::path(path), ec).string();
+        if (ec) key = path;
+        auto& seen = loadedPaths();
+        if (std::find(seen.begin(), seen.end(), key) != seen.end()) return false;
+        seen.push_back(key);
+    }
     std::ifstream f(path);
     if (!f) return false;
     Pack pack;
@@ -192,7 +206,7 @@ int loadDefaultPresetPacks()
     return n;
 }
 
-void clearPresetPacks() { packs().clear(); rebuildViews(); }
+void clearPresetPacks() { packs().clear(); loadedPaths().clear(); rebuildViews(); }
 int  numPresetPacks() { return static_cast<int>(packs().size()); }
 const char* presetPackName(int pack) { return (pack >= 0 && pack < numPresetPacks()) ? packs()[static_cast<size_t>(pack)].name.c_str() : ""; }
 

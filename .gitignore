@@ -38,3 +38,7 @@ Tools/library/texture_retry.json
 Tools/library/field_jobs.json
 Tools/library/field_report.json
 Scratch/
+
+# Build- und Installationsprotokolle: Ergebnisse eines Laufs, nicht Quelltext
+Deploy/*.log
+Deploy/*.err

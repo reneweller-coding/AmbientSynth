@@ -160,9 +160,16 @@ void AmbientSynthProcessor::event(const ControlEvent& e)
     else presetEvents_.push(e);
 }
 
-// Message thread, from the pump: the preset changes OSC asked for.
+// Message thread, from the pump: the preset changes OSC asked for, and the parameters the map
+// left behind when it was switched off.
 void AmbientSynthProcessor::servePresetRequests()
 {
+    if (mapExit_.exchange(false, std::memory_order_acq_rel)) {
+        for (const ParamDesc& d : paramTable()) {
+            if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) continue;
+            if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(live().blendValue(d.id)));
+        }
+    }
     ControlEvent ev;
     while (presetEvents_.pop(ev)) {
         switch (ev.type) {
@@ -265,32 +272,18 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    // Leaving the preset map: the sound stays where the map left it, so the gliding blend
-    // values become the live parameters (through the host, like a controller would).
-    // The travelling preset change has arrived: write the target's own values into the parameters
-    // and switch the morph off. The engine is already playing exactly those values, so nothing
-    // moves -- what changes is that the state is a preset again and not a blend of two.
-    if (morphTarget_ >= 0 && live().morphPosition() >= 0.999f) {
-        const int target = morphTarget_;
-        morphTarget_ = -1;
-        currentProgram_ = target;
-        soundIndex_ = target;
-        soundName_ = preset(target).name;
-        zIndex_ = -1; strikeIndex_ = -1; cosmosIndex_ = -1;
-        applyScoped(preset(target), PresetScope::Full);
-        applyLevelMatch(target);
-        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(ParamId::MorphActive)].key))
-            p->setValueNotifyingHost(0.0f);
-        if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(ParamId::MorphPos)].key))
-            p->setValueNotifyingHost(0.0f);
-    }
-    const bool mapNow = raw_[static_cast<size_t>(ParamId::MapActive)]->load() >= 0.5f;
-    if (!mapNow && live().mapActive()) {
-        for (const ParamDesc& d : paramTable()) {
-            if (isMapParam(d.id) || isMorphParam(d.id) || isMacroParam(d.id)) continue;
-            if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(live().blendValue(d.id)));
-        }
-    }
+    // Leaving the preset map: the sound stays where the map left it, so the gliding blend values
+    // become the live parameters. Writing two hundred and ninety-three parameters through the host
+    // is not work for the audio thread -- it is exactly what was moved off it for OSC preset
+    // changes -- so the audio thread only notices that the map has been switched off and the
+    // message thread does the writing a few milliseconds later. The blended values stay where they
+    // are in the meantime: switching the map off leaves blendCur_ alone.
+    //
+    // (The block that used to sit here for the arrival of a travelling preset change is gone with
+    // it. Nothing has set morphTarget_ since a preset change became a crossfade of two engines,
+    // so it applied a preset from the audio thread that was never on its way.)
+    if (raw_[static_cast<size_t>(ParamId::MapActive)]->load() < 0.5f && live().mapActive())
+        mapExit_.store(true, std::memory_order_release);
 
     {   // Into the instrument -- or, while a transition is being built, into the engine that is
         // about to become it, so that the new preset's values do not also land on the old sound.

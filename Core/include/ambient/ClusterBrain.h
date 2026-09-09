@@ -916,6 +916,12 @@ private:
     static bool pitchClassEqual(double fa, double fb)
     {
         double r = fa / fb;
+        // The same guard intervalConsonance has, and for the same reason: these two loops
+        // halve and double until the ratio is inside an octave, and neither of them ends for
+        // a ratio of zero or infinity. A Scala file with a degree of zero -- which the tuning
+        // code answers with a frequency of zero, by design -- would have hung the audio thread
+        // here for ever.
+        if (!(r > 0.0) || !(r < 1.0e30)) return false;
         while (r >= 2.0) r *= 0.5;
         while (r < 1.0) r *= 2.0;
         return std::fabs(std::log2(r)) * 1200.0 < 10.0 || std::fabs(std::log2(r) - 1.0) * 1200.0 < 10.0;

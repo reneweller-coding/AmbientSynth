@@ -181,6 +181,10 @@ public:
     // scale are: written into a pending copy and picked up at the next block.
     void resetModulation();          // the matrix cleared, the six envelopes back to default
     bool applyPresetModulation(const Preset& p);   // the mod and envs fields of a preset
+private:
+    void clearPendingModulation();   // clear without announcing
+    void publishModulation();        // announce, once everything is written
+public:
     bool setModMatrixText(const char* text);
     int  writeModMatrix(char* buf, size_t cap) const { return matrixPending_.write(buf, cap); }
     const ModMatrix& modMatrix() const { return matrixPending_; }
@@ -334,6 +338,8 @@ private:
     ModEnvSpec   envSpec_[kNumModEnvs];
     ModMatrix    matrix_, matrixPending_;
     std::atomic<int> modVersion_{ 0 };
+    // Set while the audio thread copies the pending matrix and shapes; the writer waits on it.
+    std::atomic<bool> modBusy_ { false };
     int          modSeen_ = 0;
     float        modSrc_[kNumModSources] = {};
     float        modOut_[kNumParams] = {};

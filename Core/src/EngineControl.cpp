@@ -27,18 +27,37 @@ namespace ambient {
 
 // ---------------------------------------------------------------- modulation
 
-void Engine::resetModulation()
+// Clears the pending matrix and shapes WITHOUT announcing them: the announcement is what makes
+// the audio thread copy, and it must not do that while the rest is still being written.
+void Engine::clearPendingModulation()
 {
     matrixPending_.clear();
     // A default shape every envelope starts from: up over a quarter of its length, down over the
     // rest. Time is scaled by the envelope's own Time parameter, so this is a shape, not a length.
     for (auto& e : envPending_) e.parse("0:0/1:1/4:0");
+}
+
+void Engine::resetModulation()
+{
+    clearPendingModulation();
+    publishModulation();
+}
+
+// Hand the finished matrix and shapes over. The audio thread copies them at the top of its
+// next block; waiting for it to finish an earlier copy is the same handshake the user scale
+// and the user wavetable use, and it costs microseconds.
+void Engine::publishModulation()
+{
+    while (modBusy_.load(std::memory_order_acquire)) { }
     modVersion_.fetch_add(1, std::memory_order_release);
 }
 
 bool Engine::applyPresetModulation(const Preset& p)
 {
-    resetModulation();
+    // Cleared, then filled, then announced -- once, at the end. It used to announce the clear
+    // and then parse into the same object, so the audio thread could be copying the matrix
+    // while the message thread was still writing it.
+    clearPendingModulation();
     bool ok = true;
     if (p.mod != nullptr && *p.mod) ok = matrixPending_.parse(p.mod) && ok;
     if (p.envs != nullptr && *p.envs) {
@@ -58,14 +77,14 @@ bool Engine::applyPresetModulation(const Preset& p)
             s = (*end == '~') ? end + 1 : end;
         }
     }
-    modVersion_.fetch_add(1, std::memory_order_release);
+    publishModulation();
     return ok;
 }
 
 bool Engine::setModMatrixText(const char* text)
 {
     if (!matrixPending_.parse(text)) return false;
-    modVersion_.fetch_add(1, std::memory_order_release);
+    publishModulation();
     return true;
 }
 
@@ -73,7 +92,7 @@ bool Engine::setEnvShape(int index, const char* text)
 {
     if (index < 0 || index >= kNumModEnvs) return false;
     if (!envPending_[index].parse(text)) return false;
-    modVersion_.fetch_add(1, std::memory_order_release);
+    publishModulation();
     return true;
 }
 
@@ -147,8 +166,10 @@ void Engine::stepModulation(float dt)
     // Pick up matrix or shape edits made on the message thread (fixed-size objects, no allocation).
     const int mv = modVersion_.load(std::memory_order_acquire);
     if (mv != modSeen_) {
+        modBusy_.store(true, std::memory_order_release);
         matrix_ = matrixPending_;
         for (int i = 0; i < kNumModEnvs; ++i) envShape_[i] = envPending_[i];
+        modBusy_.store(false, std::memory_order_release);
         modSeen_ = mv;
         // Whether anything reads the Lenia field, so it is only computed when it is heard.
         leniaUsed_ = false;

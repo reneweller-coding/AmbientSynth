@@ -216,6 +216,8 @@ private:
     // Asks the audio thread to let go of the engine that is fading out, so the message thread may
     // prepare it for the next change. A transition interrupted this way ends where it stands.
     std::atomic<bool> endFade_ { false };
+    // The map was switched off: the message thread writes the blend it left into the parameters.
+    std::atomic<bool> mapExit_ { false };
     int  pendingPreset_ = -1;         // a change waiting for the audio thread to free an engine
     void beginTransition(int index);  // message thread: prepare the incoming engine and publish it
     // A change asked for while both engines were busy is served from here, a few milliseconds
@@ -268,8 +270,7 @@ private:
     juce::String scalaText_, userScaleName_;
     juce::File textureFile_[ambient::kSlots], wavetableFile_, impulseFile_, impulseBFile_;
     bool       levelMatch_ = false, compact_ = false;
-    // The travelling preset change (selectPreset): the target, and what the browser last set.
-    int        morphTarget_ = -1;
+    // What the browser last set for a travelling preset change.
     bool       morphOnSelect_ = true;
     float      morphSelectSeconds_ = 20.0f;
     int        layoutMode_ = 0;

@@ -1,3 +1,5 @@
+#include <chrono>
+#include <thread>
 #include "ambient/Convolution.h"
 #include "ambient/Dsp.h"
 #include <cmath>
@@ -91,7 +93,9 @@ void Convolver::setImpulse(const float* L, const float* R, int n, double impulse
 
     const int activeNow = active_.load(std::memory_order_acquire);
     const int target = activeNow < 0 ? 0 : 1 - activeNow;
-    for (int spin = 0; spin < 200000 && inUse_.load(std::memory_order_acquire) == target; ++spin) { }
+    // Sleeps, and up to 200 ms: see Engine::setTexture.
+    for (int spin = 0; spin < 4000 && inUse_.load(std::memory_order_acquire) == target; ++spin)
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
     analyse(sets_[target], l, r, R != nullptr);
     active_.store(target, std::memory_order_release);
 }

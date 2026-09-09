@@ -276,7 +276,10 @@ void StereoDelay::process(const float* inL, const float* inR, float* wetL, float
 void Diffuser::prepare(double sampleRate)
 {
     sr_ = sampleRate;
-    const int size = 1 << 13;
+    // Sized from the rate: fixed at 8192 the ring was shorter than the 47.9 ms stage from
+    // 176.4 kHz up, and that stage silently became a 5 ms one.
+    int size = 1 << 13;
+    while (size < static_cast<int>(0.05 * sr_) + 64) size <<= 1;
     // Lengths in the ratio of small primes, so the four stages never line up and the field stays
     // dense instead of ringing.
     const double ms[kStages] = { 13.7, 21.3, 33.1, 47.9 };
@@ -440,15 +443,19 @@ void Patina::process(float* L, float* R, int n)
         const float d = centre + swing * (0.8f * wowV + 0.2f * sin01(flutterPh_));
         bufL_[static_cast<size_t>(w_ & mask_)] = L[i];
         bufR_[static_cast<size_t>(w_ & mask_)] = R[i];
-        const float rp = static_cast<float>(w_) - d;
+        // In double, and with the write pointer kept inside the ring: as a float the pointer
+        // stopped being an integer after 2^24 samples (six minutes at 48 kHz) and the read head
+        // began to jitter by one sample, then two, then four against the write position -- a
+        // Nyquist buzz on the master that got worse for as long as the instrument ran.
+        const double rp = static_cast<double>(w_) - static_cast<double>(d);
         const int i0 = static_cast<int>(std::floor(rp));
-        const float f = rp - static_cast<float>(i0);
+        const float f = static_cast<float>(rp - static_cast<double>(i0));
         auto read = [&](const std::vector<float>& b) {
             const float a = b[static_cast<size_t>(i0 & mask_)], c = b[static_cast<size_t>((i0 + 1) & mask_)];
             return a + f * (c - a);
         };
         float l = read(bufL_), r = read(bufR_);
-        ++w_;
+        w_ = (w_ + 1) & mask_;   // stays an exact integer for ever
         // The lost top end.
         if (lpC_ < 1.0f) { lpL_ += lpC_ * (l - lpL_); lpR_ += lpC_ * (r - lpR_); l = lpL_; r = lpR_; }
         // A noise floor that lives with the music: mostly constant, a little louder when the tape

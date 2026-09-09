@@ -80,6 +80,10 @@ bool parseScala(const char* text, FixedScale& out)
         // trim
         const char* a = p;
         while (a < end && (*a == ' ' || *a == '\t' || *a == '\r')) ++a;
+        // The description may be an empty line -- the format allows it and many files have one.
+        // Skipping blank lines in every state turned the count line into the name and the first
+        // pitch into the count, and a valid file was refused.
+        if (a >= end && lineState == 0) { copyName(s, ""); lineState = 1; }
         if (a < end && *a != '!') {
             char line[256];
             size_t len = static_cast<size_t>(end - a);
@@ -96,7 +100,11 @@ bool parseScala(const char* text, FixedScale& out)
             } else if (got < expected) {
                 double v = 0.0;
                 char* endp = nullptr;
-                if (std::strchr(line, '.') != nullptr) {
+                // Cents or ratio is decided by the value alone, not by the comment that may
+                // follow it on the same line: "3/2 pure fifth (approx. 702c)" is a ratio.
+                size_t vend = 0;
+                while (line[vend] != 0 && line[vend] != ' ' && line[vend] != '\t') ++vend;
+                if (std::memchr(line, '.', vend) != nullptr) {
                     double cents = std::strtod(line, &endp);
                     v = std::pow(2.0, cents / 1200.0);
                 } else {

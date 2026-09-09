@@ -94,9 +94,11 @@ inline float VoiceFilter::one(int ch, float x)
         // Feedback comb tuned to Cutoff, a low pass in the loop; output scaled so the peaks sit at
         // unity and Resonance deepens the dips between them instead of raising the level.
         float* buf = combBuf_[ch];
-        const float rp = static_cast<float>(combW_) - combDelay_;
+        // In double: as a float the write pointer lost its integer part after 2^24 samples, and a
+        // note held for six minutes (the brain holds for up to ten) heard its comb drift.
+        const double rp = static_cast<double>(combW_) - static_cast<double>(combDelay_);
         const int i0 = static_cast<int>(std::floor(rp));
-        const float f = rp - static_cast<float>(i0);
+        const float f = static_cast<float>(rp - static_cast<double>(i0));
         const float a = buf[(i0) & (kCombMax - 1)], b = buf[(i0 + 1) & (kCombMax - 1)];
         const float d = a + f * (b - a);
         combDamp_[ch] += 0.35f * (d - combDamp_[ch]);
@@ -112,7 +114,7 @@ inline void VoiceFilter::tick(float inL, float inR, float& outL, float& outR)
 {
     outL = one(0, sat(inL));
     outR = one(1, sat(inR));
-    if (model_ == FilterModel::Comb) ++combW_;
+    if (model_ == FilterModel::Comb) combW_ = (combW_ + 1) & (kCombMax - 1);
 }
 
 } // namespace ambient

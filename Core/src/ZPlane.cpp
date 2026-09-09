@@ -147,6 +147,14 @@ struct NormGrid {
 const NormGrid& grid() { static const NormGrid g; return g; }
 }
 
+// Builds the normalisation grid now, on whoever calls -- prepare() does, from the message thread.
+// Left alone, the first voice to build a cascade did it on the audio thread, inside the guard
+// the language puts around a function-local static: a lock, where no lock belongs.
+void zWarmTables() { (void)grid(); }
+
+namespace {
+}
+
 float zBuildCascade(const ZFrame& f, ZBiquad* ch, float sr)
 {
     const NormGrid& g = grid();

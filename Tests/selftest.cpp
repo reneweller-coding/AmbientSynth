@@ -137,6 +137,24 @@ void testTuning()
     CHECK(std::fabs(user.ratios[1] - 1.125) < 1e-12, "scala ratio 9/8");
     CHECK(std::fabs(user.ratios[4] - 5.0 / 3.0) < 1e-5, "scala cents entry");
     CHECK(!parseScala("garbage", user), "reject malformed scala");
+    // The format allows an empty description line, and a comment after a value on the same
+    // line. Both used to be misread: the blank line was skipped so the count became the name,
+    // and a "." anywhere in the line made a ratio into cents.
+    {
+        FixedScale e;
+        CHECK(parseScala("! empty description\n\n 2\n 3/2 pure fifth (approx. 702c)\n 2/1\n", e), "scala: empty description line accepted");
+        CHECK(e.count == 2 && std::fabs(e.ratios[1] - 1.5) < 1e-12, "scala: ratio with a comment after it is still a ratio");
+    }
+    // Text that is not a number is the parameter's default, never NaN: every comparison with NaN
+    // is false, so a NaN slipped through min/max and into the engine.
+    {
+        const ParamDesc& d = paramDesc(ParamId::Cutoff);
+        CHECK(paramValueFromText(d, "nan") == d.def, "param text 'nan' is the default");
+        CHECK(paramValueFromText(d, "inf") == d.max, "param text 'inf' is clamped");
+        Engine eng;
+        eng.prepare(48000.0, 64);
+        CHECK(!eng.setModMatrixText("lfo1>cutoff:nan"), "a NaN modulation depth is refused");
+    }
 
     CHECK(intervalConsonance(1.0) == 1.0, "unison consonance 1");
     CHECK(intervalConsonance(1.5) > intervalConsonance(1.25), "fifth more consonant than third");

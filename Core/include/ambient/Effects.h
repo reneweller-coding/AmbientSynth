@@ -368,7 +368,11 @@ public:
         for (int k = 0; k < kWalls; ++k) { lp_[k] = 0.0f; dSrc_[k] = 1.0f; gSrc_[k] = 0.0f; }
         setRoom(8.0f, 0.35f, 1.0f);
         setSource(0.0f, 0.4f);
-        for (int k = 0; k < kWalls; ++k) { dSrc_[k] = dSrcT_[k]; gSrc_[k] = gSrcT_[k]; }
+        for (int k = 0; k < kWalls; ++k) {
+            dSrc_[k] = dSrcT_[k]; gSrc_[k] = gSrcT_[k];
+            dEar_[k] = dEarT_[k];
+            for (int m = 0; m < kWalls; ++m) dPair_[k][m] = dPairT_[k][m];
+        }
     }
 
     // size: the room's longest dimension in metres (the shoebox is size x 0.8 size x 0.45 size,
@@ -427,10 +431,16 @@ public:
             for (int k = 0; k < kWalls; ++k) {
                 dSrc_[k] += 0.0005f * (dSrcT_[k] - dSrc_[k]);
                 gSrc_[k] += 0.0005f * (gSrcT_[k] - gSrc_[k]);
+                // The walls' distances glide too. setRoom() runs every block from the parameters,
+                // and while the source's distance already glided, the ear and wall-pair delays
+                // were set outright: automating Early Size moved six read heads by hundreds of
+                // samples at once, a click per block.
+                dEar_[k] += 0.0005f * (dEarT_[k] - dEar_[k]);
                 inject[k] = ringRead(in_.data(), mask_, w_, dSrc_[k]) * gSrc_[k];
                 float s = inject[k];
                 for (int j = 0; j < kWalls; ++j) {
                     if (j == k) { inc[j][k] = 0.0f; continue; }
+                    dPair_[j][k] += 0.0005f * (dPairT_[j][k] - dPair_[j][k]);
                     inc[j][k] = ringRead(pair_[j][k].data(), mask_, w_, dPair_[j][k]);
                     s += inc[j][k];
                 }
@@ -472,7 +482,8 @@ private:
             float dnl = 0.0f;
             for (int a = 0; a < 3; ++a) dnl += node_[k][a] * node_[k][a];
             dnl = std::sqrt(dnl);
-            dEar_[k] = std::min(maxD, dnl / c * static_cast<float>(sr_) + 1.0f);
+            dEarT_[k] = std::min(maxD, dnl / c * static_cast<float>(sr_) + 1.0f);
+            if (dEar_[k] <= 0.0f) dEar_[k] = dEarT_[k];   // first time: nothing to glide from
             gEar_[k] = (1.0f - absorb_) / (1.0f + dnl);
             // Direction: the wall's own axis, widened or narrowed by Width.
             const float x = node_[k][0] / std::max(0.001f, dnl);
@@ -480,10 +491,11 @@ private:
             panL_[k] = std::sqrt(0.5f * (1.0f - pan));
             panR_[k] = std::sqrt(0.5f * (1.0f + pan));
             for (int m = 0; m < kWalls; ++m) {
-                if (m == k) { dPair_[k][m] = 1.0f; continue; }
+                if (m == k) { dPairT_[k][m] = 1.0f; dPair_[k][m] = 1.0f; continue; }
                 float d2 = 0.0f;
                 for (int a = 0; a < 3; ++a) { const float u = node_[m][a] - node_[k][a]; d2 += u * u; }
-                dPair_[k][m] = std::min(maxD, std::sqrt(d2) / c * static_cast<float>(sr_) + 1.0f);
+                dPairT_[k][m] = std::min(maxD, std::sqrt(d2) / c * static_cast<float>(sr_) + 1.0f);
+                if (dPair_[k][m] <= 0.0f) dPair_[k][m] = dPairT_[k][m];
             }
         }
     }
@@ -509,9 +521,9 @@ private:
     double sr_ = 48000.0;
     float  node_[kWalls][3] = {}, half_[kWalls] = {};
     float  src_[3] = { 0.0f, 2.0f, 0.0f };
-    float  dPair_[kWalls][kWalls] = {};
+    float  dPair_[kWalls][kWalls] = {}, dPairT_[kWalls][kWalls] = {};
     float  dSrc_[kWalls] = {}, dSrcT_[kWalls] = {}, gSrc_[kWalls] = {}, gSrcT_[kWalls] = {};
-    float  dEar_[kWalls] = {}, gEar_[kWalls] = {};
+    float  dEar_[kWalls] = {}, dEarT_[kWalls] = {}, gEar_[kWalls] = {};
     float  panL_[kWalls] = {}, panR_[kWalls] = {};
     float  lp_[kWalls] = {};
     float  lpCoef_ = 1.0f;

@@ -18,7 +18,7 @@ double parseScoreTime(const char* text)
     while (n < 3) {
         char* end = nullptr;
         const double v = std::strtod(p, &end);
-        if (end == p) return -1.0;
+        if (end == p || !std::isfinite(v)) return -1.0;
         parts[n++] = v;
         p = end;
         if (*p != ':') break;
@@ -98,6 +98,7 @@ bool Score::parse(const char* text)
                         if (tok[2] == d->choices[i]) { e.value = static_cast<float>(i); byName = true; }
                 if (!byName && d->kind == ParamKind::Bool && (tok[2] == "on" || tok[2] == "off")) { e.value = tok[2] == "on" ? 1.0f : 0.0f; byName = true; }
                 if (!byName) e.value = static_cast<float>(std::atof(tok[2].c_str()));
+                if (!std::isfinite(e.value)) e.value = d->def;   // clampv lets NaN through
                 e.value = clampv(e.value, d->min, d->max);
                 if (tok.size() >= 5 && tok[3] == "over") {
                     e.over = parseScoreTime(tok[4].c_str());

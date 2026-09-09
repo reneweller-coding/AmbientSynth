@@ -247,6 +247,7 @@ def main():
     ap.add_argument("--resume", action="store_true",
                     help="skip presets the cache already holds (the cache is written as it goes)")
     a = ap.parse_args()
+    a.chunk = max(1, a.chunk)   # zero would be range(0, n, 0)
 
     if a.taps:
         os.makedirs(a.taps, exist_ok=True)

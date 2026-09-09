@@ -1,3 +1,5 @@
+#include <chrono>
+#include <thread>
 #include "ambient/Engine.h"
 #include "ambient/PresetMap.h"
 #include "ambient/PresetMeta.h"
@@ -75,7 +77,10 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
         (void)keepL; (void)keepR;
     }
     {
-        int ring = 1; while (ring < 2 * maxBlock_) ring <<= 1;
+        // A block behind, plus as far back as the tape's wow and flutter reach (0.33 % of a
+        // second) -- two blocks alone were shorter than that at small host buffers, and the head
+        // wrapped round to the previous pass.
+        int ring = 1; while (ring < 2 * maxBlock_ + static_cast<int>(0.005 * sr_) + 16) ring <<= 1;
         fbRingL_.assign(static_cast<size_t>(ring), 0.0f);
         fbRingR_.assign(static_cast<size_t>(ring), 0.0f);
         fbMask_ = ring - 1; fbW_ = 0;
@@ -84,6 +89,11 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     seed_ = static_cast<int>(getParam(ParamId::Seed));
     rng_.seed(static_cast<uint64_t>(seed_) + 1);
     for (auto& v : voices_) v.prepare(sr_, rng_.fork());
+    // Two tables built on first use: the built-in wavetables and the Z-plane grid. Their first
+    // use was on the audio thread, under the lock the language puts round a static's
+    // construction. Touched here so that they exist before any block is rendered.
+    (void)builtinTable(0);
+    zWarmTables();
     arc_.init(rng_);
     shiftDrift_.init(rng_);
     ensemble_.prepare(sr_);
@@ -318,7 +328,11 @@ void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, d
     const int target = active < 0 ? 0 : 1 - active;
     // Wait until the audio thread no longer holds the target buffer (it publishes the index it
     // used last); bounded, so a host without a running audio thread cannot hang us.
-    for (int spin = 0; spin < 200000 && textureInUse_[slot].load(std::memory_order_acquire) == target; ++spin) { }
+    // The wait sleeps rather than spins, and long enough for a 2048-sample block at 44.1 kHz
+    // (46 ms) several times over: a spin of 200 000 turns was a fifth of a millisecond, after
+    // which the buffer the audio thread was still reading was reassigned under it.
+    for (int spin = 0; spin < 4000 && textureInUse_[slot].load(std::memory_order_acquire) == target; ++spin)
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
     Texture& t = textures_[slot][target];
     t.mono.assign(mono, mono + std::max(n, 0));
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;

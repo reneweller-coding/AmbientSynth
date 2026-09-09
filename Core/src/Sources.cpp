@@ -657,6 +657,13 @@ void SourceSlot::stretchFrame(const SlotParams& p, const Texture* tex, double ra
     const double loopLen = static_cast<double>(len) - zone;
     auto wrap = [&](double q) {
         if (loopLen <= 1.0) return 0.0;
+        // Far away -- a high note over a short clip puts the window's start millions of samples
+        // out -- one fmod brings it into reach; walking there one loop at a time took hundreds of
+        // thousands of steps per read. Near the loop, the same two steps as before.
+        if (q >= len + 2.0 * loopLen || q < zone - 2.0 * loopLen) {
+            q = zone + std::fmod(q - zone, loopLen);
+            if (q < zone) q += loopLen;
+        }
         while (q >= len) q -= loopLen;
         while (q < zone) q += loopLen;
         return q;

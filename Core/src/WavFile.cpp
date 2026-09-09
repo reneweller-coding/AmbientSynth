@@ -139,6 +139,13 @@ bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels
         std::fread(tag, 1, 4, f) != 4 || std::memcmp(tag, "WAVE", 4) != 0) { std::fclose(f); return false; }
     uint16_t format = 0, channels = 0, bits = 0; uint32_t rate = 0;
     bool haveFmt = false, ok = false;
+    // How long the file really is. A recorder that was stopped by pulling the plug leaves the
+    // data chunk's length at 0xFFFFFFFF, and a reader that believes it asks for sixteen
+    // gigabytes of floats before it has read a sample.
+    const long afterHeader = std::ftell(f);
+    std::fseek(f, 0, SEEK_END);
+    const long fileLen = std::ftell(f);
+    std::fseek(f, afterHeader, SEEK_SET);
     while (std::fread(tag, 1, 4, f) == 4 && rd32(size)) {
         const long next = std::ftell(f) + static_cast<long>(size + (size & 1u));
         if (std::memcmp(tag, "fmt ", 4) == 0) {
@@ -151,6 +158,11 @@ bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels
             haveFmt = channels > 0 && rate > 0 && (bits == 8 || bits == 16 || bits == 24 || bits == 32);
         } else if (std::memcmp(tag, "data", 4) == 0 && haveFmt) {
             const int bytes = bits / 8;
+            if (fileLen > 0) {
+                const long here = std::ftell(f);
+                const long left = here >= 0 && fileLen > here ? fileLen - here : 0;
+                if (static_cast<uint64_t>(size) > static_cast<uint64_t>(left)) size = static_cast<uint32_t>(left);
+            }
             const uint32_t frames = size / static_cast<uint32_t>(bytes * channels);
             channelsOut.assign(channels, std::vector<float>(frames, 0.0f));
             std::vector<unsigned char> buf(static_cast<size_t>(bytes * channels));

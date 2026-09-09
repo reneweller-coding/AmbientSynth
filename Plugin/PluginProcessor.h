@@ -101,7 +101,7 @@ public:
     void selectPreset(int index, bool viaMorph);
     bool morphOnSelect() const { return morphOnSelect_; }
     void setMorphOnSelect(bool on) { morphOnSelect_ = on; }
-    float morphSelectSeconds() const { return morphSelectSeconds_; }
+    float morphSelectSeconds() const { return morphSelectSeconds_.load(std::memory_order_relaxed); }
     void setMorphSelectSeconds(float s) { morphSelectSeconds_ = juce::jlimit(0.5f, 600.0f, s); }
     // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
     // come (0..1) -- the browser draws both.
@@ -110,7 +110,7 @@ public:
     // for -- the incoming engine may be published a block before the audio thread takes it up,
     // and a line that appeared one frame late would look like a dropped click.
     bool  transitionInFlight() const
-    { return fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0; }
+    { return swapTo_.load(std::memory_order_acquire) >= 0 || fading_.load(std::memory_order_acquire) >= 0; }
     int   morphingTo() const { return transitionInFlight() ? soundIndex_ : -1; }
     int   morphingFrom() const { return transitionInFlight() ? fadingFrom_ : -1; }
     float morphProgress() const { return transitionInFlight() ? fadePos_.load() : 1.0f; }
@@ -256,7 +256,7 @@ private:
     static constexpr float kFadeHeadStart = 8.0f;
     // The notes held right now, from MIDI, OSC and the set timeline alike. They are handed to the
     // incoming engine of a transition: a chord held through a preset change stays held.
-    std::array<float, 128> heldVel_{};
+    std::array<std::atomic<float>, 128> heldVel_{};   // audio writes, beginTransition reads
     void noteOn(int note, float vel);
     void noteOff(int note);
     void allNotesOff();
@@ -274,7 +274,7 @@ private:
     bool       levelMatch_ = false, compact_ = false;
     // What the browser last set for a travelling preset change.
     bool       morphOnSelect_ = true;
-    float      morphSelectSeconds_ = 20.0f;
+    std::atomic<float> morphSelectSeconds_ { 20.0f };   // editor writes, audio reads
     int        layoutMode_ = 0;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;
@@ -284,6 +284,7 @@ private:
     std::atomic<bool> setRecording_{ false }, setPlaying_{ false };
     // Set while the audio thread is writing into the recording, so stopping can wait for it.
     std::atomic<bool> setRecBusy_{ false };
+    std::atomic<bool> setPlayBusy_{ false };   // and while it is stepping through a set being played
     std::atomic<double> setTime_{ 0.0 };
     float setLast_[ambient::kNumParams] = {};
     double setClock_ = 0.0;

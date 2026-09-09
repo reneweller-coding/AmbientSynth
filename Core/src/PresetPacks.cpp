@@ -126,7 +126,6 @@ bool loadPresetPack(const char* path)
         if (ec) key = path;
         auto& seen = loadedPaths();
         if (std::find(seen.begin(), seen.end(), key) != seen.end()) return false;
-        seen.push_back(key);
     }
     std::ifstream f(path);
     if (!f) return false;
@@ -181,6 +180,14 @@ bool loadPresetPack(const char* path)
     for (PackEntry& e : pack.entries) e.meta.family = family;
     packs().push_back(std::make_unique<Pack>(std::move(pack)));
     appendViews(*packs().back());
+    // Remembered as loaded only now that it is. Remembered at the top, a pack that failed to
+    // parse -- or was simply not there yet -- could never be tried again in this process.
+    {
+        std::error_code ec;
+        std::string key = std::filesystem::weakly_canonical(std::filesystem::path(path), ec).string();
+        if (ec) key = path;
+        loadedPaths().push_back(key);
+    }
     return true;
 }
 
@@ -207,7 +214,12 @@ int loadDefaultPresetPacks()
     if (const char* env = std::getenv("AMBIENT_PACKS")) {
         int n = 0;
         for (const std::string& dir : split(env, ';')) if (!dir.empty()) n += loadPresetPacksIn(dir.c_str());
-        if (n > 0) return n;
+        // Final, whatever it found. It used to fall through to the default folders when nothing
+        // was loaded -- which is exactly the case on the SECOND call in one process (a batch
+        // render), because everything in the environment folder is already loaded by then. The
+        // batch then read the installed copies out of ProgramData on top: an older library
+        // under a measurement that had asked, by setting the variable, for this one only.
+        return n;
     }
     int n = 0;
     const char* home = std::getenv("USERPROFILE");

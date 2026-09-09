@@ -1,3 +1,4 @@
+#include <cmath>
 #include "ambient/Timeline.h"
 #include <algorithm>
 #include <cstdio>
@@ -38,7 +39,9 @@ bool SetTimeline::parse(const char* text)
         char* endp = nullptr;
         TimelineEvent ev;
         ev.t = std::strtod(p, &endp);
-        if (endp == p) return false;
+        // A NaN time compares false with everything: add() would break the ordering and step()
+        // would stop on it for good, so everything after it would never play.
+        if (endp == p || !std::isfinite(ev.t)) return false;
         p = endp; while (*p == ' ') ++p;
         char kind[16] = {}; int k = 0;
         while (*p && *p != ' ' && k < 15) kind[k++] = *p++;
@@ -49,6 +52,7 @@ bool SetTimeline::parse(const char* text)
             const ParamDesc* d = findParam(key);
             if (d == nullptr) return false;
             ev.type = TimelineEvent::Type::Param; ev.a = static_cast<int>(d->id); ev.v = std::strtof(p, nullptr);
+            if (!std::isfinite(ev.v)) return false;
         } else if (std::strcmp(kind, "on") == 0) {
             ev.type = TimelineEvent::Type::NoteOn; ev.a = static_cast<int>(std::strtol(p, &endp, 10)); ev.v = std::strtof(endp, nullptr);
         } else if (std::strcmp(kind, "off") == 0) {
@@ -72,6 +76,9 @@ std::vector<char> SetTimeline::write() const
         case TimelineEvent::Type::NoteOn:  len = std::snprintf(line, sizeof(line), "%.3f on %d %.3f\n", e.t, e.a, e.v); break;
         case TimelineEvent::Type::NoteOff: len = std::snprintf(line, sizeof(line), "%.3f off %d\n", e.t, e.a); break;
         }
+        // snprintf returns the length the line WOULD have had; a huge time makes that longer
+        // than the buffer, and copying that many bytes reads past it.
+        if (len >= static_cast<int>(sizeof(line))) len = static_cast<int>(sizeof(line)) - 1;
         if (len > 0) out.insert(out.end(), line, line + len);
     }
     out.push_back(0);

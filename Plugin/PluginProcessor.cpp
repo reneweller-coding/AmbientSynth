@@ -87,7 +87,10 @@ AmbientSynthProcessor::AmbientSynthProcessor()
 
 AmbientSynthProcessor::~AmbientSynthProcessor()
 {
-    // A warmup still running would be executing code this library is about to give back.
+    // The OSC thread first: it calls event() on this object, and the queue it pushes into is
+    // declared after it, so it would be destroyed first. Then the warmup thread, which would be
+    // executing code this library is about to give back.
+    osc_.stop();
     ambient::PresetMap::shutdown();
     for (auto* p : getParameters()) p->removeListener(&paramWatch_);
     presetPump_.stopTimer();
@@ -333,6 +336,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     // changed since the last block plus the notes, at the block's time.
     const double blockSeconds = buffer.getNumSamples() / getSampleRate();
     if (setPlaying_.load()) {
+        setPlayBusy_.store(true, std::memory_order_release);
         const double t0 = setClock_, t1 = setClock_ + blockSeconds;
         setPlay_.step(t0, t1, [this](const TimelineEvent& e) {
             switch (e.type) {
@@ -347,6 +351,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         setClock_ = t1;
         setTime_.store(setClock_);
         if (setPlay_.finished() && setClock_ > setPlay_.length() + 1.0) setPlaying_.store(false);
+        setPlayBusy_.store(false, std::memory_order_release);
     }
     if (setRecording_.load()) {
         setRecBusy_.store(true, std::memory_order_release);
@@ -376,7 +381,6 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         else if (m.isPitchWheel())   live().setBend(expressed, (m.getPitchWheelValue() - 8192) / 8192.0f);
         else if (m.isChannelPressure()) live().setPressure(expressed, m.getChannelPressureValue() / 127.0f);
         else if (m.isAftertouch())   live().setPressure(m.getNoteNumber(), m.getAfterTouchValue() / 127.0f);
-        else if (m.isController() && m.getControllerNumber() == 74) live().setSlide(expressed, m.getControllerValue() / 127.0f);
         else if (m.isAllNotesOff() || m.isAllSoundOff()) allNotesOff();
         else if (m.isMidiClock()) {   // 24 a quarter; the interval between two carries the tempo
             const double t = clockSamples_ + meta.samplePosition;
@@ -392,6 +396,9 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
             // The wheel is a modulation source in its own right. It is not an "else": a player
             // may also have learned CC 1 onto a knob, and both should work.
             if (cc == 1) live().setWheel(m.getControllerValue() / 127.0f);
+            // Slide (CC 74, the MPE third dimension) the same way: it used to be its own branch
+            // ahead of this one, which meant CC 74 could never be learned onto a knob.
+            if (cc == 74) live().setSlide(expressed, m.getControllerValue() / 127.0f);
             const int learn = learnTarget_.exchange(-1);
             if (learn >= 0) {
                 for (auto& c : ccMap_) if (c.load() == learn) c.store(-1);   // one controller per parameter
@@ -418,7 +425,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         // no dip in the middle and no moment where anything switches. A parameter morph between
         // two unrelated presets cannot do this: its ninety-three switches all flipped at half way
         // and every source restarted, and that is what it sounded like -- a cut in the middle.
-        const float secs = std::max(morphSelectSeconds_, 0.25f);
+        const float secs = std::max(morphSelectSeconds_.load(std::memory_order_relaxed), 0.25f);
         const float t0 = fadePos_;
         // The ramp does not start before there is something to ramp in. Measured on the incoming
         // engine's own output, before any gain: -60 dBFS is audible, and a brain that has not
@@ -750,6 +757,8 @@ bool AmbientSynthProcessor::playSetFile(const juce::File& file)
 {
     setPlaying_.store(false);
     setRecording_.store(false);
+    // The audio thread may be inside step() over the very events load() is about to replace.
+    for (int spin = 0; spin < 2000000 && setPlayBusy_.load(std::memory_order_acquire); ++spin) { }
     if (!setPlay_.load(file.getFullPathName().toRawUTF8())) return false;
     setPlay_.seek(0.0);
     setClock_ = 0.0;
@@ -848,8 +857,13 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
 // is on its way, which is exactly when the audio thread touches the live one and nothing else.
 void AmbientSynthProcessor::releaseIdleEngine()
 {
-    if (fading_.load(std::memory_order_acquire) >= 0) return;
+    // swapTo_ FIRST, then fading_. The audio thread writes fading_ before it clears swapTo_, so
+    // a reader that sees swapTo_ cleared is guaranteed to see fading_ set. Read the other way
+    // round there was a two-load window -- fading_ still -1, swapTo_ already -1 -- in which a
+    // crossfade that had just begun looked like nothing at all, and the engine freed here was the
+    // one the audio thread was rendering.
     if (swapTo_.load(std::memory_order_acquire) >= 0) return;
+    if (fading_.load(std::memory_order_acquire) >= 0) return;
     if (pendingPreset_ >= 0 || prepareTarget_ != nullptr) return;
     engines_[live_.load(std::memory_order_relaxed) ^ 1].reset();
 }
@@ -861,7 +875,7 @@ void AmbientSynthProcessor::servePendingPreset()
     if (pendingPreset_ < 0) { releaseIdleEngine(); return; }
     // Still busy: a fade in flight (both engines rendered), or a swap already published and not
     // yet taken up. Come back in a moment.
-    if (fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0) return;
+    if (swapTo_.load(std::memory_order_acquire) >= 0 || fading_.load(std::memory_order_acquire) >= 0) return;   // this order, see releaseIdleEngine
     const int index = pendingPreset_;
     pendingPreset_ = -1;
     beginTransition(index);
@@ -915,7 +929,7 @@ void AmbientSynthProcessor::noteOff(int note)
 
 void AmbientSynthProcessor::allNotesOff()
 {
-    heldVel_.fill(0.0f);
+    for (auto& h : heldVel_) h.store(0.0f, std::memory_order_relaxed);
     live().allNotesOff();
 }
 
@@ -1048,6 +1062,9 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             if (soundName_.isNotEmpty()) {
                 soundIndex_ = -1;
                 for (int i = 0; i < numPresets(); ++i) if (soundName_ == preset(i).name) { soundIndex_ = i; break; }
+                // The host's program index and the map's ring follow the same name; without this
+                // they kept showing whatever was loaded before the state came in.
+                if (soundIndex_ >= 0) currentProgram_ = soundIndex_;
             }
             if (cosmosName_.isNotEmpty()) {
                 cosmosIndex_ = -1;

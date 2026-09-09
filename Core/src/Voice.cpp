@@ -31,6 +31,9 @@ constexpr float kFmMaxStep = 0.4f;   // per-sample deviation clamp (tan of the a
 void Voice::prepare(double sampleRate, uint64_t seed)
 {
     sr_ = sampleRate;
+    // The modal bank derives every mode's angle and radius from its own copy of the rate, and
+    // nothing ever set it: at 96 kHz the modes rang an octave high and half as long.
+    zModal_.prepare(static_cast<float>(sr_));
     ildCoefConst_ = 1.0f - std::exp(-kTwoPi * 1000.0f / static_cast<float>(sr_));
     skyProto_.setQ(8000.0f, 1.5f, static_cast<float>(sr_));   // Blauert's band: fixed frequency, fixed Q
     rng_.seed(seed);

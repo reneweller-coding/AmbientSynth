@@ -198,16 +198,16 @@ bool ModEnv::parse(const char* text)
         if (n >= kMaxEnvPoints) return false;
         char* endp = nullptr;
         pts[n].time = static_cast<float>(std::strtod(s, &endp));
-        if (endp == s || *endp != ':') return false;
+        if (endp == s || *endp != ':' || !std::isfinite(pts[n].time)) return false;
         s = endp + 1;
         pts[n].value = static_cast<float>(std::strtod(s, &endp));
-        if (endp == s) return false;
+        if (endp == s || !std::isfinite(pts[n].value)) return false;
         s = endp;
         pts[n].curve = 0.0f;
         if (*s == ':') {
             ++s;
             pts[n].curve = static_cast<float>(std::strtod(s, &endp));
-            if (endp == s) return false;
+            if (endp == s || !std::isfinite(pts[n].curve)) return false;
             s = endp;
         }
         ++n;
@@ -321,7 +321,7 @@ bool ModMatrix::parse(const char* text)
         if (*s == ':') {
             char* endp = nullptr;
             r.depth = static_cast<float>(std::strtod(s + 1, &endp));
-            if (endp == s + 1) return false;
+            if (endp == s + 1 || !std::isfinite(r.depth)) return false;   // a NaN depth would poison every target
             s = endp;
         }
         while (*s == ':') {   // optional via source and the "u" flag, in any order

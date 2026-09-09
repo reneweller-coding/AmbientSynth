@@ -1,3 +1,4 @@
+#include <cmath>
 #include "ambient/Presets.h"
 #include <cstring>
 #include <cstdlib>
@@ -1800,6 +1801,10 @@ float paramValueFromText(const ParamDesc& d, const char* text)
         if (!std::strcmp(text, "off") || !std::strcmp(text, "false") || !std::strcmp(text, "no")) return 0.0f;
     }
     const float v = static_cast<float>(std::atof(text));
+    // "nan" passes both comparisons below -- every comparison with NaN is false -- and would be
+    // stored as the parameter's value. "inf" is caught by them and clamped, which is fine. A
+    // value that is not a number at all is the default.
+    if (std::isnan(v)) return d.def;
     return v < d.min ? d.min : (v > d.max ? d.max : v);
 }
 

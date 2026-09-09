@@ -102,7 +102,7 @@ int Route::write(char* buf, size_t cap) const
             len = std::snprintf(item, sizeof(item), "%s|%g|%g|%g", preset(w.preset).name, w.travel, w.hold, w.radius);
         else
             len = std::snprintf(item, sizeof(item), "%.3f,%.3f|%g|%g|%g", w.x, w.y, w.travel, w.hold, w.radius);
-        if (len <= 0) return 0;
+        if (len <= 0 || len >= static_cast<int>(sizeof(item))) return 0;   // a name too long for the item is a name the text cannot hold
         const size_t need = static_cast<size_t>(len) + (i > 0 ? 1 : 0);
         if (used + need + 1 > cap) return 0;
         if (i > 0) buf[used++] = ';';

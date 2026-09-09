@@ -616,6 +616,10 @@ static int runOnce(int argc, char** argv)
 
     if (haveSet) { if (!secondsGiven) seconds = setFile.length() + 20.0; setFile.seek(0.0); }
     if (haveScore) { if (!secondsGiven) seconds = score.length() + 20.0; score.rewind(); }
+    if (!(seconds >= 0.0) || !(seconds < 1.0e7) || block <= 0 || block > (1 << 16) || !(sr > 0.0)) {
+        std::fprintf(stderr, "bad --seconds, --block or --rate\n");
+        return 2;
+    }
     const long total = static_cast<long>(seconds * sr);
     std::vector<float> L(static_cast<size_t>(block)), R(static_cast<size_t>(block));
     std::vector<float> wav; wav.reserve(static_cast<size_t>(total) * 2);

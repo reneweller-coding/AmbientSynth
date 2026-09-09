@@ -566,7 +566,7 @@ private:
     // per two seconds so that a press is a slide and never a jump (SOMA Terra's interval keys).
     double            transposeTarget_ = 0.0, transposeCur_ = 0.0;
     // Sleep: after two seconds of silence (no voice, output below -90 dBFS) the effects sleep
-    long              silentSamples_ = 0;
+    long long         silentSamples_ = 0;   // 64-bit: a long is 32 bits here and wrapped after twelve hours
     bool              asleep_ = false;
     // The map cursor the blend target was computed for, so a cursor that stands still is not
     // searched for and blended again on every block.

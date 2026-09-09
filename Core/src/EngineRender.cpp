@@ -174,8 +174,8 @@ void Engine::process(float* L, float* R, int n)
         for (auto& v : voices_) if (v.isActive()) { anyVoice = true; break; }
         float peak = 0.0f;
         for (int i = 0; i < n; ++i) peak = std::max(peak, std::max(std::fabs(L[i]), std::fabs(R[i])));
-        if (!anyVoice && peak < 3.2e-5f) silentSamples_ += n; else silentSamples_ = 0;
-        asleep_ = silentSamples_ > static_cast<long>(2.0 * sr_);
+        if (!anyVoice && peak < 3.2e-5f) silentSamples_ = std::min<long long>(silentSamples_ + n, 1LL << 40); else silentSamples_ = 0;
+        asleep_ = silentSamples_ > static_cast<long long>(2.0 * sr_);
     }
 
     uint64_t m0 = 0, m1 = 0;
@@ -493,8 +493,12 @@ void Engine::renderChunk(float* L, float* R, int n)
     }
     // Sympathy: this block's foreground is what the voices will hear of each other in the next
     // one. A block of delay is what makes the loop safe, and at these depths inaudible.
+    // Bounded: the coupling goes back into the voices before their filters, and sixteen voices
+    // through a resonant filter can add up to a loop gain above one. Clamped here the loop can
+    // saturate, but it cannot climb to infinity and leave NaN in every filter. Identity below
+    // twice full scale, so a healthy mix hears nothing of it.
     if (sympathy_ > 0.0f && static_cast<int>(coupleBuf_.size()) >= n)
-        for (int i = 0; i < n; ++i) coupleBuf_[static_cast<size_t>(i)] = 0.5f * (nl[i] + nr[i]);
+        for (int i = 0; i < n; ++i) coupleBuf_[static_cast<size_t>(i)] = clampv(0.5f * (nl[i] + nr[i]), -2.0f, 2.0f);
 
     const float master = dbToGain(masterGain_);
     for (int i = 0; i < n; ++i) {

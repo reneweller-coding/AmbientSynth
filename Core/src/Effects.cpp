@@ -24,6 +24,21 @@ void Ensemble::prepare(double sampleRate)
 
 void Ensemble::process(float* L, float* R, int n)
 {
+    // Mix at zero means the wet signal is multiplied by nothing -- and all three modes computed it
+    // anyway: three chorus voices with their delay reads, two pitch shifters with their
+    // cross-fades, or up to forty-eight velvet taps, per sample, to be thrown away. The delay line
+    // is still fed, so the effect has its history the moment it is turned back on; what is skipped
+    // is only the part whose result was going to be discarded.
+    if (mix_ <= 0.0f) {
+        float* bl = bufL_.data();
+        float* br = bufR_.data();
+        for (int i = 0; i < n; ++i) {
+            bl[w_ & mask_] = L[i];
+            br[w_ & mask_] = R[i];
+            ++w_;
+        }
+        return;
+    }
     if (mode_ == 2)      processVelvet(L, R, n);
     else if (mode_ == 1) processShift(L, R, n);
     else                 processChorus(L, R, n);

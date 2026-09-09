@@ -21,6 +21,7 @@ Nothing about the sound is touched: only positions, descriptors, tags and groups
 import argparse
 import concurrent.futures
 import json
+import math
 import os
 import re
 import subprocess
@@ -351,6 +352,22 @@ def main():
             print(f"   {c:5d}  {vocab[j]}")
 
     # ---- write ------------------------------------------------------------------------------
+    # Two presets on the same spot of the map are two dots drawn on top of each other, and one of
+    # them can never be clicked. make_presets nudges its own output apart, but the layout here
+    # rewrites every position, and 146 of them landed on a shared cell. The same deterministic
+    # golden-angle spiral, so the same input gives the same map.
+    taken = set()
+    for i in range(len(rows)):
+        x, y = float(xy[i, 0]), float(xy[i, 1])
+        step = 0
+        while (round(x, 3), round(y, 3)) in taken and step < 64:
+            step += 1
+            ang = 2.39996 * step
+            rad = 0.004 * math.sqrt(step)
+            x = min(1.0, max(0.0, float(xy[i, 0]) + rad * math.cos(ang)))
+            y = min(1.0, max(0.0, float(xy[i, 1]) + rad * math.sin(ang)))
+        taken.add((round(x, 3), round(y, 3)))
+        xy[i, 0], xy[i, 1] = x, y
     fams = PM.families()
     metaRows = []
     for i, r in enumerate(rows):

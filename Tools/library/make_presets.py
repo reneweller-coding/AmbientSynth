@@ -38,8 +38,13 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 
 # Choice names, exactly as Core/src/Params.cpp, Sources.cpp and ZPlane.cpp spell them.
 STACKS = ["Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics"]
-SOURCE_TYPES = ["Wavetable", "FM", "Texture", "Noise", "Noise", "Additive"]   # noise twice: an ambient synth lives in it
-FILTER_MODELS = ["LP 6", "LP 24", "HP 12", "BP 12", "Notch", "Peak", "Ladder", "Comb", "Formant"]
+# Noise once, not twice: a noise slot measured as the flattest thing a preset can carry (median
+# flatness x1.33 against presets without one, p90 x2.2), and harsh was the word for the library.
+SOURCE_TYPES = ["Wavetable", "FM", "Texture", "Noise", "Additive"]
+# Weighted: the models that keep the body (low-pass, ladder) twice, the ones that take it away or
+# make it metallic (high-pass, notch, comb: flatness x1.3-1.4 in the census) once.
+FILTER_MODELS = ["LP 6", "LP 6", "LP 24", "LP 24", "Ladder", "Ladder", "BP 12", "BP 12", "Peak", "Peak",
+                 "Formant", "Formant", "HP 12", "Notch", "Comb"]
 STRIKE_TYPES = ["String", "String", "Wood", "Metal"]
 TABLES = ["Classic", "Organ", "Vocal", "Glass", "Metal", "User"]
 SLOT_RATIOS = ["1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1"]
@@ -735,6 +740,14 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     mod = apply_shade(p, style["modules"], shade)
     on = lambda k: rng.random() < mod.get(k, 0.0)
     field = style["name"] in FIELD_STYLES     # an environment style: swamps allowed everywhere
+    # Air is a band of noise laid over the top, and in the census it was the single setting most
+    # tied to a harsh preset: nineteen percent of the library had it at 0.3 or more, and those
+    # measured 1.67 times as flat as the rest. Capped at 0.3 -- unless the style is about air
+    # (its own range reaches past 0.45), which keeps its upper half but not its top.
+    air_hi = style["params"].get("air", (0.0, 0.3))
+    air_hi = float(air_hi[-1]) if isinstance(air_hi, (list, tuple)) else 0.3
+    if "air" in p:
+        p["air"] = min(float(p["air"]), 0.45 if air_hi > 0.45 else 0.3)
     texture_file = wavetable_file = ""
     # One clip per slot where the slots differ (the Stretch type draws its own per slot); the
     # pack's texture field then carries them ';'-separated, one per slot, empty for a slot
@@ -836,10 +849,12 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("pos_drift", u(rng, 0.05, 0.7))
         elif kind == "Noise":
             put("noise", style["noise"][rng.randrange(len(style["noise"]))])
-            put("noise_q", u(rng, 0.15, 0.85))
+            put("noise_q", u(rng, 0.25, 0.85))
             put("pos", u(rng, 0.05, 0.9))          # band centre / colour
             put("pos_drift", u(rng, 0.05, 0.8))
-            put("level", u(rng, 0.12, 0.45))
+            # Lower than it was (0.12 .. 0.45): a noise slot is a colour under the tone, and at
+            # the old level it was the tone. Measured: presets with one were 1.33x as flat.
+            put("level", u(rng, 0.07, 0.28))
             if got("noise") == "Crackle":
                 put("density", logu(rng, 1.5, 30.0))
             put("follow", "Note" if (got("noise") in ("Band", "Wind") and rng.random() < 0.4) else "Free")
@@ -1012,16 +1027,19 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             p["z_decay"] = logu(rng, 0.4, 18.0)
             p["z_damp"] = u(rng, 0.3, 0.95)
         else:
-            p["z_mode"] = "Replace" if rng.random() < 0.45 else "Series"
+            # Replace less often than Series (was 0.45): with the voice filter gone, the z-plane
+            # alone shapes the sound, and those presets measured 1.46x as flat with the widest
+            # spread of all (p90 0.083 against the built-ins' 0.030).
+            p["z_mode"] = "Replace" if rng.random() < 0.25 else "Series"
             p["z_shape"] = Z_SHAPES[rng.randrange(len(Z_SHAPES))]
         p["z_z"] = u(rng, 0.0, 0.7)      # the cube's third axis
         p["z_x"] = u(rng, 0.1, 0.9)
         p["z_y"] = u(rng, 0.1, 0.9)
         p["z_rate"] = logu(rng, 0.006, 0.25)
         p["z_depth"] = u(rng, 0.2, 0.9)
-        p["z_res"] = u(rng, 0.25, 0.85)
+        p["z_res"] = u(rng, 0.2, 0.7)
         p["z_keytrack"] = u(rng, 0.0, 0.6) if rng.random() < 0.4 else 0.0
-        p["z_mix"] = u(rng, 0.4, 1.0) if p["z_mode"] == "Replace" else u(rng, 0.3, 0.9)
+        p["z_mix"] = u(rng, 0.35, 0.8) if p["z_mode"] == "Replace" else u(rng, 0.3, 0.9)
 
     # The delay ducks its own loop on transients, so a fresh attack does not have to fight the
     # brightness of the last one's tail.

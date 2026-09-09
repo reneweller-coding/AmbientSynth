@@ -205,8 +205,11 @@ IMPULSES_BASE = ["room_hall", "room_chamber", "spectral"]
 # All ten colours, not the four the library used to draw from. Pink and Brown stay likeliest --
 # they are what a bed is made of -- but Blue, Violet, Grey, Band, Crackle and Digital are in the
 # instrument and were in no preset at all.
-NOISE_BASE = ["Pink", "Pink", "Brown", "Brown", "White", "Wind", "Band", "Grey", "Blue", "Violet",
-              "Crackle", "Digital"]
+# Without White, Grey and Violet: the hiss colours. Grey measured as the flattest setting in the
+# whole library (median flatness x1.94, p90 0.18 against the built-ins' 0.03) -- it is white noise
+# with a dip, and a drone does not want white noise under it. A style may still ask for one by
+# name in its own list.
+NOISE_BASE = ["Pink", "Pink", "Brown", "Brown", "Wind", "Band", "Blue", "Crackle", "Digital"]
 
 
 def S(name, inspiration, params, modules=None, words=None, prompts=None, tables=None, granular=None,
@@ -248,7 +251,7 @@ STYLES = [
                "gentle overtone singing bowl cloud, very slow"],
       tables=["Glass thinning", "Odd breathing", "Formant sweep", "Singing bowl", "Stretched string"],
       granular={"spread": (0.004, 0.05), "grains": 1.3},
-      impulses=['tuned', 'room_cathedral', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
+      impulses=['tuned', 'room_cathedral', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Pink']),
 
     S("Deep Earth", "Lustmord",
       {"master_gain": (-13.0, -8.0),
@@ -376,7 +379,7 @@ STYLES = [
                "huge harmonic series pad with slow shimmer"],
       tables=["Shepard stack", "Bell partials", "Stretched octave", "Harmonic gate", "Glass thinning"],
       granular={"spread": (0.01, 0.15), "grains": 1.4},
-      impulses=['shimmer', 'tuned', 'room_cathedral'], noise=['Violet', 'Blue', 'Grey']),
+      impulses=['shimmer', 'tuned', 'room_cathedral'], noise=['Violet', 'Blue', 'Pink']),
 
     S("Temple of Air", "Ooephoi",
       {"master_gain": (-15.0, -10.0),
@@ -400,7 +403,7 @@ STYLES = [
                "deep ceremonial breath tone, no vibrato"],
       tables=["Organ mixture", "Vowel choir", "Three vowels", "Formant beat", "Breath band"],
       granular={"spread": (0.003, 0.04), "grains": 1.5},
-      impulses=['tuned', 'room_cathedral', 'shimmer'], noise=['Grey', 'Pink', 'Blue']),
+      impulses=['tuned', 'room_cathedral', 'shimmer'], noise=['Pink', 'Pink', 'Blue']),
 
     S("Vast Chord", "Mathias Grassow",
       {"scale": ["JI Major (Ptolemy)", "JI Minor", "JI 7-limit", "Pythagorean"],
@@ -421,7 +424,7 @@ STYLES = [
                "warm analog string mass, cathedral sized"],
       tables=["Vowel choir", "Three vowels", "Organ drawbars", "Formant beat", "Fifth stack"],
       granular={"spread": (0.004, 0.06), "grains": 1.6},
-      impulses=['tuned', 'room_cathedral', 'room_hall'], noise=['Pink', 'Grey']),
+      impulses=['tuned', 'room_cathedral', 'room_hall'], noise=['Pink', 'Pink']),
 
     S("Desert Ember", "Steve Roach",
       {"brightness": (0.35, 0.7), "tilt": (1.0, 2.0), "partials": ("int", 10, 22),
@@ -523,7 +526,7 @@ STYLES = [
                "victorian parlour recording, degraded and ghostly"],
       tables=["Glass thinning", "Singing bowl", "Bowed cymbal", "Resonator bank", "Bell partials"],
       granular={"spread": (0.1, 0.6), "grains": 1.3},
-      impulses=['reverse', 'shimmer', 'room_chamber'], noise=['Pink', 'Crackle', 'Grey']),
+      impulses=['reverse', 'shimmer', 'room_chamber'], noise=['Pink', 'Crackle', 'Pink']),
 
     S("Chamber Grey", "In Camera",
       {"master_gain": (-17.0, -12.0),
@@ -543,7 +546,7 @@ STYLES = [
                "gentle indoor hum with distant traffic"],
       tables=["Prepared piano", "Stretched string", "Pluck point", "Resonator bank", "Bowed string"],
       granular={"spread": (0.1, 0.5), "grains": 1.0},
-      impulses=['room_chamber', 'room_bunker'], noise=['Grey', 'Pink', 'Crackle']),
+      impulses=['room_chamber', 'room_bunker'], noise=['Pink', 'Pink', 'Crackle']),
 
     S("Painted Field", "Andrew Chalk",
       {"master_gain": (-16.0, -11.0),
@@ -564,7 +567,7 @@ STYLES = [
                "slow melting chord, gauzy and bright"],
       tables=["Random walk", "Pink resonance", "Breath band", "Waterphone", "Tilt walk"],
       granular={"spread": (0.006, 0.1), "grains": 1.4},
-      impulses=['shimmer', 'room_hall', 'tuned'], noise=['Pink', 'Grey']),
+      impulses=['shimmer', 'room_hall', 'tuned'], noise=['Pink', 'Pink']),
 
     S("Loop Studio", "Colin Potter",
       {"brightness": (0.35, 0.7), "partials": ("int", 8, 20), "inharmonic": (0.1, 0.4),
@@ -624,7 +627,7 @@ STYLES = [
                "smooth wide pad, imperceptible change"],
       tables=["Vowel choir", "Tilt walk", "Sub fold", "Stretched string", "Organ mixture"],
       granular={"spread": (0.003, 0.03), "grains": 1.5},
-      impulses=['tuned', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Grey']),
+      impulses=['tuned', 'room_hall', 'shimmer'], noise=['Pink', 'Brown', 'Pink']),
 
     S("Hull Rumble", "SleepResearch_Facility",
       {"master_gain": (-14.0, -9.0),
@@ -730,7 +733,7 @@ STYLES = [
                "gentle string quartet stretched into ambience"],
       tables=["Bowed string", "Stretched string", "Three vowels", "Formant beat", "Fifth stack"],
       granular={"spread": (0.004, 0.06), "grains": 1.5},
-      impulses=['room_hall', 'tuned', 'shimmer'], noise=['Pink', 'Grey']),
+      impulses=['room_hall', 'tuned', 'shimmer'], noise=['Pink', 'Pink']),
 
     S("Tape Saturation", "Tim Hecker",
       {"master_gain": (-13.0, -9.0),
@@ -799,7 +802,7 @@ STYLES = [
                "triple organ drone, no attack, no end"],
       tables=["Fifth stack", "Prime sieve", "Sub fold", "Beating pairs", "Formant beat"],
       granular={"spread": (0.006, 0.08), "grains": 1.4},
-      impulses=['room_hall', 'room_cathedral', 'tuned'], noise=['Pink', 'Brown', 'Grey']),
+      impulses=['room_hall', 'room_cathedral', 'tuned'], noise=['Pink', 'Brown', 'Pink']),
 
     S("Turning Harmony", "Pauline Oliveros",
       {"scale": ["JI 7-limit", "JI Major (Ptolemy)", "JI Minor", "Pythagorean"],
@@ -837,7 +840,7 @@ STYLES = [
                "precise digital drone with a moving resonance"],
       tables=["PPG digital", "Lo-fi bits", "Harmonic gate", "Bi-phase", "Saw to square"],
       granular={"spread": (0.02, 0.3), "grains": 1.1},
-      impulses=['modal', 'comb', 'spectral', 'room_plate'], noise=['White', 'Grey', 'Digital']),
+      impulses=['modal', 'comb', 'spectral', 'room_plate'], noise=['White', 'Pink', 'Digital']),
 
     S("Own Tuning", "Catherine Christer Hennix",
       {"scale": ["JI 7-limit", "Otonality 1-11", "Subharmonic 16-8", "JI Major (Ptolemy)"],
@@ -857,7 +860,7 @@ STYLES = [
                "endless chord breathing in time with its own mistuning"],
       tables=["Prime sieve", "Bohlen-Pierce", "Stretched octave", "Fifth stack", "Fibonacci"],
       granular={"spread": (0.005, 0.09), "grains": 1.3},
-      impulses=['tuned', 'room_cathedral', 'modal'], noise=['Pink', 'Brown', 'Grey']),
+      impulses=['tuned', 'room_cathedral', 'modal'], noise=['Pink', 'Brown', 'Pink']),
 
     # ------------------------------------------------------------------ the field recordings
     #
@@ -885,7 +888,7 @@ STYLES = [
                "wind over a high moor"],
       tables=["Pink resonance", "Breath band", "Random walk", "Waterphone", "Spectral erosion"],
       granular={"spread": (0.02, 0.2), "grains": 1.0},
-      impulses=['room_cathedral', 'room_hall', 'room_chamber'], noise=['Pink', 'Brown', 'Grey']),
+      impulses=['room_cathedral', 'room_hall', 'room_chamber'], noise=['Pink', 'Brown', 'Pink']),
 
     # The thirty-second pack, written for the mixing desk this instrument grew: the background
     # narrowed as it goes back, the foreground's own upper middle opened by the Haas band, the
@@ -919,7 +922,7 @@ STYLES = [
       tables=["Gong wash", "Metal bar", "Sub bloom", "Ring bell", "Resonator bank"],
       granular={"spread": (0.02, 0.25), "grains": 1.0},
       impulses=['struck', 'room_bunker', 'room_cavern', 'modal'],
-      noise=['Brown', 'Pink', 'Grey']),
+      noise=['Brown', 'Pink', 'Pink']),
 
     # ---- the two packs built on the newest source types -----------------------------------
     #
@@ -978,7 +981,7 @@ STYLES = [
                "one frame of a choir, frozen and transposed"],
       tables=["Resonator bank", "Spectral erosion", "Stretched string", "Singing bowl", "Harmonic gate"],
       impulses=['room_hall', 'room_cavern', 'spectral'],
-      noise=['Pink', 'Brown', 'Grey', 'Wind']),
+      noise=['Pink', 'Brown', 'Pink', 'Wind']),
 
     # ---------------------------------------------------------------- five packs for what the
     # library never used. Each one is built around a family of the instrument that appeared in
@@ -1029,7 +1032,7 @@ STYLES = [
                "an organ in seventh-limit intonation"],
       tables=["Fifth stack", "Prime sieve", "Stretched octave", "Organ mixture", "Fibonacci"],
       impulses=['room_cathedral', 'room_hall', 'tuned'],
-      noise=['Pink', 'Grey', 'Brown']),
+      noise=['Pink', 'Pink', 'Brown']),
 
     S("Lenia Fields", "continuous cellular automata, after Bert Chan",
       {"brain_rate": ("log", 20.0, 120.0), "brain_density": ("int", 3, 7),
@@ -1051,7 +1054,7 @@ STYLES = [
                "warm liquid seen through glass, slowly moving"],
       tables=["Random walk", "Waterphone", "Ring cluster", "Fibonacci", "Spectral erosion"],
       impulses=['room_cavern', 'spectral', 'room_hall'],
-      noise=['Grey', 'Wind', 'Band', 'Pink']),
+      noise=['Pink', 'Wind', 'Band', 'Pink']),
 
     S("Strange Attractor", "Lorenz and Roessler, integrated over minutes",
       {"brain_rate": ("log", 25.0, 150.0), "brain_density": ("int", 2, 6),
@@ -1094,7 +1097,7 @@ STYLES = [
                "small wooden objects moved on a table by your ear"],
       tables=["Breath band", "Stopped pipe", "Three vowels", "Bowed string", "Prepared piano"],
       impulses=['room_chamber', 'room_plate', 'struck'],
-      noise=['Grey', 'Pink', 'Crackle', 'Band']),
+      noise=['Pink', 'Pink', 'Crackle', 'Band']),
 
     # ---------------------------------------------------------------- and three that were asked
     # for by name. Nothing here is sampled from or affiliated with anybody: the ranges were set by
@@ -1130,7 +1133,7 @@ STYLES = [
                "a piano recorded in the next room and left running"],
       tables=["Organ drawbars", "Stopped pipe", "Vowel choir", "Odd breathing", "Fibonacci"],
       impulses=['room_hall', 'room_chamber', 'room_plate'],
-      noise=['Pink', 'Grey', 'Brown']),
+      noise=['Pink', 'Pink', 'Brown']),
 
     S("Permafrost North", "Biosphere",
       # Substrata: the Arctic. A cold, narrow band of sound, sub bass a long way under it, small
@@ -1160,7 +1163,7 @@ STYLES = [
                "a distant engine across a fjord at night"],
       tables=["Pink resonance", "Sub fold", "Spectral erosion", "Breath band", "Stretched octave"],
       impulses=['room_cavern', 'room_bunker', 'spectral'],
-      noise=['Wind', 'Brown', 'Grey', 'Pink']),
+      noise=['Wind', 'Brown', 'Pink', 'Pink']),
 
     S("Ritual Stone", "Raison d'etre",
       # Dark ritual ambient: a cathedral, a bell, a choir at the edge of hearing, and a long
@@ -1191,5 +1194,5 @@ STYLES = [
                "iron and rust, a cathedral, a long way down"],
       tables=["Organ mixture", "Gong wash", "Singing bowl", "Bell partials", "Three vowels"],
       impulses=['room_cathedral', 'room_cavern', 'modal', 'struck'],
-      noise=['Brown', 'Pink', 'Grey', 'Wind']),
+      noise=['Brown', 'Pink', 'Pink', 'Wind']),
 ]

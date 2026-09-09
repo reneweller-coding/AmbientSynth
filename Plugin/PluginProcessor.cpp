@@ -61,6 +61,7 @@ AmbientSynthProcessor::AmbientSynthProcessor()
 {
     for (int i = 0; i < kNumParams; ++i)
         raw_[static_cast<size_t>(i)] = apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key);
+    for (auto* p : getParameters()) p->addListener(&paramWatch_);
     for (auto& c : ccMap_) c.store(-1);
     // Preset packs (thousands of presets as text files) before anything reads the preset list.
     loadDefaultPresetPacks();
@@ -81,6 +82,8 @@ AmbientSynthProcessor::AmbientSynthProcessor()
 
 AmbientSynthProcessor::~AmbientSynthProcessor()
 {
+    for (auto* p : getParameters()) p->removeListener(&paramWatch_);
+    presetPump_.stopTimer();
     stopTimer();
     saveSession();
 }

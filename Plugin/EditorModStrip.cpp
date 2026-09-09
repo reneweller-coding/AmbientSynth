@@ -115,7 +115,7 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
     addChildComponent(hint);
     pullMatrix();
     setTab(0);
-    startTimerHz(30);
+    startTimerHz(15);   // was 30: this strip was 54 % of all the drawing the panel did
 }
 
 void AmbientSynthEditor::ModView::setTab(int t)

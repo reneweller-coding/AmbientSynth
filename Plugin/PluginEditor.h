@@ -334,7 +334,7 @@ private:
     // voice is summing right now, plus those partials as a spectrum. It moves because the
     // shimmer and the drift move -- it is the sound, not an illustration of it.
     struct ScopeView : juce::Component, juce::Timer {
-        explicit ScopeView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(30); }
+        explicit ScopeView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
         AmbientSynthProcessor& proc;
@@ -419,6 +419,16 @@ private:
             juce::Point<float> centre { 0.5f, 0.5f };
             bool panning = false;
             juce::Point<float> panFrom, centreFrom;
+            // The cloud itself, drawn once into an image. Eight and a half thousand filled dots,
+            // fifteen times a second, were nineteen percentage points of a processor core for a
+            // picture that only changes when the window, the zoom, the pan, the filter or the
+            // colouring changes. What moves -- the cursor, the ring, the crossing, the names --
+            // is drawn live on top of it.
+            juce::Image cloud;
+            float cloudZoom = -1.0f;
+            juce::Point<float> cloudCentre { -1.0f, -1.0f };
+            int  cloudW = 0, cloudH = 0, cloudFilter = -1, cloudCount = -1;
+            bool cloudGroups = false;
         };
         // classic column browser (Omnisphere / Absynth style): each column narrows the list
         struct Column : juce::ListBoxModel {
@@ -493,6 +503,7 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> mapActiveAttach;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> radiusAttach;
         std::vector<int> filtered;
+        int filterGen = 0;      // bumped by applyFilter, so the map knows its cached cloud is stale
         int selected = -1;
         // "More like this": the list narrowed to the map's nearest neighbours of the selected
         // preset, and the map zoomed onto them. The similarity is the one the map already has.
@@ -593,16 +604,31 @@ private:
     struct FilterView : juce::Component, juce::Timer {
         explicit FilterView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
         void paint(juce::Graphics&) override;
-        void timerCallback() override { if (isShowing()) repaint(); }
+        // Nothing but parameters is drawn here, so nothing but a parameter can change it.
+        void timerCallback() override
+        { const uint32_t g = proc.paramGeneration(); if (isShowing() && g != seen) { seen = g; repaint(); } }
         AmbientSynthProcessor& proc;
+        uint32_t seen = 0xffffffffu;
     };
     // One source slot: the wavetable frame, the FM cycle, the clip with its grain window, or the
     // colour of the noise -- whichever the slot is set to.
     struct SourceView : juce::Component, juce::Timer {
         SourceView(AmbientSynthProcessor& p, int s) : proc(p), slot(s) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
         void paint(juce::Graphics&) override;
-        void timerCallback() override { if (isShowing()) repaint(); }
+        // A wavetable frame, an FM cycle and a noise colour are pictures of parameters and
+        // change only when one moves. A clip's grains, the additive bank's partials, a bowed
+        // string and a spectral model are what the engine is doing this instant, and are drawn
+        // every tick.
+        void timerCallback() override
+        {
+            if (!isShowing()) return;
+            const int type = static_cast<int>(std::lround(proc.engine().getParam(ambient::slotParamIds(slot - 1)[0])));
+            const bool alive = type == 3 || type == 5 || type == 6 || type == 7 || type == 8;
+            const uint32_t g = proc.paramGeneration();
+            if (alive || g != seen) { seen = g; repaint(); }
+        }
         AmbientSynthProcessor& proc;
+        uint32_t seen = 0xffffffffu;
         int slot;   // 1, 2 or 3
         float amp[ambient::kTablePartials] = {};   // smoothed live amplitudes for the additive picture
     };
@@ -624,7 +650,7 @@ private:
     // The stereo stage: every sounding voice as a dot, left-right by its pan, near-far by its
     // plane, size by its envelope -- the spatial model (concept.md) as a picture, moving.
     struct StageView : juce::Component, juce::Timer {
-        explicit StageView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(20); }
+        explicit StageView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(15); }
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
         // The planes are the things on the stage a hand can move: the conductor's, the keys' and
@@ -698,7 +724,7 @@ private:
     // The Vector's square, with the point in it: three corners are the source slots, the fourth
     // is all three together. Drag the point; it is the one control here whose value is a place.
     struct VectorView : juce::Component, juce::Timer {
-        explicit VectorView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(20); }
+        explicit VectorView(AmbientSynthProcessor& p) : proc(p) { startTimerHz(15); }
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
         void mouseDown(const juce::MouseEvent& e) override { drag(e); }
@@ -738,7 +764,7 @@ private:
     std::unique_ptr<SpectrumView> spectrumView_;
     // The amplitude envelope as a curve, with the loudest voice's level on it.
     struct EnvView : juce::Component, juce::Timer {
-        explicit EnvView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(20); }
+        explicit EnvView(AmbientSynthProcessor& p) : proc(p) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
         void paint(juce::Graphics&) override;
         void timerCallback() override { if (isShowing()) repaint(); }
         AmbientSynthProcessor& proc;

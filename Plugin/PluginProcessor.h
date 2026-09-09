@@ -158,6 +158,11 @@ public:
     bool isFavourite(int preset) const { return preset >= 0 && favourites_[preset]; }
     void setFavourite(int preset, bool on) { if (preset >= 0) favourites_.setBit(preset, on); }
 
+    // Bumped whenever any parameter changes, from wherever. A display that draws nothing but
+    // parameters -- the filter response, an envelope, the vector square -- has no business
+    // repainting fifteen times a second while the panel stands still, and asks this instead.
+    uint32_t paramGeneration() const { return paramGen_.load(std::memory_order_relaxed); }
+
     juce::AudioProcessorValueTreeState apvts;
     // The instrument that is sounding. There are two of them (see selectPreset): a preset change
     // that is meant to be heard as a transition lets the old one keep playing while the new one
@@ -167,6 +172,17 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+
+    // One listener on every parameter; counting is all it does, so it costs nothing on the audio
+    // thread when a host automates something.
+    struct ParamWatch : juce::AudioProcessorParameter::Listener {
+        explicit ParamWatch(std::atomic<uint32_t>& g) : gen(g) {}
+        void parameterValueChanged(int, float) override { gen.fetch_add(1, std::memory_order_relaxed); }
+        void parameterGestureChanged(int, bool) override {}
+        std::atomic<uint32_t>& gen;
+    };
+    std::atomic<uint32_t> paramGen_ { 0 };
+    ParamWatch paramWatch_ { paramGen_ };
 
     ambient::Engine engines_[2];
     // Which of the two is the instrument right now. Read by both threads and written only by the

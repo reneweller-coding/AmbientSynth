@@ -284,6 +284,7 @@ bool AmbientSynthEditor::BrowseView::Column::passes(int preset) const
 
 void AmbientSynthEditor::BrowseView::applyFilter()
 {
+    ++filterGen;          // the map's cached cloud is drawn from this list
     filtered.clear();
     const juce::String needle = search.getText().trim().toLowerCase();
     const int fam = family.getSelectedId() - 2;
@@ -702,8 +703,6 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     // dimmed points first, then the filtered ones, then the current program
     const bool groups = owner.colourByGroup.getToggleState() && numPresetClusters() > 0;
     const int current = owner.proc.getCurrentProgram();
-    std::vector<bool> inFilter(static_cast<size_t>(numPresets()), false);
-    for (int i : owner.filtered) inFilter[static_cast<size_t>(i)] = true;
     // With a preset library loaded there can be thousands of points: shrink the dots so the
     // plane stays readable, and draw the dimmed ones as squares, which is much cheaper to fill.
     const int shown = std::min(numPresetMeta(), numPresets());
@@ -712,20 +711,42 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     const float dotScale = juce::jlimit(0.34f, 1.0f, std::sqrt(200.0f / juce::jmax(1, shown))) * std::pow(zoom, 0.35f);
     const bool many = shown > 800;
     const auto screen = getLocalBounds().toFloat().expanded(12.0f);
-    for (int pass = 0; pass < 2; ++pass) {
-        for (int i = 0; i < shown; ++i) {
-            if (inFilter[static_cast<size_t>(i)] != (pass == 1)) continue;
-            const PresetMeta& m = presetMeta(i);
-            const auto s = toScreen(m.x, m.y);
-            if (!screen.contains(s)) continue;
-            const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
-            juce::Colour c = groups ? clusterColour(presetClusterOf(m)) : familyColour(m.family);
-            if (pass == 0) c = c.withAlpha(0.18f);
-            g.setColour(c);
-            if (pass == 0 && many) g.fillRect(s.x - size / 2, s.y - size / 2, size, size);
-            else                   g.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
-            if (i == owner.selected && i != current) { g.setColour(kText); g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f); }
+    // The cloud is the same picture until the window, the zoom, the pan, the filter or the
+    // colouring changes, so it is drawn into an image and blitted. Live at fifteen frames a
+    // second it was eight and a half thousand filled ellipses per frame.
+    if (cloud.isNull() || cloudW != getWidth() || cloudH != getHeight()
+        || cloudZoom != zoom || cloudCentre != centre
+        || cloudFilter != owner.filterGen || cloudGroups != groups || cloudCount != shown) {
+        cloudW = juce::jmax(1, getWidth()); cloudH = juce::jmax(1, getHeight());
+        cloudZoom = zoom; cloudCentre = centre; cloudFilter = owner.filterGen;
+        cloudGroups = groups; cloudCount = shown;
+        cloud = juce::Image(juce::Image::ARGB, cloudW, cloudH, true);
+        juce::Graphics cg(cloud);
+        std::vector<bool> inFilter(static_cast<size_t>(numPresets()), false);
+        for (int i : owner.filtered) inFilter[static_cast<size_t>(i)] = true;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (int i = 0; i < shown; ++i) {
+                if (inFilter[static_cast<size_t>(i)] != (pass == 1)) continue;
+                const PresetMeta& m = presetMeta(i);
+                const auto s = toScreen(m.x, m.y);
+                if (!screen.contains(s)) continue;
+                const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
+                juce::Colour c = groups ? clusterColour(presetClusterOf(m)) : familyColour(m.family);
+                if (pass == 0) c = c.withAlpha(0.18f);
+                cg.setColour(c);
+                if (pass == 0 && many) cg.fillRect(s.x - size / 2, s.y - size / 2, size, size);
+                else                   cg.fillEllipse(s.x - size / 2, s.y - size / 2, size, size);
+            }
         }
+    }
+    g.drawImageAt(cloud, 0, 0);
+    // The chosen preset's own ring is live: picking one in the list must not redraw the cloud.
+    if (owner.selected >= 0 && owner.selected < shown && owner.selected != current) {
+        const PresetMeta& m = presetMeta(owner.selected);
+        const auto s = toScreen(m.x, m.y);
+        const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
+        g.setColour(kText);
+        g.drawEllipse(s.x - size / 2 - 3, s.y - size / 2 - 3, size + 6, size + 6, 1.5f);
     }
     // What is playing, marked so it can be found at a glance: everything else on this plane is a
     // dot of a few pixels, and "where am I" is the first question a map has to answer. A ring, a

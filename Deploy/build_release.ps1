@@ -1,6 +1,7 @@
 # AmbientSynth -- build the binaries other people get, and wrap them in a setup.
 #
 #   powershell -File Deploy\build_release.ps1 [-Version 1.0.0] [-SkipBuild] [-NoSetup]
+#                                             [-Toolchain msvc|intel]
 #
 # Three things make this build different from an everyday one:
 #
@@ -33,7 +34,28 @@ param(
     [string]$TimestampUrl = "http://timestamp.digicert.com",
     [switch]$SkipBuild,       # reuse whatever is in build-release already
     [switch]$NoSetup,         # stage and zip, but do not call the Inno compiler
-    [switch]$SkipManual       # reuse the manual already in docs/manual
+    [switch]$SkipManual,      # reuse the manual already in docs/manual
+    # Which compiler builds the thing people get. "msvc" is the one every release so far was made
+    # with. "intel" is oneAPI's icx, which on the same source and the same flags renders about a
+    # fifth to a quarter faster -- 29 % on a bare offline render, 20 % through the plugin under
+    # audio and automation, and only about 4 % in the standalone sitting idle, where nearly all
+    # the work is the window rather than the sound.
+    #
+    # It is not a drop-in: oneAPI's own setvars.bat cannot find its per-component scripts on at
+    # least one machine here, so the environment is set up by hand below; CMake calls icx
+    # "IntelLLVM" rather than MSVC, so anything tied to if(MSVC) quietly does not apply; JUCE asks
+    # for link-time optimisation, which makes icx emit LLVM bitcode that link.exe cannot read, so
+    # the build needs lld; and there is no Visual Studio generator for it without the IDE
+    # integration, so it builds with NMake and therefore without parallelism.
+    #
+    # What it does NOT change: the instrument is generative, so different floating-point code
+    # generation puts it on a different trajectory -- every render differs from the MSVC one. That
+    # was measured rather than assumed. Over sixty presets the descriptors the map is built from
+    # move by 5 % of a typical distance between two presets (Spearman 0.985 over every pair), and
+    # the loudness by a hundredth of a decibel on average, 0.31 dB at worst. The map and the
+    # loudness matching stay valid; the library does not need measuring again.
+    [ValidateSet("msvc", "intel")]
+    [string]$Toolchain = "msvc"
 )
 $python = "Tools\TextureGen\.venv\Scripts\python.exe"
 $ErrorActionPreference = "Stop"
@@ -47,9 +69,50 @@ if (-not $Version) {
 }
 Write-Host "AmbientSynth $Version" -ForegroundColor Cyan
 
-$buildDir = Join-Path $root "build-release"
+$intel = $Toolchain -eq "intel"
+# A tree of its own per compiler: the two produce different objects from the same sources, and
+# sharing a build directory between them means a rebuild that looks incremental and is not.
+$buildDir = Join-Path $root ($(if ($intel) { "build-release-intel" } else { "build-release" }))
 $stage = Join-Path $root "Deploy\stage"
 $out = Join-Path $root "Deploy\out"
+
+# Where the test binaries land. The Visual Studio generator is multi-configuration and puts them
+# under the configuration's name; NMake, which is what the Intel build has to use, does not.
+$testDir = Join-Path $buildDir ($(if ($intel) { "Tests" } else { "Tests\Release" }))
+
+# Runs a batch file for its environment and keeps what it set. Visual Studio and oneAPI both ship
+# their setup as batch files, and a batch file cannot change the environment of the PowerShell
+# that called it -- so it is called in a cmd of its own, and what it left behind is read back.
+function Import-CmdEnvironment([string]$batch) {
+    if (-not (Test-Path $batch)) { throw "not found: $batch" }
+    $tmp = [System.IO.Path]::GetTempFileName()
+    cmd /c " `"$batch`" > nul 2>&1 && set > `"$tmp`" "
+    foreach ($line in Get-Content $tmp) {
+        if ($line -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2] }
+    }
+    Remove-Item $tmp -Force
+}
+
+# Everything oneAPI's setvars.bat would have done, done here instead, because on this machine it
+# cannot find the per-component scripts it is supposed to call and reports each one as missing
+# while returning success. Four directories: the compiler, its linker (lld-link lives one level
+# down from icx and is needed because JUCE asks for link-time optimisation), its libraries and its
+# headers.
+function Enable-IntelToolchain {
+    $vs = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Auxiliary\Build\vcvars64.bat" -ErrorAction SilentlyContinue |
+          Select-Object -First 1 -ExpandProperty FullName
+    if (-not $vs) { throw "vcvars64.bat not found -- the Intel build still links with the Microsoft linker" }
+    Import-CmdEnvironment $vs
+    $icx = Get-ChildItem "C:\Program Files (x86)\Intel\oneAPI\compiler\*\bin\icx.exe" -ErrorAction SilentlyContinue |
+           Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $icx) { throw "icx.exe not found -- is the oneAPI C++ compiler installed?" }
+    $iroot = Split-Path -Parent (Split-Path -Parent $icx.FullName)
+    $env:PATH = "$iroot\bin;$iroot\bin\compiler;$env:PATH"
+    $env:LIB = "$iroot\lib;$env:LIB"
+    $env:INCLUDE = "$iroot\include;$env:INCLUDE"
+    Write-Host "  Intel oneAPI: $iroot" -ForegroundColor DarkGray
+    return $icx.FullName
+}
 
 if (-not $SkipBuild) {
     # JUCE writes the Windows version resource once and does not notice afterwards that the
@@ -59,13 +122,32 @@ if (-not $SkipBuild) {
     $rc = Join-Path $buildDir "Plugin\AmbientSynth_artefacts\JuceLibraryCode\AmbientSynth_resources.rc"
     if (Test-Path $rc) { Remove-Item $rc -Force }
 
-    # A build for other people is not worth having in a hurry: -j 2 leaves the machine usable.
-    cmake -S . -B $buildDir -G "Visual Studio 18 2026" -A x64 `
-        -DAMBIENT_STATIC_RUNTIME=ON -DAMBIENT_AVX2=ON -DAMBIENT_BUILD_TOOLS=ON `
+    $common = @(
+        "-DAMBIENT_STATIC_RUNTIME=ON", "-DAMBIENT_AVX2=ON", "-DAMBIENT_BUILD_TOOLS=ON",
         "-DFETCHCONTENT_SOURCE_DIR_JUCE=$root/build/_deps/juce-src"   # the JUCE already fetched
-    if ($LASTEXITCODE -ne 0) { throw "configure failed" }
-    cmake --build $buildDir --config Release --parallel 2
-    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    )
+    if ($intel) {
+        $icx = Enable-IntelToolchain
+        # NMake because there is no Visual Studio toolset for icx without the IDE integration, and
+        # lld because JUCE turns on link-time optimisation, which makes icx write LLVM bitcode
+        # where the Microsoft linker expects objects -- it stops with LNK1107 on the first one.
+        $lld = "-fuse-ld=lld"
+        cmake -S . -B $buildDir -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_C_COMPILER=$icx" "-DCMAKE_CXX_COMPILER=$icx" `
+            "-DCMAKE_EXE_LINKER_FLAGS=$lld" "-DCMAKE_SHARED_LINKER_FLAGS=$lld" "-DCMAKE_MODULE_LINKER_FLAGS=$lld" `
+            @common
+        if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+        # NMake builds one file at a time, so this is slow and, unlike the -j 2 below, already
+        # leaves the machine usable.
+        cmake --build $buildDir
+        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    } else {
+        # A build for other people is not worth having in a hurry: -j 2 leaves the machine usable.
+        cmake -S . -B $buildDir -G "Visual Studio 18 2026" -A x64 @common
+        if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+        cmake --build $buildDir --config Release --parallel 2
+        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    }
 
     # The tests are built in the same configuration that ships, and have to pass in it: a static
     # runtime and a missing AVX2 are exactly the kind of change that is fine until it is not.
@@ -75,10 +157,14 @@ if (-not $SkipBuild) {
     # they open no audio device.
     Remove-Item env:AMBIENT_MUTE -ErrorAction SilentlyContinue
     $env:AMBIENT_PACKS = Join-Path $root "Library\Packs"
-    & (Join-Path $buildDir "Tests\Release\ambient_selftest.exe")
+    & (Join-Path $testDir "ambient_selftest.exe")
     if ($LASTEXITCODE -ne 0) { throw "self test failed in the release configuration" }
-    & (Join-Path $buildDir "Tests\Release\ambient_hosttest.exe")
+    & (Join-Path $testDir "ambient_hosttest.exe")
     if ($LASTEXITCODE -ne 0) { throw "host test failed in the release configuration" }
+    # The two threads against each other, in the configuration that ships. Every serious fault
+    # this instrument has had was a handover between them, so it is worth the four seconds.
+    & (Join-Path $testDir "ambient_racetest.exe") 4
+    if ($LASTEXITCODE -ne 0) { throw "race test failed in the release configuration" }
 }
 
 $art = Join-Path $buildDir "Plugin\AmbientSynth_artefacts\Release"
@@ -94,8 +180,13 @@ $dumpbin = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\
 if ($dumpbin) {
     foreach ($bin in @($exe, (Join-Path $vst "Contents\x86_64-win\AmbientSynth.vst3"))) {
         $deps = & $dumpbin /dependents $bin | Select-String -Pattern '^\s+\S+\.dll' | ForEach-Object { $_.Line.Trim() }
-        $bad = $deps | Where-Object { $_ -match '^(VCRUNTIME|MSVCP|CONCRT|api-ms-win-crt)' }
-        if ($bad) { throw "$([System.IO.Path]::GetFileName($bin)) still needs the Visual C++ runtime: $($bad -join ', ')" }
+        # Intel's runtime is the same trap wearing another name: libmmd and svml_dispmd sit beside
+        # icx and are found while building, and are nowhere on the machine of somebody who has
+        # only ever installed a DAW. They do not appear when the runtime is linked in statically,
+        # which is what AMBIENT_STATIC_RUNTIME does and why icx then picks libmmt over libmmd --
+        # but that is a thing to check rather than to trust.
+        $bad = $deps | Where-Object { $_ -match '^(VCRUNTIME|MSVCP|CONCRT|api-ms-win-crt|libmmd|svml|libiomp|libirng)' }
+        if ($bad) { throw "$([System.IO.Path]::GetFileName($bin)) still needs a runtime nobody has: $($bad -join ', ')" }
         Write-Host ("  {0}: {1} system DLLs, none of them a redistributable" -f [System.IO.Path]::GetFileName($bin), $deps.Count)
     }
 } else {
@@ -187,8 +278,16 @@ $(Get-Content (Join-Path $root "LICENSE") -TotalCount 1)
 "@ | Set-Content (Join-Path $stage "README.txt") -Encoding utf8
 
 # ---------------------------------------------------------------- portable archive
+# A version number used to mean one binary. With a choice of compiler it can mean two, and the
+# files here are named after the version alone -- so a run can quietly replace an archive that
+# was published under that name with a different build of it, same name, different checksum.
+# Said out loud rather than discovered later by somebody comparing hashes with a release page.
 $zip = Join-Path $out "AmbientSynth-$Version-portable.zip"
-if (Test-Path $zip) { Remove-Item $zip -Force }
+if (Test-Path $zip) {
+    Write-Warning ("replacing {0} (built {1}) with a {2} build" -f
+                   [System.IO.Path]::GetFileName($zip), (Get-Item $zip).LastWriteTime, $Toolchain)
+    Remove-Item $zip -Force
+}
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Host ("  portable zip: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
 

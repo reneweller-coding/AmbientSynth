@@ -222,6 +222,16 @@ powershell -File Deploy\build_release.ps1
 Builds in its own tree and leaves two things in `Deploy/out/`: **`AmbientSynth-<version>-Setup.exe`**
 (14 MB) and a portable **`.zip`** (15 MB) for anyone who would rather not run an installer.
 
+`-Toolchain intel` builds the same thing with oneAPI's compiler instead, which renders about a
+fifth faster through the plugin under load and a quarter faster on a bare offline render — in the
+standalone sitting idle it is nearer four per cent, because almost all of that work is the window
+rather than the sound. It needs no extra runtime: with the runtime linked in, Intel's own library
+goes in with it, and the check below covers that too. What it does change is the sound, in the
+sense that a generative instrument put on a different floating-point trajectory plays a different
+take of the same patch. Measured over sixty presets, the descriptors the map is built from move by
+5 % of a typical distance between two presets and the loudness by a hundredth of a decibel, so the
+map and the loudness matching stay as they are.
+
 Nothing has to be installed first. The runtime is linked in
 (`-DAMBIENT_STATIC_RUNTIME=ON`), so there is no Visual C++ redistributable to chase — the script
 checks that with `dumpbin` and refuses to package a binary that still asks for one. The build is

@@ -2,5 +2,11 @@ add_executable(ambient_render main.cpp)
 target_link_libraries(ambient_render PRIVATE AmbientCore)
 if(MSVC)
     target_compile_options(ambient_render PRIVATE /W4 /permissive- /utf-8)
-    target_link_options(ambient_render PRIVATE /STACK:16777216)
+endif()
+# How much stack the program needs is a property of the program, not of the compiler that built
+# it: an Engine is a few hundred kilobytes and more than one of them stands on the stack here.
+# Tied to MSVC, the option quietly went missing under any other Windows compiler -- Intel's, for
+# one -- and the binary died on startup with nothing but an exit code.
+if(WIN32)
+    target_link_options(ambient_render PRIVATE "LINKER:/STACK:16777216")
 endif()

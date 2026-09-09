@@ -219,6 +219,7 @@ private:
     std::atomic<bool> endFade_ { false };
     // The map was switched off: the message thread writes the blend it left into the parameters.
     std::atomic<bool> mapExit_ { false };
+    int routeMirrorLeft_ = 0;   // samples until the route's cursor is told to the host again
     int  pendingPreset_ = -1;         // a change waiting for the audio thread to free an engine
     void beginTransition(int index);  // message thread: prepare the incoming engine and publish it
     // A change asked for while both engines were busy is served from here, a few milliseconds

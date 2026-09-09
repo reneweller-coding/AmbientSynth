@@ -572,6 +572,7 @@ private:
     // searched for and blended again on every block.
     float             blendX_ = 0.0f, blendY_ = 0.0f, blendR_ = 0.0f;
     bool              blendHave_ = false;
+    bool              roomBWas_ = false;    // was the second room morphing on the last block?
     // The matched partial ratios and what they were computed for (see readParams).
     float             matchRatio_[kMaxPartials] = {};
     float             matchLast_ = -1.0f, matchB_ = -1.0f;

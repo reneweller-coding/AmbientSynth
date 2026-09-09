@@ -184,7 +184,13 @@ void Wavetable::spectrumAt(float pos, float* out, float transport) const
 bool Wavetable::analyse(const float* mono, int n, int frameLen)
 {
     frames = 0;
+    // A power of two, and not merely long enough: the FFT builds its bit-reversal table for
+    // the next power of two above the length it is given, so a frame of 300 samples produces
+    // indices up to 511 and the transform then swaps entries two hundred past the end of its
+    // own buffers. Nothing in the instrument passes anything but 2048 today; this is so that
+    // nothing ever can.
     if (mono == nullptr || frameLen < 64 || n < frameLen) return false;
+    if ((frameLen & (frameLen - 1)) != 0) return false;
     const int total = n / frameLen;
     const int keep = std::min(total, kTableFrames);
     Fft fft(frameLen);

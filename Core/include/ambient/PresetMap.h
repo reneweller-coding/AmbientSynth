@@ -22,6 +22,9 @@ public:
     // is a knob that answers a moment late rather than an instrument that hangs.
     static void warmup();
     static void warmupAsync();
+    // Waits for a warmup that is still running. A plugin must call this before its library
+    // can be unloaded, or the thread outlives the code it is executing.
+    static void shutdown();
     static bool ready();
 
     struct Blend {

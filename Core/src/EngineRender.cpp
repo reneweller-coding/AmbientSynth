@@ -301,6 +301,12 @@ void Engine::renderChunk(float* L, float* R, int n)
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
+        // The stems too. They are the host's buffers (multi-out) or the render tool's, and
+        // leaving them alone means whatever was in them last is heard again -- silence in the
+        // mix and a burst of the previous block on every stem.
+        if (stems_ != nullptr)
+            for (int c = 0; c < kNumStems * 2; ++c)
+                std::memset(stems_[c] + stemPos_, 0, bytes);
         return;
     }
     if (fbOn && fbBus_ > 0.0f)
@@ -522,7 +528,14 @@ void Engine::renderChunk(float* L, float* R, int n)
         room_.process(rl, rr, ol, orr, n);
         // Morph: the second impulse's answer to the same input, faded in. Only computed while
         // the morph is actually between the two rooms.
-        if (roomMorph_ > 0.0005f || smRoomMorph_.value > 1.0e-4f) {
+        const bool morphing = roomMorph_ > 0.0005f || smRoomMorph_.value > 1.0e-4f;
+        // Stopping leaves the second room frozen wherever it was -- half a block in its input,
+        // a finished block in its output, its delay line where it stood. Turned up again minutes
+        // later it would play that back before anything new reached it. It is emptied once, at
+        // the moment it falls silent, so it always starts from nothing.
+        if (!morphing && roomBWas_) roomB_.reset();
+        roomBWas_ = morphing;
+        if (morphing) {
             float* bl = roomBL_.data(); float* br = roomBR_.data();
             roomB_.process(rl, rr, bl, br, n);
             for (int i = 0; i < n; ++i) {

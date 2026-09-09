@@ -12,6 +12,7 @@
 // about the whole piece: a meter that only sees what the interface happened to ask for is a
 // meter with holes in it.
 #pragma once
+#include <atomic>
 #include <cstddef>
 #include <vector>
 
@@ -85,29 +86,36 @@ private:
 // all night cannot do that. What is kept now is a window of the recent past, which is also the
 // more useful thing to report: a meter that describes the last hour rather than the whole night.
 struct LoudnessLog {
-    void prepare(size_t capacity) { buf_.assign(capacity, 0.0f); pos_ = 0; count_ = 0; }
-    void clear() { pos_ = 0; count_ = 0; }
+    void prepare(size_t capacity) { buf_.assign(capacity, 0.0f); pos_.store(0); count_.store(0); }
+    void clear() { pos_.store(0); count_.store(0); }
     void push(float v)                      // audio thread; never allocates
     {
         if (buf_.empty()) return;
-        buf_[pos_] = v;
-        pos_ = (pos_ + 1) % buf_.size();
-        if (count_ < buf_.size()) ++count_;
+        const size_t p = pos_.load(std::memory_order_relaxed);
+        buf_[p] = v;
+        pos_.store((p + 1) % buf_.size(), std::memory_order_release);
+        const size_t c = count_.load(std::memory_order_relaxed);
+        if (c < buf_.size()) count_.store(c + 1, std::memory_order_release);
     }
-    size_t size() const { return count_; }
-    bool  empty() const { return count_ == 0; }
+    size_t size() const { return count_.load(std::memory_order_acquire); }
+    bool  empty() const { return size() == 0; }
     // The window in order, oldest first (message thread).
     std::vector<float> snapshot() const
     {
+        // Both indices are read once and then held: they move under this function, and a count
+        // that grew between the reserve and the loop would have walked past what was counted.
+        const size_t n = count_.load(std::memory_order_acquire);
+        const size_t p = pos_.load(std::memory_order_acquire);
         std::vector<float> out;
-        out.reserve(count_);
-        const size_t from = (count_ < buf_.size()) ? 0 : pos_;
-        for (size_t k = 0; k < count_; ++k) out.push_back(buf_[(from + k) % buf_.size()]);
+        out.reserve(n);
+        const size_t from = (n < buf_.size()) ? 0 : p;
+        for (size_t k = 0; k < n; ++k) out.push_back(buf_[(from + k) % buf_.size()]);
         return out;
     }
 private:
     std::vector<float> buf_;
-    size_t pos_ = 0, count_ = 0;
+    // Written by the audio thread, read by whoever asks for a reading.
+    std::atomic<size_t> pos_ { 0 }, count_ { 0 };
 };
 
 class ZwickerLoudness {

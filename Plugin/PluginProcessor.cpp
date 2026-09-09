@@ -87,6 +87,8 @@ AmbientSynthProcessor::AmbientSynthProcessor()
 
 AmbientSynthProcessor::~AmbientSynthProcessor()
 {
+    // A warmup still running would be executing code this library is about to give back.
+    ambient::PresetMap::shutdown();
     for (auto* p : getParameters()) p->removeListener(&paramWatch_);
     presetPump_.stopTimer();
     stopTimer();
@@ -309,7 +311,14 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         float rx, ry, rr;
         const bool wasActive = raw_[static_cast<size_t>(ParamId::RouteActive)]->load() >= 0.5f;
         live().routeStep(buffer.getNumSamples() / getSampleRate(), rx, ry, rr);
-        if (wasActive) {
+        // Telling the host about a parameter is what a plugin does when it moves one itself, and
+        // it is how the map cursor reaches the display and the automation lane. But a route walks
+        // it continuously, so at a 64-sample buffer this was five parameter changes seven hundred
+        // and fifty times a second -- for a cursor that crosses the plane over minutes. Thirty
+        // times a second is finer than any lane records and finer than any eye sees.
+        routeMirrorLeft_ -= buffer.getNumSamples();
+        if (wasActive && routeMirrorLeft_ <= 0) {
+            routeMirrorLeft_ = static_cast<int>(getSampleRate() / 30.0);
             auto mirror = [this](ParamId id) {
                 if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key)) {
                     const float v = live().getParam(id);

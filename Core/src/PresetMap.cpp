@@ -20,6 +20,8 @@ std::vector<std::unique_ptr<std::vector<float>>> g_retired;
 std::atomic<const float*> g_table { nullptr };
 std::atomic<int>          g_count { 0 };       // presets in the published table
 std::atomic<bool>         g_building { false };
+std::thread               g_thread;
+std::mutex                g_threadLock;
 std::mutex                g_buildLock;
 }
 
@@ -43,7 +45,19 @@ void PresetMap::warmup()
 void PresetMap::warmupAsync()
 {
     if (g_building.exchange(true, std::memory_order_acq_rel)) return;   // one at a time
-    std::thread([] { warmup(); g_building.store(false, std::memory_order_release); }).detach();
+    // NOT detached. A host scanning plugins builds an instance, destroys it and unloads the
+    // library within milliseconds, and a detached thread then runs code that is no longer mapped
+    // -- an access violation during the scan, and a blacklisted plugin. The thread is kept so it
+    // can be waited for; shutdown() does that, and the host layer calls it when it goes away.
+    std::lock_guard<std::mutex> lock(g_threadLock);
+    if (g_thread.joinable()) g_thread.join();
+    g_thread = std::thread([] { warmup(); g_building.store(false, std::memory_order_release); });
+}
+
+void PresetMap::shutdown()
+{
+    std::lock_guard<std::mutex> lock(g_threadLock);
+    if (g_thread.joinable()) g_thread.join();
 }
 
 bool PresetMap::ready() { return g_table.load(std::memory_order_acquire) != nullptr; }

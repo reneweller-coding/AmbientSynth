@@ -399,6 +399,13 @@ void Engine::stepChaos(float dt)
     const double hR = static_cast<double>(dt) * 6.0 / period;    // one turn of the spiral is about six
     for (double left = hL; left > 0.0; left -= 0.01) rk4(lorenz_, std::min(left, 0.01), lorenz);
     for (double left = hR; left > 0.0; left -= 0.01) rk4(rossler_, std::min(left, 0.01), rossler);
+    // An attractor that has left the finite world never comes back on its own, and clampv
+    // does not stop it: every comparison against a NaN is false, so clampv hands the NaN
+    // straight on -- into the matrix, into filters and gains, and the instrument is silent
+    // until the plugin is reloaded. If either state is no longer finite it is seeded again.
+    auto finite3 = [](const double* v) { return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]); };
+    if (!finite3(lorenz_))  { lorenz_[0] = 0.1; lorenz_[1] = 0.0; lorenz_[2] = 20.0; }
+    if (!finite3(rossler_)) { rossler_[0] = 1.0; rossler_[1] = 1.0; rossler_[2] = 1.0; }
     chaosOut_[0] = clampv(static_cast<float>(lorenz_[0] / 20.0), -1.0f, 1.0f);
     chaosOut_[1] = clampv(static_cast<float>(lorenz_[1] / 27.0), -1.0f, 1.0f);
     chaosOut_[2] = clampv(static_cast<float>((lorenz_[2] - 25.0) / 22.0), -1.0f, 1.0f);

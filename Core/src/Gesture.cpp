@@ -1,4 +1,5 @@
 #include "ambient/Gesture.h"
+#include <cmath>
 #include "ambient/Dsp.h"
 #include <cstring>
 #include <cstdio>
@@ -12,7 +13,16 @@ const char* const kInputNames[kNumGestureInputs] = {
     "LeftTilt", "RightTilt", "LeftPinch", "RightPinch", "HeadYaw", "HeadPitch", "HeadRoll",
     "Custom0", "Custom1", "Custom2", "Custom3", "Custom4", "Custom5", "Custom6", "Custom7",
 };
-float norm01(float v, float lo, float hi) { return clampv((v - lo) / (hi - lo), 0.0f, 1.0f); }
+// A calibration that collected no range at all leaves lo == hi, and the division then makes a
+// NaN -- which this function used to hand on, straight into the host's parameters, because a
+// comparison against NaN is false and clampv lets it through. An empty range means nothing was
+// measured: the input reads as the bottom of it.
+float norm01(float v, float lo, float hi)
+{
+    const float span = hi - lo;
+    if (!(std::fabs(span) > 1.0e-9f)) return 0.0f;
+    return clampv((v - lo) / span, 0.0f, 1.0f);
+}
 }
 
 const char* gestureInputName(GestureInput in)
@@ -107,10 +117,11 @@ void GestureLayer::setHead(float yawDeg, float pitchDeg, float rollDeg)
 
 bool GestureLayer::addMapping(const GestureMapping& m)
 {
-    if (numMappings_ >= kMaxMappings) return false;
-    maps_[numMappings_] = m;
-    state_[numMappings_] = State{};
-    ++numMappings_;
+    const int n = numMappings_.load(std::memory_order_relaxed);
+    if (n >= kMaxMappings) return false;
+    maps_[n] = m;
+    state_[n] = State{};
+    numMappings_.store(n + 1, std::memory_order_release);   // published only once it is written
     return true;
 }
 
@@ -215,7 +226,8 @@ bool GestureLayer::parseMappings(const char* text)
 int GestureLayer::writeMappings(char* out, int capacity) const
 {
     int pos = 0;
-    for (int i = 0; i < numMappings_ && pos < capacity; ++i) {
+    const int count = numMappings_.load(std::memory_order_acquire);
+    for (int i = 0; i < count && pos < capacity; ++i) {
         const GestureMapping& m = maps_[i];
         pos += std::snprintf(out + pos, static_cast<size_t>(capacity - pos), "%s %s %g %g %g %g %s %d\n",
                              gestureInputName(m.input), paramDesc(m.param).key, m.min, m.max, m.smoothSeconds, m.deadzone,

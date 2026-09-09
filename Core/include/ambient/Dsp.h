@@ -27,8 +27,11 @@ struct Rng {
 // Sine lookup on a [0,1) phase. 4096 entries + guard, linear interpolation.
 struct SineTable {
     static constexpr int N = 4096;
-    float v[N + 1];
-    SineTable() { for (int i = 0; i <= N; ++i) v[i] = std::sin(kTwoPi * static_cast<float>(i) / static_cast<float>(N)); }
+    // Two guard entries, not one: the interpolation reads v[i] and v[i + 1], and a phase of
+    // exactly 1.0 -- which the chorus produces as 1.0 - phase when the phase is zero -- lands
+    // on i == N and read v[N + 1], one past the end of the table.
+    float v[N + 2];
+    SineTable() { for (int i = 0; i <= N + 1; ++i) v[i] = std::sin(kTwoPi * static_cast<float>(i) / static_cast<float>(N)); }
 };
 inline const SineTable& sineTable() { static const SineTable t; return t; }
 // Cosine/sine of a phase in [0,1), from the sine table. Used to seed and to step the rotating
@@ -37,8 +40,17 @@ inline void phasorFrom(double phase01, float& c, float& s);
 
 inline float sin01(double phase01)
 {
-    const double x = phase01 * SineTable::N;
-    const int i = static_cast<int>(x);
+    double x = phase01 * SineTable::N;
+    int i = static_cast<int>(x);
+    // One unsigned comparison catches a phase below zero and one above one at the same time.
+    // Both were reading outside the table; a caller that hands over a phase it has not
+    // wrapped gets the wrapped answer rather than whatever was in memory.
+    if (static_cast<unsigned>(i) > static_cast<unsigned>(SineTable::N)) {
+        const double p = phase01 - std::floor(phase01);
+        x = p * SineTable::N;
+        i = static_cast<int>(x);
+        if (static_cast<unsigned>(i) > static_cast<unsigned>(SineTable::N)) return 0.0f;
+    }
     const float f = static_cast<float>(x - i);
     const float* t = sineTable().v;
     return t[i] + f * (t[i + 1] - t[i]);

@@ -194,6 +194,7 @@ private:
     int    lastBlockSize_ = 512;
     ambient::Engine& engineAt(int i) { return *engines_[i]; }
     ambient::Engine& ensureEngine(int i);      // message thread: build and prepare it if it is gone
+    void carryUserData(ambient::Engine& e);   // the scale, wavetable, clips and room the player loaded
     void releaseIdleEngine();                  // message thread: give back the one nothing is using
     // Which of the two is the instrument right now. Read by both threads and written only by the
     // audio thread, at a block boundary (see the swap in processBlock): the message thread
@@ -280,6 +281,8 @@ private:
     // set timeline (recording appends on the audio thread; save/load on the message thread while stopped)
     ambient::SetTimeline setRec_, setPlay_;
     std::atomic<bool> setRecording_{ false }, setPlaying_{ false };
+    // Set while the audio thread is writing into the recording, so stopping can wait for it.
+    std::atomic<bool> setRecBusy_{ false };
     std::atomic<double> setTime_{ 0.0 };
     float setLast_[ambient::kNumParams] = {};
     double setClock_ = 0.0;

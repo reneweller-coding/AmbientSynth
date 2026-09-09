@@ -340,6 +340,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         if (setPlay_.finished() && setClock_ > setPlay_.length() + 1.0) setPlaying_.store(false);
     }
     if (setRecording_.load()) {
+        setRecBusy_.store(true, std::memory_order_release);
         for (int i = 0; i < kNumParams; ++i) {
             const float v = raw_[static_cast<size_t>(i)]->load();
             if (v != setLast_[i]) { setRec_.add({ setClock_, TimelineEvent::Type::Param, i, v }); setLast_[i] = v; }
@@ -351,6 +352,7 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
         setClock_ += blockSeconds;
         setTime_.store(setClock_);
+        setRecBusy_.store(false, std::memory_order_release);
     }
 
     const bool mpe = raw_[static_cast<size_t>(ParamId::MpeOn)]->load() >= 0.5f;
@@ -708,6 +710,11 @@ void AmbientSynthProcessor::startSetRecording()
 {
     setPlaying_.store(false);
     setRec_.clear();
+    // All the room it will ever need, taken here on the message thread: from now on the audio
+    // thread only writes into it, and it must not allocate while doing so. A quarter of a million
+    // events is hours of playing -- past that the recording stops growing instead of stopping the
+    // audio.
+    setRec_.reserve(1u << 18);
     // The starting state goes in at t = 0 so playback begins from the same sound.
     for (int i = 0; i < kNumParams; ++i) {
         const float v = raw_[static_cast<size_t>(i)]->load();
@@ -721,7 +728,11 @@ void AmbientSynthProcessor::startSetRecording()
 
 bool AmbientSynthProcessor::stopSetRecording(const juce::File& saveTo)
 {
-    setRecording_.store(false);
+    // Stop, then wait for the audio thread to finish the block it may be writing into the
+    // timeline. Without this the message thread walked the event list while the audio thread was
+    // still appending to it -- and if the vector had grown at that moment, it walked freed memory.
+    setRecording_.store(false, std::memory_order_release);
+    for (int spin = 0; spin < 2000000 && setRecBusy_.load(std::memory_order_acquire); ++spin) { }
     if (saveTo == juce::File()) return true;
     return setRec_.save(saveTo.getFullPathName().toRawUTF8());
 }
@@ -789,8 +800,39 @@ ambient::Engine& AmbientSynthProcessor::ensureEngine(int i)
             e->setParam(static_cast<ParamId>(k), raw_[static_cast<size_t>(k)]->load());
         e->prepare(lastSampleRate_, lastBlockSize_);
         engines_[i] = std::move(e);
+        carryUserData(*engines_[i]);
     }
     return *engines_[i];
+}
+
+// What the player loaded by hand, into an engine that has just been built. A preset brings its own
+// sample, wavetable and impulse and overwrites these a moment later; what it does NOT bring is a
+// Scala scale a player tuned the instrument to, or a wavetable, clip or room they opened
+// themselves. Those live in the engine and nowhere else, and a fresh engine starts without them --
+// so a preset change silently retuned the instrument to twelve-tone equal temperament and put the
+// built-in table back. Copied from the engine that is playing, not read from disk again.
+void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
+{
+    ambient::Engine& from = live();
+    if (scalaText_.isNotEmpty()) {
+        FixedScale sc;
+        if (parseScala(scalaText_.toRawUTF8(), sc)) e.setUserScale(sc);
+    }
+    if (const ambient::Wavetable* wt = from.userWavetable()) e.setUserWavetable(*wt);
+    for (int k = 0; k < ambient::kSlots; ++k)
+        if (const ambient::Texture* t = from.displayTexture(k))
+            if (!t->empty())
+                e.setTexture(k, t->mono.data(), static_cast<int>(t->mono.size()), t->sampleRate, t->baseHz, t->seamless);
+    // The impulse responses are the one thing the engine cannot hand over -- it keeps them as
+    // spectra, not as samples -- so a room the player opened is read from its file again. A
+    // generated room needs nothing: a new engine makes its own.
+    if (from.hasUserImpulse() && impulseFile_.existsAsFile()) {
+        ambient::Engine* was = prepareTarget_;
+        prepareTarget_ = &e;
+        loadImpulseFile(impulseFile_, false);
+        if (impulseBFile_.existsAsFile()) loadImpulseFile(impulseBFile_, true);
+        prepareTarget_ = was;
+    }
 }
 
 // Message thread: the engine nobody is using goes back. Only when nothing is fading and no change

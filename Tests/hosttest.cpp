@@ -248,6 +248,12 @@ int main()
             for (int c = 0; c < 2; ++c) for (int i = 0; i < block; ++i) { const float v = buf.getReadPointer(c)[i]; e += v * v; }
             return std::sqrt(e / (2.0 * block)) + 1e-9;
         };
+        {   // a wavetable and a scale of the player's own, before any preset change
+            std::vector<float> frame(2048);
+            for (int i = 0; i < 2048; ++i) frame[static_cast<size_t>(i)] = std::sin(6.2831853f * i / 2048.0f);
+            check(p->engine().loadUserWavetable(frame.data(), static_cast<int>(frame.size())), "a user wavetable loads");
+            check(p->loadScalaText("! test.scl\nTest scale\n 3\n!\n 100.0\n 200.0\n 2/1\n", "Test"), "a Scala scale loads");
+        }
         p->selectPreset(a, false);
         midi.addEvent(juce::MidiMessage::noteOn(1, 57, 0.8f), 0);
         midi.addEvent(juce::MidiMessage::noteOn(1, 64, 0.7f), 0);
@@ -297,6 +303,12 @@ int main()
         check(worstJump < 3.0, "a transition never steps in level from one 85 ms window to the next");
         check(mid > 0.3 && mid < 0.7, "half way through the time given, the fade is about half way");
         check(arrived > 1e-3, "when the old preset is gone the new one is already audible");
+        // What the player loaded by hand has to survive the change of engine -- and the engine
+        // has changed by now, so this is asked of the new one. A preset brings its own sample
+        // and wavetable; a Scala scale and a table opened from a file live in the engine and
+        // nowhere else, and a transition builds a fresh one.
+        check(p->engine().userWavetable() != nullptr, "a wavetable the player loaded survives a transition");
+        check(std::strstr(p->engine().userScale().name, "Test") != nullptr, "and so does the scale they tuned it to");
         check(p->morphingTo() < 0 && p->morphingFrom() < 0 && p->morphProgress() >= 1.0f,
               "when the time is up the change has arrived and nothing travels");
         p->releaseResources();

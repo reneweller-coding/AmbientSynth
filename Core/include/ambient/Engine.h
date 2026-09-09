@@ -224,6 +224,9 @@ public:
 
 
     const FixedScale& scale() const { return *scale_; }
+    // The Scala slot itself, whatever the Scale parameter happens to be pointing at: a preset
+    // chooses its own scale, and that must not be read as "the tuning the player loaded is gone".
+    const FixedScale& userScale() const { return scales_[kUserScaleIndex]; }
     double frequencyOf(int note) const;
     double sampleRate() const { return sr_; }
 

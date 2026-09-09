@@ -74,9 +74,10 @@ public:
     bool  resting() const { return resting_; }
 
     // Mappings, message thread (the audio thread reads them; keep changes rare).
-    int  numMappings() const { return numMappings_; }
+    int  numMappings() const { return numMappings_.load(std::memory_order_acquire); }
     const GestureMapping& mapping(int i) const { return maps_[i]; }
-    void clearMappings() { numMappings_ = 0; }
+    // Zero FIRST, so the audio thread stops reading before the table underneath it is rewritten.
+    void clearMappings() { numMappings_.store(0, std::memory_order_release); }
     bool addMapping(const GestureMapping& m);
     void setDefaultMappings();
     // Text form, one mapping per line:
@@ -101,7 +102,8 @@ public:
         if (resting_) return 0;
         const bool susp = suspended();
         int written = 0;
-        for (int i = 0; i < numMappings_; ++i) {
+        const int count = numMappings_.load(std::memory_order_acquire);
+        for (int i = 0; i < count; ++i) {
             const GestureMapping& m = maps_[i];
             State& s = state_[i];
             float x = input(m.input);
@@ -134,7 +136,10 @@ private:
     std::atomic<uint64_t> updates_{ 0 };
     GestureMapping maps_[kMaxMappings];
     State state_[kMaxMappings];
-    int numMappings_ = 0;
+    // Written by the message thread when the mapping text is edited, read by the audio thread
+    // every block. Published after the entry it counts has been written, so a half-written
+    // mapping is never acted on.
+    std::atomic<int> numMappings_ { 0 };
     void finishCalibration();
     float handX_[2] = {}, handY_[2] = {}, handZ_[2] = {};
     float hLow_ = 0.9f, hHigh_ = 1.7f, rNear_ = 0.2f, rFar_ = 0.7f, dNear_ = 0.1f, dFar_ = 0.8f;

@@ -8,6 +8,9 @@ namespace ambient {
 
 void SetTimeline::add(const TimelineEvent& e)
 {
+    // Room was taken in advance (reserve): past it the event is dropped rather than the
+    // vector grown, because this is called from the audio thread while a set is recorded.
+    if (capacity_ > 0 && events_.size() >= capacity_) return;
     if (events_.empty() || events_.back().t <= e.t) { events_.push_back(e); return; }
     auto it = std::upper_bound(events_.begin(), events_.end(), e, [](const TimelineEvent& a, const TimelineEvent& b) { return a.t < b.t; });
     events_.insert(it, e);

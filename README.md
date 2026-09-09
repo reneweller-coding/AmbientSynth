@@ -157,6 +157,44 @@ Outputs:
 The first configure downloads JUCE (tag set by `AMBIENT_JUCE_TAG`).
 `-DAMBIENT_BUILD_PLUGIN=OFF` builds only the core and the tools, which needs no JUCE.
 
+## Checking it
+
+Two binaries run on every build. `ambient_selftest` measures the instrument: tuning, envelopes,
+the brain, determinism. `ambient_hosttest` measures the plugin around it — everything a host does
+and a synth has to survive: rates from 44.1 to 96 kHz and blocks from 16 to 2048, a state that has
+to come back exactly as it went out (both what the engine holds and what the host reads back),
+programs changed while audio runs, and four seconds of two threads writing every parameter at once
+while it plays. Run the host test **without** `AMBIENT_MUTE`: it measures levels, and a muted
+instrument passes everything trivially.
+
+```bash
+build/Tests/Release/ambient_selftest.exe
+build/Tests/Release/ambient_hosttest.exe
+```
+
+Two switches turn the host test into a tool rather than a check. `AMBIENT_FUZZ=1` sets every
+parameter at random, then moves one section at a time while a chord plays, and names any section
+whose sound stops being a number (`AMBIENT_FUZZ_LONG=1` gives each five seconds instead of one).
+`AMBIENT_TIMING=1` prints what a program change costs a host, built-in against library.
+
+Two more are worth running before a release, and neither lives in the repository.
+[pluginval](https://github.com/Tracktion/pluginval) exercises the VST3 wrapper itself — the same
+contract, but through the format, which is where the plugin actually meets a DAW:
+
+```bash
+pluginval --strictness-level 10 --timeout-ms 900000 --validate build/Plugin/AmbientSynth_artefacts/Release/VST3/AmbientSynth.vst3
+```
+
+And the address sanitizer, which MSVC has built in. Configure it from PowerShell rather than a
+POSIX shell, which turns `/fsanitize=address` into a path; running the result needs the sanitizer
+runtime beside the compiler on `PATH`, or the process exits with no message at all:
+
+```powershell
+cmake -B build-asan -G "Visual Studio 18 2026" -A x64 -DCMAKE_CXX_FLAGS="/fsanitize=address /Zi"
+cmake --build build-asan --config RelWithDebInfo --target ambient_selftest ambient_hosttest
+$env:PATH = "$vs\VC\Tools\MSVC\<version>\bin\Hostx64\x64;$env:PATH"
+```
+
 ## Installing (what other people get)
 
 ```powershell

@@ -288,8 +288,13 @@ int main()
                     blocks, audioSecs, writes.load(), secs, audioSecs / secs);
         check(finite(buf), "audio stays finite while two threads write every parameter");
         // Real time is the bar a host holds it to. Well under it here means a host that
-        // automates a lot cannot keep up either.
+        // automates a lot cannot keep up either. Not asked of a sanitized build, which is several
+        // times slower by design and would fail this every time while proving nothing.
+       #if !defined(__SANITIZE_ADDRESS__)
         check(audioSecs > secs, "audio keeps up with real time while every parameter is automated");
+       #else
+        std::printf("  (sanitized build: the real-time bar is not asked of it)\n");
+       #endif
     }
 
     // ---------------------------------------------------------------- which preset it says it is

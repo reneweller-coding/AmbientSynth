@@ -691,7 +691,22 @@ void Engine::renderChunk(float* L, float* R, int n)
             double lowest = 0.0;
             for (const auto& v : voices_)
                 if (v.isActive() && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
-            if (lowest > 0.0) subHz = lowest / (subOctave_ == 1 ? 2.0 : 4.0);
+            if (lowest > 0.0) {
+                // Folded back into the register the root mode would have used, which is what keeps
+                // it a foundation. An octave under the lowest voice and nothing else, a chord up
+                // in the fifth octave put the "sub" at 220 Hz -- no longer under the music but in
+                // the middle of it, doubling the voice rather than carrying it. Measured: the
+                // energy below 130 Hz fell by 23 dB, because the sub had simply left the bass.
+                //
+                // The fold moves it by octaves only, so the pitch class still follows the chord --
+                // which is the whole point, and is what separates this from Difference, where the
+                // fold is applied to an interval and the pitch class therefore does not follow.
+                // What a bass player does: the root of the chord, in the register of a bass.
+                const double lo = subHz * 0.75, hi = lo * 2.0;
+                subHz = lowest / (subOctave_ == 1 ? 2.0 : 4.0);
+                while (subHz >= hi) subHz *= 0.5;
+                while (subHz < lo)  subHz *= 2.0;
+            }
         } else if (subSource_ == 1) {
             // Ghost tone (Rich's combination tones): the difference between the two lowest sounding
             // voices is the tone the ear makes by itself in just intonation (3:2 -> f/2, 5:4 -> f/4,

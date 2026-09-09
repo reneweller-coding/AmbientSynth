@@ -28,7 +28,6 @@ void Convolver::prepare(double sampleRate, float maxSeconds)
     accRe_.assign(kN, 0.0f);  accIm_.assign(kN, 0.0f);
     for (auto& s : sets_) { s.parts = 0; s.seconds = 0.0; for (int c = 0; c < 2; ++c) { s.re[c].clear(); s.im[c].clear(); } }
     active_.store(-1, std::memory_order_release);
-    inUse_.store(-1, std::memory_order_release);
     reset();
 }
 
@@ -93,9 +92,10 @@ void Convolver::setImpulse(const float* L, const float* R, int n, double impulse
 
     const int activeNow = active_.load(std::memory_order_acquire);
     const int target = activeNow < 0 ? 0 : 1 - activeNow;
-    // Sleeps, and up to 200 ms: see Engine::setTexture.
-    for (int spin = 0; spin < 4000 && inUse_.load(std::memory_order_acquire) == target; ++spin)
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
+    // The other set is written only once every block that had begun has ended: the same
+    // reasoning as Engine::setTexture, and the same reason the flag that stood here was not
+    // enough. A block that began before this call chose its set back then.
+    waitForQuiet();
     analyse(sets_[target], l, r, R != nullptr);
     active_.store(target, std::memory_order_release);
 }
@@ -133,10 +133,27 @@ void Convolver::generateDefault(uint64_t seed, float seconds)
     setImpulse(ch[0].data(), ch[1].data(), n, sr_);
 }
 
+// Message thread: see Engine::waitForQuiet.
+void Convolver::waitForQuiet()
+{
+    const unsigned long long begun = blocksBegun_.load(std::memory_order_acquire);
+    for (int spin = 0; spin < 8000; ++spin) {
+        if (blocksDone_.load(std::memory_order_acquire) >= begun) return;
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
+}
+
 void Convolver::processBlock()
 {
+    blocksBegun_.fetch_add(1, std::memory_order_acq_rel);
+    // Every way out of this function has to say so, including this one. A block that is counted
+    // as begun and never as done leaves the two counters apart for good, and every loader after
+    // it waits out its whole timeout for a block that ended long ago.
+    struct Done {
+        std::atomic<unsigned long long>& c;
+        ~Done() { c.fetch_add(1, std::memory_order_release); }
+    } done { blocksDone_ };
     const int a = active_.load(std::memory_order_acquire);
-    inUse_.store(a, std::memory_order_release);
     if (a < 0) { for (int c = 0; c < 2; ++c) std::fill(outBuf_[c].begin(), outBuf_[c].end(), 0.0f); return; }
     const Set& s = sets_[a];
     // 1. spectra of the new input blocks into the delay line
@@ -175,8 +192,6 @@ void Convolver::processBlock()
         }
     }
     fdlHead_ = (fdlHead_ + 1) % maxParts_;
-    // See Engine::process: the flag says "in use", so it is given back here.
-    inUse_.store(-1, std::memory_order_release);
 }
 
 void Convolver::process(const float* inL, const float* inR, float* outL, float* outR, int n)

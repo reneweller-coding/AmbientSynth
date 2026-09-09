@@ -28,6 +28,7 @@ namespace ambient {
 
 void Engine::process(float* L, float* R, int n)
 {
+    blocksBegun_.fetch_add(1, std::memory_order_acq_rel);
 #if AMBIENT_HAS_MXCSR
     const unsigned int savedCsr = _mm_getcsr();
     _mm_setcsr(savedCsr | 0x8040);   // flush-to-zero + denormals-are-zero
@@ -193,14 +194,8 @@ void Engine::process(float* L, float* R, int n)
             if (v.level() > noteLevel_[nt].load(std::memory_order_relaxed)) noteLevel_[nt].store(v.level(), std::memory_order_relaxed);
         }
     }
-    // "In use" has to mean IN USE, not "used last". It said the latter -- it was set to whichever
-    // buffer the block had read and then left standing -- so a loader arriving while no audio was
-    // running found the flag pointing at the buffer it wanted and waited out its whole timeout for
-    // an audio thread that was never going to answer. A host with its transport stopped does not
-    // call this function at all, and that is exactly when somebody browses presets: every clip a
-    // preset brought with it cost the full wait, four slots deep. Cleared here, the wait lasts at
-    // most the block that is running, and when nothing is running there is nothing to wait for.
-    for (auto& u : textureInUse_) u.store(-1, std::memory_order_release);
+    // Done: whatever this block picked up, it has let go of. See Engine::waitForQuiet.
+    blocksDone_.fetch_add(1, std::memory_order_release);
     mask_[0].store(m0, std::memory_order_relaxed);
     mask_[1].store(m1, std::memory_order_relaxed);
     activeVoices_.store(active, std::memory_order_relaxed);

@@ -44,7 +44,10 @@ private:
     void processBlock();
 
     Set   sets_[2];
-    std::atomic<int> active_{ -1 }, inUse_{ -1 };
+    std::atomic<int> active_{ -1 };
+    // Begun and finished; see Engine::waitForQuiet for why it takes two of them.
+    std::atomic<unsigned long long> blocksBegun_ { 0 }, blocksDone_ { 0 };
+    void waitForQuiet();
     Fft   fft_{ 2 * kBlock };
     int   maxParts_ = 0;
     double sr_ = 48000.0;

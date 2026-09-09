@@ -29,6 +29,19 @@ namespace ambient {
 
 // Clears the pending matrix and shapes WITHOUT announcing them: the announcement is what makes
 // the audio thread copy, and it must not do that while the rest is still being written.
+// Takes the pending matrix and shapes for the message thread. Everything that writes into them
+// has to hold this, not merely announce afterwards that it has finished: the audio thread copies
+// the very bytes the parser writes, so an edit that begins while a copy is running is a race on
+// the matrix itself. That was the shape of it -- announcing was guarded, writing was not, and the
+// thread sanitizer found it in four seconds once there was a workload that did both at once.
+void Engine::lockModulation()
+{
+    // The message thread may wait; the copy it waits for is a few hundred bytes.
+    while (modLock_.test_and_set(std::memory_order_acquire)) { }
+}
+
+void Engine::unlockModulation() { modLock_.clear(std::memory_order_release); }
+
 void Engine::clearPendingModulation()
 {
     matrixPending_.clear();
@@ -39,16 +52,16 @@ void Engine::clearPendingModulation()
 
 void Engine::resetModulation()
 {
+    lockModulation();
     clearPendingModulation();
     publishModulation();
+    unlockModulation();
 }
 
-// Hand the finished matrix and shapes over. The audio thread copies them at the top of its
-// next block; waiting for it to finish an earlier copy is the same handshake the user scale
-// and the user wavetable use, and it costs microseconds.
+// Hand the finished matrix and shapes over: the audio thread copies them at the top of a block
+// once it can take the lock. Called with the lock held.
 void Engine::publishModulation()
 {
-    while (modBusy_.load(std::memory_order_acquire)) { }
     modVersion_.fetch_add(1, std::memory_order_release);
 }
 
@@ -57,6 +70,7 @@ bool Engine::applyPresetModulation(const Preset& p)
     // Cleared, then filled, then announced -- once, at the end. It used to announce the clear
     // and then parse into the same object, so the audio thread could be copying the matrix
     // while the message thread was still writing it.
+    lockModulation();
     clearPendingModulation();
     bool ok = true;
     if (p.mod != nullptr && *p.mod) ok = matrixPending_.parse(p.mod) && ok;
@@ -78,22 +92,27 @@ bool Engine::applyPresetModulation(const Preset& p)
         }
     }
     publishModulation();
+    unlockModulation();
     return ok;
 }
 
 bool Engine::setModMatrixText(const char* text)
 {
-    if (!matrixPending_.parse(text)) return false;
-    publishModulation();
-    return true;
+    lockModulation();
+    const bool ok = matrixPending_.parse(text);
+    if (ok) publishModulation();
+    unlockModulation();
+    return ok;
 }
 
 bool Engine::setEnvShape(int index, const char* text)
 {
     if (index < 0 || index >= kNumModEnvs) return false;
-    if (!envPending_[index].parse(text)) return false;
-    publishModulation();
-    return true;
+    lockModulation();
+    const bool ok = envPending_[index].parse(text);
+    if (ok) publishModulation();
+    unlockModulation();
+    return ok;
 }
 
 int Engine::writeEnvShape(int index, char* buf, size_t cap) const
@@ -165,11 +184,13 @@ void Engine::stepModulation(float dt)
 {
     // Pick up matrix or shape edits made on the message thread (fixed-size objects, no allocation).
     const int mv = modVersion_.load(std::memory_order_acquire);
-    if (mv != modSeen_) {
-        modBusy_.store(true, std::memory_order_release);
+    // Tried, never waited for: the audio thread does not block on the message thread. A matrix
+    // that is being edited right now simply arrives at the next block, a few milliseconds later,
+    // which is sooner than a hand can move a mouse.
+    if (mv != modSeen_ && !modLock_.test_and_set(std::memory_order_acquire)) {
         matrix_ = matrixPending_;
         for (int i = 0; i < kNumModEnvs; ++i) envShape_[i] = envPending_[i];
-        modBusy_.store(false, std::memory_order_release);
+        modLock_.clear(std::memory_order_release);
         modSeen_ = mv;
         // Whether anything reads the Lenia field, so it is only computed when it is heard.
         leniaUsed_ = false;
@@ -644,7 +665,6 @@ void Engine::readParams()
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
         for (int k = 0; k < kSlots; ++k) {
             const int a = textureActive_[k].load(std::memory_order_acquire);
-            textureInUse_[k].store(a, std::memory_order_release);
             vp_.texture[k] = (a >= 0 && !textures_[k][a].empty()) ? &textures_[k][a] : nullptr;
         }
     }

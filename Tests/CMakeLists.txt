@@ -8,6 +8,18 @@ if(MSVC)
 endif()
 add_test(NAME selftest COMMAND ambient_selftest)
 
+# The handovers between the rendering thread and the one that answers the mouse, under load. No
+# framework, so it builds on Linux too -- which is the only place a sanitizer can watch a data
+# race happen (see the file's own notes). On Windows it is a stress test.
+add_executable(ambient_racetest racetest.cpp)
+target_link_libraries(ambient_racetest PRIVATE AmbientCore)
+if(MSVC)
+    target_compile_options(ambient_racetest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_definitions(ambient_racetest PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_link_options(ambient_racetest PRIVATE /STACK:16777216)
+endif()
+add_test(NAME racetest COMMAND ambient_racetest 4)
+
 # The host contract: rates and block sizes, state round trip, programs while playing, an editor
 # opened under load, parameters written from another thread. Needs the plugin's shared code, so it
 # is only built when the plugin is.

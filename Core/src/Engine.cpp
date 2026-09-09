@@ -321,18 +321,42 @@ bool Engine::loadUserWavetable(const float* mono, int n, int frameLen)
     return true;
 }
 
+// Message thread: returns once every block that had begun by the time it was called has ended.
+// After that, any block still running began later and therefore read whatever this thread had
+// already published -- which is what makes the other half of a double buffer safe to write.
+//
+// There is no guess in it. When the audio thread is not running the two counters are equal on the
+// first look and it returns at once, which is a host with its transport stopped; when a block is
+// in flight it waits for that block and no longer, whether that block is 16 samples or 2048. The
+// version before this one counted finished blocks and gave up after two milliseconds of seeing
+// none, on the theory that nothing was rendering -- which is also what a slow block looks like
+// from outside, and a 2048-sample block at 44.1 kHz is 46 milliseconds long.
+void Engine::waitForQuiet()
+{
+    const unsigned long long begun = blocksBegun_.load(std::memory_order_acquire);
+    for (int spin = 0; spin < 8000; ++spin) {
+        if (blocksDone_.load(std::memory_order_acquire) >= begun) return;
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
+}
+
 void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz, bool seamless)
 {
     if (slot < 0 || slot >= kSlots) return;
     const int active = textureActive_[slot].load(std::memory_order_acquire);
     const int target = active < 0 ? 0 : 1 - active;
-    // Wait until the audio thread no longer holds the target buffer (it publishes the index it
-    // used last); bounded, so a host without a running audio thread cannot hang us.
-    // The wait sleeps rather than spins, and long enough for a 2048-sample block at 44.1 kHz
-    // (46 ms) several times over: a spin of 200 000 turns was a fifth of a millisecond, after
-    // which the buffer the audio thread was still reading was reassigned under it.
-    for (int spin = 0; spin < 4000 && textureInUse_[slot].load(std::memory_order_acquire) == target; ++spin)
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
+    // The buffer about to be written is the one that is NOT playing -- but "not playing" is a
+    // statement about now, and the audio thread chose what to play at the top of the block it is
+    // in. A block that began before this call may still be holding exactly this buffer, from
+    // before the last swap. So: wait for two blocks to go by, which is the proof that every block
+    // begun earlier has ended, and every block begun since read the current active and therefore
+    // did not choose this one.
+    //
+    // The flag that used to stand here asked the wrong question. It said which buffer the audio
+    // thread had taken up LAST, and there is a window between its reading the active index and
+    // its saying so; a writer whose check fell inside that window saw nothing and wrote into a
+    // buffer that was about to be read. The thread sanitizer found it, on Linux, in forty seconds.
+    waitForQuiet();
     Texture& t = textures_[slot][target];
     t.mono.assign(mono, mono + std::max(n, 0));
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;

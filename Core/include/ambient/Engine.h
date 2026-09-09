@@ -182,8 +182,10 @@ public:
     void resetModulation();          // the matrix cleared, the six envelopes back to default
     bool applyPresetModulation(const Preset& p);   // the mod and envs fields of a preset
 private:
-    void clearPendingModulation();   // clear without announcing
-    void publishModulation();        // announce, once everything is written
+    void lockModulation();           // take the pending matrix and shapes (message thread waits)
+    void unlockModulation();
+    void clearPendingModulation();   // clear without announcing; call with the lock held
+    void publishModulation();        // announce, once everything is written; with the lock held
 public:
     bool setModMatrixText(const char* text);
     int  writeModMatrix(char* buf, size_t cap) const { return matrixPending_.write(buf, cap); }
@@ -341,8 +343,9 @@ private:
     ModEnvSpec   envSpec_[kNumModEnvs];
     ModMatrix    matrix_, matrixPending_;
     std::atomic<int> modVersion_{ 0 };
-    // Set while the audio thread copies the pending matrix and shapes; the writer waits on it.
-    std::atomic<bool> modBusy_ { false };
+    // Held by whoever is touching the pending matrix and shapes. The message thread waits for
+    // it; the audio thread only tries, and leaves an edit in progress alone until the next block.
+    std::atomic_flag modLock_ = ATOMIC_FLAG_INIT;
     int          modSeen_ = 0;
     float        modSrc_[kNumModSources] = {};
     float        modOut_[kNumParams] = {};
@@ -501,7 +504,14 @@ private:
     // Texture: two buffers per slot, the audio thread reads the active one and publishes which.
     Texture           textures_[kSlots][2];
     std::atomic<int>  textureActive_[kSlots] = { -1, -1, -1, -1 };
-    std::atomic<int>  textureInUse_[kSlots]  = { -1, -1, -1, -1 };
+    // Blocks begun and blocks finished. Two counters rather than one, because the question a
+    // loader has to answer is not "how many have gone by" but "is anything still holding what it
+    // picked up before I looked" -- and those differ exactly while a block is in flight. Reading
+    // `started` and then waiting for `finished` to reach it answers it without guessing: when
+    // nothing is rendering the two are already equal and there is no wait at all, and when a
+    // block is running the wait is exactly as long as that block, however long that happens to be.
+    std::atomic<unsigned long long> blocksBegun_ { 0 }, blocksDone_ { 0 };
+    void waitForQuiet();   // message thread: until every block begun before now has ended
     const FixedScale* scale_ = nullptr;
     int               rootNote_ = 62;
     double            refPitch_ = 440.0;

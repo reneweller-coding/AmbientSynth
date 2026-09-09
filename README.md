@@ -177,6 +177,24 @@ parameter at random, then moves one section at a time while a chord plays, and n
 whose sound stops being a number (`AMBIENT_FUZZ_LONG=1` gives each five seconds instead of one).
 `AMBIENT_TIMING=1` prints what a program change costs a host, built-in against library.
 
+A third, `ambient_racetest`, is the one that needs no framework. It renders on one thread while
+another changes everything a window can change — knobs, clips, the modulation matrix, envelope
+shapes, the tuning, the wavetable — as fast as it can, and asks only that the sound stay a number
+and the audio keep up. It exists because nearly every serious fault in this instrument has been a
+handover between those two threads, and because the core builds on Linux, where a sanitizer can
+watch such a handover go wrong instead of being reasoned about:
+
+```bash
+cmake -S . -B build-tsan -DAMBIENT_BUILD_PLUGIN=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+cmake --build build-tsan -j
+setarch $(uname -m) -R ./build-tsan/Tests/ambient_racetest 60
+```
+
+`setarch -R` turns off address-space randomisation, which recent kernels lay out in a way the
+sanitizer refuses to start under. On Windows there is no thread sanitizer at all, for any
+compiler, and WSL is the whole reason this is reachable at all.
+
 Two more are worth running before a release, and neither lives in the repository.
 [pluginval](https://github.com/Tracktion/pluginval) exercises the VST3 wrapper itself — the same
 contract, but through the format, which is where the plugin actually meets a DAW:

@@ -212,14 +212,18 @@ private:
     // A change asked for while both engines were busy is served from here, a few milliseconds
     // later. A timer rather than a wait: the message thread must not block on the audio thread,
     // and with no audio device running it would never be let go.
+    // It also carries out the preset changes OSC asks for: those write the whole parameter tree
+    // and read files, which is not work for the audio thread.
     struct PresetPump : juce::Timer {
         explicit PresetPump(AmbientSynthProcessor& p) : proc(p) {}
-        void timerCallback() override { proc.servePendingPreset(); }
+        void timerCallback() override { proc.servePresetRequests(); proc.servePendingPreset(); }
         AmbientSynthProcessor& proc;
     };
     PresetPump presetPump_ { *this };
+    ambient::EventQueue presetEvents_;   // OSC preset changes, waiting for the message thread
 public:
     void servePendingPreset();        // message thread; does nothing until an engine is free
+    void servePresetRequests();       // message thread; the preset changes OSC asked for
 private:
     // A transition in flight: the engine on its way out, and how far the crossfade has come.
     // -1 when nothing is fading. Equal-power, so the sum never dips in the middle. Written on the

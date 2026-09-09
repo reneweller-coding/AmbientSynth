@@ -68,6 +68,9 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     // The map's parameter vectors for those presets, on a thread of its own: a second of work
     // that only the map needs, and nothing should wait for it to open a window or start playing.
     PresetMap::warmupAsync();
+    // The pump runs for the life of the instrument: it carries out the preset changes OSC asks
+    // for and finishes a transition that had to wait for an engine. Two atomic reads at 30 Hz.
+    presetPump_.startTimerHz(30);
     // OSC on 9000; a second instance in a DAW simply reports the port as taken.
     osc_.start(9000, *this, gestures_);
     // Session recall. The switch lives in the same settings file as the state, so turning it off
@@ -149,7 +152,24 @@ void AmbientSynthProcessor::setParamNormalised(ParamId id, float norm)
 
 void AmbientSynthProcessor::event(const ControlEvent& e)
 {
-    events_.push(e);   // consumed on the audio thread
+    // Notes to the audio thread, preset changes to the message thread: one is a handful of
+    // atomics, the other opens files.
+    if (e.type == ControlEvent::Type::NoteOn || e.type == ControlEvent::Type::NoteOff) events_.push(e);
+    else presetEvents_.push(e);
+}
+
+// Message thread, from the pump: the preset changes OSC asked for.
+void AmbientSynthProcessor::servePresetRequests()
+{
+    ControlEvent ev;
+    while (presetEvents_.pop(ev)) {
+        switch (ev.type) {
+        case ControlEvent::Type::Preset:       setCurrentProgram(ev.a); break;
+        case ControlEvent::Type::SoundPreset:  applySoundPreset(ev.a); break;
+        case ControlEvent::Type::CosmosPreset: applyCosmosPreset(ev.a); break;
+        default: break;
+        }
+    }
 }
 
 bool AmbientSynthProcessor::setGestureMappings(const juce::String& text)
@@ -220,15 +240,18 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         if (auto* p = apvts.getParameter(paramTable()[static_cast<size_t>(id)].key))
             p->setValueNotifyingHost(p->convertTo0to1(v));
     });
-    // Events from OSC (notes, presets) arrive on the audio thread through the queue.
+    // Notes from OSC arrive on the audio thread through the queue, where they belong. Preset
+    // changes do not: applying one writes two hundred and ninety-three parameters through the
+    // host and reads a sample, a wavetable and an impulse response off the disk. That was being
+    // done here, in the middle of a block, for every preset an OSC client or the Quest app asked
+    // for -- file I/O and allocation on the thread that must not wait for anything. They go to
+    // the message thread now (see servePresetRequests).
     ControlEvent ev;
     while (events_.pop(ev)) {
         switch (ev.type) {
         case ControlEvent::Type::NoteOn:       noteOn(ev.a, ev.b); break;
         case ControlEvent::Type::NoteOff:      noteOff(ev.a); break;
-        case ControlEvent::Type::Preset:       setCurrentProgram(ev.a); break;
-        case ControlEvent::Type::SoundPreset:  applySoundPreset(ev.a); break;
-        case ControlEvent::Type::CosmosPreset: applyCosmosPreset(ev.a); break;
+        default: break;
         }
     }
 
@@ -757,16 +780,12 @@ void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
 // then ours to build on.
 void AmbientSynthProcessor::servePendingPreset()
 {
-    if (pendingPreset_ < 0) { presetPump_.stopTimer(); return; }
+    if (pendingPreset_ < 0) return;
     // Still busy: a fade in flight (both engines rendered), or a swap already published and not
     // yet taken up. Come back in a moment.
-    if (fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0) {
-        if (!presetPump_.isTimerRunning()) presetPump_.startTimerHz(30);
-        return;
-    }
+    if (fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0) return;
     const int index = pendingPreset_;
     pendingPreset_ = -1;
-    presetPump_.stopTimer();
     beginTransition(index);
 }
 

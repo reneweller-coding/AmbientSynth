@@ -13,6 +13,7 @@
 #include "PluginProcessor.h"
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <chrono>
@@ -123,6 +124,128 @@ int main()
         int mw = 0;
         for (int i = 0; i < kNumParams; ++i) if (std::fabs(va[i] - vb[i]) > 1.0e-4f * juce::jmax(1.0f, std::fabs(va[i]))) ++mw;
         check(mw == 0, "a morph snapshot survives a state round trip");
+    }
+
+    // ---------------------------------------------------------------- what the host sees restored
+    // The round trip above compares what the ENGINE holds, which is what the sound is made of.
+    // A host compares something narrower and just as binding: the value of every parameter object
+    // it can automate. pluginval found four that came back at whatever they had been set to
+    // rather than at what the state said, and nothing here would have noticed, because the engine
+    // value was right in each case.
+    {
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(48000.0, 256);
+        juce::MemoryBlock blob;
+        p->getStateInformation(blob);
+        std::vector<float> saved;
+        for (auto* par : p->getParameters()) saved.push_back(par->getValue());
+        juce::Random rng(99);
+        for (auto* par : p->getParameters()) par->setValueNotifyingHost(rng.nextFloat());
+        p->setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+        int wrong = 0, i = 0;
+        for (auto* par : p->getParameters()) {
+            if (std::fabs(par->getValue() - saved[static_cast<size_t>(i)]) > 0.01f) {
+                if (wrong < 8) std::printf("  not restored: %-14s saved %.4f, now %.4f\n",
+                                           par->getName(20).toRawUTF8(), saved[static_cast<size_t>(i)], par->getValue());
+                ++wrong;
+            }
+            ++i;
+        }
+        check(wrong == 0, "every host parameter is restored by setStateInformation");
+    }
+
+    // ---------------------------------------------------------------- random parameter settings
+    // AMBIENT_FUZZ=1: not part of the normal run. Sets every parameter to a random value, plays a
+    // chord, and asks only that the result be a number. Then it narrows a failure down to the
+    // parameters that actually cause it, by putting them back one at a time.
+    if (std::getenv("AMBIENT_FUZZ") != nullptr) {
+        juce::AudioBuffer<float> buf(2, 256);
+        // Plays a chord on a fresh instrument and says whether the sound stayed a number, while
+        // `pick` is being written to from another thread the whole time.
+        auto trial = [&buf](const char* section, double seconds, int seed) {
+            auto p = std::make_unique<AmbientSynthProcessor>();
+            p->prepareToPlay(48000.0, 256);
+            std::vector<juce::AudioProcessorParameter*> pick;
+            int i = 0;
+            for (auto* par : p->getParameters()) {
+                if (section == nullptr || std::strcmp(paramTable()[static_cast<size_t>(i)].section, section) == 0) pick.push_back(par);
+                ++i;
+            }
+            std::atomic<bool> stop { false };
+            std::thread hammer([&pick, &stop, seed] {
+                juce::Random rng(seed);
+                while (!stop.load()) for (auto* par : pick) { par->setValueNotifyingHost(rng.nextFloat()); if (stop.load()) return; }
+            });
+            const auto t0 = std::chrono::steady_clock::now();
+            bool ok = true;
+            juce::MidiBuffer midi;
+            for (int b = 0; ok && std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() < seconds; ++b) {
+                midi.clear();
+                if (b == 1) { midi.addEvent(juce::MidiMessage::noteOn(1, 48, 0.9f), 0); midi.addEvent(juce::MidiMessage::noteOn(1, 55, 0.7f), 8); }
+                buf.clear();
+                p->processBlock(buf, midi);
+                ok = finite(buf);
+            }
+            stop.store(true);
+            hammer.join();
+            return ok;
+        };
+        // Does a fresh instrument, left alone, stay a number? The control for everything below.
+        std::printf("  fuzz: nothing written at all      -> %s\n", trial("no such section", 2.0, 1) ? "finite" : "NON-FINITE");
+        std::printf("  fuzz: every parameter at once     -> %s\n", trial(nullptr, 4.0, 7) ? "finite" : "NON-FINITE");
+        std::vector<const char*> sections;
+        for (const ParamDesc& d : paramTable()) {
+            bool have = false;
+            for (const char* s2 : sections) if (std::strcmp(s2, d.section) == 0) { have = true; break; }
+            if (!have) sections.push_back(d.section);
+        }
+        for (const char* sec : sections) {
+            bool ok = true;
+            for (int rep = 0; rep < 3 && ok; ++rep) ok = trial(sec, 1.2, 7 + rep);
+            if (!ok) std::printf("      %-16s *** NON-FINITE ***\n", sec);
+        }
+        std::printf("  fuzz: sections not listed above stayed finite\n");
+        check(true, "fuzz finished");
+    }
+
+    // ---------------------------------------------------------------- parameters under two threads
+    // What a host does when it plays back automation on everything at once, which is what
+    // pluginval's parameter thread safety test does -- and where it gave up after fifteen minutes.
+    {
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(48000.0, 256);
+        juce::AudioBuffer<float> buf(2, 256);
+        std::atomic<bool> stop { false };
+        std::atomic<long long> writes { 0 };
+        auto hammer = [&p, &stop, &writes](int seed) {
+            juce::Random rng(seed);
+            while (!stop.load()) {
+                for (auto* par : p->getParameters()) {
+                    par->setValueNotifyingHost(rng.nextFloat());
+                    writes.fetch_add(1, std::memory_order_relaxed);
+                    if (stop.load()) return;
+                }
+            }
+        };
+        std::thread t1(hammer, 1), t2(hammer, 2);
+        const auto t0 = std::chrono::steady_clock::now();
+        long long blocks = 0;
+        while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(4)) {
+            juce::MidiBuffer midi;
+            buf.clear();
+            p->processBlock(buf, midi);
+            ++blocks;
+        }
+        stop.store(true);
+        t1.join(); t2.join();
+        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        const double audioSecs = blocks * 256.0 / 48000.0;
+        std::printf("  stress: %lld blocks (%.1f s of audio) and %lld parameter writes in %.1f s wall -- %.2fx real time\n",
+                    blocks, audioSecs, writes.load(), secs, audioSecs / secs);
+        check(finite(buf), "audio stays finite while two threads write every parameter");
+        // Real time is the bar a host holds it to. Well under it here means a host that
+        // automates a lot cannot keep up either.
+        check(audioSecs > secs, "audio keeps up with real time while every parameter is automated");
     }
 
     // ---------------------------------------------------------------- which preset it says it is

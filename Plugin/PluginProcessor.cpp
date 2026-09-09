@@ -1094,6 +1094,20 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             tree.removeProperty("soundPreset", nullptr);
             tree.removeProperty("cosmosPreset", nullptr);
             apvts.replaceState(tree);
+            // Make the parameter objects agree with the state that was just restored. Replacing
+            // the state moves a parameter only where the value IN THE TREE changes, and a switch
+            // puts only 0 or 1 there while the object keeps whatever raw number the host set it
+            // to: a switch a host had left at 0.87 -- which is "on" -- stayed at 0.87 when a
+            // state saying 1.0 came in, and the host read 0.87 back out of a session it had
+            // saved as 1.0. The sound was right either way, because the engine reads the
+            // switched value and not the raw one, so nothing here ever heard it. pluginval did.
+            for (const ParamDesc& d : paramTable()) {
+                auto* par = apvts.getParameter(d.key);
+                const auto* raw = apvts.getRawParameterValue(d.key);
+                if (par == nullptr || raw == nullptr) continue;
+                const float norm = par->convertTo0to1(raw->load());
+                if (std::fabs(par->getValue() - norm) > 1.0e-6f) par->setValueNotifyingHost(norm);
+            }
             if (text.isNotEmpty()) loadScalaText(text, name);
             // A saved state names the file the way it was when it was saved; the same two
             // spellings apply (see loadPresetFiles), so the same rule answers here.

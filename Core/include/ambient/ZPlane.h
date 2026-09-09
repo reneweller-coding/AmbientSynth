@@ -86,6 +86,20 @@ public:
         }
         return sum * norm_;
     }
+    // See ZBiquad::guard: the same climb, over a bank whose poles sit even closer to the circle.
+    inline bool guard()
+    {
+        bool hit = false;
+        for (int i = 0; i < used_; ++i) {
+            Mode& m = modes_[i];
+            for (int ch = 0; ch < 2; ++ch)
+                if (!(std::fabs(m.z1[ch]) < 1.0e9f && std::fabs(m.z2[ch]) < 1.0e9f)) {
+                    m.z1[ch] = m.z2[ch] = 0.0f;
+                    hit = true;
+                }
+        }
+        return hit;
+    }
     // |H(f)| of the whole bank, for the display: the modes add, they do not multiply.
     float magnitudeAt(float hz) const;
 
@@ -125,6 +139,22 @@ struct ZBiquad {
         z2 = b2 * x - a2 * y;
         return y;
     }
+    // A resonant filter whose centre is swept while it is still ringing can take in more energy per
+    // cycle than it lets out. Every coefficient here is clamped to a stable pole, and a fixed setting
+    // is stable at any value -- sixty random ones were -- but sweeping one is not the same thing as
+    // standing at either end of the sweep, and a Q of three hundred needs very little help. The state
+    // then grows block by block until it is no longer a number, and from that moment the instrument
+    // is silent until it is reloaded, because a NaN multiplied by anything stays a NaN.
+    //
+    // So the state is looked at once a block. The bound is far above anything music reaches and far
+    // below where a float stops counting, which is the room needed to notice the climb before it
+    // arrives at infinity. Below it this costs two comparisons a block and changes nothing.
+        inline bool guard()
+    {
+        if (std::fabs(z1) < 1.0e9f && std::fabs(z2) < 1.0e9f) return false;   // false for a NaN too
+        z1 = z2 = 0.0f;
+        return true;
+    }
     void copyCoefficients(const ZBiquad& o) { b0 = o.b0; b1 = o.b1; b2 = o.b2; a1 = o.a1; a2 = o.a2; }
     void reset() { z1 = z2 = 0.0f; }
 };
@@ -154,6 +184,13 @@ struct Resonator {
         const float y = b0 * in - a1 * s1 - a2 * s2;
         s2 = s1; s1 = y;
         return y;
+    }
+    // See ZBiquad::guard. The body's twelve modes are swept whenever its root moves.
+    inline bool guard()
+    {
+        if (std::fabs(s1) < 1.0e9f && std::fabs(s2) < 1.0e9f) return false;
+        s1 = s2 = 0.0f;
+        return true;
     }
     void reset() { s1 = s2 = 0.0f; }
 };

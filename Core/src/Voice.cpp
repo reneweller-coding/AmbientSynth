@@ -772,6 +772,11 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         }
         pos += len;
     }
+    // The Z-plane filter is the one thing here whose poles sit close enough to the circle that
+    // sweeping it -- which is what an LFO on Z X or Z Y does, and what half the library does --
+    // can put more energy in than comes out. See ZBiquad::guard.
+    for (int k = 0; k < zUsed_; ++k) { zbL_[k].guard(); zbR_[k].guard(); }
+    zModal_.guard();
     if (!env_.isActive()) note_ = -1;
 }
 

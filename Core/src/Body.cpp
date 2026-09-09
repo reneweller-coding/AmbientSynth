@@ -102,6 +102,8 @@ void Body::process(const float* in, float* outL, float* outR, int n, float level
         outL[i] += l * g;
         outR[i] += r * g;
     }
+    // Once a block, after the modes have run: see Resonator::guard.
+    for (auto& r : res_) r.guard();
 }
 
 } // namespace ambient

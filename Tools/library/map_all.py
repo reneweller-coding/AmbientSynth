@@ -66,8 +66,11 @@ def slug(name):
 def measure_builtin(name, tapdir=None):
     """The same instrument, the same conditions as the packs: three keys held, the conductor at
     six seconds, a minute of it. --dump comes along so the parameter flags can be read too."""
+    # --hour pins the arc clock to the same hour measure_packs uses. Without it the built-ins are
+    # measured at whatever time the pass happens to run and the packs at 21:00, and the ranks --
+    # which are what the map's axes are made of -- would mix two different conditions.
     cmd = [RENDER, "--preset", name, "--seconds", str(SECONDS), "--notes", "45,52,59",
-           "--set", "brain_rate=6", "--measure", "--dump"]
+           "--set", "brain_rate=6", "--hour", "21", "--measure", "--dump"]
     if tapdir:
         cmd += ["--tap", os.path.join(tapdir, slug(name) + ".wav")]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",

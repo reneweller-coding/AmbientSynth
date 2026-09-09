@@ -176,6 +176,13 @@ void AmbientSynthProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     scratch_.setSize(2, samplesPerBlock);
     fadeBuf_.setSize(2, samplesPerBlock);
     sampleRate_ = sampleRate > 0.0 ? sampleRate : 48000.0;
+    // Both engines have just had their buffers cleared, so a transition that was in flight has
+    // nothing left to fade out of: it ends here rather than crossfading from silence.
+    fading_.store(-1, std::memory_order_relaxed);
+    swapTo_.store(-1, std::memory_order_relaxed);
+    paramTarget_.store(-1, std::memory_order_relaxed);
+    fadePos_.store(1.0f, std::memory_order_relaxed);
+    fadeHead_ = 0.0f;
 }
 
 bool AmbientSynthProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const

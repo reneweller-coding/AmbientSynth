@@ -849,7 +849,14 @@ void AmbientSynthEditor::resized()
     designH_ = std::max(kMinDesignH, kHeaderH + bodyH_ + kStripH);
     scale_ = juce::jmax(0.05f, static_cast<float>(getWidth()) / static_cast<float>(designW_));
     const auto tf = juce::AffineTransform::scale(scale_);
-    for (auto* child : getChildren()) child->setTransform(tf);
+    // Every child is laid out in design coordinates and scaled to the window -- except the corner
+    // resizer, which is JUCE's own and which JUCE places at the window's bottom right in window
+    // coordinates (AudioProcessorEditor::editorResized). Scaling that one too moved it to
+    // (width - 18) * scale: a stray drag handle floating in the middle of the panel, at half the
+    // way across whenever the window showed the layout at half size. It stays untransformed.
+    for (auto* child : getChildren())
+        if (dynamic_cast<juce::ResizableCornerComponent*>(child) == nullptr)
+            child->setTransform(tf);
 
     header_ = juce::Rectangle<int>(0, 0, designW_, kHeaderH);
     // The Sound box gets the room the Cosmos box used to take: it holds the longest names, and

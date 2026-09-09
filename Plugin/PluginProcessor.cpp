@@ -697,8 +697,8 @@ bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
     return true;
 }
 
-// Choosing a preset as a journey rather than a cut. A is what is playing, B is where we are
-// going, and the position glides from one to the other; processBlock lands it when it arrives.
+// Choosing a preset as a journey rather than a cut: the old one plays on while the new one comes
+// up under it, and the map draws the crossing from one to the other while it happens.
 void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
 {
     if (index < 0 || index >= numPresets()) return;
@@ -712,6 +712,9 @@ void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
     // engines is what there is, and a third preset chosen mid-fade wants the one that was
     // arriving to leave, not the one that already left.
     const int outgoing = live_;
+    // Where the sound is leaving from, for the map's line. Mid-flight it is the preset that was
+    // arriving, because that is the one now playing on the engine about to leave.
+    fadingFrom_ = currentProgram_;
     if (fading_ >= 0) { engines_[fading_].allNotesOff(); engines_[fading_].reset(); }
     live_ = outgoing ^ 1;
     // The incoming engine starts clean: whatever it played last time is gone, and it takes the

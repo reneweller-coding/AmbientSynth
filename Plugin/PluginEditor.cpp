@@ -371,6 +371,17 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         const juce::String ps = juce::SystemStats::getEnvironmentVariable("AMBIENT_PRESET", "");
         for (int i = 0; ps.isNotEmpty() && i < numPresets(); ++i)
             if (ps == preset(i).name) { proc_.applySoundPreset(i); if (soundBox_) soundBox_->setSelectedId(i + 1, juce::dontSendNotification); }
+        // AMBIENT_MORPH_TO=<name>: a second in, start a transition to this one, so the map's
+        // crossing -- the line, the travelling point, the two labels -- can be photographed while
+        // it is happening. Alongside AMBIENT_SHOT, which captures ten seconds after the chord.
+        const juce::String mt = juce::SystemStats::getEnvironmentVariable("AMBIENT_MORPH_TO", "");
+        for (int i = 0; mt.isNotEmpty() && i < numPresets(); ++i)
+            if (mt == preset(i).name) {
+                juce::Timer::callAfterDelay(1200, [safe = juce::Component::SafePointer<AmbientSynthEditor>(this), i] {
+                    if (safe != nullptr) safe->proc_.selectPreset(i, true);
+                });
+                break;
+            }
     }   // open on the perform page
     {   // dev aids: AMBIENT_BROWSE=1|map opens the browser (map view with "map"), AMBIENT_ROUTE=<route preset> preloads a route
         const juce::String br = juce::SystemStats::getEnvironmentVariable("AMBIENT_BROWSE", "");

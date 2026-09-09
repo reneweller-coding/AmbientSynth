@@ -732,23 +732,34 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
     // crosshair, and the name -- at every zoom, whether or not it survived the filter. While a
     // preset change is travelling (the browser's "morph into it"), a line runs from where the
     // sound started to where it is going, filled in as far as it has come.
+    // The ring is on the preset the instrument has been given; while a transition is in flight the
+    // sound is still on its way there from the one that is leaving, so the line is drawn from THAT
+    // one to here. It used to be drawn from the program to the morph target, which were the same
+    // preset from the moment the change was made once a preset change became a crossfade -- a line
+    // of no length, and its label printed over the ring's own name.
+    const int from = owner.proc.morphingFrom();
+    const bool travelling = from >= 0 && from < shown && from != current;
     if (current >= 0 && current < shown) {
         const PresetMeta& m = presetMeta(current);
         const auto s = toScreen(m.x, m.y);
-        const int to = owner.proc.morphingTo();
-        if (to >= 0 && to < shown) {
-            const PresetMeta& mt = presetMeta(to);
-            const auto d = toScreen(mt.x, mt.y);
+        if (travelling) {
+            const PresetMeta& mf = presetMeta(from);
+            const auto d = toScreen(mf.x, mf.y);
             const float t = juce::jlimit(0.0f, 1.0f, owner.proc.morphProgress());
             g.setColour(kAccent.withAlpha(0.35f));
-            g.drawLine(juce::Line<float>(s, d), 1.4f);
-            const juce::Point<float> at = s + (d - s) * t;
+            g.drawLine(juce::Line<float>(d, s), 1.4f);               // the whole way
+            const juce::Point<float> at = d + (s - d) * t;           // how far it has come
             g.setColour(kAccent);
-            g.drawLine(juce::Line<float>(s, at), 2.2f);
+            g.drawLine(juce::Line<float>(d, at), 2.2f);
             g.fillEllipse(at.x - 4.0f, at.y - 4.0f, 8.0f, 8.0f);
-            g.setColour(kText); g.setFont(juce::FontOptions(10.5f));
-            g.drawText(juce::String(juce::roundToInt(t * 100.0f)) + " % -> " + preset(to).name,
-                       static_cast<int>(d.x) + 10, static_cast<int>(d.y) - 6, 260, 14, juce::Justification::centredLeft);
+            // Both labels stay at the departure, where nothing else writes: the moving point
+            // carries the eye, and a number that travels with it would end up on the ring's name.
+            g.setColour(kText.withAlpha(0.75f)); g.setFont(juce::FontOptions(10.5f));
+            g.drawText(preset(from).name, static_cast<int>(d.x) + 10, static_cast<int>(d.y) - 7, 240, 14,
+                       juce::Justification::centredLeft);
+            g.setColour(kAccent.withAlpha(0.8f)); g.setFont(juce::FontOptions(9.5f));
+            g.drawText(juce::String(juce::roundToInt(t * 100.0f)) + " % across",
+                       static_cast<int>(d.x) + 10, static_cast<int>(d.y) + 7, 160, 12, juce::Justification::centredLeft);
         }
         const float r = 13.0f;
         g.setColour(kAccent.withAlpha(0.16f)); g.fillEllipse(s.x - r, s.y - r, 2 * r, 2 * r);
@@ -762,7 +773,10 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         g.setColour(kText); g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(preset(current).name, static_cast<int>(s.x) + 18, static_cast<int>(s.y) - 8, 240, 15, juce::Justification::centredLeft);
         g.setColour(kAccent.withAlpha(0.8f)); g.setFont(juce::FontOptions(9.5f));
-        g.drawText("playing", static_cast<int>(s.x) + 18, static_cast<int>(s.y) + 6, 120, 12, juce::Justification::centredLeft);
+        // "arriving" while the crossfade runs: the ring is already on the new preset, but what is
+        // mostly being heard at that moment is still the old one.
+        g.drawText(travelling ? "arriving" : "playing",
+                   static_cast<int>(s.x) + 18, static_cast<int>(s.y) + 6, 120, 12, juce::Justification::centredLeft);
     }
     // Names, once there is room for them. Zoomed in past four, every preset in the filter whose
     // label would not sit on another's gets its name; the check is a coarse grid of the label's
@@ -771,14 +785,31 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         g.setFont(juce::FontOptions(10.5f));
         std::set<std::pair<int, int>> taken;
         const int cw = 130, ch = 13;   // a label's width, so two names never share a line
+        // The two labels that were already written -- what is playing, and what is being left --
+        // take their cells first, so no other preset's name is printed across them. The grid only
+        // ever kept THESE labels apart from each other; the ring's own name was invisible to it.
+        auto reserve = [&](int i) {
+            if (i < 0 || i >= shown) return;
+            const auto p = toScreen(presetMeta(i).x, presetMeta(i).y);
+            for (int dx = 0; dx <= 1; ++dx)
+                for (int dy = -1; dy <= 1; ++dy)
+                    taken.insert({ static_cast<int>(p.x) / cw + dx, static_cast<int>(p.y) / ch + dy });
+        };
+        reserve(current);
+        if (travelling) reserve(from);
         for (int i : owner.filtered) {
             if (i >= shown) continue;
+            // Not the ones that have a label of their own already: what is playing carries its
+            // name in bold beside the ring, and a preset being left carries it at the line's
+            // start. Drawing them here as well put the same word twice over itself, eleven
+            // pixels apart -- one smeared line of glyphs that read as neither name.
+            if (i == current || (travelling && i == from)) continue;
             const PresetMeta& m = presetMeta(i);
             const auto s = toScreen(m.x, m.y);
             if (!screen.contains(s)) continue;
             const std::pair<int, int> cell { static_cast<int>(s.x) / cw, static_cast<int>(s.y) / ch };
             if (!taken.insert(cell).second) continue;
-            g.setColour((i == owner.selected || i == current) ? kText : kDim);
+            g.setColour(i == owner.selected ? kText : kDim);
             g.drawText(preset(i).name, static_cast<int>(s.x) + 7, static_cast<int>(s.y) - 7, cw + 40, ch, juce::Justification::centredLeft);
         }
     }

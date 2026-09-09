@@ -255,6 +255,10 @@ int main()
         const double before = rmsOf();
         p->selectPreset(b, true);
         check(p->morphingTo() == b, "a travelling preset change names its destination");
+        // Both ends, because the map draws a line between them: without the departure the line ran
+        // from the new preset to itself, and its label was printed over the arrival's own name.
+        check(p->morphingFrom() == a, "and where it is travelling from");
+        check(p->morphingFrom() != p->morphingTo(), "the two ends of the line are two different presets");
         // The ramp waits for the incoming engine to be audible (up to a capped head start) and only
         // then runs its two seconds; the checks below count from where it starts.
         // Level is compared between neighbouring windows of sixteen blocks (85 ms): one block is
@@ -293,7 +297,8 @@ int main()
         check(worstJump < 3.0, "a transition never steps in level from one 85 ms window to the next");
         check(mid > 0.3 && mid < 0.7, "half way through the time given, the fade is about half way");
         check(arrived > 1e-3, "when the old preset is gone the new one is already audible");
-        check(p->morphingTo() < 0 && p->morphProgress() >= 1.0f, "when the time is up the change has arrived and nothing travels");
+        check(p->morphingTo() < 0 && p->morphingFrom() < 0 && p->morphProgress() >= 1.0f,
+              "when the time is up the change has arrived and nothing travels");
         p->releaseResources();
     }
 

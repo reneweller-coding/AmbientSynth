@@ -105,10 +105,12 @@ public:
     void setMorphSelectSeconds(float s) { morphSelectSeconds_ = juce::jlimit(0.5f, 600.0f, s); }
     // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
     // come (0..1) -- the browser draws both.
-    // What the map draws as the travelling line: the preset the sound is on its way to, and how
-    // far it has come. During a transition that is the crossfade; otherwise nothing is travelling.
-    int   morphingTo() const { return fading_ >= 0 ? soundIndex_ : -1; }
-    float morphProgress() const { return fading_ >= 0 ? fadePos_ : 1.0f; }
+    // What the map draws as the travelling line: where the sound is coming from, where it is
+    // going, and how far it has come. During a transition that is the crossfade between the two
+    // engines; otherwise nothing is travelling and both ends are -1.
+    int   morphingTo() const { return fading_.load() >= 0 ? soundIndex_ : -1; }
+    int   morphingFrom() const { return fading_.load() >= 0 ? fadingFrom_ : -1; }
+    float morphProgress() const { return fading_.load() >= 0 ? fadePos_.load() : 1.0f; }
     void setMorphSlotFromPreset(int slot, int presetIndex);
     void setMorphSlotFromCurrent(int slot);
     juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
@@ -168,9 +170,14 @@ private:
     ambient::Engine& live()  { return engines_[live_]; }
     ambient::Engine& other() { return engines_[live_ ^ 1]; }
     // A transition in flight: the engine on its way out, and how far the crossfade has come.
-    // -1 when nothing is fading. Equal-power, so the sum never dips in the middle.
-    int   fading_  = -1;
-    float fadePos_ = 0.0f;
+    // -1 when nothing is fading. Equal-power, so the sum never dips in the middle. Written on the
+    // audio thread and read by the map, which draws the crossing, so both are atomic.
+    std::atomic<int>   fading_  { -1 };
+    std::atomic<float> fadePos_ { 0.0f };
+    // Which preset the leaving engine is playing, so the map can draw the line from there. The
+    // program number is the arriving one from the moment the change is made -- the name, the
+    // parameters and the ring all move at once -- so the departure has to be remembered here.
+    int   fadingFrom_ = -1;
     // Before the ramp starts, the incoming engine is given time to speak: a brain preset's first
     // note comes when the brain decides to play it, a sample preset's clip may still be loading,
     // a drone's attack may be ten seconds long. Until the incoming engine is audible (or

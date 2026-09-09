@@ -42,3 +42,4 @@ Scratch/
 # Build- und Installationsprotokolle: Ergebnisse eines Laufs, nicht Quelltext
 Deploy/*.log
 Deploy/*.err
+Deploy/out-old/

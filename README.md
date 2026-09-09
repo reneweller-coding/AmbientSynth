@@ -127,16 +127,19 @@ cmake --build build-tsan -j && setarch $(uname -m) -R ./build-tsan/Tests/ambient
 ## Releasing
 
 ```powershell
-powershell -File Deploy\build_release.ps1 [-Toolchain msvc|intel]
+powershell -File Deploy\build_release.ps1
 ```
 
 Builds in its own tree with the runtime linked in and AVX2 on, runs the three tests in that exact
 configuration, refuses to package a binary that still asks for any redistributable — Microsoft's or
 Intel's — and leaves a setup and a portable zip in `Deploy\out` with their SHA-256 sums.
-`-Toolchain intel` builds the same thing with oneAPI's compiler, which is about a fifth faster
-through the plugin under load; it puts a generative instrument on a different floating-point
-trajectory, so it plays a different take of the same patch, but the map and the loudness matching
-were measured to hold.
+
+Releases are built with Intel's oneAPI compiler, which is about a fifth faster through the plugin
+under load than MSVC. It puts a generative instrument on a different floating-point trajectory, so
+it plays a different take of the same patch; over sixty presets the descriptors the map is laid out
+from move by 5 % of a typical distance between two presets and the loudness by a hundredth of a
+decibel, so the map and the loudness matching hold. `-Toolchain msvc` builds the same source with
+Microsoft's compiler, for comparing the two rather than for packaging.
 
 The sample library is 10 GB of FLAC in seven archives on the release page; the installer downloads
 them with your consent, and the portable zip points to them in its README.

@@ -54,8 +54,11 @@ param(
     # move by 5 % of a typical distance between two presets (Spearman 0.985 over every pair), and
     # the loudness by a hundredth of a decibel on average, 0.31 dB at worst. The map and the
     # loudness matching stay valid; the library does not need measuring again.
+    # Intel is what ships. Every release from 1.11.3 on is built with it, so a plain run of this
+    # script produces the thing that goes to the release page; -Toolchain msvc is there for
+    # comparing the two, not for packaging.
     [ValidateSet("msvc", "intel")]
-    [string]$Toolchain = "msvc"
+    [string]$Toolchain = "intel"
 )
 $python = "Tools\TextureGen\.venv\Scripts\python.exe"
 $ErrorActionPreference = "Stop"

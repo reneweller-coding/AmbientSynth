@@ -7,6 +7,9 @@
 #include "ambient/ZPlane.h"    // choice names of the z-plane filter
 #include "ambient/Modulation.h"  // choice names of the LFOs and envelopes
 #include <cstring>
+#include <algorithm>
+#include <iterator>
+#include <vector>
 
 namespace ambient {
 
@@ -691,9 +694,22 @@ ParamSection sectionOf(const char* name)
 
 const ParamDesc* findParam(const char* key)
 {
+    // Binary search over a sorted index, built once. It used to be a linear strcmp over the whole
+    // table, and everything that reads a preset goes through here: warming the map up for the
+    // library meant eight thousand presets times a hundred and thirty settings times a hundred
+    // and forty-six string comparisons -- a hundred and sixty million of them, 1.75 seconds, paid
+    // in full every time an engine was prepared. Nine comparisons instead of a hundred and forty-six.
     if (key == nullptr) return nullptr;
-    for (const auto& d : kTable) if (std::strcmp(key, d.key) == 0) return &d;
-    return nullptr;
+    static const std::vector<const ParamDesc*> sorted = [] {
+        std::vector<const ParamDesc*> v;
+        v.reserve(std::size(kTable));
+        for (const auto& d : kTable) v.push_back(&d);
+        std::sort(v.begin(), v.end(), [](const ParamDesc* a, const ParamDesc* b) { return std::strcmp(a->key, b->key) < 0; });
+        return v;
+    }();
+    auto it = std::lower_bound(sorted.begin(), sorted.end(), key,
+                               [](const ParamDesc* d, const char* k) { return std::strcmp(d->key, k) < 0; });
+    return (it != sorted.end() && std::strcmp((*it)->key, key) == 0) ? *it : nullptr;
 }
 
 } // namespace ambient

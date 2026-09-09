@@ -7,6 +7,7 @@
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 #endif
 #include "ambient/PresetMeta.h"
+#include "ambient/PresetMap.h"
 #include "PluginEditor.h"
 #include "ambient/Tuning.h"
 #include "ambient/Presets.h"
@@ -63,6 +64,9 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     for (auto& c : ccMap_) c.store(-1);
     // Preset packs (thousands of presets as text files) before anything reads the preset list.
     loadDefaultPresetPacks();
+    // The map's parameter vectors for those presets, on a thread of its own: a second of work
+    // that only the map needs, and nothing should wait for it to open a window or start playing.
+    PresetMap::warmupAsync();
     // OSC on 9000; a second instance in a DAW simply reports the port as taken.
     osc_.start(9000, *this, gestures_);
     // Session recall. The switch lives in the same settings file as the state, so turning it off
@@ -181,6 +185,21 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // Which engine is the instrument is decided here and nowhere else, at a block boundary, so
+    // that the message thread can build the next preset on the other one without ever writing to
+    // an engine that is being rendered.
+    if (endFade_.exchange(false, std::memory_order_acq_rel)) {
+        const int f = fading_.load(std::memory_order_relaxed);
+        if (f >= 0) { engines_[f].allNotesOff(); fading_.store(-1, std::memory_order_release); }
+    }
+    if (const int sw = swapTo_.exchange(-1, std::memory_order_acq_rel); sw >= 0) {
+        fading_.store(live_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        live_.store(sw, std::memory_order_release);
+        fadePos_.store(0.0f, std::memory_order_relaxed);
+        fadeHead_ = 0.0f;
+        paramTarget_.store(-1, std::memory_order_release);
+    }
+
     // Macros are gesture inputs Custom0..7: one knob, several parameters.
     for (int m = 0; m < 8; ++m)
         gestures_.setInput(static_cast<GestureInput>(static_cast<int>(GestureInput::Custom0) + m),
@@ -230,8 +249,13 @@ void AmbientSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    for (int i = 0; i < kNumParams; ++i)
-        live().setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+    {   // Into the instrument -- or, while a transition is being built, into the engine that is
+        // about to become it, so that the new preset's values do not also land on the old sound.
+        const int pt = paramTarget_.load(std::memory_order_acquire);
+        ambient::Engine& dst = engines_[pt >= 0 ? pt : live_.load(std::memory_order_relaxed)];
+        for (int i = 0; i < kNumParams; ++i)
+            dst.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+    }
 
     // The host's play head, when there is one (the standalone has none and the engine then runs
     // its own clock).
@@ -467,7 +491,7 @@ void AmbientSynthProcessor::loadPresetFiles(int index)
                 const juce::String p = k < parts.size() ? parts[k].trim() : juce::String();
                 const juce::File f = p.isNotEmpty() ? onDisk(p) : juce::File();
                 if (f != juce::File()) loadTextureFile(k, f);
-                else { live().clearTexture(k); textureFile_[k] = juce::File(); }
+                else { target().clearTexture(k); textureFile_[k] = juce::File(); }
             }
         }
     }
@@ -483,7 +507,7 @@ void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
     }, scope);
     // The matrix rows and the envelope shapes are data, not parameters, so they do not travel
     // through the parameter tree: the engine takes them straight from the preset.
-    if (scope != PresetScope::Cosmos) live().applyPresetModulation(pr);
+    if (scope != PresetScope::Cosmos) target().applyPresetModulation(pr);
 }
 
 void AmbientSynthProcessor::setCurrentProgram(int index)
@@ -602,7 +626,7 @@ bool AmbientSynthProcessor::loadTextureFile(int slot, const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
-    live().setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+    target().setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
                        ambient::loopFromName(file.getFileName().toRawUTF8()));
     textureFile_[slot] = file;
     return true;
@@ -613,7 +637,7 @@ bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());
-    live().setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+    target().setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
                        ambient::loopFromName(file.getFileName().toRawUTF8()));
     for (auto& f : textureFile_) f = file;
     return true;
@@ -630,8 +654,8 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
     if (!reader->read(&buf, 0, n, 0, true, true)) return false;
     const float* L = buf.getReadPointer(0);
     const float* R = buf.getNumChannels() > 1 ? buf.getReadPointer(1) : nullptr;
-    if (second) { live().setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
-    else        { live().setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
+    if (second) { target().setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
+    else        { target().setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
     return true;
 }
 
@@ -639,7 +663,7 @@ bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
 {
     std::vector<float> mono; double rate = 0.0;
     if (!readMono(file, mono, rate)) return false;
-    if (!live().loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
+    if (!target().loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
     wavetableFile_ = file;
     return true;
 }
@@ -702,34 +726,65 @@ bool AmbientSynthProcessor::loadPresetFile(const juce::File& file)
 void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
 {
     if (index < 0 || index >= numPresets()) return;
-    if (!viaMorph || !morphOnSelect_) { fading_ = -1; setCurrentProgram(index); return; }
+    if (!viaMorph || !morphOnSelect_) { endFade_.store(true, std::memory_order_release); setCurrentProgram(index); return; }
     // A transition, not a morph. The preset that is playing keeps playing, untouched, on the
-    // engine it is on; the new one is loaded onto the other engine, which then becomes the
-    // instrument -- parameters, notes and the displays all move to it at once -- and the two are
-    // crossfaded in processBlock over morphSelectSeconds_. Nothing is interpolated, so nothing
-    // has to be interpolable: the two presets may share nothing at all and still meet in the air.
-    // If a transition is already running, the one on its way out is simply dropped -- two
-    // engines is what there is, and a third preset chosen mid-fade wants the one that was
-    // arriving to leave, not the one that already left.
-    const int outgoing = live_;
-    // Where the sound is leaving from, for the map's line. Mid-flight it is the preset that was
-    // arriving, because that is the one now playing on the engine about to leave.
+    // engine it is on; the new one is built on the other engine and only then made the
+    // instrument, and the two are crossfaded in processBlock over morphSelectSeconds_. Nothing is
+    // interpolated, so nothing has to be interpolable: the two presets may share nothing at all
+    // and still meet in the air.
+    //
+    // Both engines are busy while a transition is running -- one playing, one leaving -- so a
+    // change asked for mid-flight ends the running one and waits for the audio thread to let go.
+    // It is served a few milliseconds later, by the pump. What must never happen is what this
+    // used to do: reset an engine, hand it notes and switch it live from the message thread while
+    // the audio thread was rendering it.
+    pendingPreset_ = index;
+    if (fading_.load(std::memory_order_acquire) >= 0) endFade_.store(true, std::memory_order_release);
+    servePendingPreset();
+}
+
+// Message thread. Runs when neither engine is being rendered but one: the one that is not live is
+// then ours to build on.
+void AmbientSynthProcessor::servePendingPreset()
+{
+    if (pendingPreset_ < 0) { presetPump_.stopTimer(); return; }
+    // Still busy: a fade in flight (both engines rendered), or a swap already published and not
+    // yet taken up. Come back in a moment.
+    if (fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0) {
+        if (!presetPump_.isTimerRunning()) presetPump_.startTimerHz(30);
+        return;
+    }
+    const int index = pendingPreset_;
+    pendingPreset_ = -1;
+    presetPump_.stopTimer();
+    beginTransition(index);
+}
+
+void AmbientSynthProcessor::beginTransition(int index)
+{
+    const int incoming = live_.load(std::memory_order_relaxed) ^ 1;
+    // Where the sound is leaving from, for the map's line.
     fadingFrom_ = currentProgram_;
-    if (fading_ >= 0) { engines_[fading_].allNotesOff(); engines_[fading_].reset(); }
-    live_ = outgoing ^ 1;
-    // The incoming engine starts clean: whatever it played last time is gone, and it takes the
-    // full preset the way a program change would, files included.
-    live().allNotesOff();
-    live().reset();
-    fading_  = outgoing;
-    fadePos_ = 0.0f;
-    fadeHead_ = 0.0f;
+    // From here until the swap, everything about the new preset goes to the incoming engine and
+    // nothing to the one that is still playing: the parameter tree's next push (paramTarget_),
+    // the modulation matrix and the sample files (prepareTarget_), the notes.
+    paramTarget_.store(incoming, std::memory_order_release);
+    prepareTarget_ = &engines_[incoming];
+    engines_[incoming].allNotesOff();
+    engines_[incoming].reset();
     setCurrentProgram(index);
+    // The parameter tree reaches the engine once a block; this one has to be complete before it
+    // is heard, so it is filled in here as well.
+    for (int i = 0; i < kNumParams; ++i)
+        engines_[incoming].setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
     // The chord that is being held is held on the new instrument too. Without this a player
     // holding a chord through a preset change heard it die with the old preset and nothing take
     // its place -- the notes had gone to an engine that was on its way out.
     for (int i = 0; i < 128; ++i)
-        if (heldVel_[static_cast<size_t>(i)] > 0.0f) live().noteOn(i, heldVel_[static_cast<size_t>(i)]);
+        if (heldVel_[static_cast<size_t>(i)] > 0.0f) engines_[incoming].noteOn(i, heldVel_[static_cast<size_t>(i)]);
+    prepareTarget_ = nullptr;
+    fadePos_.store(0.0f, std::memory_order_relaxed);      // nothing is fading yet: the map reads this
+    swapTo_.store(incoming, std::memory_order_release);   // the audio thread takes it from here
 }
 
 // Notes go to the live engine and are remembered, so a transition can hand them on.

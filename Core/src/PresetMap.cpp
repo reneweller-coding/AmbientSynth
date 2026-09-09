@@ -4,38 +4,55 @@
 #include "ambient/Dsp.h"
 #include <vector>
 #include <cmath>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 namespace ambient {
 
 namespace {
-std::vector<float> g_values;   // numPresets * kNumParams
-bool g_ready = false;
+// The table the audio thread reads, published as a pointer: a rebuild fills a new one and swaps
+// it in, and the one it replaces is kept rather than freed. Keeping it costs a few megabytes at
+// most (a rebuild happens when packs are loaded, which is once) and it is the only way a reader
+// that is already inside blend() cannot have the ground taken from under it.
+std::vector<std::unique_ptr<std::vector<float>>> g_retired;
+std::atomic<const float*> g_table { nullptr };
+std::atomic<int>          g_count { 0 };       // presets in the published table
+std::atomic<bool>         g_building { false };
+std::mutex                g_buildLock;
 }
 
 void PresetMap::warmup()
 {
-    // Rebuilds when the preset list has grown (a pack was loaded); message thread only.
-    static int built = -1;
-    if (built == numPresets()) return;
-    built = numPresets();
-    {
-        const int n = numPresets();
-        g_values.assign(static_cast<size_t>(n) * kNumParams, 0.0f);
-        for (int p = 0; p < n; ++p) {
-            float* v = g_values.data() + static_cast<size_t>(p) * kNumParams;
-            for (const ParamDesc& d : paramTable()) v[static_cast<int>(d.id)] = d.def;
-            applyPreset(preset(p), [&](ParamId id, float val) { v[static_cast<int>(id)] = val; });
-        }
-        g_ready = true;
+    std::lock_guard<std::mutex> lock(g_buildLock);
+    const int n = numPresets();
+    if (g_count.load(std::memory_order_acquire) == n && g_table.load(std::memory_order_acquire) != nullptr) return;
+    auto built = std::make_unique<std::vector<float>>(static_cast<size_t>(n) * kNumParams, 0.0f);
+    for (int p = 0; p < n; ++p) {
+        float* v = built->data() + static_cast<size_t>(p) * kNumParams;
+        for (const ParamDesc& d : paramTable()) v[static_cast<int>(d.id)] = d.def;
+        applyPreset(preset(p), [&](ParamId id, float val) { v[static_cast<int>(id)] = val; });
     }
+    const float* data = built->data();
+    g_retired.push_back(std::move(built));
+    g_count.store(n, std::memory_order_release);
+    g_table.store(data, std::memory_order_release);
 }
 
-bool PresetMap::ready() { return g_ready; }
+void PresetMap::warmupAsync()
+{
+    if (g_building.exchange(true, std::memory_order_acq_rel)) return;   // one at a time
+    std::thread([] { warmup(); g_building.store(false, std::memory_order_release); }).detach();
+}
+
+bool PresetMap::ready() { return g_table.load(std::memory_order_acquire) != nullptr; }
 
 const float* PresetMap::presetValues(int index)
 {
-    if (!g_ready || index < 0 || index >= numPresets()) return nullptr;
-    return g_values.data() + static_cast<size_t>(index) * kNumParams;
+    const float* t = g_table.load(std::memory_order_acquire);
+    if (t == nullptr || index < 0 || index >= g_count.load(std::memory_order_acquire)) return nullptr;
+    return t + static_cast<size_t>(index) * kNumParams;
 }
 
 PresetMap::Blend PresetMap::neighbours(float x, float y, float radius)
@@ -81,29 +98,33 @@ PresetMap::Blend PresetMap::neighbours(float x, float y, float radius)
 
 void PresetMap::blend(const Blend& b, float* out)
 {
+    // The neighbours' vectors are looked up once, not once per parameter per neighbour: this runs
+    // at control rate on the audio thread and the table is behind an atomic now.
+    const float* row[kNeighbours] = {};
+    const bool have = ready() && b.count > 0;
+    if (have)
+        for (int k = 0; k < b.count; ++k)
+            if ((row[k] = presetValues(b.index[k])) == nullptr) return;   // a rebuild caught us: leave the sound alone
     for (const ParamDesc& d : paramTable()) {
         const int i = static_cast<int>(d.id);
-        if (!g_ready || b.count == 0) { out[i] = d.def; continue; }
-        const float* strongest = presetValues(b.index[0]);
+        if (!have) { out[i] = d.def; continue; }
         switch (d.kind) {
         case ParamKind::Float: {
             const float span = std::max(d.max - d.min, 1e-9f);
             float p = 0.0f;
-            for (int k = 0; k < b.count; ++k) {
-                const float v = presetValues(b.index[k])[i];
-                p += b.weight[k] * std::pow(clampv((v - d.min) / span, 0.0f, 1.0f), d.skew);
-            }
+            for (int k = 0; k < b.count; ++k)
+                p += b.weight[k] * std::pow(clampv((row[k][i] - d.min) / span, 0.0f, 1.0f), d.skew);
             out[i] = d.min + span * std::pow(clampv(p, 0.0f, 1.0f), 1.0f / d.skew);
             break;
         }
         case ParamKind::Int: {
             float v = 0.0f;
-            for (int k = 0; k < b.count; ++k) v += b.weight[k] * presetValues(b.index[k])[i];
+            for (int k = 0; k < b.count; ++k) v += b.weight[k] * row[k][i];
             out[i] = static_cast<float>(std::lround(v));
             break;
         }
         default:
-            out[i] = strongest[i];
+            out[i] = row[0][i];
         }
     }
 }

@@ -106,11 +106,14 @@ public:
     // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
     // come (0..1) -- the browser draws both.
     // What the map draws as the travelling line: where the sound is coming from, where it is
-    // going, and how far it has come. During a transition that is the crossfade between the two
-    // engines; otherwise nothing is travelling and both ends are -1.
-    int   morphingTo() const { return fading_.load() >= 0 ? soundIndex_ : -1; }
-    int   morphingFrom() const { return fading_.load() >= 0 ? fadingFrom_ : -1; }
-    float morphProgress() const { return fading_.load() >= 0 ? fadePos_.load() : 1.0f; }
+    // going, and how far it has come. A change counts as travelling from the moment it is asked
+    // for -- the incoming engine may be published a block before the audio thread takes it up,
+    // and a line that appeared one frame late would look like a dropped click.
+    bool  transitionInFlight() const
+    { return fading_.load(std::memory_order_acquire) >= 0 || swapTo_.load(std::memory_order_acquire) >= 0; }
+    int   morphingTo() const { return transitionInFlight() ? soundIndex_ : -1; }
+    int   morphingFrom() const { return transitionInFlight() ? fadingFrom_ : -1; }
+    float morphProgress() const { return transitionInFlight() ? fadePos_.load() : 1.0f; }
     void setMorphSlotFromPreset(int slot, int presetIndex);
     void setMorphSlotFromCurrent(int slot);
     juce::String morphSlotName(int slot) const { return slotName_[slot & 1]; }
@@ -166,9 +169,42 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     ambient::Engine engines_[2];
-    int  live_ = 0;                          // which of the two is the instrument right now
-    ambient::Engine& live()  { return engines_[live_]; }
-    ambient::Engine& other() { return engines_[live_ ^ 1]; }
+    // Which of the two is the instrument right now. Read by both threads and written only by the
+    // audio thread, at a block boundary (see the swap in processBlock): the message thread
+    // prepares the other engine in full and then asks for the change, so no engine is ever
+    // written by one thread while the other renders it.
+    std::atomic<int> live_ { 0 };
+    ambient::Engine& live()  { return engines_[live_.load(std::memory_order_relaxed)]; }
+    ambient::Engine& other() { return engines_[live_.load(std::memory_order_relaxed) ^ 1]; }
+    // Where the message thread's engine writes go while a transition is being prepared: the
+    // incoming engine, which nothing renders yet. Null the rest of the time, when they mean the
+    // instrument itself. Message thread only.
+    ambient::Engine* prepareTarget_ = nullptr;
+    ambient::Engine& target() { return prepareTarget_ != nullptr ? *prepareTarget_ : live(); }
+    // The engine the audio thread pushes the parameter tree into, or -1 for "whichever is live".
+    // While a transition is being prepared it is the incoming one, so that the preset now being
+    // written into the tree does not also land on the engine that is still playing the old sound.
+    std::atomic<int>  paramTarget_ { -1 };
+    // Published when the incoming engine is ready; the audio thread makes it live and starts the
+    // crossfade at the next block. -1 = nothing waiting.
+    std::atomic<int>  swapTo_ { -1 };
+    // Asks the audio thread to let go of the engine that is fading out, so the message thread may
+    // prepare it for the next change. A transition interrupted this way ends where it stands.
+    std::atomic<bool> endFade_ { false };
+    int  pendingPreset_ = -1;         // a change waiting for the audio thread to free an engine
+    void beginTransition(int index);  // message thread: prepare the incoming engine and publish it
+    // A change asked for while both engines were busy is served from here, a few milliseconds
+    // later. A timer rather than a wait: the message thread must not block on the audio thread,
+    // and with no audio device running it would never be let go.
+    struct PresetPump : juce::Timer {
+        explicit PresetPump(AmbientSynthProcessor& p) : proc(p) {}
+        void timerCallback() override { proc.servePendingPreset(); }
+        AmbientSynthProcessor& proc;
+    };
+    PresetPump presetPump_ { *this };
+public:
+    void servePendingPreset();        // message thread; does nothing until an engine is free
+private:
     // A transition in flight: the engine on its way out, and how far the crossfade has come.
     // -1 when nothing is fading. Equal-power, so the sum never dips in the middle. Written on the
     // audio thread and read by the map, which draws the crossing, so both are atomic.

@@ -47,7 +47,11 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
 {
     sr_ = sampleRate;
     maxBlock_ = std::max(maxBlockSize, kControlBlock);
-    PresetMap::warmup();   // cached preset vectors for the map (allocates here, never in process)
+    // The map's cached preset vectors are NOT built here. With the library loaded that is eight
+    // thousand presets and it measured 1.75 s of the 1.78 s this function took -- paid on every
+    // plugin instance, every offline render, every sample-rate change, whether or not the map was
+    // ever switched on. The host builds it in the background (PresetMap::warmupAsync); until it
+    // is ready the map does not engage, and everything else in the instrument is unaffected.
     for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_, &smEnvelop_, &smComod_ })
         s->setTime(0.02f, sr_);
     smDelayMix_.snap(getParam(ParamId::DelayMix)); smDelayToFar_.snap(getParam(ParamId::DelayToFar));

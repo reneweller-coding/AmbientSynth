@@ -14,9 +14,14 @@ class PresetMap {
 public:
     static constexpr int kNeighbours = 6;
 
-    // Builds the cached parameter vectors of all presets (allocates; call before the audio
-    // thread needs blend(); the engine does it in prepare()).
+    // Builds the cached parameter vectors of all presets (allocates; call before the audio thread
+    // needs blend()). With a library loaded this reads eight thousand presets, so it is NOT done
+    // while an instrument is being prepared -- it used to be, and cost 1.75 seconds every time a
+    // plugin instance was created or an offline render started. warmupAsync() puts it on a thread
+    // of its own and returns at once; until it is ready() the map simply does not engage, which
+    // is a knob that answers a moment late rather than an instrument that hangs.
     static void warmup();
+    static void warmupAsync();
     static bool ready();
 
     struct Blend {

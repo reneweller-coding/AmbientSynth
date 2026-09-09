@@ -124,9 +124,10 @@ def main():
             if len(f) > 2 and f[2].strip():
                 m = f[2].split()
                 # Nine numbers plus the tag bits; a tenth token is the measured loudness, which
-                # measure_packs.py has written since the level-matching option existed.
-                if len(m) not in (9, 10):
-                    problems.append(f"{where}: metadata has {len(m)} fields, expected 9 or 10")
+                # measure_packs.py has written since the level-matching option existed; map_all
+                # adds the three drone descriptors, the group and the two phrases -- sixteen.
+                if len(m) not in (9, 10, 16):
+                    problems.append(f"{where}: metadata has {len(m)} fields, expected 9, 10 or 16")
                 else:
                     try:
                         vals = [float(x) for x in m[:8]]

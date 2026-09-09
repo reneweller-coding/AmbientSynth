@@ -19,10 +19,10 @@ against it but has not been run on a headset yet. Licence: AGPL-3.0.
 
 ## Download
 
-**[AmbientSynth-1.11.2-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.2/AmbientSynth-1.11.2-Setup.exe)**
+**[AmbientSynth-1.11.3-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3/AmbientSynth-1.11.3-Setup.exe)**
 (16 MB) -- installs the standalone, the VST3, the preset library and, with your
 consent, downloads the 10 GB sample library (FLAC). Nothing else has to be installed:
-the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.2/AmbientSynth-1.11.2-portable.zip)**
+the runtime is linked in. **[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3/AmbientSynth-1.11.3-portable.zip)**
 (18 MB) for anyone who would rather not run an installer, and the
 **[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.10.0/AmbientSynth-Manual.pdf)**
 (PDF, 157 pages) -- every tab of the panel as a picture, with what it does and

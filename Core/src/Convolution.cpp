@@ -175,6 +175,8 @@ void Convolver::processBlock()
         }
     }
     fdlHead_ = (fdlHead_ + 1) % maxParts_;
+    // See Engine::process: the flag says "in use", so it is given back here.
+    inUse_.store(-1, std::memory_order_release);
 }
 
 void Convolver::process(const float* inL, const float* inR, float* outL, float* outR, int n)

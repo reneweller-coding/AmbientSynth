@@ -290,6 +290,9 @@ private:
     double setClock_ = 0.0;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
     int currentProgram_ = 0;
+    // A program change reads files off the disk; these two hold a sweep back until it stops.
+    std::atomic<int> pendingFiles_ { -1 };
+    double lastProgramAt_ = -1.0e9;
     int soundIndex_ = 0, cosmosIndex_ = 0, zIndex_ = 0, strikeIndex_ = 0;
     // The names, not the indices: a pack added or removed between two sessions renumbers every
     // preset behind it, and an index would then name a different sound.

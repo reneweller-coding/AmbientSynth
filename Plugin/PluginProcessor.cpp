@@ -175,6 +175,13 @@ void AmbientSynthProcessor::servePresetRequests()
             if (auto* p = apvts.getParameter(d.key)) p->setValueNotifyingHost(p->convertTo0to1(live().blendValue(d.id)));
         }
     }
+    // A program sweep that has come to rest: read the files of the one that is left standing.
+    // Held back until it is quiet, so a sweep that is still moving reads nothing at all.
+    if (const int want = pendingFiles_.load(std::memory_order_acquire); want >= 0
+        && juce::Time::getMillisecondCounterHiRes() - lastProgramAt_ > 250.0) {
+        pendingFiles_.store(-1, std::memory_order_release);
+        if (want == currentProgram_) loadPresetFiles(want);
+    }
     ControlEvent ev;
     while (presetEvents_.pop(ev)) {
         switch (ev.type) {
@@ -573,6 +580,20 @@ void AmbientSynthProcessor::setCurrentProgram(int index)
     zIndex_ = -1; strikeIndex_ = -1;
     cosmosIndex_ = -1;   // the program brought its own Cosmos layer
     applyScoped(preset(index), PresetScope::Full);
+    // The knobs are a tenth of a millisecond. The files a preset names -- its clips, its
+    // wavetable, its room -- are a sixth of a SECOND, because they are read off the disk and
+    // decoded, and a host can automate the program number like any other parameter. Every step
+    // of such a sweep paid that, on whichever thread the host asked from.
+    //
+    // So a change that stands on its own is served here, exactly as before; a change that
+    // arrives while another one is still warm is only remembered, and the pump reads the files
+    // once the sweep has stopped. Nothing is lost by it: a preset that lived a millisecond was
+    // never heard, and only the one still standing at the end has files worth reading.
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const bool burst = now - lastProgramAt_ < 300.0;
+    lastProgramAt_ = now;
+    if (burst) { pendingFiles_.store(index, std::memory_order_release); return; }
+    pendingFiles_.store(-1, std::memory_order_release);
     loadPresetFiles(index);
 }
 

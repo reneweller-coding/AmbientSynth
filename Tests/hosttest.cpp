@@ -158,6 +158,29 @@ int main()
     // AMBIENT_FUZZ=1: not part of the normal run. Sets every parameter to a random value, plays a
     // chord, and asks only that the result be a number. Then it narrows a failure down to the
     // parameters that actually cause it, by putting them back one at a time.
+    // AMBIENT_TIMING=1: what one program change costs a host. pluginval hammers every parameter
+    // it can see, and through the VST3 wrapper that includes the program change -- so this number,
+    // times the number of writes it makes, is the fifteen minutes it gave up after.
+    if (std::getenv("AMBIENT_TIMING") != nullptr) {
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(48000.0, 256);
+        std::printf("  timing: %d programs are on offer\n", p->getNumPrograms());
+        auto time = [&p](int from, int count, const char* what) {
+            const auto t0 = std::chrono::steady_clock::now();
+            for (int i = 0; i < count; ++i) p->setCurrentProgram(from + i);
+            const double each = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() / count;
+            std::printf("  timing: %-28s %7.1f ms each\n", what, each * 1000.0);
+            return each;
+        };
+        // Built-ins first: most of them name no files at all. Then presets out of the library,
+        // which nearly all name a clip, a wavetable or a room, and those are read off the disk.
+        const double built = time(0, 20, "a built-in program");
+        const double pack = p->getNumPrograms() > 600 ? time(600, 20, "a program from the library") : built;
+        const double each = std::max(built, pack);
+        std::printf("  timing: fifteen minutes of the slower is %.0f changes\n", 900.0 / each);
+        check(true, "timing done");
+    }
+
     if (std::getenv("AMBIENT_FUZZ") != nullptr) {
         juce::AudioBuffer<float> buf(2, 256);
         // Plays a chord on a fresh instrument and says whether the sound stayed a number, while
@@ -201,11 +224,32 @@ int main()
         }
         for (const char* sec : sections) {
             bool ok = true;
-            for (int rep = 0; rep < 3 && ok; ++rep) ok = trial(sec, 1.2, 7 + rep);
+            for (int rep = 0; rep < 3 && ok; ++rep) ok = trial(sec, std::getenv("AMBIENT_FUZZ_LONG") ? 5.0 : 1.2, 7 + rep);
             if (!ok) std::printf("      %-16s *** NON-FINITE ***\n", sec);
         }
         std::printf("  fuzz: sections not listed above stayed finite\n");
         check(true, "fuzz finished");
+    }
+
+    // ---------------------------------------------------------------- a program brings its files
+    // A program change that stands on its own still reads what the preset names, right there and
+    // then. Only a sweep is held back, and only until it stops -- so this has to keep working, or
+    // presets would quietly play with whatever clip happened to be loaded before.
+    {
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(48000.0, 256);
+        int withClip = -1;
+        for (int i = 0; i < p->getNumPrograms() && withClip < 0; ++i)
+            if (preset(i).texture != nullptr && *preset(i).texture != 0) withClip = i;
+        if (withClip >= 0) {
+            p->setCurrentProgram(withClip);
+            bool any = false;
+            for (int k = 0; k < ambient::kSlots; ++k) {
+                const ambient::Texture* t = p->engine().displayTexture(k);
+                if (t != nullptr && !t->empty()) any = true;
+            }
+            check(any, "a program change on its own loads the clip the preset names");
+        }
     }
 
     // ---------------------------------------------------------------- parameters under two threads

@@ -19,6 +19,7 @@
 #include "ambient/PresetMap.h"
 #include "ambient/Timeline.h"
 #include "ambient/Score.h"
+#include "ambient/Cosmos.h"          // Fft, for the tonal probe
 #include "ambient/ClusterBrain.h"   // peakRoughness: one Plomp-Levelt curve for the conductor and the map
 #include <cstdio>
 #include <cstring>
@@ -309,12 +310,105 @@ void printMeasurements(const std::vector<float>& L, const std::vector<float>& R,
 
 // One render, exactly as the command line asks for it. main() below calls this once, or once
 // per preset when --batch is given.
+// ---------------------------------------------------------------- does it follow the note?
+//
+// Plays the same two-note chord twice, a tritone apart, and asks how much of the sound moved with
+// it. Everything a preset makes divides into two: material that is pitched to what is played -- the
+// slots that follow the note, their partials, the filters riding on them -- and material that is
+// not: the Foundation on the conductor's root, a Free sample bed, noise, the tail of a reverb. Only
+// the first can be heard as harmony. A listener who plays a chord, then another, and hears the same
+// thing both times is hearing a preset whose second kind drowns out its first.
+//
+// The overlap of the two normalised spectra is exactly that share: what sits at the same place in
+// both is what did not move. 0 % means everything followed, 100 % means nothing did.
+//
+// The second number is where the weight is. The Foundation lives under about 130 Hz and the played
+// material mostly above 150; their ratio in decibels says whether the bass is a foundation under
+// the music or a lid on top of it.
+//
+// A tritone because it is the largest move in pitch class that keeps the register: a chord an
+// octave up would leave a register-folded bass exactly where it was and look like a preset that
+// does not follow, which is how the first version of this measurement fooled its author.
+struct TonalProbe { double staticShare = 0.0, bassDb = 0.0, rms = -120.0; };
+
+TonalProbe tonalProbe(Engine& engine, int sr, double seconds)
+{
+    constexpr int kFft = 1 << 15;
+    const int block = 256;
+    const long total = static_cast<long>(seconds * sr);
+    const long from = total / 3;              // the settled part, as every other measurement here
+    std::vector<double> spec[2];
+    double energy = 0.0;
+    long counted = 0;
+
+    for (int pass = 0; pass < 2; ++pass) {
+        const int lowNote = pass == 0 ? 57 : 63;   // A3, then D#4
+        engine.allNotesOff();
+        engine.reset();
+        engine.noteOn(lowNote, 0.8f);
+        engine.noteOn(lowNote + 7, 0.7f);
+        std::vector<float> L(static_cast<size_t>(block)), R(static_cast<size_t>(block)), mono;
+        mono.reserve(static_cast<size_t>(total - from));
+        for (long done = 0; done < total; done += block) {
+            const int n = static_cast<int>(std::min<long>(block, total - done));
+            engine.process(L.data(), R.data(), n);
+            for (int i = 0; i < n; ++i) {
+                const double m = 0.5 * (static_cast<double>(L[static_cast<size_t>(i)]) + R[static_cast<size_t>(i)]);
+                if (done + i >= from) {
+                    mono.push_back(static_cast<float>(m));
+                    energy += m * m;
+                    ++counted;
+                }
+            }
+        }
+        // Welch: half-overlapping Hann windows, averaged. One number per bin, so the two passes
+        // can be compared bin by bin.
+        spec[pass].assign(kFft / 2 + 1, 0.0);
+        Fft fft(kFft);
+        std::vector<float> re(static_cast<size_t>(kFft)), im(static_cast<size_t>(kFft));
+        int windows = 0;
+        for (size_t s = 0; s + kFft <= mono.size(); s += kFft / 2) {
+            for (int i = 0; i < kFft; ++i) {
+                const float w = 0.5f - 0.5f * std::cos(kTwoPi * i / static_cast<float>(kFft));
+                re[static_cast<size_t>(i)] = mono[s + static_cast<size_t>(i)] * w;
+                im[static_cast<size_t>(i)] = 0.0f;
+            }
+            fft.transform(re.data(), im.data(), false);
+            for (int k = 0; k <= kFft / 2; ++k)
+                spec[pass][static_cast<size_t>(k)] += static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)]
+                                                    + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)];
+            ++windows;
+        }
+        if (windows == 0) return {};
+    }
+
+    TonalProbe out;
+    double sum[2] = { 0.0, 0.0 };
+    for (int p = 0; p < 2; ++p) for (double v : spec[p]) sum[p] += v;
+    if (sum[0] <= 0.0 || sum[1] <= 0.0) return {};
+    double overlap = 0.0, lo = 0.0, hi = 0.0;
+    const double binHz = static_cast<double>(sr) / kFft;
+    for (size_t k = 0; k < spec[0].size(); ++k) {
+        overlap += std::min(spec[0][k] / sum[0], spec[1][k] / sum[1]);
+        const double f = k * binHz;
+        const double e = spec[0][k] + spec[1][k];
+        if (f >= 20.0 && f < 130.0) lo += e;
+        else if (f >= 150.0 && f <= 5000.0) hi += e;
+    }
+    out.staticShare = 100.0 * overlap;
+    out.bassDb = 10.0 * std::log10((lo + 1e-30) / (hi + 1e-30));
+    out.rms = 10.0 * std::log10(energy / std::max<long>(counted, 1) + 1e-20);
+    return out;
+}
+
 static int runOnce(int argc, char** argv)
 {
     std::string out = "ambient.wav";
     double seconds = 60.0;
     int sr = 48000, block = 256;
     bool stats = false, dump = false, useMap = false, measure = false, loudness = false;
+    bool tonal = false;
+    double tonalSeconds = 14.0;
     std::string tapPath, tapDir;
     double clockHour = -1.0;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
@@ -338,6 +432,8 @@ static int runOnce(int argc, char** argv)
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
         else if (a == "--measure") measure = true;   // print descriptors instead of writing a file
+        else if (a == "--tonal") tonal = true;       // print how much of it follows the note
+        else if (a == "--tonal-seconds") tonalSeconds = std::atof(next().c_str());
         // A short mono excerpt of the settled part, for whatever wants to listen to the render
         // rather than read its numbers -- a learned audio embedding, say. 22.05 kHz is plenty for
         // that and keeps a whole library's worth of excerpts to a few gigabytes.
@@ -643,6 +739,11 @@ static int runOnce(int argc, char** argv)
     // generative conductor changes every few seconds, which made the map's density axis a coin
     // toss. Sampled per block and averaged over the same half every other descriptor uses.
     double voiceSum = 0.0; long voiceBlocks = 0;
+    if (tonal) {
+        const TonalProbe t = tonalProbe(engine, sr, tonalSeconds);
+        std::printf("tonal: static=%.1f bass_db=%+.1f rms=%.1f\n", t.staticShare, t.bassDb, t.rms);
+        return 0;
+    }
     if (stats) std::printf("sec, rmsL_dB, rmsR_dB, peak, voices, root, arc\n");
     float secPeak = 0.0f;
 

@@ -495,6 +495,21 @@ public:
     // panel, a mapped controller, a footswitch. Read and cleared inside update().
     void requestStep() { stepRequested_ = true; }
     bool stepPending() const { return stepRequested_; }
+
+    // Fill the cluster now rather than at the event rate.
+    //
+    // An empty chord grows by one note per tick, which is an entrance when the instrument starts
+    // cold and is the right thing there. After a crossfade it is not: the preset that is leaving
+    // was sounding a full cluster, and the one arriving is heard to fail rather than to enter.
+    // With the library's slower conductors the wait is not a few bars. Measured on Interior Bloom,
+    // which asks for six voices at an event every 98.8 seconds: two voices after one minute, three
+    // after three, four after seven.
+    //
+    // While this is set the tick is a third of a second instead, so the chord walks in over a
+    // second or two rather than landing as a block; it clears itself once the cluster is full.
+    // Nothing else changes -- the notes are chosen the way they always are, by the same draw.
+    void requestFill() { filling_ = true; timer_ = 0.0; }
+    bool filling() const { return filling_; }
     // How much the homeostat is leaning right now (+ towards more surprise, - towards less), the
     // entropy of the recent interval choices in bits, and the cascade's excitation in multiples
     // of the base rate. For the panel and the tests.
@@ -553,7 +568,7 @@ public:
             if (s.remaining <= 0.0) { emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f }); s.note = -1; }
         }
 
-        const double mean = std::max(0.5, static_cast<double>(p.rateSeconds));
+        const double mean = tickSeconds(p);
         lastLean_ = leanOf(p);
         advanceTimer(dt, p, mean);
         if (timer_ > 0.0) return;
@@ -561,6 +576,7 @@ public:
 
         const int low = std::min(p.low, p.high), high = std::max(p.low, p.high);
         const int density = clampv(p.density, 1, kSlots);
+        if (filling_ && activeCount() >= density) filling_ = false;
         const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
 
         if (activeCount() >= density) {
@@ -729,12 +745,13 @@ private:
         // Fill an empty chord one note per tick, so the first bars are an entrance and not a chord.
         int sounding = activeCount();
         lastLean_ = leanOf(p);
-        advanceTimer(dt, p, std::max(0.5, static_cast<double>(p.rateSeconds)));
+        if (filling_ && sounding >= density) filling_ = false;
+        advanceTimer(dt, p, tickSeconds(p));
         const bool asked = stepRequested_;
         if (sounding < density) {
             if (timer_ > 0.0 && !asked && sounding > 0) return;
             stepRequested_ = false;
-            timer_ = std::max(0.5, static_cast<double>(p.rateSeconds));
+            timer_ = tickSeconds(p);
             const int add = chooseNote(-1, low, high, p, freqOf);
             if (add >= 0) { kick(p); remember(add); startIn(add, p, emit); }
             if (p.blend > 0.0f) {
@@ -962,6 +979,13 @@ private:
     // half the mean gap, and each event adds enough that at full Cascade one event breeds 0.65
     // further ones on average (kick = branching * mean / tau = 0.65 * 2). Short-circuited at
     // zero and at rest, so a conductor without Cascade subtracts dt as it always did.
+    // How long until the next event. The conductor's own rate, unless the cluster is being
+    // filled on request (see requestFill), in which case it is short enough to arrive as music.
+    double tickSeconds(const BrainParams& p) const
+    {
+        return filling_ ? 0.35 : std::max(0.5, static_cast<double>(p.rateSeconds));
+    }
+
     void advanceTimer(double dt, const BrainParams& p, double mean)
     {
         if (p.cascade > 0.0f || excite_ > 0.0) {
@@ -1021,6 +1045,7 @@ private:
     int    lastNote_ = -1;
     float  lastLean_ = 0.0f;
     double timer_ = 1.0;
+    bool   filling_ = false;   // fill the cluster at speed, then go back to the event rate
     int    root_ = 48;
     bool   wasOn_ = false;
     bool   stepRequested_ = false;

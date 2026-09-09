@@ -923,6 +923,11 @@ void AmbientSynthProcessor::beginTransition(int index)
     // is heard, so it is filled in here as well.
     for (int i = 0; i < kNumParams; ++i)
         in.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+    // The conductor arrives having already made up its mind. Left alone it starts from an empty
+    // chord and grows it one note per event -- an entrance, which is right from silence and wrong
+    // here, because what it is crossfading with is a full cluster. At the library's slower rates
+    // that was minutes of a single note while the old preset faded out underneath it.
+    in.requestBrainFill();
     // The chord that is being held is held on the new instrument too. Without this a player
     // holding a chord through a preset change heard it die with the old preset and nothing take
     // its place -- the notes had gone to an engine that was on its way out.

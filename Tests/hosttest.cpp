@@ -481,6 +481,35 @@ int main()
         // nowhere else, and a transition builds a fresh one.
         check(p->engine().userWavetable() != nullptr, "a wavetable the player loaded survives a transition");
         check(std::strstr(p->engine().userScale().name, "Test") != nullptr, "and so does the scale they tuned it to");
+        // The conductor arrives having already made up its mind. Growing an empty chord one note
+        // per event is an entrance from silence and a failure here: the preset being faded out was
+        // sounding a full cluster. At the library's slower rates -- Interior Bloom asks six voices
+        // at an event every 98.8 seconds -- that was two voices after a minute and four after
+        // seven. A few seconds of audio after the change, the new one should be at its density.
+        {
+            auto q = std::make_unique<AmbientSynthProcessor>();
+            q->prepareToPlay(sr, block);
+            q->setMorphSelectSeconds(2.0f);
+            int slow = -1;
+            for (int i = 0; i < numPresets() && slow < 0; ++i) {
+                const char* st = preset(i).settings;
+                if (st != nullptr && std::strstr(st, "brain_rate=9") != nullptr && std::strstr(st, "brain_density=") != nullptr)
+                    slow = i;
+            }
+            if (slow >= 0) {
+                juce::AudioBuffer<float> buf(2, block);
+                q->selectPreset(1, false);
+                feed(*q, buf, 40, false);
+                q->selectPreset(slow, true);
+                q->servePresetRequests();
+                feed(*q, buf, static_cast<int>(4.0 * sr / block), false);   // four seconds
+                const int want = static_cast<int>(q->engine().getParam(ParamId::BrainDensity));
+                const int got = q->engine().activeVoices();
+                std::printf("  [probe] four seconds after a change into %s: %d of %d voices\n",
+                            preset(slow).name, got, want);
+                check(got >= juce::jmin(want, 3), "the conductor fills its cluster when it takes over from one that was sounding");
+            }
+        }
         check(p->morphingTo() < 0 && p->morphingFrom() < 0 && p->morphProgress() >= 1.0f,
               "when the time is up the change has arrived and nothing travels");
         p->releaseResources();

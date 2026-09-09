@@ -239,6 +239,9 @@ public:
     int  brainRoot() const    { return brainRoot_.load(std::memory_order_relaxed); }
     // The key the conductor has found itself in, measured from what has been sounding and
     // for how long. Read on the message thread for the panel; never set from outside.
+    // Both conductors fill their clusters now rather than at their event rate. Used when this
+    // engine takes over from one that was already sounding; see ClusterBrain::requestFill.
+    void requestBrainFill() { brain_.requestFill(); brain2_.requestFill(); }
     KeyEstimate brainKey() const { return brain_.estimatedKey(); }
     // The arc's value when it follows the clock instead of its own drift: the night's bottom at
     // four in the morning, its top at four in the afternoon, a cosine between. Pure, so the

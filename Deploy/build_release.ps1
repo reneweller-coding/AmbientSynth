@@ -69,6 +69,12 @@ if (-not $SkipBuild) {
 
     # The tests are built in the same configuration that ships, and have to pass in it: a static
     # runtime and a missing AVX2 are exactly the kind of change that is fine until it is not.
+    # The host test measures levels -- a transition has to stay audible -- and AMBIENT_MUTE, set
+    # in the shell for every standalone that is started by hand, clears the buffer and makes every
+    # level -180 dBFS. A release build failed its own tests that way once. The tests run unmuted;
+    # they open no audio device.
+    Remove-Item env:AMBIENT_MUTE -ErrorAction SilentlyContinue
+    $env:AMBIENT_PACKS = Join-Path $root "Library\Packs"
     & (Join-Path $buildDir "Tests\Release\ambient_selftest.exe")
     if ($LASTEXITCODE -ne 0) { throw "self test failed in the release configuration" }
     & (Join-Path $buildDir "Tests\Release\ambient_hosttest.exe")

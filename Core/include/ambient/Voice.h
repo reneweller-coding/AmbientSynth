@@ -248,6 +248,10 @@ private:
     int      shoulder_ = 0;
     // Height: the notch above is shared with externalisation; the 8 kHz band is its own.
     Svf      skyL_, skyR_;
+    // Both of these depend on the sample rate and nothing else, and were being recomputed for
+    // every voice every 64 samples -- an exp and a tan each. Once, in prepare().
+    Svf      skyProto_;
+    float    ildCoefConst_ = 0.0f;
     float    pinnaAmt_ = 0.0f, skyGain_ = 0.0f;
     // Near field: a low shelf on each ear, cut on the far one and lifted on the near one.
     float    ildAmt_ = 0.0f, ildCoef_ = 0.0f, ildL_ = 0.0f, ildR_ = 0.0f, ildLpL_ = 0.0f, ildLpR_ = 0.0f;

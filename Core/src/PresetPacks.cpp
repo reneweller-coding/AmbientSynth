@@ -34,6 +34,11 @@ std::vector<std::unique_ptr<Pack>>& packs() { static std::vector<std::unique_ptr
 std::vector<Preset>& views() { static std::vector<Preset> v; return v; }
 std::vector<std::string>& paths() { static std::vector<std::string> p; return p; }   // absolute, kPresetFiles per entry
 std::vector<std::string>& loadedPaths() { static std::vector<std::string> p; return p; }   // pack files already read
+// One pointer per pack preset, in the order the views are in. presetMeta used to walk the pack
+// list to find out which pack an index belonged to -- and the map's neighbour search asks for
+// every preset's position on every audio block, so with 42 packs that was a hundred and eighty
+// thousand iterations per block to answer eight thousand questions.
+std::vector<const PresetMeta*>& metaViews() { static std::vector<const PresetMeta*> v; return v; }
 
 // One pack's presets appended to the views. Called once per pack as it is loaded: the whole list
 // used to be rebuilt every time, so loading 42 packs of 200 presets did 176 000 entries' worth of
@@ -43,6 +48,7 @@ void appendViews(const Pack& pk)
 {
     {
         for (const PackEntry& e : pk.entries) {
+            metaViews().push_back(&e.meta);
             views().push_back(Preset{ e.name.c_str(), e.settings.c_str(),
                                       e.texture.empty() ? nullptr : e.texture.c_str(),
                                       e.wavetable.empty() ? nullptr : e.wavetable.c_str(),
@@ -83,6 +89,7 @@ void rebuildViews()
 {
     views().clear();
     paths().clear();
+    metaViews().clear();
     for (const auto& pk : packs()) appendViews(*pk);
 }
 
@@ -252,13 +259,8 @@ const PresetMeta& presetMeta(int index)
     static const PresetMeta none = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f, 0.5f, 0.5f, 0.5f, { -1, -1 }, -1 };
     const int b = builtinPresetCount();
     if (index < b) return builtinPresetMeta(index);
-    int i = index - b;
-    for (const auto& pkPtr : packs()) {
-        const Pack& pk = *pkPtr;
-        if (i < static_cast<int>(pk.entries.size())) return pk.entries[static_cast<size_t>(i)].meta;
-        i -= static_cast<int>(pk.entries.size());
-    }
-    return none;
+    const size_t i = static_cast<size_t>(index - b);
+    return i < metaViews().size() ? *metaViews()[i] : none;
 }
 
 int numPresetFamilies() { return builtinPresetFamilyCount() + numPresetPacks(); }

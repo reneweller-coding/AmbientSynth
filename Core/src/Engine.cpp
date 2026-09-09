@@ -223,8 +223,15 @@ void Engine::updateBlend(int n)
         for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(effectiveParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
         blendActive_.store(true, std::memory_order_relaxed);
     }
-    const PresetMap::Blend b = PresetMap::neighbours(getParam(ParamId::MapX), getParam(ParamId::MapY), getParam(ParamId::MapRadius));
-    PresetMap::blend(b, blendTarget_);
+    // The neighbours and the blended target only change when the cursor does. Standing still is
+    // the normal case -- a hand resting on the map, a route between two points -- and the search
+    // reads every preset's position while the blend runs three powers over every float parameter.
+    // Both were done on every block for an answer that was the same as the block before.
+    const float mx = getParam(ParamId::MapX), my = getParam(ParamId::MapY), mr = getParam(ParamId::MapRadius);
+    if (mx != blendX_ || my != blendY_ || mr != blendR_ || !blendHave_) {
+        blendX_ = mx; blendY_ = my; blendR_ = mr; blendHave_ = true;
+        PresetMap::blend(PresetMap::neighbours(mx, my, mr), blendTarget_);
+    }
     const float glide = std::max(getParam(ParamId::MorphGlide), 0.05f);
     const float coef = 1.0f - std::exp(-static_cast<float>(n / sr_) / (glide / 3.0f));   // ~95 % after `glide` seconds
     for (const ParamDesc& d : paramTable()) {
@@ -235,6 +242,9 @@ void Engine::updateBlend(int n)
         switch (d.kind) {
         case ParamKind::Float: {
             const float span = std::max(d.max - d.min, 1e-9f);
+            // Arrived is arrived: three powers for a parameter that is already on its target is
+            // the same waste readParams was making, and here it is every float on every block.
+            if (std::fabs(tgt - cur) <= 1.0e-7f * span) { next = tgt; break; }
             const float pc = std::pow(clampv((cur - d.min) / span, 0.0f, 1.0f), d.skew);
             const float pt = std::pow(clampv((tgt - d.min) / span, 0.0f, 1.0f), d.skew);
             next = d.min + span * std::pow(pc + (pt - pc) * coef, 1.0f / d.skew);

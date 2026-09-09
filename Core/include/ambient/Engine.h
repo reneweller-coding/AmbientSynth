@@ -559,6 +559,15 @@ private:
     // Sleep: after two seconds of silence (no voice, output below -90 dBFS) the effects sleep
     long              silentSamples_ = 0;
     bool              asleep_ = false;
+    // The map cursor the blend target was computed for, so a cursor that stands still is not
+    // searched for and blended again on every block.
+    float             blendX_ = 0.0f, blendY_ = 0.0f, blendR_ = 0.0f;
+    bool              blendHave_ = false;
+    // The matched partial ratios and what they were computed for (see readParams).
+    float             matchRatio_[kMaxPartials] = {};
+    float             matchLast_ = -1.0f, matchB_ = -1.0f;
+    int               matchScale_ = -1, matchRoot_ = -1;
+    bool              matchHave_ = false;
 
     std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
     float* const* stems_ = nullptr;   // eight pointers or null; valid for one process() call

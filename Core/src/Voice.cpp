@@ -31,6 +31,8 @@ constexpr float kFmMaxStep = 0.4f;   // per-sample deviation clamp (tan of the a
 void Voice::prepare(double sampleRate, uint64_t seed)
 {
     sr_ = sampleRate;
+    ildCoefConst_ = 1.0f - std::exp(-kTwoPi * 1000.0f / static_cast<float>(sr_));
+    skyProto_.setQ(8000.0f, 1.5f, static_cast<float>(sr_));   // Blauert's band: fixed frequency, fixed Q
     rng_.seed(seed);
     env_.setSampleRate(sr_);
     for (auto& s : strands_) {
@@ -466,7 +468,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const float lift = std::pow(10.0f, 4.0f * amount / 20.0f) - 1.0f;     // fraction added to the near one
         ildL_ = lat > 0.0f ? cut : -lift;
         ildR_ = lat < 0.0f ? cut : -lift;
-        ildCoef_ = 1.0f - std::exp(-kTwoPi * 1000.0f / static_cast<float>(sr_));
+        ildCoef_ = ildCoefConst_;
     }
     // Externalisation: the pinna's notch sits near 7 kHz for a source in front and climbs towards
     // 9 kHz as it moves to the side; the shoulder reflection arrives about a quarter of a
@@ -491,7 +493,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
         // Blauert's directional band for "above" sits near 8 kHz: lifted for a source overhead,
         // cut for one below. Guarded at zero so a flat field adds nothing, not even a zero.
         if (elev != 0.0f) {
-            skyL_.setQ(8000.0f, 1.5f, static_cast<float>(sr_));
+            skyL_.copyCoefficients(skyProto_);
             skyR_.copyCoefficients(skyL_);
             skyGain_ = 0.6f * elev;
         }

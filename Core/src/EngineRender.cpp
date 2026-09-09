@@ -107,13 +107,19 @@ void Engine::process(float* L, float* R, int n)
         // the one behind it in the ring than by the one in front -- has no such fixed point, so
         // the bank locks in frequency and keeps a slowly turning spread of phase. That is what a
         // ring of coupled biological oscillators does, and it is why they never look identical.
-        for (int i = 0; i < 4; ++i) {
-            float coupling = 0.0f;
-            for (int j = 0; j < 4; ++j) {
-                const float w = 1.0f + 0.22f * std::sin(kTwoPi * static_cast<float>(j - i) / 4.0f);
-                coupling += w * std::sin(kuraPhase_[j] - kuraPhase_[i]);
+        // The weights depend on j - i and nothing else, so they are four numbers, not sixteen
+        // sines a block. And with Coherence at zero the coupling term is multiplied by zero:
+        // the sixteen sines of the phase differences are computed for nothing at all.
+        static const float kW[4] = { 1.0f, 1.0f + 0.22f, 1.0f, 1.0f - 0.22f };   // sin(2 pi k / 4) = 0, 1, 0, -1
+        if (K == 0.0f) {
+            for (int i = 0; i < 4; ++i) dth[i] = kTwoPi * rate / periods[i];
+        } else {
+            for (int i = 0; i < 4; ++i) {
+                float coupling = 0.0f;
+                for (int j = 0; j < 4; ++j)
+                    coupling += kW[((j - i) & 3)] * std::sin(kuraPhase_[j] - kuraPhase_[i]);
+                dth[i] = kTwoPi * rate / periods[i] + K * coupling * 0.25f;
             }
-            dth[i] = kTwoPi * rate / periods[i] + K * coupling * 0.25f;
         }
         for (int i = 0; i < 4; ++i) { kuraPhase_[i] += dth[i] * dt; if (kuraPhase_[i] > kTwoPi) kuraPhase_[i] -= kTwoPi; if (kuraPhase_[i] < 0.0f) kuraPhase_[i] += kTwoPi; }
     }

@@ -492,13 +492,26 @@ void Engine::readParams()
     // (2009) call the pair dynamic tonality. Computed here once per block for the voice and for
     // the conductor's ear alike, so both hear the same partials.
     vp_.match = g(ParamId::TuneMatch);
+    // Thirty-two partials, each two logarithms and an exponential, plus a walk over the
+    // scale's degrees inside matchedPartialRatio -- a hundred transcendentals, recomputed on
+    // every block for an answer that changes only when the knob, the spectrum's stiffness or
+    // the scale changes. None of those move at audio rate.
     if (vp_.match > 0.0f) {
         const float B = vp_.inharmonic * vp_.inharmonic * 0.02f;
         const double m = static_cast<double>(vp_.match);
+        const int scaleId = static_cast<int>(std::lround(getParam(ParamId::Scale)));
+        const bool same = matchHave_ && vp_.match == matchLast_ && B == matchB_
+                       && scaleId == matchScale_ && rootNote_ == matchRoot_;
+        if (same) {
+            for (int h = 0; h < kMaxPartials; ++h) vp_.partialRatio[h] = matchRatio_[h];
+        } else {
+        matchHave_ = true; matchLast_ = vp_.match; matchB_ = B; matchScale_ = scaleId; matchRoot_ = rootNote_;
         for (int h = 1; h <= kMaxPartials; ++h) {
             const double natural = h * (B > 0.0f ? std::sqrt(1.0 + B * static_cast<double>(h * h)) : 1.0);
             const double matched = matchedPartialRatio(h);
             vp_.partialRatio[h - 1] = static_cast<float>(std::exp(std::log(natural) + m * (std::log(matched) - std::log(natural))));
+            matchRatio_[h - 1] = vp_.partialRatio[h - 1];
+        }
         }
     }
     vp_.shimmer     = g(ParamId::Shimmer);

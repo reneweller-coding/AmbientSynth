@@ -2034,6 +2034,84 @@ void testModulation()
             CHECK(loopFromName("rain_on_tin_LOOP.wav") && loopFromName("x/forest-loop_A3.wav") && !loopFromName("forest_A3.wav"),
                   "the seamless mark is read from the file name");
         }
+        {   // ---- a grain cloud is as dense as it is asked to be
+            //
+            // What makes a cloud a cloud is the OVERLAP: Density times Grain, how many grains are
+            // sounding at once. Measured over the library as it stood, the median overlap was
+            // 2.37 and 44 % of texture slots were under 2, which is where the ear stops hearing
+            // air and starts counting grains -- and the ceiling was reached by 45 slots of 7858,
+            // so the thinness was never the engine running out. With Density capped at sixty a
+            // second a short grain could not be dense at all: at sixty milliseconds the arithmetic
+            // allows an overlap of three and a half however far the knob goes. Density now reaches
+            // two hundred and the slot holds 128 grains, so the range means something.
+            std::vector<float> clip(96000);
+            for (size_t i = 0; i < clip.size(); ++i)
+                clip[i] = 0.25f * std::sin(2.0f * 3.14159265f * 220.0f * static_cast<float>(i) / 48000.0f);
+            auto sounding = [&](float density, float grainMs, float grains) {
+                Engine e;
+                e.prepare(48000.0, 256);
+                e.setTexture(clip.data(), static_cast<int>(clip.size()), 48000.0, 220.0, false);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Texture"));
+                e.setParam(ParamId::OscLevel, 0.8f);
+                e.setParam(ParamId::Src1Density, density);
+                e.setParam(ParamId::Src1Grain, grainMs);
+                e.setParam(ParamId::Src1Grains, grains);
+                e.noteOn(57, 0.9f);
+                std::vector<float> l(256), r(256);
+                for (int b = 0; b < 2 * 48000 / 256; ++b) e.process(l.data(), r.data(), 256);
+                SourceSlot::GrainInfo info[kSlotGrains];
+                return e.displayGrains(0, info, kSlotGrains);
+            };
+            CHECK(kSlotGrains >= 128, "the slot can hold a cloud, not a handful");
+            const int thin = sounding(4.0f, 250.0f, 128.0f);      // overlap 1
+            const int dense = sounding(120.0f, 250.0f, 128.0f);   // overlap 30
+            const int shortGrains = sounding(200.0f, 60.0f, 128.0f);   // overlap 12, out of reach below Density 200
+            CHECK(thin <= 4, "a thin setting stays thin");
+            CHECK(dense > 20, "a dense setting sounds twenty grains and more at once");
+            CHECK(dense > thin * 5, "density carries through to the grains actually sounding");
+            CHECK(shortGrains > 8, "short grains can be dense too, which the old Density ceiling forbade");
+        }
+        {   // ---- a source enters on its own clock
+            //
+            // The Envelope section is one envelope for the whole voice, so until slots could be
+            // delayed a preset of a wavetable and a texture was one chord struck twice at once,
+            // however different the two materials were. Delay holds a slot silent after the note
+            // and Rise fades it in, per note. Slot 1 is muted here so only slot 2 is heard, and
+            // the level is read in three one-second windows: before the delay, and well after it.
+            auto window = [](float delaySec, int fromSec, int toSec) {
+                Engine e;
+                e.prepare(48000.0, 256);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Additive"));
+                e.setParam(ParamId::OscLevel, 0.0f);
+                e.setParam(ParamId::Src2Type, paramValueFromText(paramDesc(ParamId::Src2Type), "Wavetable"));
+                e.setParam(ParamId::Src2Level, 0.8f);
+                e.setParam(ParamId::Src2Delay, delaySec);
+                e.setParam(ParamId::Src2Rise, 0.5f);
+                e.setParam(ParamId::Attack, 0.01f);
+                // Everything that would smear one window into the next, and everything that makes
+                // sound without a slot: otherwise "silent before the delay" measures the Air.
+                e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Breath, 0.0f);
+                e.setParam(ParamId::SubLevel, 0.0f); e.setParam(ParamId::StrikeLevel, 0.0f);
+                e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+                e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::RoomLevel, 0.0f);
+                e.noteOn(57, 0.9f);
+                std::vector<float> l(256), r(256);
+                double sq = 0.0; long n = 0;
+                for (int b = 0; b < toSec * 48000 / 256; ++b) {
+                    e.process(l.data(), r.data(), 256);
+                    if (b >= fromSec * 48000 / 256) for (float v : l) { sq += static_cast<double>(v) * v; ++n; }
+                }
+                return std::sqrt(sq / std::max<long>(n, 1));
+            };
+            const double plain = window(0.0f, 1, 2);
+            const double early = window(4.0f, 1, 2);
+            const double late  = window(4.0f, 6, 7);
+            CHECK(plain > 0.005, "without a delay the source sounds from the note");
+            CHECK(early < plain * 0.02, "a delayed source is silent before its delay");
+            CHECK(late > plain * 0.5, "a delayed source arrives at its level afterwards");
+        }
         ModEnv l;
         CHECK(l.parse("0:0/2:1/4:0!l0-2"), "envelope with a loop");
         CHECK(l.loopFrom() == 0 && l.loopTo() == 2, "loop read");

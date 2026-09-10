@@ -31,9 +31,16 @@ namespace ambient {
 // depth, its spatial placing and its envelopes -- the same chord, played by another instrument.
 void Engine::adoptCluster(const int* notes, const float* vels, int count, bool second)
 {
+    // The inherited notes are not new notes. They were sounding on the engine that is leaving and
+    // they go on sounding here, so they arrive already grown: the Bloom open, and every source
+    // that waits for its Delay already in. Started from zero instead, a preset whose texture
+    // enters after twenty seconds would spend the whole crossfade and the twenty seconds after it
+    // being only half of itself -- the crossfade would change the instrument into a sketch of the
+    // instrument. A minute is past every delay the parameter allows.
+    constexpr float kInherited = 60.0f;
     if (second) {
         brain2_.adopt(notes, vels, count, [this](const BrainEvent& e) {
-            if (e.type == BrainEvent::Type::NoteOn) startNote(e.note, e.velocity, OwnerBrain2, clampv(depth_ * brain2Depth_, 0.0f, 1.0f));
+            if (e.type == BrainEvent::Type::NoteOn) startNote(e.note, e.velocity, OwnerBrain2, clampv(depth_ * brain2Depth_, 0.0f, 1.0f), kInherited);
             else stopNote(e.note, OwnerBrain2);
         });
     } else {
@@ -42,7 +49,7 @@ void Engine::adoptCluster(const int* notes, const float* vels, int count, bool s
                 const float u = rng_.uniform();
                 const float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
                                            : depth_ * (0.55f + 0.45f * rng_.uniform());
-                startNote(e.note, e.velocity, OwnerBrain, d);
+                startNote(e.note, e.velocity, OwnerBrain, d, kInherited);
             } else stopNote(e.note, OwnerBrain);
         });
     }
@@ -703,9 +710,17 @@ void Engine::renderChunk(float* L, float* R, int n)
                 // fold is applied to an interval and the pitch class therefore does not follow.
                 // What a bass player does: the root of the chord, in the register of a bass.
                 const double lo = subHz * 0.75, hi = lo * 2.0;
-                subHz = lowest / (subOctave_ == 1 ? 2.0 : 4.0);
-                while (subHz >= hi) subHz *= 0.5;
-                while (subHz < lo)  subHz *= 2.0;
+                // Both bounds have to be real numbers before anything is folded into them. With
+                // lo at zero -- a scale whose degree came out at zero hertz, a root the tuning
+                // has no frequency for -- "subHz >= 0" is true for every value including zero,
+                // and the fold is an audio thread that never leaves the block again. The window
+                // is only meaningful when it has a width, so the fold is skipped without one and
+                // the Foundation stays on the root, which is what it did before this mode existed.
+                if (lo > 0.0 && std::isfinite(hi)) {
+                    subHz = lowest / (subOctave_ == 1 ? 2.0 : 4.0);
+                    while (subHz >= hi) subHz *= 0.5;
+                    while (subHz < lo)  subHz *= 2.0;
+                }
             }
         } else if (subSource_ == 1) {
             // Ghost tone (Rich's combination tones): the difference between the two lowest sounding
@@ -719,9 +734,9 @@ void Engine::renderChunk(float* L, float* R, int n)
             if (f1 > 0.0)
                 for (const auto& v : voices_)
                     if (v.isActive() && v.frequency() / f1 > 1.003 && (f2 <= 0.0 || v.frequency() < f2)) f2 = v.frequency();
-            if (f1 > 0.0 && f2 > 0.0) {
-                double ghost = f2 - f1;
-                const double lo = subHz * 0.75, hi = lo * 2.0;   // the octave around the root sub
+            const double lo = subHz * 0.75, hi = lo * 2.0;   // the octave around the root sub
+            if (f1 > 0.0 && f2 > 0.0 && lo > 0.0 && std::isfinite(hi)) {
+                double ghost = f2 - f1;                     // for the empty window, see Lowest above
                 while (ghost >= hi) ghost *= 0.5;
                 while (ghost < lo) ghost *= 2.0;
                 subHz = ghost;

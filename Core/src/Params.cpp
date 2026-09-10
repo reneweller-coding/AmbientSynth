@@ -34,6 +34,9 @@ const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" }
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[3] = { "Root", "Difference", "Lowest" };
+// A slot's own amplitude contour: none, or one of the six shapes the preset already carries. The
+// shape is read with its own Mode and Time, so Env 3 used here is the same Env 3 the matrix uses.
+const char* const kSlotEnvNames[kNumSlotEnvs] = { "Off", "Env 1", "Env 2", "Env 3", "Env 4", "Env 5", "Env 6" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
@@ -103,10 +106,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src1FmRatio,  "src1_fm_ratio", "FM Ratio",  "Source 1", 0.25f, 8.f,    2.f,    0.5f, "x"),
     F(ParamId::Src1FmIndex,  "src1_fm_index", "FM Index",  "Source 1", 0.f,   8.f,    1.f,    0.6f, ""),
     F(ParamId::Src1Grain,    "src1_grain",    "Grain",     "Source 1", 30.f,  1000.f, 200.f,  0.5f, "ms"),
-    F(ParamId::Src1Density,  "src1_density",  "Density",   "Source 1", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    F(ParamId::Src1Density,  "src1_density",  "Density",   "Source 1", 1.f,   200.f,  12.f,   0.4f, "/s"),
     C(ParamId::Src1DensitySync, "src1_density_sync", "Sync", "Source 1", kSyncDivNames, kNumSyncDivs, 0),
     C(ParamId::Src1Follow,   "src1_follow",   "Pitch",     "Source 1", kFollowNames, 2, 0),
-    I(ParamId::Src1Grains,   "src1_grains",   "Grains",    "Source 1", 1.f,   64.f,   16.f),
+    I(ParamId::Src1Grains,   "src1_grains",   "Grains",    "Source 1", 1.f,   128.f,  16.f),
     F(ParamId::Src1Spread,   "src1_spread",   "Spread",    "Source 1", 0.f,   1.f,    0.03f,  0.5f, ""),
     C(ParamId::Src1Noise,    "src1_noise",    "Noise",     "Source 1", kNoiseKindNames, kNumNoiseKinds, 1),
     F(ParamId::Src1NoiseQ,   "src1_noise_q",  "Noise Q",   "Source 1", 0.f,   1.f,    0.4f,   1.f,  ""),
@@ -123,10 +126,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src2FmRatio,  "src2_fm_ratio", "FM Ratio",  "Source 2", 0.25f, 8.f,    2.f,    0.5f, "x"),
     F(ParamId::Src2FmIndex,  "src2_fm_index", "FM Index",  "Source 2", 0.f,   8.f,    1.f,    0.6f, ""),
     F(ParamId::Src2Grain,    "src2_grain",    "Grain",     "Source 2", 30.f,  1000.f, 200.f,  0.5f, "ms"),
-    F(ParamId::Src2Density,  "src2_density",  "Density",   "Source 2", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    F(ParamId::Src2Density,  "src2_density",  "Density",   "Source 2", 1.f,   200.f,  12.f,   0.4f, "/s"),
     C(ParamId::Src2DensitySync, "src2_density_sync", "Sync", "Source 2", kSyncDivNames, kNumSyncDivs, 0),
     C(ParamId::Src2Follow,   "src2_follow",   "Pitch",     "Source 2", kFollowNames, 2, 0),
-    I(ParamId::Src2Grains,   "src2_grains",   "Grains",    "Source 2", 1.f,   64.f,   16.f),
+    I(ParamId::Src2Grains,   "src2_grains",   "Grains",    "Source 2", 1.f,   128.f,  16.f),
     F(ParamId::Src2Spread,   "src2_spread",   "Spread",    "Source 2", 0.f,   1.f,    0.03f,  0.5f, ""),
     C(ParamId::Src2Noise,    "src2_noise",    "Noise",     "Source 2", kNoiseKindNames, kNumNoiseKinds, 1),
     F(ParamId::Src2NoiseQ,   "src2_noise_q",  "Noise Q",   "Source 2", 0.f,   1.f,    0.4f,   1.f,  ""),
@@ -150,10 +153,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src3FmRatio,  "src3_fm_ratio", "FM Ratio",  "Source 3", 0.25f, 8.f,    2.f,    0.5f, "x"),
     F(ParamId::Src3FmIndex,  "src3_fm_index", "FM Index",  "Source 3", 0.f,   8.f,    1.f,    0.6f, ""),
     F(ParamId::Src3Grain,    "src3_grain",    "Grain",     "Source 3", 30.f,  1000.f, 200.f,  0.5f, "ms"),
-    F(ParamId::Src3Density,  "src3_density",  "Density",   "Source 3", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    F(ParamId::Src3Density,  "src3_density",  "Density",   "Source 3", 1.f,   200.f,  12.f,   0.4f, "/s"),
     C(ParamId::Src3DensitySync, "src3_density_sync", "Sync", "Source 3", kSyncDivNames, kNumSyncDivs, 0),
     C(ParamId::Src3Follow,   "src3_follow",   "Pitch",     "Source 3", kFollowNames, 2, 0),
-    I(ParamId::Src3Grains,   "src3_grains",   "Grains",    "Source 3", 1.f,   64.f,   16.f),
+    I(ParamId::Src3Grains,   "src3_grains",   "Grains",    "Source 3", 1.f,   128.f,  16.f),
     F(ParamId::Src3Spread,   "src3_spread",   "Spread",    "Source 3", 0.f,   1.f,    0.03f,  0.5f, ""),
     C(ParamId::Src3Noise,    "src3_noise",    "Noise",     "Source 3", kNoiseKindNames, kNumNoiseKinds, 1),
     F(ParamId::Src3NoiseQ,   "src3_noise_q",  "Noise Q",   "Source 3", 0.f,   1.f,    0.4f,   1.f,  ""),
@@ -517,10 +520,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src4FmRatio,  "src4_fm_ratio", "FM Ratio",  "Source 4", 0.25f, 8.f,    2.f,    0.5f, "x"),
     F(ParamId::Src4FmIndex,  "src4_fm_index", "FM Index",  "Source 4", 0.f,   8.f,    1.f,    0.6f, ""),
     F(ParamId::Src4Grain,    "src4_grain",    "Grain",     "Source 4", 30.f,  1000.f, 200.f,  0.5f, "ms"),
-    F(ParamId::Src4Density,  "src4_density",  "Density",   "Source 4", 1.f,   60.f,   12.f,   0.5f, "/s"),
+    F(ParamId::Src4Density,  "src4_density",  "Density",   "Source 4", 1.f,   200.f,  12.f,   0.4f, "/s"),
     C(ParamId::Src4DensitySync, "src4_density_sync", "Sync", "Source 4", kSyncDivNames, kNumSyncDivs, 0),
     C(ParamId::Src4Follow,   "src4_follow",   "Pitch",     "Source 4", kFollowNames, 2, 0),
-    I(ParamId::Src4Grains,   "src4_grains",   "Grains",    "Source 4", 1.f,   64.f,   16.f),
+    I(ParamId::Src4Grains,   "src4_grains",   "Grains",    "Source 4", 1.f,   128.f,  16.f),
     F(ParamId::Src4Spread,   "src4_spread",   "Spread",    "Source 4", 0.f,   1.f,    0.03f,  0.5f, ""),
     C(ParamId::Src4Noise,    "src4_noise",    "Noise",     "Source 4", kNoiseKindNames, kNumNoiseKinds, 1),
     F(ParamId::Src4NoiseQ,   "src4_noise_q",  "Noise Q",   "Source 4", 0.f,   1.f,    0.4f,   1.f,  ""),
@@ -618,6 +621,22 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     // excitation is zero and this changes nothing at all, and where there is one it is what the
     // section wanted anyway -- a parallel world that comes and goes rather than a constant hum.
     F(ParamId::CosmosSwell,    "cosmos_swell",    "Swell",       "Cosmos",        0.f, 1.f, 0.5f, 1.f, ""),
+    // Each slot's own entrance, per note. Delay 0 and Env Off is what every preset made before
+    // these existed, so they are the defaults and nothing already written changes. Delay reaches
+    // 30 s because the library's attacks do: a texture that arrives half a minute into a held
+    // chord is a second instrument entering, not a slow fade.
+    F(ParamId::Src1Delay, "src1_delay", "Delay", "Source 1", 0.f, 30.f, 0.f, 0.4f, "s"),
+    F(ParamId::Src1Rise,  "src1_rise",  "Rise",  "Source 1", 0.01f, 30.f, 1.f, 0.4f, "s"),
+    C(ParamId::Src1Env,   "src1_env",   "Env",   "Source 1", kSlotEnvNames, kNumSlotEnvs, 0),
+    F(ParamId::Src2Delay, "src2_delay", "Delay", "Source 2", 0.f, 30.f, 0.f, 0.4f, "s"),
+    F(ParamId::Src2Rise,  "src2_rise",  "Rise",  "Source 2", 0.01f, 30.f, 1.f, 0.4f, "s"),
+    C(ParamId::Src2Env,   "src2_env",   "Env",   "Source 2", kSlotEnvNames, kNumSlotEnvs, 0),
+    F(ParamId::Src3Delay, "src3_delay", "Delay", "Source 3", 0.f, 30.f, 0.f, 0.4f, "s"),
+    F(ParamId::Src3Rise,  "src3_rise",  "Rise",  "Source 3", 0.01f, 30.f, 1.f, 0.4f, "s"),
+    C(ParamId::Src3Env,   "src3_env",   "Env",   "Source 3", kSlotEnvNames, kNumSlotEnvs, 0),
+    F(ParamId::Src4Delay, "src4_delay", "Delay", "Source 4", 0.f, 30.f, 0.f, 0.4f, "s"),
+    F(ParamId::Src4Rise,  "src4_rise",  "Rise",  "Source 4", 0.01f, 30.f, 1.f, 0.4f, "s"),
+    C(ParamId::Src4Env,   "src4_env",   "Env",   "Source 4", kSlotEnvNames, kNumSlotEnvs, 0),
 }};
 } // namespace
 
@@ -633,28 +652,32 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Partials, ParamId::Tilt, ParamId::Brightness, ParamId::OddEven, ParamId::Inharmonic, ParamId::Shimmer, ParamId::ShimmerRate,
       ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade,
       ParamId::Src1BowForce, ParamId::Src1BowSpeed,
-      ParamId::Src1SpecRate, ParamId::Src1SpecBreath, ParamId::Src1Transport },
+      ParamId::Src1SpecRate, ParamId::Src1SpecBreath, ParamId::Src1Transport,
+      ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
       ParamId::Src2Partials, ParamId::Src2Tilt, ParamId::Src2Bright, ParamId::Src2OddEven, ParamId::Src2Inharm, ParamId::Src2Shimmer, ParamId::Src2ShimmerRate,
       ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade,
       ParamId::Src2BowForce, ParamId::Src2BowSpeed,
-      ParamId::Src2SpecRate, ParamId::Src2SpecBreath, ParamId::Src2Transport },
+      ParamId::Src2SpecRate, ParamId::Src2SpecBreath, ParamId::Src2Transport,
+      ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
       ParamId::Src3Partials, ParamId::Src3Tilt, ParamId::Src3Bright, ParamId::Src3OddEven, ParamId::Src3Inharm, ParamId::Src3Shimmer, ParamId::Src3ShimmerRate,
       ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade,
       ParamId::Src3BowForce, ParamId::Src3BowSpeed,
-      ParamId::Src3SpecRate, ParamId::Src3SpecBreath, ParamId::Src3Transport },
+      ParamId::Src3SpecRate, ParamId::Src3SpecBreath, ParamId::Src3Transport,
+      ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
       ParamId::Src4Partials, ParamId::Src4Tilt, ParamId::Src4Bright, ParamId::Src4OddEven, ParamId::Src4Inharm, ParamId::Src4Shimmer, ParamId::Src4ShimmerRate,
       ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade,
       ParamId::Src4BowForce, ParamId::Src4BowSpeed,
-      ParamId::Src4SpecRate, ParamId::Src4SpecBreath, ParamId::Src4Transport },
+      ParamId::Src4SpecRate, ParamId::Src4SpecBreath, ParamId::Src4Transport,
+      ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env },
 };
 
 struct SectionName { const char* name; ParamSection section; };

@@ -201,6 +201,16 @@ enum class ParamId : int {
     LeniaRate, LeniaGrowth,
     BrainDejaVu, BrainLoop, BrainSpread, BrainBias, ChaosPeriod, KeysFilter, Transpose, PartialSpread,
     StrikeChance, StrikeCluster, CosmosSwell,
+    // Each slot's own entrance. Until these existed the four sources of a preset all started
+    // together on the one amplitude envelope in the Envelope section, so a preset with a
+    // wavetable and a texture was a single chord struck twice at once, however different the two
+    // materials were. Delay holds the slot silent after the note, Rise fades it in, and Env picks
+    // one of the six shapes as the slot's own contour instead. All three default to off, so a
+    // preset that says nothing about them sounds exactly as it did.
+    Src1Delay, Src1Rise, Src1Env,
+    Src2Delay, Src2Rise, Src2Env,
+    Src3Delay, Src3Rise, Src3Env,
+    Src4Delay, Src4Rise, Src4Env,
     Count
 };
 
@@ -235,7 +245,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 33;
+constexpr int kSlotFields  = 36;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in
@@ -269,6 +279,8 @@ extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[3];   // "Root", "Difference" (ghost tone), "Lowest" (the lowest voice)
+constexpr int kNumSlotEnvs = 7;                // "Off" and the six shapes the preset carries
+extern const char* const kSlotEnvNames[kNumSlotEnvs];
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)

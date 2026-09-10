@@ -317,6 +317,40 @@ STRIKE_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "StrikePresets.inc"
 Z_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "ZPlanePresets.inc"))
 
 
+def stagger_entries(p, envs_text, rng):
+    """Let the sources arrive one after another instead of all on the note.
+
+    The Envelope section is one envelope for the whole voice, so before `src{n}_delay` existed a
+    preset of a wavetable and a texture was one chord struck twice at once, however different the
+    two materials were -- and that, more than anything, is why two presets built from the same
+    parts sounded like the same preset. A slot that waits twenty seconds is a second instrument
+    entering under a note that is already sounding.
+
+    Not every preset: a delay everywhere would be its own mannerism. Roughly two in five of the
+    later slots wait, drawn over a wide range so some are a breath and some are half a minute, and
+    the first sounding slot never waits -- a note has to start somewhere. A quarter of the waiting
+    slots take one of the preset's own envelope shapes as their contour instead of a plain fade,
+    which is the sixteen-breakpoint envelope doing the work of an entrance.
+    """
+    sounding = [n for n in (1, 2, 3, 4)
+                if p.get(f"src{n}_type", "Additive" if n == 1 else "Off") not in ("Off", "")]
+    if len(sounding) < 2:
+        return
+    # modulation_for hands the six shapes back as ONE string, "~"-separated with the trailing
+    # empties stripped -- not as a list. Enumerating it walked over characters and wrote src2_env
+    # = "Env 11", which the parameter's choice list has no name for; the slot then fell back to a
+    # plain fade and nothing said a word. Split first.
+    shaped = [i for i, text in enumerate(envs_text.split("~")) if text]
+    for n in sounding[1:]:                        # never the first: the note has to start somewhere
+        if rng.random() >= 0.42:
+            continue
+        p[f"src{n}_delay"] = round(logu(rng, 2.5, 25.0), 2)
+        if shaped and rng.random() < 0.25:
+            p[f"src{n}_env"] = f"Env {shaped[rng.randrange(len(shaped))] + 1}"
+        else:
+            p[f"src{n}_rise"] = round(logu(rng, 1.5, 12.0), 2)
+
+
 def modulation_for(p, style, rng, shade_name):
     """Builds the matrix rows, the envelope shapes and the LFO parameters for one preset.
     Returns (matrix text, env text). Writes the LFO and envelope parameters into `p`."""
@@ -738,6 +772,15 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             continue
         p[key] = draw(rng, spec)
     mod = apply_shade(p, style["modules"], shade)
+    # A floor under the later slots. Measured over the library as it stood: 13 % of presets had one
+    # source, 55 % two, 29 % three, 3 % four -- and the reason was not that the styles chose
+    # sparseness but that most of them never named the later slots at all (src4 appears in five
+    # styles of twenty-four, src3 in twenty-three but often at 0.15). A style that asks for MORE
+    # keeps what it asked for; the floor only fills in where nothing was said. With sources that
+    # can now enter at their own time, a third and a fourth are variety rather than mud.
+    SLOT_FLOOR = {"src2": 0.85, "src3": 0.60, "src4": 0.35}
+    for key, floor in SLOT_FLOOR.items():
+        mod[key] = max(mod.get(key, 0.0), floor)
     on = lambda k: rng.random() < mod.get(k, 0.0)
     field = style["name"] in FIELD_STYLES     # an environment style: swamps allowed everywhere
     # Air is a band of noise laid over the top, and in the census it was the single setting most
@@ -760,6 +803,15 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     elif p.get("sub_level", 0.0) < 0.1:
         p["sub_level"] = u(rng, 0.15, 0.4)
     if p.get("sub_level", 0.0) > 0.05:
+        # Under the lowest sounding voice, not on the conductor's root. On the root it moves about
+        # once a quarter of an hour, so in three quarters of the library the loudest thing in the
+        # sound was the one thing that did not answer the keyboard -- measured with
+        # `ambient_render --tonal`, a median of 77 % of the spectrum standing still against a
+        # chord played a tritone away, where the built-in presets sit at 16 %. Lowest folds by
+        # octaves back into the register it was already in, so the weight stays and the pitch
+        # class follows. See Tools/library/sub_follows_chord.py, which retrofitted the 5439
+        # presets that were generated before this line existed.
+        p.setdefault("sub_source", "Lowest")
         p.setdefault("sub_glide", logu(rng, 2.0, 20.0))
         if rng.random() < 0.4:
             p["sub_binaural"] = u(rng, 1.5, 7.0)
@@ -833,7 +885,17 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
         if force is not None:                  # the tonal anchor asks for a type by name
             kind = force
         put("type", kind)
-        put("level", u(rng, 0.15, 0.55))
+        # The first slot is the voice, the others are layers under it, and they may not be drawn
+        # from the same range. A preset only becomes Additive when no type is drawn at all, and it
+        # then keeps the parameter's own default of 1.0 -- so for four rounds of the library the
+        # additive presets stood at full level over the Air and Breath bed and every other preset
+        # stood at a third of it, over the same bed. Measured, source muted against the whole
+        # preset, ninety presets of each: Additive 0.0 dB, Texture -9.0 dB, Wavetable -8.5 dB. That
+        # is what "only the additive presets are played tonally" was -- the others followed the
+        # note exactly and could not be heard doing it. 0.6 .. 1.0 puts a drawn first slot where
+        # the additive one already was; see Tools/library/rebalance_voice.py, which repaired the
+        # presets that were made before this line was right.
+        put("level", u(rng, 0.6, 1.0) if n == 1 else u(rng, 0.15, 0.55))
         if kind != "Noise" and rng.random() < 0.4:   # independent fine drift: sources that beat like an ensemble
             put("drift", logu(rng, 0.8, 10.0))
         put("octave", rng.choice([-2, -1, 0, 0, 0, 1]))
@@ -883,7 +945,9 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("bow_speed", u(extra, 0.12, 0.4) if heavy else u(extra, 0.35, 0.85))
             put("pos", u(extra, 0.1, 0.8))
             put("bright", u(extra, 0.35, 0.9))
-            put("level", u(extra, 0.2, 0.5))
+            # In the FIRST slot this material is the voice and has to stand where the additive
+            # default stands; below it, it is a layer. See the measurement at the generic draw.
+            put("level", u(extra, 0.55, 1.0) if n == 1 else u(extra, 0.2, 0.5))
             if extra.random() < 0.6:
                 put("drift", logu(extra, 1.0, 7.0))
         elif kind == "Spectral":
@@ -897,7 +961,9 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("pos", u(extra, 0.0, 1.0))
             put("pos_drift", u(extra, 0.05, 0.5))
             put("bright", u(extra, 0.3, 0.85))
-            put("level", u(extra, 0.25, 0.6))
+            # In the FIRST slot this material is the voice and has to stand where the additive
+            # default stands; below it, it is a layer. See the measurement at the generic draw.
+            put("level", u(extra, 0.6, 1.0) if n == 1 else u(extra, 0.25, 0.6))
             own = textures.tonal_pick(extra, field)
             slot_textures[n] = own
             if not texture_file:
@@ -918,7 +984,9 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             put("pos_drift", u(rng, 0.1, 0.6))
             # Higher than a Texture slot: a stretched recording has no attacks to carry it, and at
             # the Texture slot's range a four-slot field preset measured -47 dBFS.
-            put("level", u(rng, 0.3, 0.7))
+            # In the FIRST slot this material is the voice and has to stand where the additive
+            # default stands; below it, it is a layer. See the measurement at the generic draw.
+            put("level", u(rng, 0.6, 1.0) if n == 1 else u(rng, 0.3, 0.7))
             if rng.random() < 0.5:
                 put("drift", logu(rng, 0.5, 4.0))
             # The stretched bed is where the environments belong: a recording read as a
@@ -931,21 +999,35 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
             pitched = bool(PITCHED.search(own))
             put("follow", "Note" if (pitched and rng.random() < 0.35) else "Free")
         else:                                            # Texture
+            # Draw the OVERLAP, not the density. What decides whether a cloud is heard as a cloud
+            # is how many grains sound at once -- Density times Grain -- and drawing the two
+            # independently left that as a by-product: measured over 7858 texture slots the median
+            # overlap was 2.37, 44 % of them under 2. At two the ear counts the grains, and the
+            # library sounded thin for that reason and not because the engine ran out of them (45
+            # slots of 7858 reached the ceiling of 64). Rene: "die Wolken klingen nicht wirklich
+            # luftig und dicht, sondern eher duenn."
+            #
+            # Four to thirty, log-uniform: four is a texture that still shows its grain, thirty is
+            # air. The density that follows is clamped to the parameter's own ceiling, which is why
+            # that ceiling went from sixty a second to two hundred -- at sixty, a sixty-millisecond
+            # grain could not exceed an overlap of three and a half however dense the setting.
             grain_ms = logu(rng, 60.0, 800.0)
-            density = logu(rng, 3.0, 40.0)
+            overlap = logu(rng, 4.0, 30.0)
+            density = min(200.0, max(1.0, overlap * 1000.0 / grain_ms))
             put("grain", grain_ms)
             put("density", density)
             # Grains: enough for the overlap the density and length ask for, plus headroom and the
             # style's bias. Too few and the slot drops grains, which made more density quieter
             # instead of denser -- the ceiling used to be eight for everyone.
             gran = style["granular"]
-            overlap = max(1.0, density * grain_ms / 1000.0)
-            put("grains", int(min(64, max(4, math.ceil(overlap * 1.8 * gran["grains"]) + 4))))
+            put("grains", int(min(128, max(4, math.ceil(density * grain_ms / 1000.0 * 1.8 * gran["grains"]) + 4))))
             # Spread: the window the start points are drawn from. Near zero the same fragment
             # repeats and the clip freezes into a drone; near one a grain may come from anywhere.
             put("spread", math.exp(u(rng, math.log(gran["spread"][0]), math.log(gran["spread"][1]))))
             # A texture slot is now level-matched to the other two, so it needs less than before.
-            put("level", u(rng, 0.12, 0.42))
+            # In the FIRST slot this material is the voice and has to stand where the additive
+            # default stands; below it, it is a layer. See the measurement at the generic draw.
+            put("level", u(rng, 0.45, 1.0) if n == 1 else u(rng, 0.12, 0.42))
             if not texture_file and textures:
                 texture_file = textures.tonal_pick(rng, field)
             slot_textures[n] = texture_file
@@ -1210,6 +1292,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     if "brain_hold_min" in p and "brain_hold_max" in p and p["brain_hold_max"] < p["brain_hold_min"] * 1.5:
         p["brain_hold_max"] = p["brain_hold_min"] * 2.0
     matrix, envs = modulation_for(p, style, rng, shade[0])
+    stagger_entries(p, envs, extra)
     matrix = add_hands(p, style, rng, matrix)
     if len(set(slot_textures.values())) > 1:
         texture_file = ";".join(slot_textures.get(k, "") for k in range(1, 5))

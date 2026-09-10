@@ -1,6 +1,6 @@
 """The whole library, from the clips on disk to the tables the synth ships with.
 
-Eight steps, each of which can be run on its own; this driver exists so the order and the arguments
+Nine steps, each of which can be run on its own; this driver exists so the order and the arguments
 are written down once instead of living in a session's scrollback. It never generates audio -- the
 clip generators (make_textures.py, make_field_recordings.py, make_wavetables.py, make_impulses.py)
 are run by hand because they take hours of GPU time and their output is committed.
@@ -8,11 +8,12 @@ are run by hand because they take hours of GPU time and their output is committe
     1  affinity   Tools/library/clip_affinity.py    which clips belong to which style, by ear
     2  presets    Tools/library/make_presets.py     the packs themselves
     3  verify     Tools/library/verify_packs.py     every key and value actually exists
-    4  measure    Tools/library/measure_packs.py    60 s per preset, numbers plus a 12 s excerpt
-    5  builtins   Tools/library/map_all.py --dry-run  the same for the built-ins, so CLAP hears them too
-    6  clap       Tools/library/clap_embed.py       what a model says the excerpts sound like
-    7  map        Tools/library/map_all.py          one layout, the groups, the phrases, the tables
-    8  build      cmake --build ... && the selftest
+    4  balance    Tools/library/rebalance_voice.py  the voice above its own noise bed, measured
+    5  measure    Tools/library/measure_packs.py    60 s per preset, numbers plus a 12 s excerpt
+    6  builtins   Tools/library/map_all.py --dry-run  the same for the built-ins, so CLAP hears them too
+    7  clap       Tools/library/clap_embed.py       what a model says the excerpts sound like
+    8  map        Tools/library/map_all.py          one layout, the groups, the phrases, the tables
+    9  build      cmake --build ... && the selftest
 
   python Tools/library/rebuild_all.py --work <dir> [--from measure] [--jobs 3] [--dry-run]
 
@@ -32,7 +33,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PACKS = os.path.join(ROOT, "Library", "Packs")
-STEPS = ["affinity", "presets", "verify", "measure", "builtins", "clap", "map", "build"]
+STEPS = ["affinity", "presets", "verify", "balance", "measure", "builtins", "clap", "map", "build"]
 
 
 def gpu_busy(limit_mb=4000):
@@ -149,6 +150,16 @@ def main():
     if want("verify"):
         if run([py, os.path.join(HERE, "verify_packs.py")], a.dry_run):
             return 1
+    # The balance has to come before the measurement and after the packs: it CHANGES levels, so
+    # every descriptor and every loudness figure measured before it is about a library that no
+    # longer exists. It is here rather than in make_presets because it is a measurement of its own
+    # -- two renders a preset -- and because a hand-written pack deserves the same treatment.
+    if want("balance"):
+        if run([py, os.path.join(HERE, "rebalance_voice.py"), "--jobs", str(a.jobs)], a.dry_run):
+            return 1
+        if run([py, os.path.join(HERE, "verify_packs.py")], a.dry_run):
+            return 1
+
     if want("measure", cache if os.path.exists(cache + ".done") else None):
         # A minute, not the twelve seconds measure_packs defaults to: the evolution descriptors
         # measure how far a drone travels, and over twelve seconds every drone stands still. The

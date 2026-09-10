@@ -625,7 +625,14 @@ void Engine::readParams()
             s.specRate      = at(30);
             s.specBreath    = at(31);
             s.transport     = at(32);
+            s.delaySec      = at(33);
+            s.riseSec       = at(34);
+            // The choice is "Off" first, then the six shapes, so it is one off the shape's index.
+            s.envIndex      = static_cast<int>(std::lround(at(35))) - 1;
         }
+        // The shapes a slot may borrow for its entrance. Pointers into the engine, valid for the
+        // block like every other pointer in VoiceParams.
+        for (int i = 0; i < kNumModEnvs; ++i) { vp_.envShape[i] = &envShape_[i]; vp_.envSpec[i] = &envSpec_[i]; }
         // ---- the Vector
         //
         // A point in a square, after the Prophet VS and the Wavestation: the four corners are the

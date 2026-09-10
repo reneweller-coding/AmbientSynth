@@ -56,10 +56,41 @@ juce::AudioProcessorValueTreeState::ParameterLayout AmbientSynthProcessor::creat
     return layout;
 }
 
+// A crash writes a stack trace where the instrument can be asked for it.
+//
+// The occasion: the instrument disappeared while a preset was picked off the map, and Windows had
+// written nothing at all -- no report in the event log, no minidump in CrashDumps, because local
+// dumps are off on most machines and switching them on means the registry. So the instrument keeps
+// its own account: a line with the version and the time, then the backtrace, appended to
+// Documents/AmbientSynth/crash.log. Appended, because the second crash is the one that shows which
+// part of the first was the accident.
+//
+// A handler runs in a process that has already lost, so it does the least it can: JUCE's backtrace
+// (which walks the stack itself) and C file I/O. No allocation of ours, no locks, no JUCE objects
+// built here.
+static void installCrashLog()
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        static const juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                              .getChildFile("AmbientSynth").getChildFile("crash.log");
+        logFile.getParentDirectory().createDirectory();
+        juce::SystemStats::setApplicationCrashHandler([](void*) {
+            const juce::String trace = juce::SystemStats::getStackBacktrace();
+            if (FILE* f = std::fopen(logFile.getFullPathName().toRawUTF8(), "a")) {
+                std::fprintf(f, "\n---- AmbientSynth %s crashed %s\n%s\n", JucePlugin_VersionString,
+                             juce::Time::getCurrentTime().toISO8601(true).toRawUTF8(), trace.toRawUTF8());
+                std::fclose(f);
+            }
+        });
+    });
+}
+
 AmbientSynthProcessor::AmbientSynthProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "AmbientSynth", createLayout())
 {
+    installCrashLog();
     engines_[0] = std::make_unique<ambient::Engine>();   // the instrument; the second is built on demand
     for (int i = 0; i < kNumParams; ++i)
         raw_[static_cast<size_t>(i)] = apvts.getRawParameterValue(paramTable()[static_cast<size_t>(i)].key);

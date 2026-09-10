@@ -296,7 +296,12 @@ public:
 private:
     enum Owner { OwnerMidi = 0, OwnerBrain = 1, OwnerBrain2 = 2 };
     Voice* allocate(int note, int owner);
-    void   startNote(int note, float velocity, int owner, float distance);
+    // `ageSeconds` is how long this note is to be treated as having been sounding already. It is
+    // zero for a note that is played and only set where a cluster is handed from one engine to
+    // another at a preset change: the note is not new there, it is the same note on another
+    // instrument, and starting its Bloom and its source delays from zero would make the arriving
+    // preset take half a minute to become itself.
+    void   startNote(int note, float velocity, int owner, float distance, float ageSeconds = 0.0f);
     void   stopNote(int note, int owner);
     void   readParams();
     void   renderChunk(float* L, float* R, int n);

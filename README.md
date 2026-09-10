@@ -32,7 +32,9 @@ host if you want the plugin.
 
 * **Four source slots per voice** — additive bank, wavetable, two-operator FM, granular texture, a
   spectral stretch that turns a field recording into weather, ten noise colours — and a vector
-  that reads four of them as the corners of one square.
+  that reads four of them as the corners of one square. Each slot enters on its own clock: up to
+  half a minute of delay after the note, then a fade or one of the preset's sixteen-breakpoint
+  envelope shapes, so a texture can arrive under a wavetable that is already sounding.
 * **Two filters**: ten models with a wavefolder, and a Z-plane morphing filter after the E-mu
   Morpheus with 155 shapes, a cube rather than a square, and a modal mode that turns it into a
   struck body.
@@ -54,7 +56,7 @@ host if you want the plugin.
   aftertouch, wheel and slide — all through one matrix onto any knob, including the modulators'
   own.
 * **8400 presets in 42 packs**, each written in the spirit of an artist of the genre, every one
-  rendered, measured and gain-matched; 6355 samples, 2096 wavetables and 546 impulse responses,
+  rendered, measured and gain-matched; 6354 samples, 2096 wavetables and 546 impulse responses,
   two thirds of the wavetables and half the impulses cut from the recordings rather than designed.
 
 ![The preset map](docs/map.png)

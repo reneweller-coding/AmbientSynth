@@ -34,7 +34,12 @@ namespace ambient {
 constexpr int kSlots         = 4;
 constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
-constexpr int kSlotGrains    = 64;   // ceiling; Grains sets how many a slot may use
+constexpr int kSlotGrains    = 128;  // ceiling; Grains sets how many a slot may use. Raised from
+                                     // 64 when Density went to 200 a second: with the old ceiling
+                                     // the top of that range could not be reached at all, and the
+                                     // slot silently dropped the spawns it had no room for. Cheap:
+                                     // measured over a whole preset, eight grains against sixty-four
+                                     // is two percent of the render, the reverbs being the cost.
 
 // Additive sat last so the indices the presets store for the other types stayed what they were;
 // Stretch came after it and is appended for the same reason.
@@ -167,6 +172,13 @@ struct SlotParams {
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
     float xfade = 0.1f;
+    // The slot's own entrance, counted from note-on in the voice that plays it. The slot is
+    // silent for `delaySec`, then either fades in over `riseSec` or, if `envIndex` names one of
+    // the preset's six shapes, follows that shape instead. Defaults are what the instrument did
+    // before slots could enter separately: no delay, and the voice's one amplitude envelope.
+    float delaySec = 0.0f;
+    float riseSec = 1.0f;
+    int   envIndex = -1;         // -1 = none, else 0..kNumModEnvs-1
 };
 
 class SourceSlot {

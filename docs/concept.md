@@ -456,6 +456,35 @@ every random decision after it -- the oracle reported all 39 presets changed.
 Slot 4 seeds from a side stream instead, and the oracle is back to 39
 identical.
 
+### Each source enters on its own clock
+
+The Envelope section is one envelope for the whole voice. Until `src{n}_delay`
+existed, all four sources therefore started on the same note at the same
+instant, and a preset of a wavetable against a texture was one chord struck
+twice at once however different the two materials were -- which is a large
+part of why two presets built from the same parts sounded like the same
+preset. Rene, hearing the library after the level repair: *"dann könnte man
+Oszillator 2 erst einige Zeit nach Oszillator 1 starten lassen, was die
+Variabilität deutlich erhöhen würde."*
+
+Each slot now has three parameters of its own. **Delay** holds it silent for
+up to thirty seconds after the note; **Rise** fades it in afterwards; **Env**
+gives it one of the preset's six sixteen-breakpoint shapes as its level
+contour instead. The shape is the same one the modulation matrix reads, with
+that envelope's own Mode and Time -- a slot does not get a seventh envelope,
+it borrows one -- and the difference is that here it runs from the note
+rather than from the phrase clock, so every note gets it and not only the
+first one after a silence. Read as a level the shapes are bipolar: -1 is
+silence, +1 the slot at its written Level.
+
+All three default to off, so every preset written before them sounds exactly
+as it did; the gain is a multiplier of one and the copy of `SlotParams` that
+carries it costs one struct per slot per control block. The generator gives a
+delay to about two in five of the later slots -- never to the first sounding
+one, because a note has to start somewhere -- drawn log-uniformly between two
+and a half and twenty-five seconds, and a quarter of those take an envelope
+shape rather than a plain fade.
+
 ### Stretch: a recording as a continuum
 
 The Texture type reads a clip as grains; Stretch reads the same clip as a
@@ -933,7 +962,7 @@ and after); each was measured effective on its own.
   where the events gather and the count still follows Chance; weighing by the excitation itself
   saturated the probability at one and struck everything. The coin has an Rng of its own and is
   drawn only below Chance 1, so older presets render bit for bit (oracle 41/41). In the library
-  1343 of 6800 presets have a strike at all, 567 of them on Keys + Brain -- so 776 carry a
+  2116 of 8400 presets have a strike at all, 1663 of them on Keys + Brain -- so 453 carry a
   strike that never sounded unless somebody played.
 * **The Cosmos swelling with the cascade** (`cosmos_swell`, 1.10.0, on at 0.5 by default). Rene's
   next question was what the Cosmos does when the drone runs by itself. Nothing had to be fixed
@@ -2285,7 +2314,7 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 6800 presets in
+* **The sample library** (`Tools/make_content_pack.py`). The 8400 presets in
   the packs name 1584 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced

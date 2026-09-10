@@ -562,7 +562,7 @@ Voice* Engine::allocate(int note, int owner)
     return best;
 }
 
-void Engine::startNote(int note, float velocity, int owner, float distance)
+void Engine::startNote(int note, float velocity, int owner, float distance, float ageSeconds)
 {
     if (note < 0 || note > 127) return;
     // The modulation envelopes run on a phrase clock: it restarts when a note arrives into
@@ -593,7 +593,7 @@ void Engine::startNote(int note, float velocity, int owner, float distance)
         const double p = std::clamp(static_cast<double>(strikeChance_) * lift, 0.0, 1.0);
         allowStrike = strikeRng_.uniform() < p;
     }
-    v->noteOn(note, hz, velocity, owner, distance, vp_, allowStrike);
+    v->noteOn(note, hz, velocity, owner, distance, vp_, allowStrike, ageSeconds);
     if (owner == OwnerMidi) {   // portamento: a key slides in from the previous key
         if (portamento_ > 0.0f && lastKeyHz_ > 0.0 && std::fabs(lastKeyHz_ - hz) > 1e-6) v->glideFrom(lastKeyHz_, portamento_, portaGravity_);
         lastKeyHz_ = hz;

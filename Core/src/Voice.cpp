@@ -93,7 +93,8 @@ static inline float perceivedDistance(float d, float law)
     return law > 0.0f ? std::pow(clampv(d, 0.0f, 1.0f), 1.0f + 0.85f * clampv(law, 0.0f, 1.0f)) : d;
 }
 
-void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p, bool allowStrike)
+void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p,
+                   bool allowStrike, float ageSeconds)
 {
     note_ = note;
     freq_ = freqTarget_ = freqHz;
@@ -119,7 +120,8 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
-        bloomT_ = 0.0f;
+        // An inherited note has been sounding: its Bloom is open and its sources have entered.
+        bloomT_ = ageSeconds;
         prevDist_ = distance_;
     }
     press_ = pressTarget_; slide_ = slideTarget_; bend_ = bendTarget_;   // a new note starts where its controller is
@@ -295,6 +297,31 @@ void Voice::control(int blockLen, const VoiceParams& p)
     bloomT_ += dt;
     const float bt = clampv(bloomT_ / std::max(p.bloomTime, 1.0f), 0.0f, 1.0f);
     const float bloomOpen = bt * bt * (3.0f - 2.0f * bt);
+
+    // Each slot's own entrance, from this note. A preset that says nothing about it -- no delay
+    // and no shape -- gets a gain of exactly one and is not touched, which is what every preset
+    // written before these parameters existed relies on.
+    {
+        const bool held = env_.isActive() && !env_.isReleasing();
+        for (int k = 0; k < kSlots; ++k) {
+            const SlotParams& sp = p.slot[k];
+            if (sp.delaySec <= 0.0f && sp.envIndex < 0) { slotGain_[k] = 1.0f; continue; }
+            const float t = bloomT_ - sp.delaySec;
+            if (t <= 0.0f) { slotGain_[k] = 0.0f; continue; }
+            const ModEnv* shape = (sp.envIndex >= 0 && sp.envIndex < kNumModEnvs) ? p.envShape[sp.envIndex] : nullptr;
+            if (shape != nullptr && shape->count() > 1) {
+                const ModEnvSpec* spec = p.envSpec[sp.envIndex];
+                const float scale = spec != nullptr ? std::max(spec->timeScale, 0.01f) : 1.0f;
+                const EnvMode mode = spec != nullptr ? spec->mode : EnvMode::OneShot;
+                // The shapes are bipolar, as modulation shapes are; read as a level, -1 is silence
+                // and +1 is the slot at its written level.
+                slotGain_[k] = clampv(0.5f + 0.5f * shape->at(t / scale, mode, held), 0.0f, 1.0f);
+            } else {
+                const float r = clampv(t / std::max(sp.riseSec, 0.01f), 0.0f, 1.0f);
+                slotGain_[k] = r * r * (3.0f - 2.0f * r);   // smoothstep, as Bloom above
+            }
+        }
+    }
     const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness
                                     + p.pressBright * press_, 0.0f, 1.0f);
 
@@ -631,7 +658,14 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
-            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), sp, table, p.texture[k], p.driftRate * rateMul_);
+            // The slot's own entrance scales its level. A copy rather than a gain on the output,
+            // because a grain that has already been given its gain keeps it until it dies: fading
+            // the buffer would fade grains that are half over, fading the level lets the ones
+            // already sounding finish and starts the new ones quieter, which is how an entrance
+            // is heard. Costs one struct copy per slot per control block.
+            SlotParams entered = sp;
+            entered.level *= slotGain_[k];
+            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), entered, table, p.texture[k], p.driftRate * rateMul_);
         }
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();

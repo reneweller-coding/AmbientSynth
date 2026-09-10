@@ -8,6 +8,7 @@
 // is rendered with a true interaural time difference, not only with gain.
 #pragma once
 #include "Dsp.h"
+#include "Modulation.h"
 #include "Sources.h"
 #include "Filter.h"
 #include "ZPlane.h"
@@ -95,6 +96,12 @@ struct VoiceParams {
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
     const Texture*   texture[kSlots] = {};
+    // The preset's six envelope shapes, for a slot that names one as its own entrance. The same
+    // shapes the modulation matrix reads, with the same Mode and Time -- a slot does not get a
+    // seventh envelope, it borrows one, and the difference is that here it runs from the note
+    // rather than from the phrase. Null for a shape that is not set.
+    const ModEnv*     envShape[kNumModEnvs] = {};
+    const ModEnvSpec* envSpec[kNumModEnvs] = {};
 };
 
 class Voice {
@@ -104,7 +111,10 @@ public:
     // allowStrike false: this note does not strike even where the section says it would. The
     // engine decides it, because whether a conductor's note strikes is a property of the piece
     // (its chance, its cascade), not of the voice that happens to be free.
-    void noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p, bool allowStrike = true);
+    // `ageSeconds`: treat the note as having been sounding this long already. Only a cluster
+    // inherited at a preset change passes anything but zero -- see Engine::startNote.
+    void noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p,
+                bool allowStrike = true, float ageSeconds = 0.0f);
     void noteOff();
     void kill();
 
@@ -225,7 +235,8 @@ private:
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
-    float    bloomT_ = 0.0f;     // seconds since note start, for Bloom
+    float    bloomT_ = 0.0f;     // seconds since note start, for Bloom and for each slot's entrance
+    float    slotGain_[kSlots] = { 1.0f, 1.0f, 1.0f, 1.0f };   // each slot's own envelope, at control rate
     // Control-rate caches: the spectral shape only changes when its parameters do.
     float    tiltCache_[kMaxPartials + 1] = {};
     float    cachedTilt_ = -1.0f, cachedOddEven_ = -9.0f;

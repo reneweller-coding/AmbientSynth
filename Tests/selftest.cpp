@@ -2071,6 +2071,38 @@ void testModulation()
             CHECK(dense > 20, "a dense setting sounds twenty grains and more at once");
             CHECK(dense > thin * 5, "density carries through to the grains actually sounding");
             CHECK(shortGrains > 8, "short grains can be dense too, which the old Density ceiling forbade");
+
+            // The end of the clip, over and over. The grain loop reads s[ip] and s[ip+1], and since
+            // it became a gather -- eight places at once, no test between them -- the bound is
+            // computed once per block from the rate instead of checked once per sample. That
+            // arithmetic is the only thing standing between the loop and a read past the buffer,
+            // so it is worth driving at: a clip of a fifth of a second, grains longer than the clip
+            // and played fast, so nearly every grain runs off the end inside a block. Under the
+            // address sanitizer this is the case that would say so.
+            for (float rate : { 1.0f, 4.0f, 17.0f }) {
+                std::vector<float> tiny(9600);
+                for (size_t i = 0; i < tiny.size(); ++i)
+                    tiny[i] = 0.2f * std::sin(2.0f * 3.14159265f * 300.0f * static_cast<float>(i) / 48000.0f);
+                Engine e;
+                e.prepare(48000.0, 256);
+                e.setTexture(tiny.data(), static_cast<int>(tiny.size()), 48000.0, 300.0f / rate, false);
+                e.setParam(ParamId::BrainOn, 0.0f);
+                e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Texture"));
+                e.setParam(ParamId::OscLevel, 0.9f);
+                e.setParam(ParamId::Src1Follow, 1.0f);          // pitched to the note: the rate follows it
+                e.setParam(ParamId::Src1Grain, 900.0f);         // longer than the clip itself
+                e.setParam(ParamId::Src1Density, 150.0f);
+                e.setParam(ParamId::Src1Grains, 128.0f);
+                e.setParam(ParamId::Src1Spread, 1.0f);          // start anywhere, including just before the end
+                e.noteOn(84, 1.0f);
+                std::vector<float> l(256), r(256);
+                bool finite = true;
+                for (int b = 0; b < 4 * 48000 / 256; ++b) {
+                    e.process(l.data(), r.data(), 256);
+                    for (int k = 0; k < 256; ++k) if (!std::isfinite(l[k]) || !std::isfinite(r[k])) finite = false;
+                }
+                CHECK(finite, "grains that run off the end of a short clip stay finite");
+            }
         }
         {   // ---- a source enters on its own clock
             //

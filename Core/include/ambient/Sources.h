@@ -230,9 +230,20 @@ private:
     // Texture grains
     // The window is a rotating phasor, not a cosine call: at 64 grains a std::cos per sample per
     // grain is the single most expensive thing in the voice.
-    struct Grain { double pos = 0.0; double rate = 1.0; int len = 0; int age = 0; float gain = 0.0f;
+    // `start`: where in the block this grain begins. A grain is due at a moment the spawn clock
+    // knows to the sample, and it used to begin at sample 0 of the block regardless -- so every
+    // grain of a dense cloud started on one of 750 instants a second, and the cloud grew a comb
+    // at the block rate that nothing in the music put there.
+    struct Grain { double pos = 0.0; double rate = 1.0; int len = 0; int age = 0; int start = 0; float gain = 0.0f;
                    float gl = 0.0f, gr = 0.0f; float wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; bool on = false; };
     Grain  grains_[kSlotGrains];
+    // The live ones are grains_[0 .. live_), with no gaps. The array used to be a set of
+    // slots with an `on` flag, which meant walking all 128 of them per block to find the two
+    // that were sounding -- seven kilobytes touched to do nothing, per slot, per voice, per
+    // block. A grain that dies is swapped with the last live one and the count drops, which
+    // costs one copy and keeps the walk exactly as long as there is work in it. Spawning is
+    // then an append rather than a search for a free slot.
+    int    live_ = 0;
     double spawnIn_ = 0.0;   // seconds until the next grain
 public:
     // Noise: one generator per side, so the two channels are fully decorrelated -- which is what

@@ -230,6 +230,7 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     cTilt_ = -1.0f; cOdd_ = -9.0f; cPartials_ = -1;
     phC_ = phM_ = 0.0;
     for (auto& g : grains_) g.on = false;
+    live_ = 0;
     spawnIn_ = 0.0;
     gL_ = gR_ = 0.0f;
     // Stretch: the buffers, sized once for the longest window; the shared transforms, built here
@@ -418,7 +419,7 @@ void SourceSlot::renderAdditive(float* out, int n, double hz, const SlotParams& 
 int SourceSlot::displayGrains(GrainInfo* out, int maxCount, int clipLen) const
 {
     int n = 0;
-    for (int c = 0; c < kSlotGrains && n < maxCount; ++c) {
+    for (int c = 0; c < live_ && n < maxCount; ++c) {
         const Grain& g = grains_[c];
         if (!g.on || g.len <= 0) continue;
         GrainInfo& o = out[n++];
@@ -574,15 +575,29 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
     // Spawn grains at Density per second (jittered), around Position.
     spawnIn_ -= dt;
     while (spawnIn_ <= 0.0) {
+        // Where in THIS block the grain is due. spawnIn_ counts down from the block's end, so
+        // the moment is dt + spawnIn_ from its start; at 200 grains a second that is a quarter
+        // of a grain per block, and rounding every one of them to sample 0 is what built the comb.
+        const int startAt = clampv(static_cast<int>((static_cast<double>(dt) + spawnIn_) * sr_), 0, n - 1);
         spawnIn_ += (1.0 / std::max(p.density, 0.1f)) * (0.7 + 0.6 * rng_.uniform());
-        Grain* g = nullptr;
-        for (int c = 0; c < maxGrains; ++c) if (!grains_[c].on) { g = &grains_[c]; break; }
-        if (g == nullptr) continue;   // the slot is full: this grain is dropped
+        // Append. Grains is a ceiling on how many may be STARTED, so it is tested here and
+        // nowhere else: turning it down stops new grains and lets the sounding ones finish.
+        if (live_ >= maxGrains || live_ >= kSlotGrains) continue;   // full: this grain is dropped
+        Grain* g = &grains_[live_];
         const double resample = tex->sampleRate / sr_;
         // Note: the sample is pitched to the note (recorded at baseHz). Free: original speed,
         // with octave and ratio acting as a playback-speed multiplier.
         const double rate = (p.follow ? hz / std::max(tex->baseHz, 20.0) : speed) * resample;
-        const int glen = std::max(64, static_cast<int>(p.grainMs * 0.001f * static_cast<float>(sr_)));
+        // A grain reads `glen * rate` samples of the clip, so a grain longer than the clip can hold
+        // at that rate used to spawn nothing at all -- and "nothing at all" meant SILENCE, not a
+        // shorter grain. A one-second clip with 300 ms grains goes quiet two octaves up, because
+        // 300 ms at four times speed wants 1.2 s of material that is not there. Nothing said so:
+        // the slot simply stopped. Shorten the grain to what the clip can give instead; at the top
+        // of the keyboard the grains get shorter, which is what a granular player does anyway.
+        int glen = std::max(64, static_cast<int>(p.grainMs * 0.001f * static_cast<float>(sr_)));
+        const double room = (static_cast<double>(len) - 2.0) / std::max(rate, 1e-9);
+        if (room < 64.0) continue;                      // a clip too short for any grain at all
+        if (static_cast<double>(glen) > room) glen = static_cast<int>(room);
         const double span = static_cast<double>(len) - static_cast<double>(glen) * rate - 2.0;
         if (span <= 0.0) continue;
         const double centre = clampv(static_cast<double>(p.position) + wander, 0.0, 1.0) * span;
@@ -599,12 +614,13 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         const float norm = 1.63f / std::sqrt(overlap);
         const float pan = clampv(p.pan + 0.3f * rng_.bipolar(), -1.0f, 1.0f);
         const float angle = (pan + 1.0f) * 0.25f * kPi;
-        g->pos = start; g->rate = rate; g->len = glen; g->age = 0; g->on = true;
+        g->pos = start; g->rate = rate; g->len = glen; g->age = 0; g->on = true; g->start = startAt;
         g->gain = p.level * norm * tex->gain;
         g->gl = g->gain * std::cos(angle); g->gr = g->gain * std::sin(angle);
         // Hann window as a rotating phasor: w = 0.5 - 0.5*wc, advanced by one grain-length step.
         g->wc = 1.0f; g->ws = 0.0f;
         phasorFrom(1.0 / static_cast<double>(glen), g->rc, g->rs);
+        ++live_;
     }
     // The grain loop is the instrument's largest single cost: measured with VTune over a preset
     // with four texture slots, `renderTexture` is 3.11 s of 9.87 s, 31 % of the whole render, and
@@ -616,9 +632,12 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
     // end of the clip at a moment that is known in advance from its rate. Hoisted, the loop has no
     // branch left in it, every iteration is the same arithmetic, and the compiler can do what it
     // could never do before.
-    for (int c = 0; c < maxGrains; ++c) {
+    // The live grains, densely packed, and every one of them regardless of what Grains says now.
+    // That ceiling belongs to the spawn loop above and to nowhere else: turning it down used to
+    // leave everything above the new value cut off mid-waveform (a click), never advanced again,
+    // and still marked as in use, so its place was gone for good.
+    for (int c = 0; c < live_; ) {
         Grain& g = grains_[c];
-        if (!g.on) continue;
         {   // keep the window phasor on the unit circle (a grain can run for 48000 samples)
             const float r2 = g.wc * g.wc + g.ws * g.ws, fix = 1.5f - 0.5f * r2;
             g.wc *= fix; g.ws *= fix;
@@ -627,7 +646,14 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         // `rate` a sample, so the number of samples until it reaches len-2 is a division, not a
         // search; the window ends after len - age samples; a negative position (which the spawn
         // never produces) ends it at once.
-        int safe = n;
+        // A grain that began part-way through this block writes from there; every one after its
+        // first block starts at zero again.
+        const int begin = g.start < n ? g.start : n;
+        g.start = 0;
+        const int room = n - begin;
+        float* const oL = outL + begin;
+        float* const oR = scratch_ + begin;
+        int safe = room;
         if (g.pos < 0.0 || g.age >= g.len || g.pos >= static_cast<double>(len) - 2.0) {
             safe = 0;
         } else {
@@ -675,6 +701,15 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             const __m256 vc8 = _mm256_set1_ps(c8), vs8 = _mm256_set1_ps(s8);
             const __m256 vgl = _mm256_set1_ps(gl), vgr = _mm256_set1_ps(gr);
             const __m256 vhalf = _mm256_set1_ps(0.5f);
+            // The lanes are computed in double, and that was tried the other way round: keeping the
+            // base in double and the eight offsets in float fits them in one register instead of
+            // two and drops the conversions and the lane splits, which is fifteen instructions in
+            // the head of the loop reduced to six. Measured with VTune, that version was SLOWER --
+            // renderTexture 1.04 s against 0.80 s, thirty per cent worse. The head of this loop is
+            // not what it waits for; it waits for the gather, and the two broadcasts a float
+            // version needs per pass (one from a double, one from an integer) cross between the
+            // scalar and vector sides on every one of them. Left as it is, with the measurement
+            // written down so nobody spends the afternoon on it twice.
             const __m256d vrate = _mm256_set1_pd(g.rate);
             const __m256d kLo = _mm256_setr_pd(0.0, 1.0, 2.0, 3.0);
             const __m256d kHi = _mm256_setr_pd(4.0, 5.0, 6.0, 7.0);
@@ -690,11 +725,11 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
                 const __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(fa), fb, 1);
                 const __m256 s0 = _mm256_i32gather_ps(s, idx, 4);
                 const __m256 s1 = _mm256_i32gather_ps(s + 1, idx, 4);
-                const __m256 v  = _mm256_add_ps(s0, _mm256_mul_ps(frac, _mm256_sub_ps(s1, s0)));
+                const __m256 v  = _mm256_fmadd_ps(frac, _mm256_sub_ps(s1, s0), s0);
                 const __m256 w  = _mm256_sub_ps(vhalf, _mm256_mul_ps(vhalf, vwc));
                 const __m256 vw = _mm256_mul_ps(v, w);
-                _mm256_storeu_ps(outL + i, _mm256_add_ps(_mm256_loadu_ps(outL + i), _mm256_mul_ps(vw, vgl)));
-                _mm256_storeu_ps(scratch_ + i, _mm256_add_ps(_mm256_loadu_ps(scratch_ + i), _mm256_mul_ps(vw, vgr)));
+                _mm256_storeu_ps(oL + i, _mm256_add_ps(_mm256_loadu_ps(oL + i), _mm256_mul_ps(vw, vgl)));
+                _mm256_storeu_ps(oR + i, _mm256_add_ps(_mm256_loadu_ps(oR + i), _mm256_mul_ps(vw, vgr)));
                 const __m256 nc = _mm256_sub_ps(_mm256_mul_ps(vwc, vc8), _mm256_mul_ps(vws, vs8));
                 vws = _mm256_add_ps(_mm256_mul_ps(vws, vc8), _mm256_mul_ps(vwc, vs8));
                 vwc = nc;
@@ -738,8 +773,8 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
                 const float32x4_t v  = vld1q_f32(lane);
                 const float32x4_t w  = vsubq_f32(vhalf, vmulq_f32(vhalf, vwc));
                 const float32x4_t vw = vmulq_f32(v, w);
-                vst1q_f32(outL + i, vaddq_f32(vld1q_f32(outL + i), vmulq_f32(vw, vgl)));
-                vst1q_f32(scratch_ + i, vaddq_f32(vld1q_f32(scratch_ + i), vmulq_f32(vw, vgr)));
+                vst1q_f32(oL + i, vaddq_f32(vld1q_f32(oL + i), vmulq_f32(vw, vgl)));
+                vst1q_f32(oR + i, vaddq_f32(vld1q_f32(oR + i), vmulq_f32(vw, vgr)));
                 const float32x4_t nc = vsubq_f32(vmulq_f32(vwc, vc4), vmulq_f32(vws, vs4));
                 vws = vaddq_f32(vmulq_f32(vws, vc4), vmulq_f32(vwc, vs4));
                 vwc = nc;
@@ -756,8 +791,8 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             const float f = static_cast<float>(pos - ip);
             const float v = s[ip] + f * (s[ip + 1] - s[ip]);
             const float w = 0.5f - 0.5f * wc;
-            outL[i] += v * w * gl;
-            scratch_[i] += v * w * gr;
+            oL[i] += v * w * gl;
+            oR[i] += v * w * gr;
             const float nc = wc * rc - ws * rs;
             ws = ws * rc + wc * rs;
             wc = nc;
@@ -765,7 +800,15 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         g.pos = base + g.rate * safe;
         g.age += safe;
         g.wc = wc; g.ws = ws;
-        if (safe < n) g.on = false;
+        if (safe < room) {
+            // Dead. The last live grain takes its place and the count drops; `c` stays where it
+            // is, because what now sits there has not been rendered yet.
+            g.on = false;
+            --live_;
+            if (c != live_) grains_[c] = grains_[live_];
+        } else {
+            ++c;
+        }
     }
 }
 

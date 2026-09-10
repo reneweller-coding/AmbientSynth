@@ -20,6 +20,17 @@
   #define AMBIENT_HAS_AVX 0
 #endif
 
+// The other half of the instrument's world: the Quest's arm64. Four lanes rather than eight, and
+// no gather at all -- a grain reads eight different places in a clip, and on NEON those are eight
+// loads whatever else happens. What vectorises there is the window and the two accumulations,
+// which is most of the arithmetic but not the memory.
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(__ARM_NEON) || defined(__ARM_NEON__)
+  #define AMBIENT_HAS_NEON 1
+  #include <arm_neon.h>
+#else
+  #define AMBIENT_HAS_NEON 0
+#endif
+
 namespace ambient {
 
 // The same step with a left and a right weight per partial: two sums instead of one, for the

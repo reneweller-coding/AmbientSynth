@@ -211,6 +211,10 @@ enum class ParamId : int {
     Src2Delay, Src2Rise, Src2Env,
     Src3Delay, Src3Rise, Src3Env,
     Src4Delay, Src4Rise, Src4Env,
+    // How a grain reads between two samples of its clip. Linear is what the instrument always
+    // did; Hermite costs two more reads a sample and is offered rather than imposed, because
+    // which of them is right is a matter of taste in an instrument built to be soft.
+    Src1Interp, Src2Interp, Src3Interp, Src4Interp,
     Count
 };
 
@@ -245,7 +249,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 36;
+constexpr int kSlotFields  = 37;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in
@@ -281,6 +285,8 @@ extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[3];   // "Root", "Difference" (ghost tone), "Lowest" (the lowest voice)
 constexpr int kNumSlotEnvs = 7;                // "Off" and the six shapes the preset carries
 extern const char* const kSlotEnvNames[kNumSlotEnvs];
+constexpr int kNumInterp = 2;                  // Linear, Hermite
+extern const char* const kInterpNames[kNumInterp];
 extern const char* const kRoomSourceNames[2];  // "Far", "Near": what the convolution room reverberates
 extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)

@@ -37,6 +37,8 @@ const char* const kSubSourceNames[3] = { "Root", "Difference", "Lowest" };
 // A slot's own amplitude contour: none, or one of the six shapes the preset already carries. The
 // shape is read with its own Mode and Time, so Env 3 used here is the same Env 3 the matrix uses.
 const char* const kSlotEnvNames[kNumSlotEnvs] = { "Off", "Env 1", "Env 2", "Env 3", "Env 4", "Env 5", "Env 6" };
+// Between two samples of a clip: a straight line, or a curve through four points (Catmull-Rom).
+const char* const kInterpNames[kNumInterp] = { "Linear", "Hermite" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
@@ -637,6 +639,10 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src4Delay, "src4_delay", "Delay", "Source 4", 0.f, 30.f, 0.f, 0.4f, "s"),
     F(ParamId::Src4Rise,  "src4_rise",  "Rise",  "Source 4", 0.01f, 30.f, 1.f, 0.4f, "s"),
     C(ParamId::Src4Env,   "src4_env",   "Env",   "Source 4", kSlotEnvNames, kNumSlotEnvs, 0),
+    C(ParamId::Src1Interp, "src1_interp", "Interp", "Source 1", kInterpNames, kNumInterp, 0),
+    C(ParamId::Src2Interp, "src2_interp", "Interp", "Source 2", kInterpNames, kNumInterp, 0),
+    C(ParamId::Src3Interp, "src3_interp", "Interp", "Source 3", kInterpNames, kNumInterp, 0),
+    C(ParamId::Src4Interp, "src4_interp", "Interp", "Source 4", kInterpNames, kNumInterp, 0),
 }};
 } // namespace
 
@@ -653,7 +659,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade,
       ParamId::Src1BowForce, ParamId::Src1BowSpeed,
       ParamId::Src1SpecRate, ParamId::Src1SpecBreath, ParamId::Src1Transport,
-      ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env },
+      ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env, ParamId::Src1Interp },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
@@ -661,7 +667,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade,
       ParamId::Src2BowForce, ParamId::Src2BowSpeed,
       ParamId::Src2SpecRate, ParamId::Src2SpecBreath, ParamId::Src2Transport,
-      ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env },
+      ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env, ParamId::Src2Interp },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
@@ -669,7 +675,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade,
       ParamId::Src3BowForce, ParamId::Src3BowSpeed,
       ParamId::Src3SpecRate, ParamId::Src3SpecBreath, ParamId::Src3Transport,
-      ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env },
+      ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env, ParamId::Src3Interp },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
@@ -677,7 +683,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade,
       ParamId::Src4BowForce, ParamId::Src4BowSpeed,
       ParamId::Src4SpecRate, ParamId::Src4SpecBreath, ParamId::Src4Transport,
-      ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env },
+      ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env, ParamId::Src4Interp },
 };
 
 struct SectionName { const char* name; ParamSection section; };

@@ -625,6 +625,7 @@ void Engine::readParams()
             s.specRate      = at(30);
             s.specBreath    = at(31);
             s.transport     = at(32);
+            s.interp        = static_cast<int>(std::lround(at(36)));
             s.delaySec      = at(33);
             s.riseSec       = at(34);
             // The choice is "Off" first, then the six shapes, so it is one off the shape's index.

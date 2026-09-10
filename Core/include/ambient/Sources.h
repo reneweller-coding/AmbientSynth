@@ -172,6 +172,7 @@ struct SlotParams {
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
     float xfade = 0.1f;
+    int   interp = 0;            // 0 linear, 1 Hermite (Catmull-Rom over four samples)
     // The slot's own entrance, counted from note-on in the voice that plays it. The slot is
     // silent for `delaySec`, then either fades in over `riseSec` or, if `envIndex` names one of
     // the preset's six shapes, follows that shape instead. Defaults are what the instrument did

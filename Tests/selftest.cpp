@@ -2072,6 +2072,56 @@ void testModulation()
             CHECK(dense > thin * 5, "density carries through to the grains actually sounding");
             CHECK(shortGrains > 8, "short grains can be dense too, which the old Density ceiling forbade");
 
+            // Hermite against the straight line. A clip of white noise has content right up to
+            // Nyquist, which is exactly where a straight line between two samples stops being able
+            // to follow: read at anything but the recorded speed it acts as a treble roll-off. The
+            // curve through four samples does less of that, and the difference has to GROW with
+            // frequency -- if it did not, whatever the setting changed would not be this.
+            {
+                std::vector<float> noise(48000 * 2);
+                Rng rr; rr.seed(7);
+                for (float& v : noise) v = 0.25f * rr.bipolar();
+                auto bands = [&](int interp) {
+                    Engine e;
+                    e.prepare(48000.0, 256);
+                    e.setTexture(noise.data(), static_cast<int>(noise.size()), 48000.0, 261.6256, false);
+                    e.setParam(ParamId::BrainOn, 0.0f);
+                    e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Texture"));
+                    e.setParam(ParamId::OscLevel, 0.9f);
+                    e.setParam(ParamId::Src1Follow, 1.0f);
+                    e.setParam(ParamId::Src1Interp, static_cast<float>(interp));
+                    e.setParam(ParamId::Src1Grain, 500.0f);
+                    e.setParam(ParamId::Src1Density, 12.0f);
+                    e.setParam(ParamId::Src1Grains, 32.0f);
+                    e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Breath, 0.0f);
+                    e.setParam(ParamId::SubLevel, 0.0f); e.setParam(ParamId::StrikeLevel, 0.0f);
+                    e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+                    e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::RoomLevel, 0.0f);
+                    e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Attack, 0.05f);
+                    e.noteOn(62, 0.9f);
+                    std::vector<float> l(256), r(256), mono;
+                    for (int b = 0; b < 6 * 48000 / 256; ++b) {
+                        e.process(l.data(), r.data(), 256);
+                        if (b >= 2 * 48000 / 256) for (int k = 0; k < 256; ++k) mono.push_back(l[k]);
+                    }
+                    // Two bands, by counting energy through a pair of one-pole highpasses: no FFT
+                    // needed to say "is there more up there than there was".
+                    auto energyAbove = [&](float hz) {
+                        const float c = std::exp(-kTwoPi * hz / 48000.0f);
+                        float y = 0.0f, prev = 0.0f; double sum = 0.0;
+                        for (float v : mono) { y = c * (y + v - prev); prev = v; sum += static_cast<double>(y) * y; }
+                        return 10.0 * std::log10(sum / std::max<size_t>(mono.size(), 1) + 1e-30);
+                    };
+                    return std::make_pair(energyAbove(2000.0f), energyAbove(12000.0f));
+                };
+                const auto lin = bands(0), her = bands(1);
+                const double lowGain = her.first - lin.first, highGain = her.second - lin.second;
+                std::printf("  [probe] Hermite against linear: %+.2f dB above 2 kHz, %+.2f dB above 12 kHz\n",
+                            lowGain, highGain);
+                CHECK(highGain > 0.3, "Hermite keeps more of the top than a straight line does");
+                CHECK(highGain > lowGain + 0.2, "and the difference grows with frequency, which is what it is");
+            }
+
             // The end of the clip, over and over. The grain loop reads s[ip] and s[ip+1], and since
             // it became a gather -- eight places at once, no test between them -- the bound is
             // computed once per block from the rate instead of checked once per sample. That

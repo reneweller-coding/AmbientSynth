@@ -21,7 +21,7 @@ param(
     # introduced it and later installers point back at that one. Hardcoding it in the .iss meant
     # every installer since 1.0.0 asked v1.0.0 for files that had moved -- a 404 in the middle of
     # somebody's install, which is where this was finally noticed.
-    [string]$ContentTag = "v1.12.0",
+    [string]$ContentTag = "v1.12.1",
     # Code signing. Without it Windows shows "Unknown publisher" on the first run of the setup --
     # SmartScreen has nothing to go on but the file's reputation, and a fresh file has none.
     #   -SignWith "<thumbprint>"   a certificate in the current user's store (signtool /sha1)

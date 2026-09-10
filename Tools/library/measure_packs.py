@@ -19,6 +19,7 @@ Nothing else in the settings is touched, and the run is idempotent: measuring an
 measured library changes the gains by fractions of a dB.
 """
 import argparse
+import hashlib
 import json
 import time
 import concurrent.futures
@@ -224,6 +225,12 @@ def tag_bits(settings, d):
     return sum(1 << TAGS.index(x) for x in t)
 
 
+def _fingerprint(row):
+    """What this measurement was made from. The name is not enough: regenerate the library and
+    most names come back -- same seed, same generator -- with other settings underneath."""
+    parts = [str(row.get(k, "")) for k in ("settings", "texture", "wavetable", "impulse", "mod", "envs")]
+    return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:16]
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--packs", default=os.path.join(ROOT, "Library", "Packs"))
@@ -273,6 +280,27 @@ def main():
                 have = json.load(open(a.cache, encoding="utf-8"))
             except (ValueError, OSError):
                 have = {}
+        # A cached measurement belongs to the preset it was made from, and the only thing tying the
+        # two together is the name. Regenerate the library and most names come back -- same seed,
+        # same generator -- carrying other settings underneath, and --resume then keeps yesterday's
+        # numbers for them without a word. It happened: a work directory left over from an earlier
+        # run held ninety entries, and ninety presets went into the map with the descriptors and
+        # the excerpt of a library that no longer existed. So the settings are part of the key.
+        fps = {r["name"]: _fingerprint(r) for r in rows}
+        fpfile = a.cache + ".fp" if a.cache else ""
+        known = {}
+        if fpfile and os.path.exists(fpfile):
+            try:
+                known = json.load(open(fpfile, encoding="utf-8"))
+            except (ValueError, OSError):
+                known = {}
+            stale = [n for n in have if known.get(n) != fps.get(n)]
+            for n in stale:
+                del have[n]
+            if stale:
+                print(f"  {len(stale)} cached measurements belong to other settings and are dropped")
+        elif have:
+            print("  no fingerprints beside the cache: trusting it by name, as before")
         todo = [r for r in rows if r["name"] not in have]
         for r in rows:
             r["m"] = have.get(r["name"])
@@ -286,6 +314,9 @@ def main():
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({r["name"]: r["m"] for r in rows if r["m"]}, f)
             os.replace(tmp, a.cache)          # never a half-written cache on disk
+            with open(fpfile + ".part", "w", encoding="utf-8") as f:
+                json.dump({r["name"]: fps[r["name"]] for r in rows if r["m"]}, f)
+            os.replace(fpfile + ".part", fpfile)
 
         t0 = time.time()
         # Chunks, not presets: one process measures a run of them (see render_batch). Small enough

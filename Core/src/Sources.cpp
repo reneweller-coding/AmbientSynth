@@ -221,7 +221,7 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     rng_.seed(seed);
     posDrift_.init(rng_);
     idxDrift_.init(rng_);
-    for (int h = 0; h < kTablePartials; ++h) { phasorFrom(rng_.uniform(), pc_[h], ps_[h]); rc_[h] = 1.0f; rs_[h] = 0.0f; amp_[h] = ampStep_[h] = 0.0f; }
+    for (int h = 0; h < kBank; ++h) { phasorFrom(rng_.uniform(), pc_[h], ps_[h]); rc_[h] = 1.0f; rs_[h] = 0.0f; amp_[h] = ampStep_[h] = 0.0f; wL_[h] = wR_[h] = 1.0f; }
     {   // the shimmer drifters seed from a side stream, so the slot's own stream is what it always was
         Rng aux; aux.seed(seed ^ 0xD1B54A32D192ED03ull);
         for (auto& d : shim_) d.init(aux);
@@ -264,7 +264,7 @@ const Fft& SourceSlot::stretchFft(int n)
 void SourceSlot::noteOn(bool fresh)
 {
     if (!fresh) return;
-    for (int h = 0; h < kTablePartials; ++h) { phasorFrom(rng_.uniform(), pc_[h], ps_[h]); amp_[h] = ampStep_[h] = 0.0f; }
+    for (int h = 0; h < kBank; ++h) { phasorFrom(rng_.uniform(), pc_[h], ps_[h]); amp_[h] = ampStep_[h] = 0.0f; }
     active_ = 0;
     phC_ = rng_.uniform(); phM_ = rng_.uniform();
     hpX_ = hpY_ = 0.0f;
@@ -285,7 +285,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     n = std::min(n, kControlBlock);
     const float dt = static_cast<float>(n / sr_);
     if (p.type != lastType_) {   // switching type: start clean, no leftover phasor amplitudes or grains
-        for (int h = 0; h < kTablePartials; ++h) { amp_[h] = ampStep_[h] = 0.0f; }
+        for (int h = 0; h < kBank; ++h) { amp_[h] = ampStep_[h] = 0.0f; }
         active_ = 0;
         for (auto& g : grains_) g.on = false;
         if (!st_.out.empty()) std::fill(st_.out.begin(), st_.out.end(), 0.0f);
@@ -320,8 +320,13 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         return;
     }
 
+    // Unison in a bank type: the copies are spread across the field, so the slot produces two
+    // channels of its own instead of one signal placed by Pan. Pan then moves the whole group.
+    const int copies = clampv(p.unison, 1, kSlotUnison);
+    const bool wide = copies > 1 && p.type == SourceType::Wavetable;
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
-    if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt);
+    if (wide) std::memset(scratchR_, 0, sizeof(float) * static_cast<size_t>(n));
+    if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt, wide ? scratchR_ : nullptr);
     else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Stretch) renderStretch(scratch_, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
     else if (p.type == SourceType::Bow) renderBow(scratch_, n, hz, p, dt);
@@ -331,48 +336,96 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     else renderFm(scratch_, n, hz, p, dt);
     for (int i = 0; i < n; ++i) {
         gL_ += sL; gR_ += sR;
-        outL[i] += scratch_[i] * gL_;
-        outR[i] += scratch_[i] * gR_;
+        outL[i] += (wide ? scratch_[i] : scratch_[i]) * gL_;
+        outR[i] += (wide ? scratchR_[i] : scratch_[i]) * gR_;
     }
     gL_ = tL; gR_ = tR;
 }
 
-void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt)
+void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt, float* outR)
 {
     // Control: spectrum at the (wandering) position, targets normalised, rotations refreshed.
     const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.5f * p.positionDrift;
     float spec[kTablePartials];
     if (table != nullptr) table->spectrumAt(p.position + wander, spec, p.transport);
     else std::memset(spec, 0, sizeof(spec));
-    const double nyq = 0.45 * sr_;
-    float sumSq = 0.0f; int H = 0;
-    for (int h = 1; h <= kTablePartials; ++h) {
-        const double fh = hz * h;
-        if (fh >= nyq) break;
-        phasorFrom(fh / sr_, rc_[h - 1], rs_[h - 1]);
-        const float r2 = pc_[h - 1] * pc_[h - 1] + ps_[h - 1] * ps_[h - 1];
-        const float fix = 1.5f - 0.5f * r2;
-        pc_[h - 1] *= fix; ps_[h - 1] *= fix;
-        sumSq += spec[h - 1] * spec[h - 1];
-        H = h;
-    }
-    renderBank(spec, H, n, out);
+    const int H = setBankPitch(hz, p, kTablePartials);
+    renderBank(spec, H, n, out, p.unison, outR);
 }
 
-void SourceSlot::renderBank(const float* spec, int H, int n, float* out)
+// Where each copy of the bank sits: its pitch, and its place in the field.
+//
+// The copies are spread symmetrically about the written pitch -- with two they sit at plus and
+// minus half the detune, with three the middle one is exactly in tune -- and across the field the
+// same way, so the sound stays centred however many there are. At one copy the ratio is exactly
+// 1.0 and the arithmetic below is `hz * h`, which is what stood here before unison existed: every
+// preset in the library renders to the bit.
+static constexpr float kSqrt2 = 1.41421356237f;
+
+int SourceSlot::setBankPitch(double hz, const SlotParams& p, int partials)
+{
+    const int copies = clampv(p.unison, 1, kSlotUnison);
+    const double nyq = 0.45 * sr_;
+    const float width = clampv(p.uniWidth, 0.0f, 1.0f);
+    int H = 0;
+    for (int c = 0; c < copies; ++c) {
+        // -1 .. +1 across the copies, and 0 when there is only one of them.
+        const double place = copies > 1 ? (2.0 * c / (copies - 1) - 1.0) : 0.0;
+        const double ratio = copies > 1 ? std::pow(2.0, place * 0.5 * static_cast<double>(p.uniDetune) / 1200.0) : 1.0;
+        // Equal power about the centre, scaled so that a copy standing in the middle arrives at
+        // full strength in both channels rather than at 0.707 of it. The slot's own Pan is applied
+        // by the caller afterwards; without this factor it would be applied twice and turning
+        // unison on would drop the level by three decibels instead of thickening it. Measured.
+        const float angle = (static_cast<float>(place) * width + 1.0f) * 0.25f * kPi;
+        const float wl = std::cos(angle) * kSqrt2, wr = std::sin(angle) * kSqrt2;
+        const int base = c * kTablePartials;
+        int fit = 0;
+        for (int h = 1; h <= partials; ++h) {
+            const double fh = hz * ratio * h;
+            if (fh >= nyq) break;
+            const int i = base + h - 1;
+            phasorFrom(fh / sr_, rc_[i], rs_[i]);
+            const float r2 = pc_[i] * pc_[i] + ps_[i] * ps_[i];
+            const float fix = 1.5f - 0.5f * r2;
+            pc_[i] *= fix; ps_[i] *= fix;
+            wL_[i] = wl; wR_[i] = wr;
+            fit = h;
+        }
+        if (c == 0) H = fit;
+    }
+    return H;
+}
+
+// `uni` copies of the same spectrum, laid end to end in the flat bank: copy c occupies entries
+// c*kTablePartials .. c*kTablePartials+31 at its own slightly detuned pitch, so the amplitudes
+// repeat every kTablePartials and the same SIMD loop steps all of them. The energy is divided
+// among the copies -- the constant-power rule the single bank always used, applied to the whole
+// list rather than to one copy of it -- so turning unison up thickens the sound without raising
+// the level. At one copy every line below does exactly what it did before, entry for entry.
+void SourceSlot::renderBank(const float* spec, int H, int n, float* out, int uni, float* outR)
 {
     float sumSq = 0.0f;
     for (int h = 0; h < H; ++h) sumSq += spec[h] * spec[h];
-    const float scale = sumSq > 0.0f ? 0.5f / std::sqrt(sumSq) : 0.0f;
+    const int copies = clampv(uni, 1, kSlotUnison);
+    const float scale = sumSq > 0.0f ? 0.5f / std::sqrt(sumSq * static_cast<float>(copies)) : 0.0f;
     const float invLen = 1.0f / static_cast<float>(n);
-    for (int h = 0; h < kTablePartials; ++h) {
-        const float tgt = (h < H) ? spec[h] * scale : 0.0f;
+    const int span = copies * kTablePartials;
+    for (int h = 0; h < span; ++h) {
+        const int part = h % kTablePartials;
+        const float tgt = (part < H) ? spec[part] * scale : 0.0f;
         ampStep_[h] = (tgt - amp_[h]) * invLen;
     }
-    int act = H;
-    for (int h = H; h < active_; ++h) if (std::fabs(amp_[h]) > 1e-6f) act = h + 1;
+    // A copy that has just been turned off fades out rather than stopping mid-cycle.
+    for (int h = span; h < active_; ++h) ampStep_[h] = -amp_[h] * invLen;
+    int act = copies > 1 ? span : H;
+    for (int h = act; h < active_; ++h) if (std::fabs(amp_[h]) > 1e-6f) act = h + 1;
     active_ = act;
 
+    if (copies > 1 && outR != nullptr) {
+        for (int i = 0; i < n; ++i)
+            phasorBankStepStereo(pc_, ps_, rc_, rs_, amp_, ampStep_, active_, wL_, wR_, out[i], outR[i]);
+        return;
+    }
     for (int i = 0; i < n; ++i)
         out[i] = phasorBankStep(pc_, ps_, rc_, rs_, amp_, ampStep_, active_);
 }

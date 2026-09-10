@@ -643,6 +643,18 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::Src2Interp, "src2_interp", "Interp", "Source 2", kInterpNames, kNumInterp, 0),
     C(ParamId::Src3Interp, "src3_interp", "Interp", "Source 3", kInterpNames, kNumInterp, 0),
     C(ParamId::Src4Interp, "src4_interp", "Interp", "Source 4", kInterpNames, kNumInterp, 0),
+    I(ParamId::Src1Unison,    "src1_unison",     "Unison",  "Source 1", 1.f, 4.f, 1.f),
+    F(ParamId::Src1UniDetune, "src1_uni_detune", "Uni Det", "Source 1", 0.f, 40.f, 10.f, 1.f, "ct"),
+    F(ParamId::Src1UniWidth,  "src1_uni_width",  "Uni Wide","Source 1", 0.f, 1.f, 0.6f, 1.f, ""),
+    I(ParamId::Src2Unison,    "src2_unison",     "Unison",  "Source 2", 1.f, 4.f, 1.f),
+    F(ParamId::Src2UniDetune, "src2_uni_detune", "Uni Det", "Source 2", 0.f, 40.f, 10.f, 1.f, "ct"),
+    F(ParamId::Src2UniWidth,  "src2_uni_width",  "Uni Wide","Source 2", 0.f, 1.f, 0.6f, 1.f, ""),
+    I(ParamId::Src3Unison,    "src3_unison",     "Unison",  "Source 3", 1.f, 4.f, 1.f),
+    F(ParamId::Src3UniDetune, "src3_uni_detune", "Uni Det", "Source 3", 0.f, 40.f, 10.f, 1.f, "ct"),
+    F(ParamId::Src3UniWidth,  "src3_uni_width",  "Uni Wide","Source 3", 0.f, 1.f, 0.6f, 1.f, ""),
+    I(ParamId::Src4Unison,    "src4_unison",     "Unison",  "Source 4", 1.f, 4.f, 1.f),
+    F(ParamId::Src4UniDetune, "src4_uni_detune", "Uni Det", "Source 4", 0.f, 40.f, 10.f, 1.f, "ct"),
+    F(ParamId::Src4UniWidth,  "src4_uni_width",  "Uni Wide","Source 4", 0.f, 1.f, 0.6f, 1.f, ""),
 }};
 } // namespace
 
@@ -659,7 +671,8 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src1DensitySync, ParamId::Src1Drift, ParamId::Src1Stretch, ParamId::Src1Xfade,
       ParamId::Src1BowForce, ParamId::Src1BowSpeed,
       ParamId::Src1SpecRate, ParamId::Src1SpecBreath, ParamId::Src1Transport,
-      ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env, ParamId::Src1Interp },
+      ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env, ParamId::Src1Interp,
+      ParamId::Src1Unison, ParamId::Src1UniDetune, ParamId::Src1UniWidth },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
@@ -667,7 +680,8 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src2DensitySync, ParamId::Src2Drift, ParamId::Src2Stretch, ParamId::Src2Xfade,
       ParamId::Src2BowForce, ParamId::Src2BowSpeed,
       ParamId::Src2SpecRate, ParamId::Src2SpecBreath, ParamId::Src2Transport,
-      ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env, ParamId::Src2Interp },
+      ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env, ParamId::Src2Interp,
+      ParamId::Src2Unison, ParamId::Src2UniDetune, ParamId::Src2UniWidth },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
@@ -675,7 +689,8 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src3DensitySync, ParamId::Src3Drift, ParamId::Src3Stretch, ParamId::Src3Xfade,
       ParamId::Src3BowForce, ParamId::Src3BowSpeed,
       ParamId::Src3SpecRate, ParamId::Src3SpecBreath, ParamId::Src3Transport,
-      ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env, ParamId::Src3Interp },
+      ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env, ParamId::Src3Interp,
+      ParamId::Src3Unison, ParamId::Src3UniDetune, ParamId::Src3UniWidth },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
@@ -683,7 +698,8 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src4DensitySync, ParamId::Src4Drift, ParamId::Src4Stretch, ParamId::Src4Xfade,
       ParamId::Src4BowForce, ParamId::Src4BowSpeed,
       ParamId::Src4SpecRate, ParamId::Src4SpecBreath, ParamId::Src4Transport,
-      ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env, ParamId::Src4Interp },
+      ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env, ParamId::Src4Interp,
+      ParamId::Src4Unison, ParamId::Src4UniDetune, ParamId::Src4UniWidth },
 };
 
 struct SectionName { const char* name; ParamSection section; };

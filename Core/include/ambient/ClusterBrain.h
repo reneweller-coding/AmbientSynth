@@ -604,9 +604,19 @@ public:
 
         const double mean = tickSeconds(p);
         lastLean_ = leanOf(p);
+        // A wait already begun was drawn against the rate that began it. Turn Event Rate down
+        // from a hundred seconds to five and nothing happened for the rest of the old interval:
+        // minutes of a knob that looked broken. The same thing kept the cluster thin -- when a
+        // note leaves and the conductor switches to its filling pace, the wait still standing
+        // was drawn at the slow one. Capping it was not enough; it is RESCALED, so the wait is
+        // always measured in units of the rate that applies now and the shape of the draw is
+        // kept. No preset modulates brain_rate, so nothing rendered before renders differently.
+        if (timerMean_ > 0.0 && mean != timerMean_) timer_ *= mean / timerMean_;
+        timerMean_ = mean;
         advanceTimer(dt, p, mean);
         if (timer_ > 0.0) return;
         timer_ = clampv(-std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * mean, 0.5, mean * 4.0);
+        timerMean_ = mean;
 
         const int low = std::min(p.low, p.high), high = std::max(p.low, p.high);
         const int density = clampv(p.density, 1, kSlots);
@@ -1026,6 +1036,15 @@ private:
     // filled on request (see requestFill), in which case it is short enough to arrive as music.
     double tickSeconds(const BrainParams& p) const
     {
+        // Density is read as a CEILING here, not as a target: the cluster grows by one note an
+        // event and loses notes to their own Hold, so the number that sounds settles at
+        // Hold / Event Rate. Measured over the 7514 presets with a conductor that equilibrium
+        // is a median of 2.8 voices against a median Density of 4, and 4529 of them -- sixty
+        // per cent -- can never reach the number they ask for. Filling faster while short was
+        // tried and does work, but it costs Even most of its effect (0.664 -> 0.768 became
+        // 0.685 -> 0.694): with the chord always full, notes are only ever chosen at an
+        // exchange, and that is where Even has least to decide. Left as it is until the two
+        // can be had together.
         return filling_ ? 0.35 : std::max(0.5, static_cast<double>(p.rateSeconds));
     }
 
@@ -1088,6 +1107,7 @@ private:
     int    lastNote_ = -1;
     float  lastLean_ = 0.0f;
     double timer_ = 1.0;
+    double timerMean_ = 0.0;   // the rate the standing wait was drawn against, so it can be rescaled
     bool   filling_ = false;   // fill the cluster at speed, then go back to the event rate
     int    root_ = 48;
     bool   wasOn_ = false;

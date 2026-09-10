@@ -215,6 +215,12 @@ enum class ParamId : int {
     // did; Hermite costs two more reads a sample and is offered rather than imposed, because
     // which of them is right is a matter of taste in an instrument built to be soft.
     Src1Interp, Src2Interp, Src3Interp, Src4Interp,
+    // Unison in a slot: the main oscillator has had detuned strands with their own place in the
+    // field since the beginning, a slot had one mono voice. Defaults to one copy, which is that.
+    Src1Unison, Src1UniDetune, Src1UniWidth,
+    Src2Unison, Src2UniDetune, Src2UniWidth,
+    Src3Unison, Src3UniDetune, Src3UniWidth,
+    Src4Unison, Src4UniDetune, Src4UniWidth,
     Count
 };
 
@@ -249,7 +255,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 37;
+constexpr int kSlotFields  = 40;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in

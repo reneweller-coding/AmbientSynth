@@ -34,6 +34,12 @@ namespace ambient {
 constexpr int kSlots         = 4;
 constexpr int kTableFrames   = 64;
 constexpr int kTablePartials = 32;
+// Unison in a slot. The main oscillator has had up to six detuned strands with their own pan
+// since the beginning; a slot had ONE, mono, and against the bank it sounded exactly as small as
+// that. The copies are not a second bank: the phasor bank is a flat list, so copy c simply takes
+// entries c*32 .. c*32+31 at its own slightly detuned pitch, and the same SIMD loop steps all of
+// them. At unison 1 the list is what it always was, entry for entry.
+constexpr int kSlotUnison    = 4;
 constexpr int kSlotGrains    = 128;  // ceiling; Grains sets how many a slot may use. Raised from
                                      // 64 when Density went to 200 a second: with the old ceiling
                                      // the top of that range could not be reached at all, and the
@@ -172,6 +178,9 @@ struct SlotParams {
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
     float xfade = 0.1f;
+    int   unison = 1;            // detuned copies of the slot's bank, 1..kSlotUnison
+    float uniDetune = 10.0f;     // cents between the outermost copies
+    float uniWidth = 0.6f;       // how far the copies are placed apart across the field
     int   interp = 0;            // 0 linear, 1 Hermite (Catmull-Rom over four samples)
     // The slot's own entrance, counted from note-on in the voice that plays it. The slot is
     // silent for `delaySec`, then either fades in over `riseSec` or, if `envIndex` names one of
@@ -203,9 +212,14 @@ public:
     int displayGrains(GrainInfo* out, int maxCount, int clipLen) const;
 
 private:
-    void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt);
+    void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt, float* outR = nullptr);
     void renderAdditive(float* out, int n, double hz, const SlotParams& p, float dt);
-    void renderBank(const float* spec, int H, int n, float* out);   // the phasor bank's block: targets, then the sum
+    // The phasor bank's block: targets, then the sum. `uni` copies of the spectrum end to end;
+    // with more than one and an `outR`, they are spread across the field and it writes stereo.
+    void renderBank(const float* spec, int H, int n, float* out, int uni = 1, float* outR = nullptr);
+    // Rotations and stereo weights for `uni` copies around `hz`, detuned by `cents` end to end and
+    // placed across `width`. Returns how many partials of one copy fit below Nyquist.
+    int  setBankPitch(double hz, const SlotParams& p, int partials);
     void renderFm(float* out, int n, double hz, const SlotParams& p, float dt);
     void renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
@@ -216,9 +230,12 @@ private:
     static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
 
     // Wavetable: phasor bank like Voice::Strand.
-    float  pc_[kTablePartials] = {}, ps_[kTablePartials] = {};
-    float  rc_[kTablePartials] = {}, rs_[kTablePartials] = {};
-    float  amp_[kTablePartials] = {}, ampStep_[kTablePartials] = {};
+    static constexpr int kBank = kTablePartials * kSlotUnison;
+    float  pc_[kBank] = {}, ps_[kBank] = {};
+    float  rc_[kBank] = {}, rs_[kBank] = {};
+    float  amp_[kBank] = {}, ampStep_[kBank] = {};
+    float  wL_[kBank] = {}, wR_[kBank] = {};   // each copy's place in the field
+    bool   bankStereo_ = false;                // set when more than one copy is sounding
     int    active_ = 0;
     // Additive: per-partial shimmer and the cached tilt/odd-even shape
     Drifter shim_[kTablePartials];
@@ -293,6 +310,7 @@ private:
     double sr_ = 48000.0;
     float  gL_ = 0.0f, gR_ = 0.0f;
     float  scratch_[64] = {};
+    float  scratchR_[64] = {};   // the bank's right channel when its copies are spread
     SourceType lastType_ = SourceType::Off;
 };
 

@@ -178,6 +178,7 @@ struct SlotParams {
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
     float xfade = 0.1f;
+    float root = 0.0f;           // Wavetable: give the fundamental at least this share of the energy
     int   unison = 1;            // detuned copies of the slot's bank, 1..kSlotUnison
     float uniDetune = 10.0f;     // cents between the outermost copies
     float uniWidth = 0.6f;       // how far the copies are placed apart across the field

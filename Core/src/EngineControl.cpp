@@ -629,6 +629,7 @@ void Engine::readParams()
             s.unison        = static_cast<int>(std::lround(at(37)));
             s.uniDetune     = at(38);
             s.uniWidth      = at(39);
+            s.root          = at(40);
             s.delaySec      = at(33);
             s.riseSec       = at(34);
             // The choice is "Off" first, then the six shapes, so it is one off the shape's index.

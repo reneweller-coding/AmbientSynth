@@ -2072,6 +2072,61 @@ void testModulation()
             CHECK(dense > thin * 5, "density carries through to the grains actually sounding");
             CHECK(shortGrains > 8, "short grains can be dense too, which the old Density ceiling forbade");
 
+            // Root: a fundamental where the table has none.
+            //
+            // A wavetable is a spectrum, and one cut from a bell or a bowed harmonic keeps that
+            // material's own empty bottom. Measured over the library, a quarter of all frames hold
+            // less than a tenth of their energy in the fundamental; played low, what is heard is
+            // the sixth partial of a note whose own pitch is not in the sound. The table here is
+            // that case made pure: a single cycle of the SIXTH harmonic and nothing else.
+            {
+                std::vector<float> table(2048 * 4);
+                for (size_t i = 0; i < table.size(); ++i)
+                    table[i] = 0.5f * std::sin(2.0f * 3.14159265f * 6.0f * static_cast<float>(i % 2048) / 2048.0f);
+                auto weight = [&](float root) {
+                    Engine e;
+                    e.prepare(48000.0, 256);
+                    e.loadUserWavetable(table.data(), static_cast<int>(table.size()), 2048);
+                    e.setParam(ParamId::BrainOn, 0.0f);
+                    e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Wavetable"));
+                    e.setParam(ParamId::Src1Table, paramValueFromText(paramDesc(ParamId::Src1Table), "User"));
+                    e.setParam(ParamId::OscLevel, 0.9f);
+                    e.setParam(ParamId::Src1Root, root);
+                    e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Breath, 0.0f);
+                    e.setParam(ParamId::SubLevel, 0.0f); e.setParam(ParamId::StrikeLevel, 0.0f);
+                    e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+                    e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::RoomLevel, 0.0f);
+                    e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Attack, 0.05f);
+                    e.noteOn(36, 0.9f);                                  // C2, 65.4 Hz
+                    std::vector<float> l(256), r(256), mono;
+                    for (int b = 0; b < 4 * 48000 / 256; ++b) {
+                        e.process(l.data(), r.data(), 256);
+                        if (b >= 48000 / 256) for (int k = 0; k < 256; ++k) mono.push_back(l[k]);
+                    }
+                    // The fundamental itself, by a Goertzel at exactly that frequency: a one-pole
+                    // was tried and is far too blunt for this -- at six decibels an octave the
+                    // sixth partial leaks straight through it and reports a fifth of the energy
+                    // sitting where in truth there is nothing at all.
+                    auto atHz = [&](double hz) {
+                        const double w = 2.0 * kPi * hz / 48000.0;
+                        const double cw = 2.0 * std::cos(w);
+                        double s1 = 0.0, s2 = 0.0;
+                        for (float v : mono) { const double s0 = v + cw * s1 - s2; s2 = s1; s1 = s0; }
+                        return (s1 * s1 + s2 * s2 - cw * s1 * s2) / (0.25 * static_cast<double>(mono.size()) * mono.size());
+                    };
+                    double all = 0.0; for (float v : mono) all += static_cast<double>(v) * v;
+                    all /= std::max<size_t>(mono.size(), 1);
+                    return std::make_pair(atHz(65.406) / std::max(all, 1e-30), all);
+                };
+                const auto off = weight(0.0f), on = weight(1.0f);
+                std::printf("  [probe] a table with no fundamental at C2: the note itself holds %.5f of the energy, %.5f with Root up "
+                            "(level %+.2f dB)\n", off.first, on.first, 10.0 * std::log10(on.second / std::max(off.second, 1e-30)));
+                CHECK(off.first < 0.01, "a table cut from a bell really has nothing where the note is");
+                CHECK(on.first > off.first * 4.0, "and Root puts a fundamental under it");
+                CHECK(std::fabs(10.0 * std::log10(on.second / std::max(off.second, 1e-30))) < 3.0,
+                      "by moving weight about, not by adding level");
+            }
+
             // Hermite against the straight line. A clip of white noise has content right up to
             // Nyquist, which is exactly where a straight line between two samples stops being able
             // to follow: read at anything but the recorded speed it acts as a treble roll-off. The

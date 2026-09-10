@@ -349,6 +349,31 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
     float spec[kTablePartials];
     if (table != nullptr) table->spectrumAt(p.position + wander, spec, p.transport);
     else std::memset(spec, 0, sizeof(spec));
+    // Root: give the fundamental a floor.
+    //
+    // A wavetable here is a spectrum, and a spectrum cut from a recording keeps whatever that
+    // recording had -- which for a bell, a bowed harmonic or overtone singing is very little at
+    // the bottom. Measured over 1200 frames of the library: the energy sits at partial 5.8 on
+    // average, the fundamental holds 24 % of it, and a QUARTER of all frames have less than a
+    // tenth of their energy there. Played high that is the sound of the material; played low it
+    // is why "the wavetable sources are thin and only work up top" -- what one hears is the
+    // sixth partial of a note whose own pitch is not in the sound at all.
+    //
+    // At 1 the fundamental is brought up to half the energy of the frame, and renderBank's
+    // constant-power rule pulls the rest down to make room, so this shifts weight rather than
+    // adding level. It is a knob and not a repair of the tables: which of the two readings is
+    // right belongs to the material, and at 0 -- what every preset has -- the frame is exactly
+    // what was analysed.
+    if (p.root > 0.0f) {
+        double e = 0.0;
+        for (int h = 0; h < kTablePartials; ++h) e += static_cast<double>(spec[h]) * spec[h];
+        const double f0 = static_cast<double>(spec[0]) * spec[0];
+        const double want = 0.5 * clampv(static_cast<double>(p.root), 0.0, 1.0);
+        if (e > 0.0 && f0 < want * e) {
+            const double rest = e - f0;
+            spec[0] = static_cast<float>(std::sqrt(want * rest / std::max(1.0 - want, 1e-6)));
+        }
+    }
     const int H = setBankPitch(hz, p, kTablePartials);
     renderBank(spec, H, n, out, p.unison, outR);
 }

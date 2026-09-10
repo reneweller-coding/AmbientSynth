@@ -217,6 +217,8 @@ enum class ParamId : int {
     Src1Interp, Src2Interp, Src3Interp, Src4Interp,
     // Unison in a slot: the main oscillator has had detuned strands with their own place in the
     // field since the beginning, a slot had one mono voice. Defaults to one copy, which is that.
+    // Root: how much of a fundamental a wavetable is given when its own has none.
+    Src1Root, Src2Root, Src3Root, Src4Root,
     Src1Unison, Src1UniDetune, Src1UniWidth,
     Src2Unison, Src2UniDetune, Src2UniWidth,
     Src3Unison, Src3UniDetune, Src3UniWidth,
@@ -255,7 +257,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 40;
+constexpr int kSlotFields  = 41;
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in

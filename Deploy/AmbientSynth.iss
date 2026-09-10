@@ -23,7 +23,7 @@
   ; Only a fallback for a hand-run compile. build_release.ps1 passes the real one
   ; (/DContentBaseUrl=...): the archives live with the release that introduced them, and this
   ; line pointing at a fixed old tag is what produced "Download failed: 404 Not Found".
-  #define ContentBaseUrl "https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3"
+  #define ContentBaseUrl "https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.12.0"
 #endif
 #define HaveContent FileExists(AddBackslash(SourcePath) + "content-files.iss")
 #if HaveContent

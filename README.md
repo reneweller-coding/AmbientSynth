@@ -16,12 +16,12 @@ background.
 
 ## Download
 
-**[AmbientSynth-1.11.3-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3/AmbientSynth-1.11.3-Setup.exe)**
+**[AmbientSynth-1.12.0-Setup.exe](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.12.0/AmbientSynth-1.12.0-Setup.exe)**
 installs the standalone, the VST3 and the preset library, and offers to download the 10 GB sample
 library. Nothing else has to be installed: the runtime is linked in.
-**[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3/AmbientSynth-1.11.3-portable.zip)**
+**[Portable zip](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.12.0/AmbientSynth-1.12.0-portable.zip)**
 for anyone who would rather not run an installer, and the
-**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.11.3/AmbientSynth-Manual.pdf)**
+**[manual](https://github.com/reneweller-coding/AmbientSynth/releases/download/v1.12.0/AmbientSynth-Manual.pdf)**
 — every tab of the panel as a picture, what its knobs mean, and seven chapters on why the
 instrument is built the way it is, with the mathematics and the references.
 

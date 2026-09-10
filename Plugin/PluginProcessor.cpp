@@ -12,6 +12,9 @@
 #include "ambient/Tuning.h"
 #include "ambient/Presets.h"
 #include <cstdlib>
+#include <cstdio>       // the crash log writes with C file I/O: no allocation in a broken process
+#include <exception>    // std::set_terminate
+#include <mutex>        // std::call_once
 
 using namespace ambient;
 
@@ -70,18 +73,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout AmbientSynthProcessor::creat
 // built here.
 static void installCrashLog()
 {
+    // Standalone only. Both of these are process-wide hooks, and a plugin that reaches into a
+    // host's crash handling is a bad guest -- a DAW has its own, and it is the one the user will
+    // send in. The standalone has nobody else to report to.
+    if (juce::PluginHostType::getPluginLoadedAs() != juce::AudioProcessor::wrapperType_Standalone) return;
     static std::once_flag once;
     std::call_once(once, [] {
         static const juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
                                               .getChildFile("AmbientSynth").getChildFile("crash.log");
         logFile.getParentDirectory().createDirectory();
-        juce::SystemStats::setApplicationCrashHandler([](void*) {
+        static const auto write = [](const char* how) {
             const juce::String trace = juce::SystemStats::getStackBacktrace();
             if (FILE* f = std::fopen(logFile.getFullPathName().toRawUTF8(), "a")) {
-                std::fprintf(f, "\n---- AmbientSynth %s crashed %s\n%s\n", JucePlugin_VersionString,
+                std::fprintf(f, "\n---- AmbientSynth %s %s %s\n%s\n", JucePlugin_VersionString, how,
                              juce::Time::getCurrentTime().toISO8601(true).toRawUTF8(), trace.toRawUTF8());
                 std::fclose(f);
             }
+        };
+        juce::SystemStats::setApplicationCrashHandler([](void*) { write("crashed"); });
+        // Two doors, and JUCE's handler only watches one of them. It installs an unhandled
+        // exception filter, which catches an access violation; an uncaught C++ exception goes to
+        // std::terminate instead and never passes that filter. The occasion for looking: the
+        // instrument vanished while a preset was picked off the map, and Windows recorded neither
+        // a dump nor an Application Error entry -- which is what a process that ends through
+        // terminate or exit looks like, and not what an access violation looks like. So both.
+        static const std::terminate_handler previous = std::set_terminate([] {
+            write("terminated");
+            if (previous != nullptr) previous();
+            std::abort();
         });
     });
 }

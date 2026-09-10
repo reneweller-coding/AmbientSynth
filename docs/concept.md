@@ -1956,7 +1956,7 @@ combinations) serves the Cosmos box. All 160 render finite.
 
 Not a sample player: grains are spawned at exponentially distributed intervals around *Density*,
 each with its own start point, playback rate, Hann window and pan, and they overlap freely.
-*Grains* (1..64) is the ceiling on how many a slot may have sounding at once; *Spread* scatters
+*Grains* (1..128) is the ceiling on how many a slot may have sounding at once; *Spread* scatters
 the start point around *Position*, from a 0.1 % window up to the whole clip. The window runs as
 a rotating phasor rather than a `std::cos` per sample -- at 64 grains that call was the most
 expensive thing in the voice.
@@ -1970,6 +1970,41 @@ inaudible next to a Wavetable slot. All three source types now land within 0.8 d
 
 Cost, measured: eight voices with both slots granular at 60 grains/s and 800 ms grains --
 1024 concurrent grains -- render at 6.5x realtime with *Grains* at 64, 8.6x at 32 and 16x at 8.
+
+**The overlap is the thing, and it was never drawn.** Rene: *"der Granular-Oszillator erzeugt
+bislang eine relativ geringe Anzahl an Grains, dadurch klingen die Wolken nicht wirklich luftig
+und dicht, sondern eher dünn."* What decides whether a cloud is heard as a cloud is not the grain
+rate but *Density* times *Grain* -- how many are sounding at once -- and the generator drew those
+two independently, which left the overlap as a by-product. Measured over 7858 texture slots: median
+overlap **2.37**, 44 % of them under two, 68 % under four. At two the ear counts the grains. The
+ceiling was reached by **45 slots of 7858**, so the thinness was never the engine running out of
+them; the presets were asking for a rattle. The generator now draws the overlap (4 .. 30,
+log-uniform) and computes the density from it: median 10.9, none under two.
+
+*Density* also had a ceiling that made short grains structurally sparse. At 60 a second, a
+60 ms grain cannot exceed an overlap of 3.6 however far the knob is turned -- the arithmetic
+forbids it. It now reaches 200 a second, and the slot holds 128 grains rather than 64 so that the
+top of that range means something.
+
+Whether the loop needs SoA and hand-written AVX was asked and measured rather than assumed: over a
+whole preset, **eight grains against sixty-four is two percent of the render**. The arithmetic of
+the instrument is the phasor bank (`Simd.h`), which is already vectorised by hand; the grain loop
+is small beside it, and the reverbs are the cost. It remains worth doing as an efficiency measure,
+and the right cut is across SAMPLES within one grain (lane *k* = sample *i+k*, the eight window
+phasors seeded at r^0..r^7 and turned by r^8 each pass) rather than across grains: that way the
+accumulation into the output is a plain vector add instead of a horizontal reduction per sample,
+and a grain's lifetime stays scalar. The one real obstacle is that `Grain::pos` is a `double`
+walking through a clip of millions of samples -- in `float` a 96000-sample clip leaves 1/128 of a
+sample of resolution, which is audible pitch jitter -- so a gather needs the position split into an
+integer index and a fraction.
+
+**Against the field**, since the question is fair: Tasty Chips' GR-1, a dedicated granular
+instrument, advertises *"128 grains per voice, which can add up to a total of 1000+ grains
+simultaneously"*; Waldorf's Iridium runs 1 to 8 grains per voice in Particle mode; Omnisphere
+documents *"up to eight voices of granularity per Layer"*; Pigments and Novum have a ceiling but do
+not publish it. AmbientSynth is at 128 per slot, four slots per voice, sixteen voices. The GR-1's
+number is the interesting one: the instrument that does nothing else picked 128 per voice as the
+figure worth printing, which is the same one this arrived at from the other direction.
 
 ### Noise slot
 

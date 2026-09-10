@@ -57,6 +57,33 @@ bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate)
     return true;
 }
 
+bool readWavStereo(const char* path, std::vector<float>& left, std::vector<float>& right, int& sampleRate)
+{
+    left.clear();
+    right.clear();
+    std::vector<std::vector<float>> ch;
+    if (!readWavChannels(path, ch, sampleRate) || ch.empty()) return false;
+    if (ch.size() == 1) { left = std::move(ch[0]); return true; }
+    if (ch.size() == 2) { left = std::move(ch[0]); right = std::move(ch[1]); return true; }
+    // More than two: the odd channels to the left, the even ones to the right. Nothing in the
+    // library is like this, but a player's own file might be, and a reader that took only the
+    // first two would quietly drop the rest.
+    const size_t n = ch[0].size();
+    left.assign(n, 0.0f);
+    right.assign(n, 0.0f);
+    size_t nl = 0, nr = 0;
+    for (size_t c = 0; c < ch.size(); ++c) {
+        std::vector<float>& into = (c % 2 == 0) ? left : right;
+        (c % 2 == 0 ? nl : nr) += 1;
+        for (size_t i = 0; i < n && i < ch[c].size(); ++i) into[i] += ch[c][i];
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (nl > 0) left[i] /= static_cast<float>(nl);
+        if (nr > 0) right[i] /= static_cast<float>(nr);
+    }
+    return true;
+}
+
 namespace {
 
 // FLAC, for the sample library. The clips ship as 24-bit FLAC rather than 24-bit WAV: the same

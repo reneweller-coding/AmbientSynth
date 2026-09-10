@@ -132,6 +132,19 @@ struct SpectralModel {
 
 struct Texture {
     std::vector<float> mono;
+    // The clip's two channels, interleaved (L0 R0 L1 R1 ...), empty when the file was mono.
+    //
+    // Ninety-five per cent of the library is stereo and all of it used to be summed to mono at
+    // load: measured over 235 clips, the median correlation between the two channels is 0.90 for
+    // the generated textures and 0.76 for the field recordings, and a third to a half of them sit
+    // below 0.5. Summing those cancels exactly what is decorrelated, and what is decorrelated in a
+    // recording of a room is the diffuse part -- which is the low, enveloping part. The direct
+    // sound sits centred and survives, so the fold is a high-pass in disguise.
+    //
+    // Interleaved rather than two arrays because the grain loop gathers the two channels at the
+    // same index: side by side they share a cache line, which is what that loop waits for.
+    std::vector<float> lr;
+    bool stereo() const { return lr.size() == 2 * mono.size() && !mono.empty(); }
     double sampleRate = 48000.0;
     double baseHz = 261.6256;   // assumed pitch of the sample for Follow = Note
     // Reading gain, from the clip's own RMS: the wavetable and FM slots normalise themselves to

@@ -289,6 +289,7 @@ private:
     float setLast_[ambient::kNumParams] = {};
     double setClock_ = 0.0;
     bool readMono(const juce::File& file, std::vector<float>& mono, double& sampleRate);
+    bool readStereo(const juce::File& file, std::vector<float>& left, std::vector<float>& right, double& sampleRate);
     int currentProgram_ = 0;
     // A program change reads files off the disk; these two hold a sweep back until it stops.
     std::atomic<int> pendingFiles_ { -1 };

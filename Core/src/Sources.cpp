@@ -538,9 +538,17 @@ void Texture::measure()
     // The wavetable and FM slots normalise themselves to unity, so a Texture slot has to be
     // brought to the same reference or Level means something different in each slot: a field
     // recording at -25 dBFS RMS entered the mix twenty decibels below its neighbours.
+    //
+    // Measured on what actually plays: the grain loop reads `lr` for a stereo clip and `mono` for
+    // a mono one. For a decorrelated recording the mono sum is up to 3 dB below either channel, so
+    // taking the reference from `mono` in both cases would make every wide clip enter the mix
+    // louder than it used to the moment the second channel was wired up -- a library-wide level
+    // change smuggled in behind a stereo fix.
     double sq = 0.0;
-    for (float v : mono) sq += static_cast<double>(v) * v;
-    const double rms = mono.empty() ? 0.0 : std::sqrt(sq / static_cast<double>(mono.size()));
+    size_t count = 0;
+    if (stereo()) { for (float v : lr) sq += static_cast<double>(v) * v; count = lr.size(); }
+    else          { for (float v : mono) sq += static_cast<double>(v) * v; count = mono.size(); }
+    const double rms = count == 0 ? 0.0 : std::sqrt(sq / static_cast<double>(count));
     gain = rms > 1e-6 ? static_cast<float>(clampv(0.3 / rms, 0.5, 16.0)) : 1.0f;
     analyse();
 }
@@ -644,14 +652,23 @@ void Texture::analyse()
 // Catmull-Rom through four samples: the curve that passes through y1 and y2 with the slopes the
 // neighbours imply. Against the straight line it folds back less of what it cannot represent when
 // a clip is played above its own pitch, and takes less off the top when it is played below.
-// Needs s[ip-1] .. s[ip+2]; the caller guarantees that window, see `herm` in renderTexture.
-static inline float hermite(const float* s, int ip, float t)
+// Needs p[-stride] .. p[2*stride]; the caller guarantees that window, see `herm` in renderTexture.
+// `p` points at the sample before the fraction and `stride` is 1 for a mono clip, 2 for one channel
+// of an interleaved pair.
+static inline float hermiteAt(const float* p, int stride, float t)
 {
-    const float y0 = s[ip - 1], y1 = s[ip], y2 = s[ip + 1], y3 = s[ip + 2];
+    const float y0 = p[-stride], y1 = p[0], y2 = p[stride], y3 = p[2 * stride];
     const float a = 0.5f * ((y3 - y0) + 3.0f * (y1 - y2));
     const float b = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
     const float c = 0.5f * (y2 - y0);
     return ((a * t + b) * t + c) * t + y1;
+}
+
+// One sample of a clip at a fractional position, either way of joining the dots.
+template <bool H>
+static inline float readAt(const float* p, int stride, float t)
+{
+    return H ? hermiteAt(p, stride, t) : p[0] + t * (p[stride] - p[0]);
 }
 
 void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt)
@@ -659,7 +676,13 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
     // outL receives the left channel, scratch_ the right (the caller adds both).
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
     if (tex == nullptr || tex->empty()) return;
-    const float* s = tex->mono.data();
+    // A stereo clip is read as a pair and keeps its own image; a mono one takes the path it always
+    // took, to the instruction. Which of the two is a compile-time tag below, for the same reason
+    // the interpolation is one: this loop is the instrument's largest single cost and a test inside
+    // it is paid by every clip, including the ones that would not have used the answer.
+    const bool wide = tex->stereo();
+    const float* s = wide ? tex->lr.data() : tex->mono.data();
+    const int stride = wide ? 2 : 1;
     const int len = static_cast<int>(tex->mono.size());
     const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.15f * p.positionDrift;
     const int maxGrains = clampv(p.grains, 1, kSlotGrains);
@@ -773,8 +796,10 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         // `if` inside the loop it cost seven per cent EVEN WITH HERMITE OFF -- measured, 6.96 s
         // against 7.45: a branch in the innermost loop is paid by everybody. As a tag the
         // compiler resolves it before the loop exists and the linear path is what it was.
-        const auto runGrain = [&](auto hermTag) {
+        const auto runGrain = [&](auto hermTag, auto wideTag) {
             constexpr bool H = decltype(hermTag)::value;
+            constexpr bool W = decltype(wideTag)::value;
+            (void) stride;
 #if AMBIENT_HAS_AVX && defined(__AVX2__)
         // Eight SAMPLES of one grain at a time, not eight grains. Vectorising across grains is the
         // obvious cut and the wrong one: they all add into the same output sample, so every step
@@ -827,31 +852,43 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
                 const __m128 fa = _mm256_cvtpd_ps(_mm256_sub_pd(pa, _mm256_cvtepi32_pd(ia)));
                 const __m128 fb = _mm256_cvtpd_ps(_mm256_sub_pd(pb, _mm256_cvtepi32_pd(ib)));
                 const __m256 frac = _mm256_insertf128_ps(_mm256_castps128_ps256(fa), fb, 1);
-                __m256 v;
-                if constexpr (H) {
-                    // Catmull-Rom through four samples. Two more gathers, which is most of what
-                    // it costs: the gather is what this loop waits for, so Hermite is roughly
-                    // twice the work of the line and is a choice rather than the default.
-                    const __m256 y0 = _mm256_i32gather_ps(s - 1, idx, 4);
-                    const __m256 y1 = _mm256_i32gather_ps(s,     idx, 4);
-                    const __m256 y2 = _mm256_i32gather_ps(s + 1, idx, 4);
-                    const __m256 y3 = _mm256_i32gather_ps(s + 2, idx, 4);
-                    const __m256 h  = _mm256_set1_ps(0.5f);
-                    const __m256 ca = _mm256_mul_ps(h, _mm256_add_ps(_mm256_sub_ps(y3, y0),
-                                        _mm256_mul_ps(_mm256_set1_ps(3.0f), _mm256_sub_ps(y1, y2))));
-                    const __m256 cb = _mm256_add_ps(_mm256_sub_ps(y0, _mm256_mul_ps(_mm256_set1_ps(2.5f), y1)),
-                                        _mm256_sub_ps(_mm256_add_ps(y2, y2), _mm256_mul_ps(h, y3)));
-                    const __m256 cc = _mm256_mul_ps(h, _mm256_sub_ps(y2, y0));
-                    v = _mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_fmadd_ps(ca, frac, cb), frac, cc), frac, y1);
-                } else {
-                    const __m256 s0 = _mm256_i32gather_ps(s, idx, 4);
-                    const __m256 s1 = _mm256_i32gather_ps(s + 1, idx, 4);
-                    v = _mm256_fmadd_ps(frac, _mm256_sub_ps(s1, s0), s0);
-                }
+                // One channel at eight places. For an interleaved pair the neighbour a sample
+                // ahead is two floats along instead of one, and the index doubles -- which is why
+                // the pair is stored interleaved: the second channel's gather lands in the cache
+                // lines the first one has just pulled in, so it costs an instruction and not a
+                // memory stall.
+                constexpr int st = W ? 2 : 1;
+                (void) st;                       // folded into the addresses below; MSVC counts that as unused
+                __m256i idxS = idx;
+                if constexpr (W) idxS = _mm256_add_epi32(idx, idx);
+                const auto readEight = [&](const float* p) -> __m256 {
+                    if constexpr (H) {
+                        // Catmull-Rom through four samples. Two more gathers, which is most of
+                        // what it costs: the gather is what this loop waits for, so Hermite is
+                        // roughly twice the work of the line and is a choice, not the default.
+                        const __m256 y0 = _mm256_i32gather_ps(p - st, idxS, 4);
+                        const __m256 y1 = _mm256_i32gather_ps(p,          idxS, 4);
+                        const __m256 y2 = _mm256_i32gather_ps(p + st, idxS, 4);
+                        const __m256 y3 = _mm256_i32gather_ps(p + 2 * st, idxS, 4);
+                        const __m256 h  = _mm256_set1_ps(0.5f);
+                        const __m256 ca = _mm256_mul_ps(h, _mm256_add_ps(_mm256_sub_ps(y3, y0),
+                                            _mm256_mul_ps(_mm256_set1_ps(3.0f), _mm256_sub_ps(y1, y2))));
+                        const __m256 cb = _mm256_add_ps(_mm256_sub_ps(y0, _mm256_mul_ps(_mm256_set1_ps(2.5f), y1)),
+                                            _mm256_sub_ps(_mm256_add_ps(y2, y2), _mm256_mul_ps(h, y3)));
+                        const __m256 cc = _mm256_mul_ps(h, _mm256_sub_ps(y2, y0));
+                        return _mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_fmadd_ps(ca, frac, cb), frac, cc), frac, y1);
+                    } else {
+                        const __m256 s0 = _mm256_i32gather_ps(p,      idxS, 4);
+                        const __m256 s1 = _mm256_i32gather_ps(p + st, idxS, 4);
+                        return _mm256_fmadd_ps(frac, _mm256_sub_ps(s1, s0), s0);
+                    }
+                };
+                const __m256 vL = readEight(s);
+                __m256 vR = vL;
+                if constexpr (W) vR = readEight(s + 1);
                 const __m256 w  = _mm256_sub_ps(vhalf, _mm256_mul_ps(vhalf, vwc));
-                const __m256 vw = _mm256_mul_ps(v, w);
-                _mm256_storeu_ps(oL + i, _mm256_add_ps(_mm256_loadu_ps(oL + i), _mm256_mul_ps(vw, vgl)));
-                _mm256_storeu_ps(oR + i, _mm256_add_ps(_mm256_loadu_ps(oR + i), _mm256_mul_ps(vw, vgr)));
+                _mm256_storeu_ps(oL + i, _mm256_add_ps(_mm256_loadu_ps(oL + i), _mm256_mul_ps(_mm256_mul_ps(vL, w), vgl)));
+                _mm256_storeu_ps(oR + i, _mm256_add_ps(_mm256_loadu_ps(oR + i), _mm256_mul_ps(_mm256_mul_ps(vR, w), vgr)));
                 const __m256 nc = _mm256_sub_ps(_mm256_mul_ps(vwc, vc8), _mm256_mul_ps(vws, vs8));
                 vws = _mm256_add_ps(_mm256_mul_ps(vws, vc8), _mm256_mul_ps(vwc, vs8));
                 vwc = nc;
@@ -884,19 +921,23 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             const float32x4_t vc4 = vdupq_n_f32(c4), vs4 = vdupq_n_f32(s4);
             const float32x4_t vgl = vdupq_n_f32(gl), vgr = vdupq_n_f32(gr);
             const float32x4_t vhalf = vdupq_n_f32(0.5f);
+            constexpr int st = W ? 2 : 1;
             for (; i + 4 <= safe; i += 4) {
-                float lane[4];
+                float laneL[4], laneR[4];
                 for (int k = 0; k < 4; ++k) {
                     const double pos = base + g.rate * (i + k);
                     const int ip = static_cast<int>(pos);
                     const float f = static_cast<float>(pos - ip);
-                    lane[k] = H ? hermite(s, ip, f) : s[ip] + f * (s[ip + 1] - s[ip]);
+                    laneL[k] = readAt<H>(s + st * ip, st, f);
+                    if constexpr (W) laneR[k] = readAt<H>(s + st * ip + 1, st, f);
                 }
-                const float32x4_t v  = vld1q_f32(lane);
+                (void) laneR;
+                const float32x4_t vL = vld1q_f32(laneL);
+                float32x4_t vR = vL;
+                if constexpr (W) vR = vld1q_f32(laneR);
                 const float32x4_t w  = vsubq_f32(vhalf, vmulq_f32(vhalf, vwc));
-                const float32x4_t vw = vmulq_f32(v, w);
-                vst1q_f32(oL + i, vaddq_f32(vld1q_f32(oL + i), vmulq_f32(vw, vgl)));
-                vst1q_f32(oR + i, vaddq_f32(vld1q_f32(oR + i), vmulq_f32(vw, vgr)));
+                vst1q_f32(oL + i, vaddq_f32(vld1q_f32(oL + i), vmulq_f32(vmulq_f32(vL, w), vgl)));
+                vst1q_f32(oR + i, vaddq_f32(vld1q_f32(oR + i), vmulq_f32(vmulq_f32(vR, w), vgr)));
                 const float32x4_t nc = vsubq_f32(vmulq_f32(vwc, vc4), vmulq_f32(vws, vs4));
                 vws = vaddq_f32(vmulq_f32(vws, vc4), vmulq_f32(vwc, vs4));
                 vwc = nc;
@@ -907,20 +948,24 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
             wc = lastC[0]; ws = lastS[0];
         }
 #endif
+        constexpr int stT = W ? 2 : 1;
         for (; i < safe; ++i) {
             const double pos = base + g.rate * i;
             const int ip = static_cast<int>(pos);
             const float f = static_cast<float>(pos - ip);
-            const float v = H ? hermite(s, ip, f) : s[ip] + f * (s[ip + 1] - s[ip]);
+            const float vL = readAt<H>(s + stT * ip, stT, f);
+            const float vR = W ? readAt<H>(s + stT * ip + 1, stT, f) : vL;
             const float w = 0.5f - 0.5f * wc;
-            oL[i] += v * w * gl;
-            oR[i] += v * w * gr;
+            oL[i] += vL * w * gl;
+            oR[i] += vR * w * gr;
             const float nc = wc * rc - ws * rs;
             ws = ws * rc + wc * rs;
             wc = nc;
         }
         };
-        if (herm) runGrain(std::true_type{}); else runGrain(std::false_type{});
+        // Four bodies, chosen once per grain per block: line or curve, one channel or two.
+        if (herm) { if (wide) runGrain(std::true_type{},  std::true_type{});  else runGrain(std::true_type{},  std::false_type{}); }
+        else      { if (wide) runGrain(std::false_type{}, std::true_type{});  else runGrain(std::false_type{}, std::false_type{}); }
         g.pos = base + g.rate * safe;
         g.age += safe;
         g.wc = wc; g.ws = ws;

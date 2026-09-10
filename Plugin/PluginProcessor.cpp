@@ -745,25 +745,59 @@ bool AmbientSynthProcessor::readMono(const juce::File& file, std::vector<float>&
     return true;
 }
 
+// The same read, both channels kept. A texture slot plays the recording's own image now, so the
+// fold to mono that readMono does would throw away what it is there to play; readMono stays for
+// the wavetable loader, which really does want one signal.
+bool AmbientSynthProcessor::readStereo(const juce::File& file, std::vector<float>& left,
+                                       std::vector<float>& right, double& sampleRate)
+{
+    left.clear();
+    right.clear();
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(file));
+    if (reader == nullptr || reader->lengthInSamples <= 0) return false;
+    const juce::int64 maxLen = static_cast<juce::int64>(reader->sampleRate * 120.0);
+    const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, maxLen));
+    const int chans = static_cast<int>(reader->numChannels);
+    juce::AudioBuffer<float> buf(chans, n);
+    if (!reader->read(&buf, 0, n, 0, true, true)) return false;
+    left.assign(static_cast<size_t>(n), 0.0f);
+    if (chans > 1) right.assign(static_cast<size_t>(n), 0.0f);
+    int nl = 0, nr = 0;
+    for (int c = 0; c < chans; ++c) {
+        std::vector<float>& into = (c % 2 == 0 || chans == 1) ? left : right;
+        ((c % 2 == 0 || chans == 1) ? nl : nr) += 1;
+        const float* s = buf.getReadPointer(c);
+        for (int i = 0; i < n; ++i) into[static_cast<size_t>(i)] += s[i];
+    }
+    for (int i = 0; i < n; ++i) {
+        if (nl > 0) left[static_cast<size_t>(i)] /= static_cast<float>(nl);
+        if (nr > 0) right[static_cast<size_t>(i)] /= static_cast<float>(nr);
+    }
+    sampleRate = reader->sampleRate;
+    return true;
+}
+
 bool AmbientSynthProcessor::loadTextureFile(int slot, const juce::File& file)
 {
     if (slot < 0 || slot >= ambient::kSlots) return false;
-    std::vector<float> mono; double rate = 0.0;
-    if (!readMono(file, mono, rate)) return false;
+    std::vector<float> l, r; double rate = 0.0;
+    if (!readStereo(file, l, r, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());   // "_A3" suffix from TextureGen
-    target().setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
-                       ambient::loopFromName(file.getFileName().toRawUTF8()));
+    target().setTexture(slot, l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                       base > 0.0 ? base : 261.6256, ambient::loopFromName(file.getFileName().toRawUTF8()));
     textureFile_[slot] = file;
     return true;
 }
 
 bool AmbientSynthProcessor::loadTextureFile(const juce::File& file)
 {
-    std::vector<float> mono; double rate = 0.0;
-    if (!readMono(file, mono, rate)) return false;
+    std::vector<float> l, r; double rate = 0.0;
+    if (!readStereo(file, l, r, rate)) return false;
     const double base = baseHzFromName(file.getFileName().toRawUTF8());
-    target().setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
-                       ambient::loopFromName(file.getFileName().toRawUTF8()));
+    target().setTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                       base > 0.0 ? base : 261.6256, ambient::loopFromName(file.getFileName().toRawUTF8()));
     for (auto& f : textureFile_) f = file;
     return true;
 }
@@ -911,7 +945,7 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
     for (int k = 0; k < ambient::kSlots; ++k)
         if (const ambient::Texture* t = from.displayTexture(k))
             if (!t->empty())
-                e.setTexture(k, t->mono.data(), static_cast<int>(t->mono.size()), t->sampleRate, t->baseHz, t->seamless);
+                e.setTexture(k, *t);
     // The impulse responses are the one thing the engine cannot hand over -- it keeps them as
     // spectra, not as samples -- so a room the player opened is read from its file again. A
     // generated room needs nothing: a new engine makes its own.

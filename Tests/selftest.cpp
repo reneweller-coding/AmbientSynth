@@ -2177,6 +2177,88 @@ void testModulation()
                 CHECK(highGain > lowGain + 0.2, "and the difference grows with frequency, which is what it is");
             }
 
+            // A stereo clip keeps its own image.
+            //
+            // Ninety-five per cent of the library is stereo and every clip of it used to be summed
+            // to mono when it was loaded. The case that says whether the second channel is really
+            // being read is the one the sum destroys completely: L and R the same noise with
+            // opposite signs. Mono that is silence. So the test is its own negative control -- the
+            // same two channels through the mono entry point have to vanish, and through the stereo
+            // one have to come out loud and anti-correlated. And a clip whose channels are IDENTICAL
+            // has to arrive at the level it always did, because a stereo fix that quietly moves the
+            // whole library's texture level by three decibels is not a fix.
+            //
+            // The clip is a tone and not noise, and that is the second half of the lesson. The
+            // instrument puts about six samples between the two ears before anything reaches the
+            // output -- measured, and it is there for an Additive source too, so it is nothing to
+            // do with grains. A tone survives that (an additive source comes out at +0.78); white
+            // noise does not, and a noise clip therefore arrives fully decorrelated whatever its
+            // channels did. Written with noise this test measured +0.1 dB of side energy for both
+            // an identical-channel clip and an anti-phase one and said nothing at all.
+            {
+                std::vector<float> a(48000 * 2), minusA(a.size()), sum(a.size());
+                for (size_t i = 0; i < a.size(); ++i) {
+                    a[i] = 0.3f * std::sin(kTwoPi * 200.0 * static_cast<double>(i) / 48000.0);
+                    minusA[i] = -a[i];
+                    sum[i] = 0.5f * (a[i] + minusA[i]);
+                }
+                // level, and how much of it stands in the side channel rather than the middle.
+                auto run = [&](const float* L, const float* R) {
+                    Engine e;
+                    e.prepare(48000.0, 256);
+                    if (R != nullptr) e.setTexture(L, R, static_cast<int>(a.size()), 48000.0, 261.6256, false);
+                    else              e.setTexture(L, static_cast<int>(a.size()), 48000.0, 261.6256, false);
+                    e.setParam(ParamId::BrainOn, 0.0f);
+                    e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Texture"));
+                    e.setParam(ParamId::OscLevel, 0.9f);
+                    e.setParam(ParamId::Src1Follow, 1.0f);
+                    e.setParam(ParamId::Src1Grain, 200.0f);
+                    e.setParam(ParamId::Src1Density, 20.0f);
+                    e.setParam(ParamId::Src1Grains, 32.0f);
+                    e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::Breath, 0.0f);
+                    e.setParam(ParamId::SubLevel, 0.0f); e.setParam(ParamId::StrikeLevel, 0.0f);
+                    e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+                    e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::RoomLevel, 0.0f);
+                    e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Attack, 0.05f);
+                    // Everything downstream that makes a field out of a signal, off: Phase Width
+                    // alone decorrelates a centred voice so thoroughly that what the clip did is no
+                    // longer visible at the output. The question here is what the source produced.
+                    e.setParam(ParamId::PhaseWidth, 0.0f); e.setParam(ParamId::Externalise, 0.0f);
+                    e.setParam(ParamId::Doppler, 0.0f); e.setParam(ParamId::Haas, 0.0f);
+                    e.setParam(ParamId::SideAir, 0.0f); e.setParam(ParamId::Unison, 1.0f);
+                    e.setParam(ParamId::Spread, 0.0f); e.setParam(ParamId::Src1Spread, 0.0f);
+                    e.noteOn(62, 0.9f);
+                    std::vector<float> l(256), r(256);
+                    double sq = 0.0, mid = 0.0, side = 0.0; size_t n = 0;
+                    for (int b = 0; b < 6 * 48000 / 256; ++b) {
+                        e.process(l.data(), r.data(), 256);
+                        if (b < 2 * 48000 / 256) continue;
+                        for (int k = 0; k < 256; ++k) {
+                            sq += static_cast<double>(l[k]) * l[k] + static_cast<double>(r[k]) * r[k];
+                            const double m = 0.5 * (static_cast<double>(l[k]) + r[k]);
+                            const double s = 0.5 * (static_cast<double>(l[k]) - r[k]);
+                            mid += m * m; side += s * s;
+                            ++n;
+                        }
+                    }
+                    const double rms = std::sqrt(sq / std::max<size_t>(2 * n, 1));
+                    const double sideDb = 10.0 * std::log10((side + 1e-30) / (mid + 1e-30));
+                    return std::make_pair(rms, sideDb);
+                };
+                const auto folded = run(sum.data(), nullptr);           // what the loader used to do
+                const auto wide   = run(a.data(), minusA.data());       // both channels
+                const auto same   = run(a.data(), a.data());            // a clip with no width at all
+                const auto plain  = run(a.data(), nullptr);             // the same clip as a mono file
+                std::printf("  [probe] anti-phase clip: mono sum %.2e, stereo %.2e (side %+.1f dB); "
+                            "identical channels %.2e (side %+.1f dB) against mono %.2e (side %+.1f dB)\n",
+                            folded.first, wide.first, wide.second, same.first, same.second, plain.first, plain.second);
+                CHECK(folded.first < 1e-5, "a clip whose channels cancel is silence once it is summed");
+                CHECK(wide.first > 100.0 * std::max(folded.first, 1e-9), "and is not silence when both channels are read");
+                CHECK(wide.second > same.second + 10.0, "and its energy stands in the side channel, where the recording put it");
+                CHECK(std::fabs(20.0 * std::log10(std::max(same.first, 1e-12) / std::max(plain.first, 1e-12))) < 0.5,
+                      "a stereo clip with identical channels arrives at the level a mono one does");
+            }
+
             // The end of the clip, over and over. The grain loop reads s[ip] and s[ip+1], and since
             // it became a gather -- eight places at once, no test between them -- the bound is
             // computed once per block from the rate instead of checked once per sample. That

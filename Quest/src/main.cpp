@@ -479,11 +479,13 @@ public:
                 std::string one = all.substr(start, semi == std::string::npos ? std::string::npos : semi - start);
                 while (!one.empty() && one.front() == ' ') one.erase(one.begin());
                 while (!one.empty() && one.back() == ' ') one.pop_back();
-                if (!one.empty() && readWavMono(one.c_str(), mono, rate)) {
+                std::vector<float> right;
+                if (!one.empty() && readWavStereo(one.c_str(), mono, right, rate)) {
                     const double base = baseHzFromName(one.c_str());
                     const bool seamless = loopFromName(one.c_str());
-                    if (perSlot) engine_.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256, seamless);
-                    else         engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256, seamless);
+                    const float* rp = right.empty() ? nullptr : right.data();
+                    if (perSlot) engine_.setTexture(slot, mono.data(), rp, static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256, seamless);
+                    else         engine_.setTexture(mono.data(), rp, static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256, seamless);
                     LOGI("preset texture %d: %s", slot + 1, one.c_str());
                 }
                 if (semi == std::string::npos) break;
@@ -517,9 +519,11 @@ public:
             }
             closedir(d);
         }
-        if (!texPath.empty() && readWavMono(texPath.c_str(), mono, rate)) {
+        std::vector<float> texRight;
+        if (!texPath.empty() && readWavStereo(texPath.c_str(), mono, texRight, rate)) {
             const double base = baseHzFromName(texPath.c_str());
-            engine_.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
+            engine_.setTexture(mono.data(), texRight.empty() ? nullptr : texRight.data(),
+                               static_cast<int>(mono.size()), rate, base > 0.0 ? base : 261.6256,
                                loopFromName(texPath.c_str()));
             LOGI("%s: %.1f s @ %d Hz, base %.1f Hz", texPath.c_str(), mono.size() / static_cast<double>(rate), rate, base > 0.0 ? base : 261.6256);
         }

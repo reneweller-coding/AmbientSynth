@@ -341,6 +341,30 @@ void Engine::waitForQuiet()
     }
 }
 
+void Engine::setTexture(int slot, const float* L, const float* R, int n, double sampleRate, double baseHz, bool seamless)
+{
+    if (R == nullptr) { setTexture(slot, L, n, sampleRate, baseHz, seamless); return; }
+    if (slot < 0 || slot >= kSlots || L == nullptr) return;
+    const int len = std::max(n, 0);
+    // The mono sum for the analysis and for the types that read one signal, and the interleaved
+    // pair for the grain loop. Built here rather than in every caller, so a host, the render tool
+    // and the Quest cannot disagree about what the sum is.
+    std::vector<float> mono(static_cast<size_t>(len), 0.0f);
+    for (int i = 0; i < len; ++i) mono[static_cast<size_t>(i)] = 0.5f * (L[i] + R[i]);
+    waitForQuiet();
+    const int active = textureActive_[slot].load(std::memory_order_acquire);
+    const int target = active < 0 ? 0 : 1 - active;
+    Texture& t = textures_[slot][target];
+    t.mono = std::move(mono);
+    t.lr.assign(static_cast<size_t>(2 * len), 0.0f);
+    for (int i = 0; i < len; ++i) { t.lr[static_cast<size_t>(2 * i)] = L[i]; t.lr[static_cast<size_t>(2 * i + 1)] = R[i]; }
+    t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
+    t.seamless = seamless;
+    t.measure();
+    textureActive_[slot].store(target, std::memory_order_release);
+}
+
 void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz, bool seamless)
 {
     if (slot < 0 || slot >= kSlots) return;
@@ -360,10 +384,21 @@ void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, d
     waitForQuiet();
     Texture& t = textures_[slot][target];
     t.mono.assign(mono, mono + std::max(n, 0));
+    t.lr.clear();          // this buffer may have held a stereo clip: a mono one is mono again
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.seamless = seamless;
     t.measure();
+    textureActive_[slot].store(target, std::memory_order_release);
+}
+
+void Engine::setTexture(int slot, const Texture& src)
+{
+    if (slot < 0 || slot >= kSlots || src.empty()) return;
+    waitForQuiet();
+    const int active = textureActive_[slot].load(std::memory_order_acquire);
+    const int target = active < 0 ? 0 : 1 - active;
+    textures_[slot][target] = src;
     textureActive_[slot].store(target, std::memory_order_release);
 }
 

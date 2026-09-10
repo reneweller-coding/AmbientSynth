@@ -15,6 +15,10 @@ namespace ambient {
 std::string resolveAudioFile(const char* path);
 
 bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate);
+// A clip's two channels for a texture slot: `left` always, `right` empty when the file was mono
+// (and when it had more than two channels, which are folded into the two). Every caller that loads
+// a texture wants exactly this, and each of them used to fold to mono on its own.
+bool readWavStereo(const char* path, std::vector<float>& left, std::vector<float>& right, int& sampleRate);
 // All channels, deinterleaved (impulse responses keep their stereo).
 bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels, int& sampleRate);
 

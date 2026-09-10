@@ -461,11 +461,11 @@ static int runOnce(int argc, char** argv)
             double baseHz = baseHzFromName(path.c_str());   // "_A3" suffix (TextureGen), else C4
             if (baseHz <= 0.0) baseHz = 261.6256;
             if (i + 1 < argc && std::atof(argv[i + 1]) > 0.0) baseHz = std::atof(argv[++i]);
-            std::vector<float> mono; int rate = 0;
-            if (!readWavMono(path.c_str(), mono, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
-            engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, baseHz, loopFromName(path.c_str()));
-            std::printf("texture: %s (%.1f s @ %d Hz, base %.1f Hz%s)\n", path.c_str(), mono.size() / static_cast<double>(rate), rate, baseHz,
-                        loopFromName(path.c_str()) ? ", seamless" : "");
+            std::vector<float> l, r; int rate = 0;
+            if (!readWavStereo(path.c_str(), l, r, rate)) { std::fprintf(stderr, "cannot read texture %s\n", path.c_str()); return 2; }
+            engine.setTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate, baseHz, loopFromName(path.c_str()));
+            std::printf("texture: %s (%.1f s @ %d Hz, %s, base %.1f Hz%s)\n", path.c_str(), l.size() / static_cast<double>(rate), rate,
+                        r.empty() ? "mono" : "stereo", baseHz, loopFromName(path.c_str()) ? ", seamless" : "");
         }
         else if (a == "--route") {   // walk a route preset (by name) or a route text over the map
             const std::string spec = next();
@@ -662,11 +662,13 @@ static int runOnce(int argc, char** argv)
                 while (!one.empty() && one.front() == ' ') one.erase(one.begin());
                 while (!one.empty() && one.back() == ' ') one.pop_back();
                 if (!one.empty()) {
-                    if (readWavMono(one.c_str(), mono, rate)) {
+                    std::vector<float> right;
+                    if (readWavStereo(one.c_str(), mono, right, rate)) {
                         double base = baseHzFromName(one.c_str()); if (base <= 0.0) base = 261.6256;
                         const bool seamless = loopFromName(one.c_str());
-                        if (perSlot) engine.setTexture(slot, mono.data(), static_cast<int>(mono.size()), rate, base, seamless);
-                        else         engine.setTexture(mono.data(), static_cast<int>(mono.size()), rate, base, seamless);
+                        const float* rp = right.empty() ? nullptr : right.data();
+                        if (perSlot) engine.setTexture(slot, mono.data(), rp, static_cast<int>(mono.size()), rate, base, seamless);
+                        else         engine.setTexture(mono.data(), rp, static_cast<int>(mono.size()), rate, base, seamless);
                         std::printf("preset texture%s: %s\n", perSlot ? (" " + std::to_string(slot + 1)).c_str() : "", one.c_str());
                     } else std::fprintf(stderr, "preset texture missing: %s\n", one.c_str());
                 }

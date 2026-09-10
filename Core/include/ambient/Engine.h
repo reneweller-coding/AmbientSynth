@@ -89,6 +89,17 @@ public:
     void setTexture(int slot, const float* mono, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false);
     void setTexture(const float* mono, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false)
     { for (int k = 0; k < kSlots; ++k) setTexture(k, mono, n, sampleRate, baseHz, seamless); }
+    // The same clip with both its channels. `R` may be null, which is the mono form above; when it
+    // is not, the granular source reads the pair and keeps the recording's own image instead of
+    // playing its mono sum. The mono sum is still made here, because the band model, the Paulstretch
+    // and the Spectral resynthesis are all built on it.
+    void setTexture(int slot, const float* L, const float* R, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false);
+    void setTexture(const float* L, const float* R, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false)
+    { for (int k = 0; k < kSlots; ++k) setTexture(k, L, R, n, sampleRate, baseHz, seamless); }
+    // A clip that has already been read and measured, handed from one engine to another (a preset
+    // change builds a new engine and the player's own sample has to survive it). Copies the band
+    // model with it rather than measuring the same clip a second time.
+    void setTexture(int slot, const Texture& src);
     void clearTexture(int slot);
     bool hasTexture(int slot = 0) const
     { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }

@@ -415,6 +415,12 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                 exportManual(juce::File(man), [] { juce::JUCEApplicationBase::quit(); });
             });
         }
+        // AMBIENT_WAVETABLE=<file>: a table file into the user slot, for a picture of a table the
+        // built-ins cannot show -- they have four or five frames, a Serum bank has up to 256.
+        {
+            const juce::String wtf = juce::SystemStats::getEnvironmentVariable("AMBIENT_WAVETABLE", "");
+            if (wtf.isNotEmpty()) proc_.loadWavetableFile(juce::File(wtf));
+        }
         // AMBIENT_SET=key=value;key=value and AMBIENT_MATRIX=<routes>: parameters and routes for a
         // run, on top of the preset -- so a picture can show a state no preset has.
         {

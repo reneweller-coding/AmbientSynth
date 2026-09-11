@@ -611,26 +611,49 @@ private:
         uint32_t seen = 0xffffffffu;
     };
     // One source slot: the wavetable frame, the FM cycle, the clip with its grain window, or the
-    // colour of the noise -- whichever the slot is set to.
+    // colour of the noise -- whichever the slot is set to. A table (Harmonic or Wavetable) is drawn
+    // whole and in depth -- every frame a line, the first at the front, the frame at Position lit --
+    // and a click turns it into the flat picture of that one frame with its neighbours, and back.
     struct SourceView : juce::Component, juce::Timer {
-        SourceView(AmbientSynthProcessor& p, int s) : proc(p), slot(s) { setInterceptsMouseClicks(false, false); startTimerHz(15); }
+        SourceView(AmbientSynthProcessor& p, int s) : proc(p), slot(s) { setInterceptsMouseClicks(true, false); startTimerHz(15); }
         void paint(juce::Graphics&) override;
-        // A wavetable frame, an FM cycle and a noise colour are pictures of parameters and
-        // change only when one moves. A clip's grains, the additive bank's partials, a bowed
-        // string and a spectral model are what the engine is doing this instant, and are drawn
-        // every tick.
+        void mouseDown(const juce::MouseEvent&) override;
+        // A wavetable frame, an FM cycle and a noise colour are pictures of parameters and change
+        // only when one moves -- or, for a table, when a modulation moves its Position, which is
+        // watched here. A clip's grains, the additive bank's partials, a bowed string and a
+        // spectral model are what the engine is doing this instant, and are drawn every tick.
         void timerCallback() override
         {
             if (!isShowing()) return;
             const int type = static_cast<int>(std::lround(proc.engine().getParam(ambient::slotParamIds(slot - 1)[0])));
             const bool alive = type == 3 || type == 5 || type == 6 || type == 7 || type == 8;
+            const bool moved = (type == 1 || type == 9) && std::fabs(livePosition() - shownPos) > 0.002f;
             const uint32_t g = proc.paramGeneration();
-            if (alive || g != seen) { seen = g; repaint(); }
+            if (alive || moved || g != seen) { seen = g; repaint(); }
         }
+        // Position as it is playing: the knob, the morph or map blend, and what the matrix adds.
+        float livePosition() const
+        {
+            const ambient::ParamId id = ambient::slotParamIds(slot - 1)[6];
+            return juce::jlimit(0.0f, 1.0f, proc.engine().effectiveParam(id) + proc.engine().modAmount(id));
+        }
+        // The table in depth; false when there is nothing to stand in depth (no table, one frame).
+        bool paintTable3D(juce::Graphics& g, juce::Rectangle<float> plot, int type, int table, float pos);
         AmbientSynthProcessor& proc;
         uint32_t seen = 0xffffffffu;
-        int slot;   // 1, 2 or 3
+        int slot;   // 1 .. 4
         float amp[ambient::kTablePartials] = {};   // smoothed live amplitudes for the additive picture
+        bool  flat = false;       // the table as one frame (after a click) rather than in depth
+        float shownPos = -1.0f;   // the Position last drawn
+        // The table sampled for drawing, kTablePoints + 1 points a frame, and its lines drawn once
+        // into an image at the display's size: both rebuilt only when the table or the size changes.
+        static constexpr int kTablePoints = 96;
+        std::vector<float> tableCycles;
+        int    tableFrames = 0;
+        double tableSig = -1.0;
+        juce::Image tableMesh;
+        juce::Rectangle<int> meshBounds;
+        float  meshScale = 0.0f;
     };
     // The conductor's notes as they happen: a piano roll scrolling left, one column per tick, so
     // the cluster brain's choices can be watched rather than inferred from the keyboard strip.

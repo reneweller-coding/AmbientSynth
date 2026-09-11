@@ -536,6 +536,164 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
     g.drawText(fc.legend(), r.reduced(9, 5), juce::Justification::topRight, false);
 }
 
+void AmbientSynthEditor::SourceView::mouseDown(const juce::MouseEvent&)
+{
+    const int type = static_cast<int>(std::lround(rawParam(proc, ("src" + juce::String(slot) + "_type").toRawUTF8())));
+    if (type == 1 || type == 9) { flat = !flat; repaint(); }
+}
+
+// A table in depth. Every frame is a line of its cycle, and every step back into the table moves the
+// line up and to the right, so the table stands as one slab the eye reads as a single object -- the
+// way Serum taught everyone to look at a wavetable. The lines are drawn once into an image for as
+// long as the table and the size stay; what is drawn on every tick is the frame at Position, lit in
+// the warm colour of what is sounding, which is the part that moves.
+bool AmbientSynthEditor::SourceView::paintTable3D(juce::Graphics& g, juce::Rectangle<float> plot, int type, int table, float pos)
+{
+    // Which table, and whether it has changed since it was sampled. A user table is loaded into the
+    // same place as the one before it, so the signature reads a little of the content as well.
+    const ambient::CycleTable* ct = nullptr;
+    const ambient::Wavetable* wt = nullptr;
+    int frames = 0;
+    double sig = type * 7919.0 + table * 104729.0;
+    if (type == 9) {
+        ct = table >= ambient::kNumTables - 1 ? proc.engine().userCycles() : &ambient::builtinCycleTable(table);
+        if (ct != nullptr && !ct->empty()) {
+            frames = ct->frames;
+            for (int f : { 0, frames / 2, frames - 1 }) {
+                const float* c = ct->cycle(ambient::CycleTable::kLevels - 1, f);   // 32 samples a cycle
+                sig += (c[0] + 3.0 * c[7] + 7.0 * c[19]) * (f + 1.0);
+            }
+        }
+    } else {
+        wt = table >= ambient::kNumTables - 1 ? proc.engine().userWavetable() : &ambient::builtinTable(table);
+        if (wt != nullptr && wt->frames > 0) {
+            frames = wt->frames;
+            for (int f : { 0, frames / 2, frames - 1 })
+                for (int h = 0; h < 6; ++h) sig += wt->amp[f][h] * (h + 1.0) * (f + 1.0);
+        }
+    }
+    if (frames < 2) return false;
+    sig += frames * 31.0;
+    const int stride = kTablePoints + 1;
+
+    // The table sampled: kTablePoints points a cycle, at the level of the mipmap that still holds
+    // more detail than the display, the whole table on one scale so a quiet frame looks quiet.
+    if (sig != tableSig || frames != tableFrames) {
+        tableSig = sig;
+        tableFrames = frames;
+        tableCycles.assign(static_cast<size_t>(frames * stride), 0.0f);
+        float peak = 1.0e-6f;
+        for (int f = 0; f < frames; ++f) {
+            for (int i = 0; i <= kTablePoints; ++i) {
+                const double u = static_cast<double>(i % kTablePoints) / kTablePoints;
+                float v = 0.0f;
+                if (ct != nullptr) {
+                    v = ct->sample(4, f, u);
+                } else {
+                    double s = 0.0;
+                    for (int h = 0; h < ambient::kTablePartials; ++h) {
+                        const float a = wt->amp[f][h];
+                        if (a > 1.0e-5f) s += a * std::sin(juce::MathConstants<double>::twoPi * (h + 1) * u);
+                    }
+                    v = static_cast<float>(s);
+                }
+                tableCycles[static_cast<size_t>(f * stride + i)] = v;
+                peak = juce::jmax(peak, std::fabs(v));
+            }
+        }
+        for (auto& v : tableCycles) v /= peak;
+        tableMesh = {};
+    }
+
+    // The slab: the width of a cycle along x, the depth of the table up and to the right.
+    // The panels are wide and low, where Serum's is nearly square, so the depth is bounded by the
+    // height and the waves are allowed a little over the slab's top edge rather than drawn flat.
+    const float depthX = juce::jmin(plot.getWidth() * 0.22f, plot.getHeight() * 1.4f), depthY = plot.getHeight() * 0.34f;
+    const float width = plot.getWidth() - depthX;
+    const float ampY = (plot.getHeight() - depthY) * 0.54f;
+    const float baseY = plot.getBottom() - ampY;
+    const auto at = [&](float t, float u, float v) {
+        return juce::Point<float>(plot.getX() + t * depthX + u * width, baseY - t * depthY - v * ampY);
+    };
+    const auto frameT = [&](int f) { return static_cast<float>(f) / static_cast<float>(frames - 1); };
+
+    // The lines, into an image at the pixels the editor's scale will put on the screen.
+    const float scale = juce::jmax(1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto bounds = plot.getSmallestIntegerContainer();
+    if (!tableMesh.isValid() || bounds != meshBounds || scale != meshScale) {
+        meshBounds = bounds;
+        meshScale = scale;
+        tableMesh = juce::Image(juce::Image::ARGB, juce::jmax(1, juce::roundToInt(bounds.getWidth() * scale)),
+                                juce::jmax(1, juce::roundToInt(bounds.getHeight() * scale)), true);
+        juce::Graphics mg(tableMesh);
+        mg.addTransform(juce::AffineTransform::translation(-static_cast<float>(bounds.getX()), -static_cast<float>(bounds.getY())).scaled(scale));
+        // The floor: every frame's zero line, the edges of the slab.
+        juce::Path floor;
+        floor.startNewSubPath(at(0.0f, 0.0f, 0.0f));
+        floor.lineTo(at(0.0f, 1.0f, 0.0f));
+        floor.lineTo(at(1.0f, 1.0f, 0.0f));
+        floor.lineTo(at(1.0f, 0.0f, 0.0f));
+        floor.closeSubPath();
+        mg.setColour(ui::track.withAlpha(0.8f));
+        mg.strokePath(floor, juce::PathStrokeType(1.0f));
+        // At most forty frames: a table of 256 would be a grey wall at this size.
+        const int shown = juce::jmin(frames, 40);
+        std::vector<int> pick(static_cast<size_t>(shown));
+        for (int j = 0; j < shown; ++j) pick[static_cast<size_t>(j)] = juce::roundToInt(j * (frames - 1) / static_cast<double>(shown - 1));
+        // Lines across the frames at thirteen places in the cycle, which make the slab a surface.
+        for (int c = 0; c <= 12; ++c) {
+            const int i = c * kTablePoints / 12;
+            juce::Path across;
+            for (int j = 0; j < shown; ++j) {
+                const int f = pick[static_cast<size_t>(j)];
+                const auto p = at(frameT(f), static_cast<float>(i) / kTablePoints, tableCycles[static_cast<size_t>(f * stride + i)]);
+                if (j == 0) across.startNewSubPath(p); else across.lineTo(p);
+            }
+            mg.setColour(ui::voiceCol.withAlpha(0.11f));
+            mg.strokePath(across, juce::PathStrokeType(0.8f));
+        }
+        // The frames, back to front, the ones further back fainter.
+        for (int j = shown - 1; j >= 0; --j) {
+            const int f = pick[static_cast<size_t>(j)];
+            const float t = frameT(f);
+            juce::Path line;
+            for (int i = 0; i <= kTablePoints; ++i) {
+                const auto p = at(t, static_cast<float>(i) / kTablePoints, tableCycles[static_cast<size_t>(f * stride + i)]);
+                if (i == 0) line.startNewSubPath(p); else line.lineTo(p);
+            }
+            mg.setColour(ui::voiceCol.withAlpha(0.16f + 0.36f * (1.0f - t)));
+            mg.strokePath(line, juce::PathStrokeType(1.0f));
+        }
+    }
+    g.drawImage(tableMesh, bounds.toFloat());
+
+    // The frame at Position, between two frames when it is between them, lit: its outline, a glow,
+    // the area down to its zero line, and its place on the floor.
+    const float x = pos * static_cast<float>(frames - 1);
+    const int f0 = juce::jlimit(0, frames - 1, static_cast<int>(x));
+    const int f1 = juce::jmin(f0 + 1, frames - 1);
+    const float fr = x - static_cast<float>(f0);
+    juce::Path lit, fill;
+    fill.startNewSubPath(at(pos, 0.0f, 0.0f));
+    for (int i = 0; i <= kTablePoints; ++i) {
+        const float a = tableCycles[static_cast<size_t>(f0 * stride + i)], b = tableCycles[static_cast<size_t>(f1 * stride + i)];
+        const auto p = at(pos, static_cast<float>(i) / kTablePoints, a + fr * (b - a));
+        if (i == 0) lit.startNewSubPath(p); else lit.lineTo(p);
+        fill.lineTo(p);
+    }
+    fill.lineTo(at(pos, 1.0f, 0.0f));
+    fill.closeSubPath();
+    g.setColour(ui::live.withAlpha(0.13f));
+    g.fillPath(fill);
+    g.setColour(ui::live.withAlpha(0.55f));
+    g.drawLine(juce::Line<float>(at(pos, 0.0f, 0.0f), at(pos, 1.0f, 0.0f)), 1.0f);
+    g.setColour(ui::live.withAlpha(0.22f));
+    g.strokePath(lit, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(ui::live);
+    g.strokePath(lit, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    return true;
+}
+
 void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds();
@@ -546,6 +704,24 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
     displayFrame(g, r, kTitles[juce::jlimit(0, 9, type)], ui::voiceCol);
     const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
     const float cy = plot.getCentreY(), hh = plot.getHeight() * 0.42f;
+    // A table stands in depth, unless it has been clicked flat or has only one frame to stand.
+    if ((type == 1 || type == 9) && !flat) {
+        const int table = static_cast<int>(std::lround(rawParam(proc, (pre + "table").toRawUTF8())));
+        const float pos = livePosition();
+        shownPos = pos;
+        if (paintTable3D(g, plot, type, table, pos)) {
+            const int frames = tableFrames;
+            g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+            g.drawText(juce::String(ambient::kTableNames[juce::jlimit(0, ambient::kNumTables - 1, table)]) + "  " + juce::String(frames)
+                           + " frames  pos " + juce::String(pos, 2),
+                       r.reduced(9, 5), juce::Justification::topRight, false);
+            g.drawText("frame " + juce::String(1 + juce::roundToInt(pos * static_cast<float>(frames - 1))) + " / " + juce::String(frames),
+                       r.reduced(9, 5), juce::Justification::bottomRight, false);
+            g.setColour(ui::faint); g.setFont(ui::body(9.5f));
+            g.drawText("click: one frame", r.reduced(9, 5), juce::Justification::bottomLeft, false);
+            return;
+        }
+    }
     g.setColour(ui::track.withAlpha(0.6f));
     g.drawHorizontalLine(juce::roundToInt(cy), plot.getX(), plot.getRight());
     if (type == 0) {
@@ -577,7 +753,8 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
 
     if (type == 1) {   // wavetable: one cycle of the frame at Position, resynthesised from its spectrum
         const int table = static_cast<int>(std::lround(rawParam(proc, (pre + "table").toRawUTF8())));
-        const float pos = rawParam(proc, (pre + "pos").toRawUTF8());
+        const float pos = livePosition();
+        shownPos = pos;
         const ambient::Wavetable* wt = table >= ambient::kNumTables - 1 ? proc.engine().userWavetable()
                                                                         : &ambient::builtinTable(table);
         float spec[ambient::kTablePartials] = {};
@@ -594,7 +771,8 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
                    r.reduced(9, 5), juce::Justification::topRight, false);
     } else if (type == 9) {   // wavetable: the frame at Position as the samples it is, a few neighbours faint behind it
         const int table = static_cast<int>(std::lround(rawParam(proc, (pre + "table").toRawUTF8())));
-        const float pos = juce::jlimit(0.0f, 1.0f, rawParam(proc, (pre + "pos").toRawUTF8()));
+        const float pos = livePosition();
+        shownPos = pos;
         const ambient::CycleTable* ct = table >= ambient::kNumTables - 1 ? proc.engine().userCycles()
                                                                          : &ambient::builtinCycleTable(table);
         if (ct == nullptr || ct->empty()) {

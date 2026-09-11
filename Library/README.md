@@ -27,7 +27,11 @@ Library/
                            SA3 single notes; the .json names clip and note), otmorph 150 (optimal
                            transport between the others); report in WavetableSources
   Wavetables/CREDITS-classic.md   the AKWF/WaveEdit credits (not .txt: sort_clips.py deletes those)
-  Impulses/                curated 11.09. (Tools/library/curate_impulses.py), CREDITS.txt for AIR
+  Impulses/                curated 11.09. (Tools/library/curate_impulses.py), CREDITS.txt for AIR; and
+                           1000 rooms (Tools/ImpulseGen/roomgen.py, 11.09.): chamber, hall, cathedral,
+                           cavern, vast, plate (one slope each), bloom and far (coupled rooms), drift
+                           and swell (designed gestures); the .json holds design, seed and measurements.
+                           Names ending in a/b are Room Morph pairs on one noise (pack field 9, impulse B)
 ```
 
 Where it came from: the generator and its ledgers in `G:/Tools/VRAudio/StableAudio3` (`build/`,
@@ -43,6 +47,10 @@ Until the presets are rebuilt, and before rebuilding them:
 - do not run `make_wavetables.py` into `Library/Wavetables`, nor `check_textures.py --repair/--compact`
   (they write the old library's formats), nor `sort_clips.py` without `--no-fold`;
 - do not measure, rebalance or map the old packs: every render would miss its clips;
+- the impulses the released packs named (`Tools/library/legacy_impulses.json`, 350 files) keep their names
+  and ship with every content build, because a session keeps the path of its room; make_presets never
+  gives one to a new preset, and translates the old style families (room_hall, tuned, shimmer ...) into
+  the new ones;
 - new packs need a `format 2` line and the right type per table (Harmonic for harmonic_*, Wavetable
   for akwf_*/wavedit_*, either for ambient_*), a table whose .json says `"grounded": false` never goes
   into Source 1, and a vowel_* table is played inside the note_range its .json gives;

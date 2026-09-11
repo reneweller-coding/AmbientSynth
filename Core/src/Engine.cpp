@@ -125,9 +125,6 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     early_.prepare(sr_);
     diffuser_.prepare(sr_);
     coupleBuf_.assign(static_cast<size_t>(maxBlock_), 0.0f);
-    roomB_.prepare(sr_, roomMaxSeconds_);
-    roomBL_.assign(static_cast<size_t>(maxBlock_ + Convolver::kBlock), 0.0f);
-    roomBR_.assign(static_cast<size_t>(maxBlock_ + Convolver::kBlock), 0.0f);
     smRoomMorph_.setTime(0.05f, sr_);
     body_.prepare(sr_, 0xB0D1B0D1ull);
     patina_.prepare(sr_, 0x9A7104ull);

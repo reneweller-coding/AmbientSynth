@@ -439,13 +439,16 @@ void Engine::renderChunk(float* L, float* R, int n)
     float* rl = roomInL_.data(); float* rr = roomInR_.data();
     if (roomOn) {
         const float* srcL = roomSource_ == 0 ? fl : nl; const float* srcR = roomSource_ == 0 ? fr : nr;
+        // The convolution's own latency is taken out of the pre-delay rather than added to it, so
+        // Pre-Delay means what it says down to the latency itself (5 ms).
+        const int preDelay = std::max(0, roomPreDelay_ - room_.latency());
         for (int i = 0; i < n; ++i) {
             roomDelayL_[static_cast<size_t>(roomDelayW_)] = srcL[i]; roomDelayR_[static_cast<size_t>(roomDelayW_)] = srcR[i];
-            const int rd = (roomDelayW_ - roomPreDelay_) & roomDelayMask_;
+            const int rd = (roomDelayW_ - preDelay) & roomDelayMask_;
             rl[i] = roomDelayL_[static_cast<size_t>(rd)]; rr[i] = roomDelayR_[static_cast<size_t>(rd)];
             roomDelayW_ = (roomDelayW_ + 1) & roomDelayMask_;
         }
-        roomTailLeft_ = roomLevel_ > 0.0005f ? static_cast<long>(room_.impulseSeconds() * sr_) + Convolver::kBlock : std::max(0L, roomTailLeft_ - n);
+        roomTailLeft_ = roomLevel_ > 0.0005f ? room_.tailSamples() : std::max(0L, roomTailLeft_ - n);
     }
     diffuser_.process(fl, fr, n);
     {
@@ -595,25 +598,13 @@ void Engine::renderChunk(float* L, float* R, int n)
     }
     if (roomOn) {
         float* ol = roomOutL_.data(); float* orr = roomOutR_.data();
+        // Morph: the second impulse is blended into the first inside the convolution, which is the
+        // same as fading from one room's answer to the other's and costs one room. The smoother
+        // moves a block at a time; each stage of the convolver takes its value as its blocks begin.
+        smRoomMorph_.value = roomMorph_ + (smRoomMorph_.value - roomMorph_) * std::pow(1.0f - smRoomMorph_.coef, static_cast<float>(n));
+        if (std::fabs(smRoomMorph_.value - roomMorph_) < 1.0e-4f) smRoomMorph_.value = roomMorph_;
+        room_.setMorph(smRoomMorph_.value);
         room_.process(rl, rr, ol, orr, n);
-        // Morph: the second impulse's answer to the same input, faded in. Only computed while
-        // the morph is actually between the two rooms.
-        const bool morphing = roomMorph_ > 0.0005f || smRoomMorph_.value > 1.0e-4f;
-        // Stopping leaves the second room frozen wherever it was -- half a block in its input,
-        // a finished block in its output, its delay line where it stood. Turned up again minutes
-        // later it would play that back before anything new reached it. It is emptied once, at
-        // the moment it falls silent, so it always starts from nothing.
-        if (!morphing && roomBWas_) roomB_.reset();
-        roomBWas_ = morphing;
-        if (morphing) {
-            float* bl = roomBL_.data(); float* br = roomBR_.data();
-            roomB_.process(rl, rr, bl, br, n);
-            for (int i = 0; i < n; ++i) {
-                const float x = smRoomMorph_.next(roomMorph_);
-                ol[i] += (bl[i] - ol[i]) * x;
-                orr[i] += (br[i] - orr[i]) * x;
-            }
-        }
         const float lpc = 1.0f - std::exp(-kTwoPi * roomHighcut_ / static_cast<float>(sr_));
         const float rhpc = roomLowcut_ <= 21.0f ? 0.0f
                          : 1.0f - std::exp(-kTwoPi * (roomLowcut_ / 1.5538f) / static_cast<float>(sr_));

@@ -239,7 +239,7 @@ const HelpEntry kHelp[] = {
     { "room_source", "What the room reverberates: the far sends (before the far reverb) or the finished near bus." },
     { "room_predelay", "Milliseconds before the room's response starts." },
     { "room_highcut", "Low-pass on the room's tail." },
-    { "room_morph", "Crossfades between the two loaded impulses, A and B: one room becomes another over as long as you like. Both convolutions run only while the morph is between them, so at 0 or 1 it costs what one room costs." },
+    { "room_morph", "Crossfades between the two loaded impulses, A and B: one room becomes another over as long as you like. The two are blended inside the one convolution, so a morph costs what one room costs." },
 
     // ---- cosmos
     { "cosmos_send", "How much of the near bus goes into the Cosmos path (frequency shifter, resonator, vowel, nebula). The dry signal is untouched; Cosmos is additive." },
@@ -718,7 +718,7 @@ R"(MIDI: notes play voices on the Keys Depth plane; the lowest held key becomes 
 
 OSC on UDP port 9000: /ambient/param/<key> <value>, /ambient/paramn/<key> <0..1>, /ambient/note <n> <vel>, /ambient/preset <index>, /ambient/sound and /ambient/cosmos <index>, /ambient/morph <0..1>, /ambient/hand/L and /R <x y z pinch>, /ambient/head, /ambient/gesture, /ambient/calibrate. A second instance simply reports the port as taken.
 
-FILES: .ambientsynth (whole state), .ambientpack (preset packs), .ambientset (recorded sets), Scala .scl (Tuning > Load Scala...), wavetables (WAV from Serum, Vital or Hive -- the frame length is read from the file, 2048 samples otherwise -- Surge .wt, or a single cycle), WAV textures (a trailing note name such as "_A3" gives the clip's pitch), WAV impulse responses (mono or stereo). Rec in the header records the output to a 32-bit WAV.
+FILES: .ambientsynth (whole state), .ambientpack (preset packs), .ambientset (recorded sets), Scala .scl (Tuning > Load Scala...), wavetables (WAV from Serum, Vital or Hive -- the frame length is read from the file, 2048 samples otherwise -- Surge .wt, or a single cycle), WAV textures (a trailing note name such as "_A3" gives the clip's pitch), WAV impulse responses (mono or stereo, up to a minute). Rec in the header records the output to a 32-bit WAV.
 
 MEASURING: ambient_render renders any preset offline, deterministically, and prints level, spectral centroid, flatness, width, clicks; Tools/preset_check.py runs the sound test over a library. The same descriptors place the presets on the map.)" },
 
@@ -1054,7 +1054,7 @@ The first version of this had the nodes scattering into one another after a dela
 
 The measurement had a trap of its own. Taken over the whole quarter-second the side balance reads 0.04 dB even with the network correct, because after a few passes of the scattering the energy has been round every surface and points nowhere. Only the first thirty milliseconds carry direction, and that is where the test looks.
 
-The convolution room is a measured or designed space -- or, with the struck impulses, an object -- in parallel on the far plane, by uniform partitioned convolution in blocks of 512 samples (Gardner 1995): each input block's spectrum enters a frequency-domain delay line, every output block is the sum over partitions of input spectrum times impulse-partition spectrum, one inverse transform per block, overlap-added, one block of latency, which the far plane does not notice. Pre-delay on each reverb is the gap between the direct sound and the first reflection, which the ear reads not as the room's size but as where the source stands in it (Blauert 1997): a long pre-delay puts the source close and the wall far, a short one merges it with the room.
+The convolution room is a measured or designed space in parallel on the far plane, by partitioned convolution (Gardner 1995) with partitions that grow along the impulse (Battenberg and Avizienis 2011, Wefers 2015): 256 samples over the first 85 ms, 2048 up to 0.68 s, 16384 for the rest. Each stage's input blocks enter a frequency-domain delay line, every output block is the sum over partitions of input spectrum times impulse-partition spectrum, one inverse transform per block, overlap-added -- exact, with 5 ms of latency that the pre-delay absorbs. A late partition's answer is due long after its input arrives, so that work is spread over the time in between, and the long partitions of the tail are cheap: an impulse of a minute costs less than eight seconds did with 512-sample partitions throughout, and no single callback carries the load. Only the spectrum bins that matter are stored per partition, a mono impulse is read once for both ears, and Room Morph blends the two impulses inside the one convolution. Pre-delay on each reverb is the gap between the direct sound and the first reflection, which the ear reads not as the room's size but as where the source stands in it (Blauert 1997): a long pre-delay puts the source close and the wall far, a short one merges it with the room.
 
 The far reverb's Asymmetry stretches the right-hand lines by 1 + 0.08 a and delays the right output by up to 10 ms, so the two ears hear different reflections -- decorrelation, which is what the ear needs from a reverb to hear it as space rather than as a wash (an interaural cross-correlation below about 0.3 is the classic figure for spaciousness). Its Width is the funnel: the background's own stereo width, pulled in towards the centre while the foreground stays wide,
 
@@ -1693,6 +1693,8 @@ Schlecht, S. J. and Habets, E. A. P.: Scattering in feedback delay networks. IEE
 Abel, J. S. and Huang, P.: A simple, robust measure of reverberation echo density. 121st AES Convention, paper 6985, 2006. The normalised echo density the reverb test measures.
 
 Gardner, W. G.: Efficient convolution without input-output delay. Journal of the Audio Engineering Society 43 (3), 127-136, 1995. Partitioned convolution for the Room.
+
+Battenberg, E. and Avizienis, R.: Implementing real-time partitioned convolution algorithms on conventional operating systems. Proceedings of the 14th International Conference on Digital Audio Effects (DAFx-11), Paris, 2011; Wefers, F.: Partitioned convolution algorithms for real-time auralization. Dissertation, RWTH Aachen University, 2015. Partitions that grow along the impulse, the late ones' work spread over the time until it is due: the Room's minute.
 
 Dattorro, J.: Effect design, parts 1 and 2. Journal of the Audio Engineering Society 45 (9) and (10), 1997. Delay-line modulation, chorus and pitch shifting by a moving read pointer.
 

@@ -112,15 +112,16 @@ public:
     { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }
     // Convolution room: a stereo (R may be null) impulse response, message thread.
     void  setImpulse(const float* L, const float* R, int n, double sampleRate) { room_.setImpulse(L, R, n, sampleRate); userImpulse_ = true; }
-    // The room's second impulse: Room Morph crossfades between the two. Both convolutions only
-    // run while the morph is between them, so a room that is not morphing costs what it always did.
-    void  setImpulseB(const float* L, const float* R, int n, double sampleRate) { roomB_.setImpulse(L, R, n, sampleRate); hasImpulseB_ = true; }
+    // The room's second impulse: Room Morph blends it into the first inside the one convolution,
+    // so a morph costs what one room costs.
+    void  setImpulseB(const float* L, const float* R, int n, double sampleRate) { room_.setImpulseB(L, R, n, sampleRate); hasImpulseB_ = true; }
     bool  hasImpulseB() const { return hasImpulseB_; }
     float impulseSeconds() const { return room_.impulseSeconds(); }
     bool  hasUserImpulse() const { return userImpulse_; }
-    // Longest impulse the Room keeps (memory and CPU grow with it); call before prepare().
-    // 8 s on the desktop; the Quest app uses 4 s (a 4 s hall costs about a third of one of its cores).
-    void  setRoomMaxSeconds(float s) { roomMaxSeconds_ = clampv(s, 0.5f, 12.0f); }
+    // Longest impulse the Room keeps (memory grows with it: about 46 MB of delay line for a
+    // minute); call before prepare(). A minute on the desktop; the Quest app sets 4 s, measured
+    // there with the convolver before this one (a third of one of its cores).
+    void  setRoomMaxSeconds(float s) { roomMaxSeconds_ = clampv(s, 0.5f, 60.0f); }
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
     // For the displays (message thread, no synchronisation -- a torn read costs a pixel).
     const Wavetable* userWavetable() const { return userTable_.frames > 0 ? &userTable_ : nullptr; }
@@ -370,13 +371,12 @@ private:
     Smoother     smBody_;
     MidSide      midSide_;
     // Room (convolution) on the far plane: level, source, pre-delay ring, tail low-pass
-    Convolver    room_, roomB_;
+    Convolver    room_;
     bool         userImpulse_ = false, hasImpulseB_ = false;
     float        roomMorph_ = 0.0f;
     Smoother     smRoomMorph_;
-    std::vector<float> roomBL_, roomBR_;
     float        masterGain_ = -6.0f;
-    float        roomMaxSeconds_ = 8.0f;
+    float        roomMaxSeconds_ = 60.0f;
     // modulation
     Lfo          lfo_[kNumLfos];
     LfoSpec      lfoSpec_[kNumLfos];
@@ -632,7 +632,6 @@ private:
     // searched for and blended again on every block.
     float             blendX_ = 0.0f, blendY_ = 0.0f, blendR_ = 0.0f;
     bool              blendHave_ = false;
-    bool              roomBWas_ = false;    // was the second room morphing on the last block?
     // The matched partial ratios and what they were computed for (see readParams).
     float             matchRatio_[kMaxPartials] = {};
     float             matchLast_ = -1.0f, matchB_ = -1.0f;

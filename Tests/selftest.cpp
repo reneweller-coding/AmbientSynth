@@ -825,16 +825,16 @@ void testRoute()
 void testRoom()
 {
     const int sr = 48000;
-    {   // A unit impulse response reproduces the input one block late; two taps give two copies.
+    {   // A unit impulse response reproduces the input one latency late; two taps give two copies.
         Convolver c; c.prepare(sr, 2.0f);
         std::vector<float> ir(4000, 0.0f); ir[0] = 1.0f;
         c.setImpulse(ir.data(), nullptr, 4000, sr);
-        const int n = 8 * Convolver::kBlock;   // room for the second tap at 1500 + latency
+        const int n = 4096;   // room for the second tap at 1500 + latency
         std::vector<float> inL(n, 0.0f), inR(n, 0.0f), outL(n), outR(n);
         inL[100] = 1.0f; inR[100] = 0.5f;
         c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
         int peakAt = 0; for (int i = 1; i < n; ++i) if (std::fabs(outL[static_cast<size_t>(i)]) > std::fabs(outL[static_cast<size_t>(peakAt)])) peakAt = i;
-        CHECK(peakAt == 100 + Convolver::kBlock, "unit impulse comes back one block late");
+        CHECK(peakAt == 100 + c.latency(), "unit impulse comes back one latency late");
         // energy normalisation keeps a unit impulse at unity
         CHECK(std::fabs(std::fabs(outL[static_cast<size_t>(peakAt)]) - 1.0f) < 1e-3f && std::fabs(std::fabs(outR[static_cast<size_t>(peakAt)]) - 0.5f) < 1e-3f, "unit impulse passes the level and both channels");
         double other = 0; for (int i = 0; i < n; ++i) if (i != peakAt) other += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)];
@@ -843,8 +843,126 @@ void testRoom()
         c.setImpulse(ir2.data(), nullptr, 4000, sr);
         c.reset();
         c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
-        const float a = std::fabs(outL[static_cast<size_t>(100 + Convolver::kBlock)]), b = std::fabs(outL[static_cast<size_t>(1600 + Convolver::kBlock)]);
+        const float a = std::fabs(outL[static_cast<size_t>(100 + c.latency())]), b = std::fabs(outL[static_cast<size_t>(1600 + c.latency())]);
         CHECK(std::fabs(a - b) < 1e-3f && a > 0.5f, "a second tap in a later partition arrives at the right place");
+    }
+    {   // Exact against the direct sum through all three stages -- stereo, mono and a morph -- and
+        // the same to the last bit whatever sizes the host's blocks come in.
+        const int len = 60000;   // 1.25 s: partitions in every stage
+        Rng rng; rng.seed(31);
+        std::vector<float> hl(static_cast<size_t>(len)), hr(static_cast<size_t>(len));
+        for (int i = 0; i < len; ++i) {
+            const float env = std::exp(-4.0f * static_cast<float>(i) / static_cast<float>(len));
+            hl[static_cast<size_t>(i)] = rng.bipolar() * env;
+            hr[static_cast<size_t>(i)] = rng.bipolar() * env;
+        }
+        // The reference, normalised the way the convolver normalises (both channels together).
+        auto normalised = [&](const std::vector<float>& x, const std::vector<float>* other) {
+            double e = 0.0;
+            for (int i = 0; i < len; ++i) {
+                const double a = x[static_cast<size_t>(i)];
+                const double b = other ? static_cast<double>((*other)[static_cast<size_t>(i)]) : a;
+                e += 0.5 * (a * a + b * b);
+            }
+            std::vector<double> out(static_cast<size_t>(len));
+            for (int i = 0; i < len; ++i) out[static_cast<size_t>(i)] = x[static_cast<size_t>(i)] / std::sqrt(e);
+            return out;
+        };
+        const int n = 2 * sr;
+        std::vector<float> inL(static_cast<size_t>(n), 0.0f), inR(static_cast<size_t>(n), 0.0f);
+        for (int k = 0; k < 40; ++k) {
+            const int at = rng.below(sr / 2);
+            inL[static_cast<size_t>(at)] += rng.bipolar();
+            inR[static_cast<size_t>(at)] += rng.bipolar();
+        }
+        auto direct = [&](const std::vector<float>& in, const std::vector<double>& h, int lat) {
+            std::vector<double> y(static_cast<size_t>(n), 0.0);
+            for (int t = 0; t < n; ++t)
+                if (in[static_cast<size_t>(t)] != 0.0f)
+                    for (int j = 0; j < len && t + j + lat < n; ++j) y[static_cast<size_t>(t + j + lat)] += in[static_cast<size_t>(t)] * h[static_cast<size_t>(j)];
+            return y;
+        };
+        auto play = [&](Convolver& c, bool ragged, std::vector<float>& oL, std::vector<float>& oR) {
+            oL.assign(static_cast<size_t>(n), 0.0f); oR.assign(static_cast<size_t>(n), 0.0f);
+            Rng br; br.seed(5);
+            for (int i = 0; i < n;) {
+                const int m = std::min(n - i, ragged ? 1 + br.below(700) : 64);
+                c.process(inL.data() + i, inR.data() + i, oL.data() + i, oR.data() + i, m);
+                i += m;
+            }
+        };
+        auto errorDb = [&](const std::vector<float>& oL, const std::vector<float>& oR, const std::vector<double>& yL, const std::vector<double>& yR) {
+            double err = 0.0, ref = 0.0;
+            for (int t = 0; t < n; ++t) {
+                const double dl = oL[static_cast<size_t>(t)] - yL[static_cast<size_t>(t)], dr = oR[static_cast<size_t>(t)] - yR[static_cast<size_t>(t)];
+                err += dl * dl + dr * dr;
+                ref += yL[static_cast<size_t>(t)] * yL[static_cast<size_t>(t)] + yR[static_cast<size_t>(t)] * yR[static_cast<size_t>(t)];
+            }
+            return 10.0 * std::log10(err / ref + 1e-30);
+        };
+        Convolver c; c.prepare(sr, 2.0f);
+        CHECK(c.stageStart(2) + c.stageBlock(2) < len, "the test impulse reaches into the third stage");
+        c.setImpulse(hl.data(), hr.data(), len, sr);
+        const auto nl = normalised(hl, &hr), nr = normalised(hr, &hl);
+        const auto yL = direct(inL, nl, c.latency()), yR = direct(inR, nr, c.latency());
+        std::vector<float> aL, aR, bL, bR;
+        play(c, false, aL, aR);
+        const double stereoDb = errorDb(aL, aR, yL, yR);
+        c.reset();
+        play(c, true, bL, bR);
+        CHECK(aL == bL && aR == bR, "the room's output does not depend on the host's block sizes");
+        Convolver m; m.prepare(sr, 2.0f);
+        m.setImpulse(hl.data(), nullptr, len, sr);
+        const auto nm = normalised(hl, nullptr);
+        play(m, false, bL, bR);
+        const double monoDb = errorDb(bL, bR, direct(inL, nm, m.latency()), direct(inR, nm, m.latency()));
+        Convolver mo; mo.prepare(sr, 2.0f);
+        mo.setImpulse(hl.data(), hr.data(), len, sr);
+        mo.setImpulseB(hr.data(), hl.data(), len, sr);   // the channels swapped: another room of the same energy
+        mo.setMorph(0.3f);
+        play(mo, false, bL, bR);
+        const auto zL = direct(inL, nr, mo.latency()), zR = direct(inR, nl, mo.latency());
+        std::vector<double> wL(static_cast<size_t>(n)), wR(static_cast<size_t>(n));
+        for (int t = 0; t < n; ++t) {
+            wL[static_cast<size_t>(t)] = 0.7 * yL[static_cast<size_t>(t)] + 0.3 * zL[static_cast<size_t>(t)];
+            wR[static_cast<size_t>(t)] = 0.7 * yR[static_cast<size_t>(t)] + 0.3 * zR[static_cast<size_t>(t)];
+        }
+        const double morphDb = errorDb(bL, bR, wL, wR);
+        std::printf("  [probe] room against the direct sum: stereo %.1f dB, mono %.1f dB, morph 0.3 %.1f dB\n", stereoDb, monoDb, morphDb);
+        CHECK(stereoDb < -80.0 && monoDb < -80.0 && morphDb < -80.0, "partitioned convolution matches the direct sum (stereo, mono, morph)");
+    }
+    {   // Silence inside an impulse is not stored and a tap after it still lands right; silence at
+        // the end is trimmed; a longer file is cut at the maximum; another rate keeps its length.
+        Convolver c; c.prepare(sr, 30.0f);
+        const int len = sr * 2 + 12000;
+        std::vector<float> ir(static_cast<size_t>(len), 0.0f);
+        Rng rng; rng.seed(8);
+        for (int i = 0; i < sr / 5; ++i) ir[static_cast<size_t>(i)] = rng.bipolar() * std::exp(-10.0f * static_cast<float>(i) / static_cast<float>(sr));
+        ir[static_cast<size_t>(len - 1)] = 0.5f;   // one late tap after two seconds of nothing
+        c.setImpulse(ir.data(), nullptr, len, sr);
+        const double kept = static_cast<double>(c.keptBins()) / static_cast<double>(std::max(1LL, c.fullBins()));
+        std::printf("  [probe] an impulse with two silent seconds keeps %.0f %% of its spectrum bins\n", 100.0 * kept);
+        CHECK(kept < 0.5, "silent partitions are not stored");
+        const int n = len + sr / 2;
+        std::vector<float> inL(static_cast<size_t>(n), 0.0f), inR(static_cast<size_t>(n), 0.0f), outL(static_cast<size_t>(n)), outR(static_cast<size_t>(n));
+        inL[100] = 1.0f;
+        c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
+        double e = 0.0;
+        for (int i = 0; i < len; ++i) e += static_cast<double>(ir[static_cast<size_t>(i)]) * ir[static_cast<size_t>(i)];
+        const float expect = static_cast<float>(0.5 / std::sqrt(e));
+        CHECK(std::fabs(outL[static_cast<size_t>(100 + len - 1 + c.latency())] - expect) < 1e-3f * expect, "the late tap arrives where and as loud as it should");
+        std::vector<float> ir2(static_cast<size_t>(sr * 3), 0.0f);
+        for (int i = 0; i < sr; ++i) ir2[static_cast<size_t>(i)] = rng.bipolar();
+        c.setImpulse(ir2.data(), nullptr, sr * 3, sr);
+        CHECK(std::fabs(c.impulseSeconds() - 1.0f) < 0.01f, "the silence after an impulse is trimmed");
+        std::vector<float> longIr(static_cast<size_t>(sr * 40));
+        for (auto& v : longIr) v = 0.1f * rng.bipolar();
+        c.setImpulse(longIr.data(), nullptr, sr * 40, sr);
+        CHECK(std::fabs(c.impulseSeconds() - 30.0f) < 0.01f, "a longer impulse is cut at the maximum");
+        std::vector<float> ir441(44100);
+        for (int i = 0; i < 44100; ++i) ir441[static_cast<size_t>(i)] = rng.bipolar() * std::exp(-3.0f * static_cast<float>(i) / 44100.0f);
+        c.setImpulse(ir441.data(), nullptr, 44100, 44100.0);
+        CHECK(std::fabs(c.impulseSeconds() - 1.0f) < 0.01f, "an impulse recorded at 44.1 kHz keeps its length");
     }
     {   // The generated hall decays and is stereo.
         Convolver c; c.prepare(sr, 8.0f);

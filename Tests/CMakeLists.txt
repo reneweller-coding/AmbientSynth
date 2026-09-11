@@ -25,6 +25,15 @@ if(WIN32)
 endif()
 add_test(NAME racetest COMMAND ambient_racetest 4)
 
+# The convolution room's cost, by hand: CPU per second of audio and the worst callback, for impulse
+# lengths up to a minute. Nothing in it passes or fails, so it is not registered with ctest.
+add_executable(ambient_convbench convbench.cpp)
+target_link_libraries(ambient_convbench PRIVATE AmbientCore)
+if(MSVC)
+    target_compile_options(ambient_convbench PRIVATE /W4 /permissive- /utf-8)
+    target_compile_definitions(ambient_convbench PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
 # The host contract: rates and block sizes, state round trip, programs while playing, an editor
 # opened under load, parameters written from another thread. Needs the plugin's shared code, so it
 # is only built when the plugin is.

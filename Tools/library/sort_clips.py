@@ -41,7 +41,10 @@ FLD = os.path.join(ROOT, "Library", "FieldRecordings")
 ALSO = [os.path.join(ROOT, "Library", d) for d in ("Wavetables", "Impulses")]
 PITCHED = re.compile(r"_[A-G]#?-?[0-9]\.wav$")
 INDEX = "clips.json"
-KEEP = {"rejected.txt"}          # read by make_presets.py: which clips are duds
+# rejected.txt is read by make_presets.py (which clips are duds). CREDITS.txt is a licence notice --
+# Library/Impulses holds the AIR database's MIT text -- and has no clip beside it, which is what
+# fold() takes for an orphaned note and deletes.
+KEEP = {"rejected.txt", "CREDITS.txt"}
 PACKS = os.path.join(ROOT, "Library", "Packs")
 TONALITY = os.path.join(ROOT, "Library", "tonality.json")
 

@@ -6,6 +6,7 @@ Position faehrt ab der ersten Sekunde in zehn Sekunden einmal durch die ganze Ta
 auf denselben Pegel, hintereinander in eine Datei, dazu eine Liste mit den Zeitmarken.
 
     python demo.py [--tables DIR] [--families metal,sub] [--per-family 2] [--notes 45,52,57] [--out DIR] [--name NAME]
+                   [--prefix harmonic|ambient] [--type Harmonic|Wavetable]
 """
 import argparse
 import os
@@ -37,10 +38,10 @@ SWEEP = "0 src1_pos 0\n1 src1_pos 1 over 10\n"
 LEVEL_DB = -20.0
 
 
-def render_one(table, score, out, notes):
+def render_one(table, score, out, notes, kind="Harmonic"):
     cmd = [RENDER, "--wavetable", table, "--notes", notes, "--seconds", str(SECONDS), "--hour", "12",
            "--score", score, "--out", out]
-    for k, v in SETTINGS.items():
+    for k, v in dict(SETTINGS, src1_type=kind).items():
         cmd += ["--set", f"{k}={v}"]
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
     if r.returncode != 0 or not os.path.exists(out):
@@ -54,6 +55,8 @@ def main():
     ap.add_argument("--name", default="harmonic_demo", help="Dateiname ohne Endung fuer .flac, .mp3 und .txt")
     ap.add_argument("--families", default=",".join(hg.FAMILIES))
     ap.add_argument("--per-family", type=int, default=2)
+    ap.add_argument("--prefix", default="harmonic", help="harmonic fuer HarmonicGen, ambient fuer AmbientGen")
+    ap.add_argument("--type", default="Harmonic", choices=["Harmonic", "Wavetable"], help="welcher Tabellen-Typ spielt")
     ap.add_argument("--notes", default="45,52,57")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
@@ -65,7 +68,7 @@ def main():
     files = sorted(x for x in os.listdir(a.tables) if x.endswith(".wav"))
     chosen = []
     for fam in [x.strip() for x in a.families.split(",") if x.strip()]:
-        mine = [x for x in files if x.startswith(f"harmonic_{fam}_")]
+        mine = [x for x in files if x.startswith(f"{a.prefix}_{fam}_")]
         if mine:
             step = max(1, len(mine) // a.per_family)
             chosen += mine[::step][:a.per_family]
@@ -73,7 +76,7 @@ def main():
     parts, marks, t, rate = [], [], 0.0, None
     for name in chosen:
         out = os.path.join(work, name)
-        render_one(os.path.join(a.tables, name), score, out, a.notes)
+        render_one(os.path.join(a.tables, name), score, out, a.notes, a.type)
         x, sr = sf.read(out, always_2d=True)
         rate = rate or sr
         rms = float(np.sqrt(np.mean(x[int(2 * sr):] ** 2)))

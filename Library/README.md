@@ -10,10 +10,14 @@ Library/
   Textures/*.flac          5748 tonal clips from Stable Audio 3 medium: <category>-<id>_<Note>.flac,
                            49 categories, 24-bit 44.1 kHz stereo, 13-135 s, peak -1 dBFS
   FieldRecordings/*.flac   2938 seamless loops: fr-<category>-<id>_loop.flac, 36 categories, 40-115 s
-  Wavetables/*.wav + .json 1020 tables, flat: harmonic_* (380, HarmonicGen, the Harmonic type, 64 frames)
-                           and akwf_* / wavedit_* (640, AKWF and WaveEdit Online, CC0, the classic
-                           Wavetable type, clm chunk); every table's .json says where it came from,
-                           and for the classic ones whether it is grounded or hollow (upper layers only)
+  Wavetables/*.wav + .json 1191 tables, flat: harmonic_* (551, HarmonicGen, the Harmonic type, 64 frames:
+                           organ, choir, strings, reed, glass, pad, shimmer, chord, breath 40 each,
+                           pure 20; since 11.09. also metal 30, sub 15, pluck 30, stack 24, morph 24,
+                           resonator 24, hollow 24) and akwf_* / wavedit_* (640, AKWF and WaveEdit
+                           Online, CC0, the classic Wavetable type, clm chunk); every table's .json
+                           says where it came from and whether it is grounded or hollow -- hollow
+                           tables (harmonic_hollow_* and some classic ones) have no fundamental on
+                           purpose and belong in upper layers only
   Wavetables/CREDITS-classic.md   the AKWF/WaveEdit credits (not .txt: sort_clips.py deletes those)
   Impulses/                curated 11.09. (Tools/library/curate_impulses.py), CREDITS.txt for AIR
 ```
@@ -32,7 +36,8 @@ Until the presets are rebuilt, and before rebuilding them:
   (they write the old library's formats), nor `sort_clips.py` without `--no-fold`;
 - do not measure, rebalance or map the old packs: every render would miss its clips;
 - new packs need a `format 2` line and the right type per table (Harmonic for harmonic_*, Wavetable
-  for akwf_*/wavedit_*); the plugin reads at most 120 s of a clip (85 textures are longer).
+  for akwf_*/wavedit_*), and a table whose .json says `"grounded": false` never goes into Source 1;
+  the plugin reads at most 120 s of a clip (85 textures are longer).
 
 Everything below describes the library as it was built before this swap.
 

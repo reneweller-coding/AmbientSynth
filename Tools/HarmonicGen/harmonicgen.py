@@ -32,7 +32,7 @@ passieren muss.
 Deterministisch: derselbe Seed schreibt dieselben Bytes. Neben jeder Tabelle liegt ein JSON mit
 Familie, Seed, den gezogenen Rezeptwerten und den Messwerten.
 
-    python harmonicgen.py generate --out DIR [--per-family 40] [--seed 1] [--families organ,choir]
+    python harmonicgen.py generate --out DIR [--per-family 40] [--seed 1] [--families organ,choir] [--avoid DIR]
     python harmonicgen.py selftest
     python harmonicgen.py measure <tabelle.wav | ordner> [...]
 """
@@ -69,7 +69,7 @@ SIG_FLOOR_DB = -60.0
 DIST_MIN_DB = 4.0          # naeher an einer schon angenommenen Tabelle: Doppel
 
 # Familien, deren Raum von Natur aus klein ist, bekommen nur einen Teil der Stueckzahl.
-SHARE = {"pure": 0.5}
+SHARE = {"pure": 0.5, "sub": 0.5, "stack": 0.8, "morph": 0.8, "resonator": 0.8, "hollow": 0.8}
 
 
 # ---------------------------------------------------------------------------- Verlaeufe
@@ -261,10 +261,15 @@ def fam_pure(rng):
 FAMILIES = {"organ": fam_organ, "choir": fam_choir, "strings": fam_strings, "reed": fam_reed,
             "glass": fam_glass, "pad": fam_pad, "shimmer": fam_shimmer, "chord": fam_chord, "pure": fam_pure}
 
+# Aus diesen Familien mischt "breath". Die Liste ist eingefroren (so stand FAMILIES, als breath dazukam,
+# breath selbst eingeschlossen): kaemen die spaeteren Familien hinzu, zoege derselbe Seed andere Paare,
+# und die Tabellen, die schon in der Bibliothek liegen, liessen sich nicht mehr bitgleich nachbauen.
+BREATH_POOL = ("organ", "choir", "strings", "reed", "glass", "pad", "shimmer", "chord", "pure", "breath")
+
 
 def fam_breath(rng):
     """Zwei andere Familien, langsam ineinander uebergeblendet."""
-    a, b = rng.choice([k for k in FAMILIES], size=2, replace=False)
+    a, b = rng.choice(list(BREATH_POOL), size=2, replace=False)
     sa, pa = FAMILIES[str(a)](rng)
     sb, pb = FAMILIES[str(b)](rng)
     sa, sb = normalise_frames(sa), normalise_frames(sb)
@@ -273,6 +278,150 @@ def fam_breath(rng):
 
 
 FAMILIES["breath"] = fam_breath
+
+
+# ---------------------------------------------------------------------------- Familien aus WavetableGen
+# Die Ideen der 23 WavetableGen-Rezepte, die am 11.09.2026 Grundton und Glaette hielten -- Glocke,
+# Klangschale, Gong, Metallstab, Sub, Zupfpunkt, gestreckte Saite, Quint- und Fibonacci-Stapel,
+# Resonatorbank, Saege nach Rechteck, Tor, Erosion --, hier mit echten Rezeptwerten je Seed. Dort war
+# ein Rezept eine feste Formel, und seine Seeds unterschieden sich nur im beigemischten Rauschen (ohne
+# Rauschen bitgleich, mit ihm 2,6 dB auseinander: Doppel). "hollow" ist die Ausnahme mit Absicht:
+# Vokal-, Band-, Cluster- und Oktavfenster-Spektren ohne tragenden Grundton, fuer obere Schichten --
+# die Vokal-, Formant-, Waterphone-, Breath-Band- und Shepard-Rezepte, denen dort der Grundton fehlte.
+
+METAL_SETS = {"bell": (1, 2, 5, 9, 14, 20, 27), "bowl": (1, 3, 5, 8, 12, 17, 23),
+              "squares": (1, 4, 9, 16, 25), "triangular": (1, 3, 6, 10, 15, 21, 28)}
+STACKS = {"fifths": (1, 3, 9, 27), "octaves": (1, 2, 4, 8, 16, 32), "fibonacci": (1, 2, 3, 5, 8, 13, 21),
+          "primes": (1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31), "odd": (1, 3, 5, 7, 9, 11, 13, 15),
+          "thirds": (1, 5, 25), "septimal": (1, 2, 4, 7, 8, 14, 16, 28)}
+HIGH_PRIMES = [p for p in range(11, PARTIALS + 1) if all(p % d for d in range(2, int(p ** 0.5) + 1))]
+
+
+def partial_set(members, rng, fill):
+    """Maske mit Teiltoenen nur auf `members` (Grundton voll, die anderen 0,5..1), sonst `fill`."""
+    m = np.full(PARTIALS, fill)
+    for p in members:
+        if p <= PARTIALS:
+            m[p - 1] = 1.0 if p == 1 else rng.uniform(0.5, 1.0)
+    return m
+
+
+def blend_masks(masks):
+    """Masken nacheinander ueber die Tabelle ueberblenden, mit Kosinus-Uebergaengen."""
+    masks = np.asarray(masks)
+    if len(masks) == 1:
+        return np.tile(masks[0], (FRAMES, 1))
+    x = np.linspace(0.0, 1.0, FRAMES) * (len(masks) - 1)
+    i = np.minimum(x.astype(int), len(masks) - 2)
+    w = 0.5 - 0.5 * np.cos(np.pi * (x - i))
+    return masks[i] * (1.0 - w)[:, None] + masks[i + 1] * w[:, None]
+
+
+def fam_metal(rng):
+    names = [str(n) for n in rng.choice(list(METAL_SETS), size=int(rng.integers(2, 4)), replace=True)]
+    fill_db = float(rng.uniform(-60.0, -30.0))
+    masks = [partial_set(METAL_SETS[n], rng, 10.0 ** (fill_db / 20.0)) for n in names]
+    spec = blend_masks(masks) * tilt(curve(rng, 0.2, 0.9)) * lowpass(curve(rng, 16.0, 32.0)) * walk(rng, 2.0)
+    return spec, dict(sets=names, fill_db=round(fill_db, 1))
+
+
+def fam_sub(rng):
+    mode = str(rng.choice(["grow", "bloom", "tilt"]))
+    g = np.ones((FRAMES, PARTIALS))
+    if mode == "grow":                                      # der 2. und 3. Teilton wachsen aus dem Grundton
+        rise = through([0.0, rng.uniform(0.2, 0.6), 1.0])
+        for p, top in ((2, rng.uniform(-14.0, -6.0)), (3, rng.uniform(-18.0, -9.0))):
+            g[:, p - 1] = 10.0 ** ((-40.0 + (top + 40.0) * rise) / 20.0)
+        spec = g * tilt(np.full(FRAMES, rng.uniform(2.5, 3.5)))
+    elif mode == "bloom":                                   # ungerade Teiltoene blühen einzeln auf
+        for p in (3, 5, 7, 9):
+            g[:, p - 1] = 10.0 ** (curve(rng, -40.0, -8.0, keys=5) / 20.0)
+        spec = g * tilt(np.full(FRAMES, rng.uniform(2.2, 3.2)))
+    else:                                                   # die Neigung wandert: dunkel, offener, dunkel
+        spec = tilt(through([rng.uniform(3.0, 4.0), rng.uniform(1.6, 2.4), rng.uniform(2.6, 3.6)]))
+    return spec * lowpass(curve(rng, 3.0, 8.0)), dict(mode=mode)
+
+
+def fam_pluck(rng):
+    pos = curve(rng, 0.06, 0.45)                            # Zupfpunkt als Anteil der Saitenlaenge
+    notch = np.abs(np.sin(np.pi * H[None, :] * pos[:, None])) * 0.97 + 0.03
+    base = tilt(curve(rng, 1.0, 1.6)) * notch
+    # Steifigkeit nach Railsback: Teilton n klingt bei n*sqrt(1 + B n^2). Eine periodische Tabelle kann
+    # ihn nur auf den naechsten ganzen Teilton legen, also wandert seine Energie dorthin.
+    stiff = float(rng.uniform(0.0, 0.0015))
+    target = np.minimum(np.rint(H * np.sqrt(1.0 + stiff * H * H)).astype(int), PARTIALS)
+    power = np.zeros_like(base)
+    for n in range(PARTIALS):
+        power[:, target[n] - 1] += base[:, n] ** 2
+    spec = np.sqrt(power)
+    buzz = through([0.0, rng.uniform(0.0, 0.25), rng.uniform(0.0, 0.5)])   # die Schraube auf der Saite
+    for p in HIGH_PRIMES:
+        spec[:, p - 1] += buzz * rng.uniform(0.02, 0.08)
+    return spec * lowpass(curve(rng, 10.0, 32.0)) * walk(rng, 1.5), dict(stiffness=round(stiff, 5))
+
+
+def fam_stack(rng):
+    names = [str(n) for n in rng.choice(list(STACKS), size=int(rng.integers(2, 4)), replace=False)]
+    masks = [partial_set(STACKS[n], rng, 1.0e-4) for n in names]
+    spec = blend_masks(masks) * tilt(curve(rng, 0.3, 1.0)) * lowpass(curve(rng, 14.0, 32.0)) * walk(rng, 1.5)
+    return spec, dict(stacks=names)
+
+
+def fam_morph(rng):
+    frames = np.linspace(0.0, 1.0, FRAMES)
+    rate = float(rng.uniform(0.5, 3.0))
+    breathe = 0.5 + 0.5 * np.sin(2.0 * np.pi * rate * frames + rng.uniform(0.0, 2.0 * np.pi))
+    even = np.clip(curve(rng, 0.0, 1.0, keys=4) * (0.6 + 0.4 * breathe), 0.02, 1.0)   # 1 Saege, 0 Rechteck
+    order = float(rng.uniform(2.0, 5.0))
+    spec = tilt(curve(rng, 0.7, 1.6)) * odd_even(even) * lowpass(curve(rng, 3.0, 32.0, keys=4), order)
+    eroded = int(rng.integers(0, 8))                        # einige Teiltoene verschwinden nacheinander, weich
+    for p in rng.choice(np.arange(2, PARTIALS + 1), size=eroded, replace=False):
+        start = rng.uniform(0.1, 0.8)
+        fall = np.clip((frames - start) / rng.uniform(0.15, 0.4), 0.0, 1.0)
+        spec[:, p - 1] *= 10.0 ** (-30.0 * (0.5 - 0.5 * np.cos(np.pi * fall)) / 20.0)
+    return spec, dict(breath_rate=round(rate, 2), lowpass_order=round(order, 2), eroded=eroded)
+
+
+def fam_resonator(rng):
+    k = int(rng.integers(3, 7))
+    width = through([rng.uniform(2.0, 3.5), rng.uniform(1.0, 2.0), rng.uniform(0.5, 1.2)])   # spitzt sich zu
+    peaks = np.zeros((FRAMES, PARTIALS))
+    for _ in range(k):
+        centre = curve(rng, 2.0, 28.0)
+        peaks += rng.uniform(0.4, 1.0) * np.exp(-0.5 * ((H[None, :] - centre[:, None]) / width[:, None]) ** 2)
+    spec = (0.08 + peaks) * tilt(curve(rng, 0.5, 1.1)) * lowpass(curve(rng, 18.0, 32.0))
+    return spec, dict(resonators=k)
+
+
+def fam_hollow(rng):
+    mode = str(rng.choice(["vowel", "band", "cluster", "shepard"]))
+    if mode == "vowel":
+        seq = [str(v) for v in rng.choice(list(VOWELS), size=int(rng.integers(2, 4)))]
+        f_ref = float(rng.uniform(98.0, 175.0))
+        cent = [through([VOWELS[v][j] for v in seq]) for j in range(3)]
+        spec = tilt(curve(rng, 0.6, 1.0)) * formants(f_ref, cent, float(rng.uniform(0.2, 0.35)), [14.0, 10.0, 6.0])
+        spec = spec * 10.0 ** (-30.0 * np.exp(-0.5 * ((H[None, :] - 1.0) / 1.2) ** 2) / 20.0)   # Grundton weg
+        params = dict(mode=mode, vowels=seq, f_ref=round(f_ref, 1))
+    elif mode == "band":
+        centre = curve(rng, 4.0, 24.0)
+        width = float(rng.uniform(0.3, 0.7))
+        spec = 0.003 + np.exp(-0.5 * ((np.log2(H[None, :]) - np.log2(centre[:, None])) / width) ** 2)
+        params = dict(mode=mode, width_oct=round(width, 2))
+    elif mode == "cluster":
+        lowest = int(rng.integers(7, 14))
+        spec = np.where(H[None, :] >= lowest, 1.0, 0.002) * tilt(curve(rng, 0.0, 0.5)) * walk(rng, 6.0)
+        params = dict(mode=mode, lowest=lowest)
+    else:                                                   # Oktaven unter einem wandernden Fenster
+        centre = curve(rng, 1.5, 4.5)
+        octaves = np.log2(H)
+        on = np.isclose(octaves, np.round(octaves)) & (H >= 2)
+        spec = np.where(on, 1.0, 0.001)[None, :] * np.exp(-0.5 * ((octaves[None, :] - centre[:, None]) / 0.9) ** 2)
+        params = dict(mode=mode)
+    return spec, params
+
+
+FAMILIES.update({"metal": fam_metal, "sub": fam_sub, "pluck": fam_pluck, "stack": fam_stack,
+                 "morph": fam_morph, "resonator": fam_resonator, "hollow": fam_hollow})
 
 # Leitplanken je Familie: kleinster Energieanteil des ersten Teiltons je Frame, erlaubter Bereich des
 # Leistungs-Schwerpunkts (Median ueber die Frames, in Teiltonnummern), kleinste Zahl hoerbarer Teiltoene.
@@ -287,6 +436,14 @@ LIMITS = {
     "chord":   dict(f1_min=0.08, centroid=(2.0, 14.0), active_min=4),
     "pure":    dict(f1_min=0.30, centroid=(1.0, 3.5),  active_min=1),
     "breath":  dict(f1_min=0.10, centroid=(1.0, 12.0), active_min=3),
+    "metal":     dict(f1_min=0.08, centroid=(1.5, 14.0), active_min=4),
+    "sub":       dict(f1_min=0.35, centroid=(1.0, 2.5),  active_min=2),
+    "pluck":     dict(f1_min=0.08, centroid=(1.3, 10.0), active_min=5),
+    "stack":     dict(f1_min=0.08, centroid=(1.3, 12.0), active_min=3),
+    "morph":     dict(f1_min=0.10, centroid=(1.2, 10.0), active_min=3),
+    "resonator": dict(f1_min=0.08, centroid=(1.5, 14.0), active_min=4),
+    # ohne Grundton mit Absicht: f1_max ist eine Obergrenze fuer seinen Anteil (Median der Frames)
+    "hollow":    dict(f1_min=0.0, f1_max=0.05, centroid=(3.0, 28.0), active_min=4),
 }
 STEP_MAX = 0.12            # groesster Abstand zweier benachbarter Frames (Einheitsvektoren, 0..sqrt 2)
 
@@ -345,6 +502,8 @@ def metrics(s):
 def check(m, lim):
     if m["f1_min"] < lim["f1_min"] - 1.0e-6:
         return "Grundton"
+    if "f1_max" in lim and m["f1_median"] > lim["f1_max"] + 1.0e-6:
+        return "Grundton zu stark"
     lo, hi = lim["centroid"]
     if not lo <= m["centroid_median"] <= hi:
         return "Schwerpunkt"
@@ -426,14 +585,24 @@ def read_table(path, frame_len=FRAME_LEN):
 
 # ---------------------------------------------------------------------------- Befehle
 
-def generate(out, per_family, seed, families):
+def generate(out, per_family, seed, families, avoid=()):
     os.makedirs(out, exist_ok=True)
     master = np.random.default_rng(seed)
     bank = np.empty((0, len(SIG_FRAMES), PARTIALS))
+    # Tabellen, die es schon gibt (etwa die Bibliothek): neue muessen sich auch von ihnen unterscheiden.
+    for folder in avoid:
+        for fname in sorted(os.listdir(folder)):
+            if fname.lower().endswith(".wav"):
+                fr = read_table(os.path.join(folder, fname))
+                if fr is not None:
+                    bank = np.concatenate([bank, signature(at_positions(analyse(fr)))[None]])
+    if len(bank):
+        print(f"  {len(bank)} vorhandene Tabellen als Vergleich", flush=True)
     report = collections.defaultdict(collections.Counter)
     for fam in families:
         want = max(1, int(round(per_family * SHARE.get(fam, 1.0))))
         made = tries = 0
+        index = 0                                         # naechster freie Name: nie etwas ueberschreiben
         while made < want and tries < want * 25:
             tries += 1
             tseed = int(master.integers(0, 2 ** 31 - 1))
@@ -451,9 +620,13 @@ def generate(out, per_family, seed, families):
             err = float(np.abs(analyse(frames) - s).max())
             if err > 1.0e-4:                              # darf nie passieren: dann rechnet render() falsch
                 raise RuntimeError(f"Rundlauf verletzt: {fam} Seed {tseed}, Abweichung {err:.2e}")
-            name = f"harmonic_{fam}_{made:03d}.wav"
+            while os.path.exists(os.path.join(out, f"harmonic_{fam}_{index:03d}.wav")):
+                index += 1
+            name = f"harmonic_{fam}_{index:03d}.wav"
+            index += 1
             write_table(os.path.join(out, name), frames, dict(
                 generator="harmonicgen", version=VERSION, family=fam, seed=tseed, frames=FRAMES,
+                grounded=LIMITS[fam]["f1_min"] > 0.0,
                 frame_len=FRAME_LEN, partials=PARTIALS, recipe=params, fixes=fixes,
                 metrics={k: (round(v, 4) if isinstance(v, float) else v) for k, v in m.items()},
                 roundtrip_max_error=err))
@@ -589,12 +762,14 @@ def main():
     g.add_argument("--per-family", type=int, default=40)
     g.add_argument("--seed", type=int, default=1)
     g.add_argument("--families", default=",".join(FAMILIES))
+    g.add_argument("--avoid", action="append", default=[],
+                   help="Ordner mit vorhandenen Tabellen, von denen sich neue unterscheiden muessen")
     sub.add_parser("selftest")
     m = sub.add_parser("measure")
     m.add_argument("paths", nargs="+")
     a = ap.parse_args()
     if a.cmd == "generate":
-        generate(a.out, a.per_family, a.seed, [f.strip() for f in a.families.split(",") if f.strip()])
+        generate(a.out, a.per_family, a.seed, [f.strip() for f in a.families.split(",") if f.strip()], a.avoid)
     elif a.cmd == "selftest":
         sys.exit(1 if selftest() else 0)
     else:

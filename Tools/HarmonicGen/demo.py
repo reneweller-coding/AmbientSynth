@@ -5,7 +5,7 @@ Dafuer: je Tabelle ein offener Akkord (A2 E3 A3), zwei leicht verstimmte Straeng
 Position faehrt ab der ersten Sekunde in zehn Sekunden einmal durch die ganze Tabelle. Alle Abschnitte
 auf denselben Pegel, hintereinander in eine Datei, dazu eine Liste mit den Zeitmarken.
 
-    python demo.py [--tables DIR] [--per-family 2] [--notes 45,52,57] [--out DIR]
+    python demo.py [--tables DIR] [--families metal,sub] [--per-family 2] [--notes 45,52,57] [--out DIR] [--name NAME]
 """
 import argparse
 import os
@@ -49,8 +49,10 @@ def render_one(table, score, out, notes):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tables", default=os.path.join(ROOT, "Library", "WavetablesNew", "harmonic"))
-    ap.add_argument("--out", default=os.path.join(ROOT, "Library", "WavetablesNew", "demo"))
+    ap.add_argument("--tables", default=os.path.join(ROOT, "Library", "Wavetables"))
+    ap.add_argument("--out", default=os.path.normpath(os.path.join(ROOT, "..", "WavetableSources", "demo-renders")))
+    ap.add_argument("--name", default="harmonic_demo", help="Dateiname ohne Endung fuer .flac, .mp3 und .txt")
+    ap.add_argument("--families", default=",".join(hg.FAMILIES))
     ap.add_argument("--per-family", type=int, default=2)
     ap.add_argument("--notes", default="45,52,57")
     a = ap.parse_args()
@@ -62,7 +64,7 @@ def main():
 
     files = sorted(x for x in os.listdir(a.tables) if x.endswith(".wav"))
     chosen = []
-    for fam in hg.FAMILIES:
+    for fam in [x.strip() for x in a.families.split(",") if x.strip()]:
         mine = [x for x in files if x.startswith(f"harmonic_{fam}_")]
         if mine:
             step = max(1, len(mine) // a.per_family)
@@ -86,13 +88,13 @@ def main():
         parts += [x, gap]
         t += (len(x) + len(gap)) / sr
 
-    flac = os.path.join(a.out, "harmonic_demo.flac")
+    flac = os.path.join(a.out, a.name + ".flac")
     sf.write(flac, np.concatenate(parts), rate, subtype="PCM_24")
     ffmpeg = shutil.which("ffmpeg")
-    mp3 = os.path.join(a.out, "harmonic_demo.mp3")
+    mp3 = os.path.join(a.out, a.name + ".mp3")
     if ffmpeg:
         subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", flac, "-b:a", "192k", mp3], check=True)
-    with open(os.path.join(a.out, "harmonic_demo.txt"), "w", encoding="utf-8") as f:
+    with open(os.path.join(a.out, a.name + ".txt"), "w", encoding="utf-8") as f:
         f.write(f"Akkord MIDI {a.notes}, je Tabelle {SECONDS:.0f} s; die Position faehrt ab 1 s in 10 s von 0 nach 1\n\n")
         for t0, name in marks:
             f.write(f"{int(t0 // 60)}:{t0 % 60:04.1f}  {name}\n")

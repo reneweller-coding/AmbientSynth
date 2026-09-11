@@ -21,6 +21,7 @@ Impulses/
 Library/Textures/
 Library/FieldRecordings/
 Library/Wavetables/
+Library/WavetablesNew/
 Library/*.log
 Tools/library/texture_jobs.json
 Library/Impulses/

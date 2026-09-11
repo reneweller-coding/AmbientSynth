@@ -20,6 +20,8 @@ int main()
 {
 #if AMBIENT_HAS_AVX
     const char* path = "avx2";
+#elif AMBIENT_HAS_NEON && defined(AMBIENT_NEON_SHIM) && defined(AMBIENT_NEON_SHIM_NOFMA)
+    const char* path = "neon-shim-nofma";
 #elif AMBIENT_HAS_NEON && defined(AMBIENT_NEON_SHIM)
     const char* path = "neon-shim";
 #elif AMBIENT_HAS_NEON

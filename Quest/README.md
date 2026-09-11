@@ -77,8 +77,30 @@ samples they name is usually the better idea.
   same folder, written by a background thread from a lock-free ring.
 * Notes glow with their envelope level (`Engine::noteLevel`).
 
+## Checks on the headset
+
+The convolution room has a NEON path that the desktop tests only run through an
+x86 stand-in for the intrinsics (`Tests/neonshim`). The arm64 build of
+`ambient_convtest` runs the real one; `ambient_convbench` measures what a Room
+impulse of 4 to 60 s costs on the XR2, which is what `setRoomMaxSeconds(4)` in
+`src/main.cpp` should be set from:
+
+```
+cmake -S . -B build-android
+cmake --build build-android --target ambient_convtest ambient_convbench -- -j6
+adb push build-android\Tests\ambient_convtest build-android\Tests\ambient_convbench /data/local/tmp/
+adb shell chmod +x /data/local/tmp/ambient_convtest /data/local/tmp/ambient_convbench
+adb shell /data/local/tmp/ambient_convtest
+adb shell /data/local/tmp/ambient_convbench 256 20 60
+```
+
+`ambient_convtest` must print `convolver path: neon` and `convtest: all checks passed`.
+(`cmake -S . -B build-android` again after test targets were added, or the build stops
+at the first one it does not know.)
+
 ## Status
 
 Compiles and packages; not yet run on a device (no headset attached to the
 build machine). First on-device checks: session state flow, swapchain format,
-hand-tracking permission prompt, Oboe stream start, pinch calibration.
+hand-tracking permission prompt, Oboe stream start, pinch calibration, and the
+two convolver runs above.

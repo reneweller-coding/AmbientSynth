@@ -28,10 +28,11 @@ inline int roundUp8(int v) { return (v + 7) & ~7; }
 // build with neither runs. This is most of the Room's arithmetic.
 
 #if AMBIENT_HAS_NEON
-// a + b c and a - b c. Fused where the compiler says the target has FMA (every AArch64 one, so
-// every Quest): one instruction each, rounded like the fmadd of the AVX path. The headers only
-// declare vfmaq_f32 under __ARM_FEATURE_FMA; anything else gets a plain multiply-add.
-#if defined(__ARM_FEATURE_FMA) || defined(AMBIENT_NEON_SHIM)
+// a + b c and a - b c. Fused wherever the target has FMA: every AArch64 compiler says so with
+// __ARM_FEATURE_FMA (the NDK header declares vfmaq_f32 only then), and MSVC's arm64 header has it
+// anyway -- one instruction each, rounded like the fmadd of the AVX path. The plain multiply-add is
+// for GCC or clang on a 32-bit ARM without VFPv4; the x86 test variant AMBIENT_NEON_SHIM_NOFMA runs it.
+#if (defined(__ARM_FEATURE_FMA) || defined(_M_ARM64) || defined(AMBIENT_NEON_SHIM)) && !defined(AMBIENT_NEON_SHIM_NOFMA)
 inline float32x4_t neonAddMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmaq_f32(a, b, c); }
 inline float32x4_t neonSubMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmsq_f32(a, b, c); }
 #else

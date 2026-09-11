@@ -122,6 +122,90 @@ inline void convolverChecks()
         const double morphDb = errorDb(bL, bR, wL, wR);
         std::printf("  [probe] room against the direct sum: stereo %.1f dB, mono %.1f dB, morph 0.3 %.1f dB\n", stereoDb, monoDb, morphDb);
         CHECK(stereoDb < -80.0 && monoDb < -80.0 && morphDb < -80.0, "partitioned convolution matches the direct sum (stereo, mono, morph)");
+
+        // Morphs between impulses that pack differently, so that every kernel and branch of the sum
+        // runs with data that would show a wrong operand or offset: two mono impulses (blendTwo),
+        // stereo against mono either way round (blendOne with one side mono), impulses of different
+        // lengths (the longer one alone, weighted, where the shorter has no partition), and one whose
+        // late partitions are band-limited (a range that splits where the narrower impulse stops).
+        const double pi = 3.14159265358979323846;
+        auto normOwn = [](const std::vector<float>& x, const std::vector<float>* other) {
+            double e = 0.0;
+            for (size_t i = 0; i < x.size(); ++i) {
+                const double a = x[i];
+                const double b = other ? static_cast<double>((*other)[i]) : a;
+                e += 0.5 * (a * a + b * b);
+            }
+            std::vector<double> out(x.size());
+            for (size_t i = 0; i < x.size(); ++i) out[i] = x[i] / std::sqrt(e);
+            return out;
+        };
+        auto directOwn = [&](const std::vector<float>& in, const std::vector<double>& h, int lat) {
+            std::vector<double> y(static_cast<size_t>(n), 0.0);
+            const int hn = static_cast<int>(h.size());
+            for (int t = 0; t < n; ++t)
+                if (in[static_cast<size_t>(t)] != 0.0f)
+                    for (int j = 0; j < hn && t + j + lat < n; ++j) y[static_cast<size_t>(t + j + lat)] += in[static_cast<size_t>(t)] * h[static_cast<size_t>(j)];
+            return y;
+        };
+        const std::vector<float> shortL(hl.begin(), hl.begin() + 20000), shortR(hr.begin(), hr.begin() + 20000);
+        // Noise over the first stage, then a Hann-windowed low tone filling each later partition
+        // exactly: its spectrum falls away fast enough that the upper bins go under the band limit.
+        std::vector<float> band(static_cast<size_t>(len), 0.0f);
+        {
+            Rng nr2; nr2.seed(77);
+            for (int i = 0; i < c.stageStart(1); ++i)
+                band[static_cast<size_t>(i)] = nr2.bipolar() * std::exp(-4.0f * static_cast<float>(i) / static_cast<float>(len));
+            for (int s = 1; s <= 2; ++s) {
+                const int stop = s == 1 ? c.stageStart(2) : len;
+                for (int from = c.stageStart(s); from < stop; from += c.stageBlock(s)) {
+                    const int to = std::min(stop, from + c.stageBlock(s));
+                    const double hz = 150.0 + 40.0 * (from % 7), amp = 0.5 * std::exp(-4.0 * from / len);
+                    for (int i = from; i < to; ++i) {
+                        const double w = 0.5 - 0.5 * std::cos(2.0 * pi * (i - from) / (to - from));
+                        band[static_cast<size_t>(i)] += static_cast<float>(amp * w * std::sin(2.0 * pi * hz * i / sr));
+                    }
+                }
+            }
+        }
+        {
+            Convolver probe; probe.prepare(sr, 2.0f);
+            probe.setImpulse(band.data(), nullptr, len, sr);
+            CHECK(probe.keptBins() < probe.fullBins() / 2, "the band-limited test impulse keeps far fewer bins than a full spectrum");
+        }
+        auto morphOf = [&](const std::vector<float>& aL, const std::vector<float>* aR, const std::vector<float>& bL_, const std::vector<float>* bR_, bool ragged) {
+            Convolver mc; mc.prepare(sr, 2.0f);
+            mc.setImpulse(aL.data(), aR ? aR->data() : nullptr, static_cast<int>(aL.size()), sr);
+            mc.setImpulseB(bL_.data(), bR_ ? bR_->data() : nullptr, static_cast<int>(bL_.size()), sr);
+            mc.setMorph(0.3f);
+            std::vector<float> oL, oR;
+            play(mc, false, oL, oR);
+            if (ragged) {
+                std::vector<float> rL, rR;
+                mc.reset();
+                play(mc, true, rL, rR);
+                CHECK(oL == rL && oR == rR, "a morph's output does not depend on the host's block sizes either");
+            }
+            const auto aLn = normOwn(aL, aR), bLn = normOwn(bL_, bR_);
+            const auto aRn = aR ? normOwn(*aR, &aL) : aLn, bRn = bR_ ? normOwn(*bR_, &bL_) : bLn;
+            const auto yaL = directOwn(inL, aLn, mc.latency()), yaR = directOwn(inR, aRn, mc.latency());
+            const auto ybL = directOwn(inL, bLn, mc.latency()), ybR = directOwn(inR, bRn, mc.latency());
+            std::vector<double> eL(static_cast<size_t>(n)), eR(static_cast<size_t>(n));
+            for (int t = 0; t < n; ++t) {
+                eL[static_cast<size_t>(t)] = 0.7 * yaL[static_cast<size_t>(t)] + 0.3 * ybL[static_cast<size_t>(t)];
+                eR[static_cast<size_t>(t)] = 0.7 * yaR[static_cast<size_t>(t)] + 0.3 * ybR[static_cast<size_t>(t)];
+            }
+            return errorDb(oL, oR, eL, eR);
+        };
+        const double monoBand    = morphOf(hl, nullptr, band, nullptr, true);        // blendTwo up to the band limit, then A alone (sumTwo, 0.7)
+        const double monoShort   = morphOf(shortL, nullptr, hl, nullptr, false);     // blendTwo, then B alone (sumTwo, 0.3)
+        const double stereoBand  = morphOf(hl, &hr, band, nullptr, false);           // blendOne with a mono B, then A alone (sumOne, 0.7)
+        const double monoStereo  = morphOf(hl, nullptr, shortL, &shortR, false);     // blendOne with a mono A, then A alone (sumTwo, 0.7)
+        const double stereoShort = morphOf(shortL, &shortR, hr, &hl, false);         // blendOne, then B alone (sumOne, 0.3)
+        std::printf("  [probe] room morphs of unlike impulses: mono/band %.1f, short/long %.1f, stereo/band %.1f, mono/stereo %.1f, stereo short/long %.1f dB\n",
+                    monoBand, monoShort, stereoBand, monoStereo, stereoShort);
+        CHECK(monoBand < -80.0 && monoShort < -80.0 && stereoBand < -80.0 && monoStereo < -80.0 && stereoShort < -80.0,
+              "morphs between impulses that pack differently match the direct sum");
     }
     {   // Silence inside an impulse is not stored and a tap after it still lands right; silence at
         // the end is trimmed; a longer file is cut at the maximum; another rate keeps its length.

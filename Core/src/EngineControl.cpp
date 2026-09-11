@@ -675,6 +675,10 @@ void Engine::readParams()
             }
         }
         vp_.userTable = userTable_.frames > 0 ? &userTable_ : nullptr;
+        {
+            const int a = cyclesActive_.load(std::memory_order_acquire);
+            vp_.userCycles = (a >= 0 && !userCycles_[a].empty()) ? &userCycles_[a] : nullptr;
+        }
         for (int k = 0; k < kSlots; ++k) {
             const int a = textureActive_[k].load(std::memory_order_acquire);
             vp_.texture[k] = (a >= 0 && !textures_[k][a].empty()) ? &textures_[k][a] : nullptr;

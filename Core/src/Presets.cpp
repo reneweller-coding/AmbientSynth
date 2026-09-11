@@ -1097,8 +1097,8 @@ const Preset kPresets[] = {
 
     // ---------------------------------------------------------------- 128..135 sources (wavetable, FM, feedback)
     { "Vocal Morph Choir",
-      "src2_type=Wavetable;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
-      "src3_type=Wavetable;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;"
+      "src2_type=Harmonic;src2_table=Vocal;src2_pos=0.2;src2_pos_drift=1;src2_level=0.6;src2_ratio=1/1;"
+      "src3_type=Harmonic;src3_table=Vocal;src3_pos=0.7;src3_pos_drift=1;src3_level=0.5;src3_ratio=3/2;"
       "src3_octave=-1;osc_level=0.5;partials=8;brain_density=4;far_decay=30;far_highcut=4000;"
       "scale=JI Major (Ptolemy);root=A;z_mode=Series;z_shape=Vowel Morph;z_rate=0.03;z_depth=1;z_mix=0.5;"
       "lfo1_rate=0.014024;lfo1_depth=0.58;lfo2_rate=0.0086674;lfo2_depth=0.45;lfo3_rate=0.0053568;"
@@ -1106,14 +1106,14 @@ const Preset kPresets[] = {
       nullptr, nullptr, nullptr,
       "lfo1>brightness:0.165;lfo2>air:0.200;lfo3>detune:-0.229;lfo4>z_y:-0.231;beat>sub_level:0.141;slide>odd_even:0.225:u;pressure>cutoff:0.255:u" },
     { "Glass Table Drift",
-      "src2_type=Wavetable;src2_table=Glass;src2_pos=0.3;src2_pos_drift=0.8;src2_level=0.7;src2_octave=1;"
+      "src2_type=Harmonic;src2_table=Glass;src2_pos=0.3;src2_pos_drift=0.8;src2_level=0.7;src2_octave=1;"
       "osc_level=0.4;partials=6;tilt=1.5;far_size=3;far_decay=45;far_highcut=8000;brain_low=48;brain_high=88;"
       "attack=8;release=20;lfo1_rate=0.026189;lfo1_depth=0.62;lfo2_rate=0.016186;lfo2_depth=0.58;"
       "lfo3_rate=0.010003;lfo3_depth=0.64;lfo4_rate=0.0061823;lfo4_depth=0.56;odd_even=-0.28",
       nullptr, nullptr, nullptr,
       "lfo1>brightness:-0.216;lfo2>resonance:-0.116;lfo3>cutoff:-0.110;lfo4>ens_depth:-0.127;beat>sub_level:0.105;pressure>far_level:0.211:u" },
     { "Organ Mixture Cloud",
-      "src2_type=Wavetable;src2_table=Organ;src2_pos=0.6;src2_pos_drift=0.4;src2_level=0.6;src3_type=Wavetable;"
+      "src2_type=Harmonic;src2_table=Organ;src2_pos=0.6;src2_pos_drift=0.4;src2_level=0.6;src3_type=Harmonic;"
       "src3_table=Organ;src3_pos=0.9;src3_level=0.4;src3_octave=-1;src3_ratio=3/2;osc_level=0.3;"
       "scale=Pythagorean;root=D;near_mix=0.4;near_decay=3;far_level=0.5;brain_density=4;cloud_send=0.3;"
       "lfo1_rate=0.016894;lfo1_depth=0.50;lfo2_rate=0.010441;lfo2_depth=0.47;lfo3_rate=0.0064529;"
@@ -1122,8 +1122,8 @@ const Preset kPresets[] = {
       nullptr, nullptr, nullptr,
       "lfo1>air:-0.127;lfo2>z_y:0.198;lfo3>arc:-0.150;lfo4>pan_drift:-0.199;beat>brightness:0.118;wheel>cloud_send:0.368:u" },
     { "Metal Field",
-      "src2_type=Wavetable;src2_table=Metal;src2_pos=0.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.5;"
-      "src3_type=Wavetable;src3_table=Metal;src3_pos=0.1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.5;"
+      "src2_type=Harmonic;src2_table=Metal;src2_pos=0.5;src2_pos_drift=1;src2_level=0.6;src2_pan=-0.5;"
+      "src3_type=Harmonic;src3_table=Metal;src3_pos=0.1;src3_pos_drift=1;src3_level=0.5;src3_pan=0.5;"
       "src3_ratio=7/4;src3_octave=-1;osc_level=0.3;inharmonic=0.4;partials=12;cutoff=1800;far_decay=40;"
       "far_highcut=3000;brain_consonance=0.3;brain_density=5;fb_fm=0.3;z_mode=Series;z_shape=Metal Bars;"
       "z_rate=0.02;z_depth=0.8;z_res=0.7;z_mix=0.4;lfo1_rate=0.014325;lfo1_depth=0.62;lfo2_rate=0.0088534;"
@@ -1147,7 +1147,7 @@ const Preset kPresets[] = {
       nullptr, nullptr, nullptr,
       "lfo1>z_y:0.233;lfo2>detune:0.196;lfo3>pan_drift:0.229;lfo4>ens_depth:-0.204;beat>far_size:0.140;slide>inharmonic:0.272:u;wheel>air:0.379:u" },
     { "Feedback Hiss",
-      "fb_bus=0.6;fb_drive=1;fb_tone=3000;fb_fm=0.3;src2_type=Wavetable;src2_table=Classic;src2_pos=0.55;"
+      "fb_bus=0.6;fb_drive=1;fb_tone=3000;fb_fm=0.3;src2_type=Harmonic;src2_table=Classic;src2_pos=0.55;"
       "src2_level=0.4;osc_level=0.6;partials=10;cutoff=2000;far_decay=30;dly_feedback=0.7;dly_mix=0.3;"
       "brain_density=4;master_gain=-9;lfo1_rate=0.019064;lfo1_depth=0.62;lfo2_rate=0.011782;lfo2_depth=0.65;"
       "lfo3_rate=0.0072819;lfo3_depth=0.46;lfo4_rate=0.0045004;lfo4_depth=0.53;z_mode=Series;"
@@ -1156,7 +1156,7 @@ const Preset kPresets[] = {
       nullptr, nullptr, nullptr,
       "lfo1>shimmer:-0.127;lfo2>air:0.172;lfo3>tilt:-0.113;lfo4>cutoff:0.197;beat>far_size:0.114;pressure>resonance:0.157:u" },
     { "Three Voices, One Key",
-      "brain_on=off;keys_depth=0;stack=Major;strands=3;detune=0;drift=1;osc_level=0.7;src2_type=Wavetable;"
+      "brain_on=off;keys_depth=0;stack=Major;strands=3;detune=0;drift=1;osc_level=0.7;src2_type=Harmonic;"
       "src2_table=Classic;src2_pos=0.25;src2_level=0.4;src2_octave=-1;src3_type=FM;src3_fm_ratio=2;"
       "src3_fm_index=0.8;src3_level=0.3;src3_octave=1;src3_ratio=3/2;near_mix=0.3;far_level=0.4;attack=2;"
       "release=8;presence=2;lfo1_rate=0.021811;lfo1_depth=0.46;lfo2_rate=0.01348;lfo2_depth=0.53;"

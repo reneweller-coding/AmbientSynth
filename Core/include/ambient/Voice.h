@@ -95,6 +95,7 @@ struct VoiceParams {
     // valid for the block. Each slot has its own clip.
     SlotParams       slot[kSlots];
     const Wavetable* userTable = nullptr;
+    const CycleTable* userCycles = nullptr;   // the same file as single cycles, for the Wavetable type
     const Texture*   texture[kSlots] = {};
     // The preset's six envelope shapes, for a slot that names one as its own entrance. The same
     // shapes the modulation matrix reads, with the same Mode and Time -- a slot does not get a

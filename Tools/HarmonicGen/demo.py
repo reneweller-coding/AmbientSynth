@@ -24,7 +24,7 @@ import harmonicgen as hg  # noqa: E402
 from engine_check import RENDER  # noqa: E402
 
 SETTINGS = {
-    "src1_type": "Wavetable", "src1_table": "User", "src1_pos_drift": "0", "src1_transport": "0", "src1_root": "0",
+    "src1_type": "Harmonic", "src1_table": "User", "src1_pos_drift": "0", "src1_transport": "0", "src1_root": "0",
     "src2_type": "Off", "src3_type": "Off", "src4_type": "Off",
     "strands": "2", "detune": "5", "drift": "2", "spread": "0.5", "shimmer": "0", "inharmonic": "0",
     "attack": "1", "decay": "0.5", "sustain": "1", "release": "2",

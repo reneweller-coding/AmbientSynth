@@ -61,6 +61,7 @@ const char* sourceWord(const std::string& type)
 {
     if (type == "Additive") return "an additive bank";
     if (type == "Table" || type == "Wavetable") return "a wavetable";
+    if (type == "Harmonic") return "a harmonic table";
     if (type == "FM") return "an FM pair";
     if (type == "Texture") return "a grain texture";
     if (type == "Noise") return "noise";

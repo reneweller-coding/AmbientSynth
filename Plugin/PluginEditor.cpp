@@ -1863,7 +1863,7 @@ void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void(
         job.steps.push_back([this, typeParam, &job] {
             job.originalType = typeParam != nullptr ? juce::String(typeParam->getValue()) : juce::String();
         });
-        for (const char* type : { "Additive", "Wavetable", "FM", "Texture", "Stretch", "Bow", "Spectral", "Noise" }) {
+        for (const char* type : { "Additive", "Harmonic", "Wavetable", "FM", "Texture", "Stretch", "Bow", "Spectral", "Noise" }) {
             const juce::String typeName(type);
             int index = -1;
             for (int i = 0; i < ambient::kNumSourceTypes; ++i) if (typeName == ambient::kSourceTypeNames[i]) index = i;
@@ -1881,7 +1881,8 @@ void AmbientSynthEditor::exportManual(const juce::File& dir, std::function<void(
                 t.name = "TYPE " + typeName;
                 t.caption = "Source 2 switched to the " + typeName + " type: the knobs that type uses are lit, the rest greyed out, and the display shows "
                           + (typeName == "Additive" ? juce::String("the partials of its bank.")
-                           : typeName == "Wavetable" ? juce::String("the current frame of the table.")
+                           : typeName == "Harmonic" ? juce::String("the current frame of the table, drawn from its spectrum.")
+                           : typeName == "Wavetable" ? juce::String("the current frame as the samples it is, its neighbours faint behind it.")
                            : typeName == "FM" ? juce::String("the modulated waveform of the pair.")
                            : typeName == "Texture" ? juce::String("the loaded clip with the grains reading it.")
                            : typeName == "Stretch" ? juce::String("the loaded clip with the stretched read position crawling through it.")
@@ -2326,18 +2327,20 @@ void AmbientSynthEditor::updateSourceCells()
     // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
-    enum { Off = 0, Table = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8 };
+    enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
     bool cellsChanged = false;
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        for (int off = 1; off <= 32; ++off) {
+        // Every field, not the first 33: the loop used to stop at Transport, and everything added after
+        // it -- Interp, Unison and its detune and width, Root -- stood lit for every type, Root on a clip.
+        for (int off = 1; off < ambient::kSlotFields; ++off) {
             bool on = type != Off;
             switch (off) {
-            case 5:  on = type == Table; break;                                  // wavetable choice
-            case 6:  on = type == Table || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral; break;   // position, or where the bow sits
+            case 5:  on = type == Harmonic || type == Wavetable; break;         // table choice
+            case 6:  on = type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral; break;   // position, or where the bow sits
             case 7:  on = type != Off;  break;                                   // pos drift moves all of them
             case 8:
             case 9:  on = type == Fm; break;
@@ -2358,7 +2361,12 @@ void AmbientSynthEditor::updateSourceCells()
             case 29: on = type == Bow; break;                                     // bow force, bow speed
             case 30:
             case 31: on = type == Spectral; break;                                // spectral rate, breath
-            case 32: on = type == Table; break;                                   // transport: how the frames morph
+            case 32: on = type == Harmonic; break;                                // transport: how the spectra morph
+            case 36: on = type == Texture; break;                                 // interpolation: how a clip is read
+            case 37:
+            case 38:
+            case 39: on = type == Harmonic || type == Wavetable; break;           // unison, its detune and width: the table types
+            case 40: on = type == Harmonic; break;                                // root: a floor under a spectrum's fundamental
             default: break;
             }
             const int ci = cellForParam(ids[off]);
@@ -2376,7 +2384,7 @@ void AmbientSynthEditor::updateSourceCells()
         }
         if (k == 1 && tableCell_ >= 0) {
             Cell& wc = cells_[static_cast<size_t>(tableCell_)];
-            const bool on = type == Table;
+            const bool on = type == Harmonic || type == Wavetable;
             if (wc.unused != !on) { wc.unused = !on; cellsChanged = true; }
         }
     }
@@ -2438,10 +2446,11 @@ void AmbientSynthEditor::showMappingEditor()
 
 void AmbientSynthEditor::chooseSourceFile(bool wavetable, int slot)
 {
-    const juce::String what = wavetable ? juce::String("Load a wavetable (2048-sample frames)")
+    const juce::String what = wavetable ? juce::String("Load a wavetable (Serum, Vital, Hive, Surge .wt, WaveEdit, a single cycle)")
                             : slot >= 0 ? "Load a clip for Source " + juce::String(slot + 1)
                                         : juce::String("Load a texture sample");
-    chooser_ = std::make_unique<juce::FileChooser>(what, juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+    chooser_ = std::make_unique<juce::FileChooser>(what, juce::File(), wavetable ? "*.wav;*.wt;*.flac;*.aif;*.aiff"
+                                                                                : "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
     chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [this, wavetable, slot](const juce::FileChooser& fc) {
             const auto file = fc.getResult();
@@ -2450,7 +2459,7 @@ void AmbientSynthEditor::chooseSourceFile(bool wavetable, int slot)
                           : slot >= 0 ? proc_.loadTextureFile(slot, file) : proc_.loadTextureFile(file);
             if (!ok)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, wavetable ? "Wavetable" : "Texture",
-                    wavetable ? "Could not read this file as a wavetable (it needs at least one 2048-sample frame)." : "Could not read this audio file.");
+                    wavetable ? "Could not read this file as a wavetable (no whole cycle in it, or nothing but silence)." : "Could not read this audio file.");
             repaint();
         });
 }

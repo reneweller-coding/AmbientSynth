@@ -21,5 +21,10 @@ bool readWavMono(const char* path, std::vector<float>& mono, int& sampleRate);
 bool readWavStereo(const char* path, std::vector<float>& left, std::vector<float>& right, int& sampleRate);
 // All channels, deinterleaved (impulse responses keep their stereo).
 bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels, int& sampleRate);
+// A wavetable file: its samples folded to mono, and how long one cycle is in them. The length comes
+// from the file where the file says it -- the "clm " chunk Serum writes and Vital copies, Surge's
+// "srge" chunk, the header of Surge's own .wt format -- and is otherwise worked out from the samples
+// (detectCycleLength, CycleTable.h). WAV, FLAC and .wt.
+bool readWavetableFile(const char* path, std::vector<float>& mono, int& cycleLen);
 
 } // namespace ambient

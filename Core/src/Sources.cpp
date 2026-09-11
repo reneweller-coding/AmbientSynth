@@ -10,7 +10,7 @@
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Wavetable", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow", "Spectral" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Harmonic", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow", "Spectral", "Wavetable" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
     "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
 };
@@ -185,24 +185,40 @@ void Wavetable::spectrumAt(float pos, float* out, float transport) const
 bool Wavetable::analyse(const float* mono, int n, int frameLen)
 {
     frames = 0;
-    // A power of two, and not merely long enough: the FFT builds its bit-reversal table for
-    // the next power of two above the length it is given, so a frame of 300 samples produces
-    // indices up to 511 and the transform then swaps entries two hundred past the end of its
-    // own buffers. Nothing in the instrument passes anything but 2048 today; this is so that
-    // nothing ever can.
-    if (mono == nullptr || frameLen < 64 || n < frameLen) return false;
-    if ((frameLen & (frameLen - 1)) != 0) return false;
+    if (mono == nullptr || frameLen < 8 || n < frameLen) return false;
     const int total = n / frameLen;
     const int keep = std::min(total, kTableFrames);
-    Fft fft(frameLen);
-    std::vector<float> re(static_cast<size_t>(frameLen)), im(static_cast<size_t>(frameLen));
+    // A power of two goes through the FFT, as it always has. Any other length -- an Adventure Kid
+    // single cycle is 600 samples -- is summed directly, bin by bin: thirty-two bins of one short
+    // cycle need no transform. The FFT itself must never see such a length: it builds its bit
+    // reversal for the next power of two above it, and a frame of 300 samples would make it swap
+    // entries two hundred past the end of its own buffers.
+    const bool pow2 = (frameLen & (frameLen - 1)) == 0;
+    std::unique_ptr<Fft> fft;
+    std::vector<float> re, im;
+    if (pow2) {
+        fft = std::make_unique<Fft>(frameLen);
+        re.assign(static_cast<size_t>(frameLen), 0.0f);
+        im.assign(static_cast<size_t>(frameLen), 0.0f);
+    }
     for (int k = 0; k < keep; ++k) {
         const int src = (keep == total) ? k : static_cast<int>(static_cast<long long>(k) * (total - 1) / std::max(keep - 1, 1));
-        std::memcpy(re.data(), mono + static_cast<size_t>(src) * static_cast<size_t>(frameLen), sizeof(float) * static_cast<size_t>(frameLen));
-        std::fill(im.begin(), im.end(), 0.0f);
-        fft.transform(re.data(), im.data(), false);
-        for (int h = 1; h <= kTablePartials; ++h)
-            amp[k][h - 1] = h < frameLen / 2 ? std::sqrt(re[static_cast<size_t>(h)] * re[static_cast<size_t>(h)] + im[static_cast<size_t>(h)] * im[static_cast<size_t>(h)]) : 0.0f;
+        const float* x = mono + static_cast<size_t>(src) * static_cast<size_t>(frameLen);
+        if (pow2) {
+            std::memcpy(re.data(), x, sizeof(float) * static_cast<size_t>(frameLen));
+            std::fill(im.begin(), im.end(), 0.0f);
+            fft->transform(re.data(), im.data(), false);
+            for (int h = 1; h <= kTablePartials; ++h)
+                amp[k][h - 1] = h < frameLen / 2 ? std::sqrt(re[static_cast<size_t>(h)] * re[static_cast<size_t>(h)] + im[static_cast<size_t>(h)] * im[static_cast<size_t>(h)]) : 0.0f;
+        } else {
+            for (int h = 1; h <= kTablePartials; ++h) {
+                if (2 * h >= frameLen) { amp[k][h - 1] = 0.0f; continue; }
+                const double w = 2.0 * 3.14159265358979323846 * h / frameLen;
+                double sr = 0.0, si = 0.0;
+                for (int i = 0; i < frameLen; ++i) { sr += x[i] * std::cos(w * i); si += x[i] * std::sin(w * i); }
+                amp[k][h - 1] = static_cast<float>(std::sqrt(sr * sr + si * si));
+            }
+        }
         normaliseFrame(amp[k]);
     }
     frames = keep;
@@ -247,6 +263,12 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     bowBridge_.assign(static_cast<size_t>(kBowMax), 0.0f);
     bowW_ = 0; bowLp_ = 0.0f; bowReady_ = false;
     specAdvance_ = 0.0;
+    // Wavetable: the start phases come from a stream of their own, and the built-in tables are
+    // made here, on this thread, rather than by the first block that asks for one.
+    cyRng_.seed(seed ^ 0x6A09E667F3BCC909ull);
+    for (double& ph : cyPhase_) ph = 0.0;
+    cyPrimed_ = false;
+    (void)builtinCycleTable(0);
 }
 
 const Fft& SourceSlot::stretchFft(int n)
@@ -271,6 +293,8 @@ void SourceSlot::noteOn(bool fresh)
     for (auto& g : grains_) g.on = false;
     spawnIn_ = 0.0;
     st_.advance = 0.0;   // a fresh note reads from Position again
+    for (double& ph : cyPhase_) ph = cyRng_.uniform();
+    cyPrimed_ = false;
     specAdvance_ = 0.0;
     for (int b = 0; b < kTablePartials; ++b) {
         specA_[b] = specAStep_[b] = specN_[b] = specNStep_[b] = 0.0f;
@@ -279,7 +303,8 @@ void SourceSlot::noteOn(bool fresh)
 }
 
 void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const SlotParams& p,
-                        const Wavetable* table, const Texture* texture, float driftRate)
+                        const Wavetable* table, const Texture* texture, float driftRate,
+                        const CycleTable* cycles)
 {
     if (p.type == SourceType::Off || n <= 0) { lastType_ = p.type; return; }   // (Source 1 in Additive mode also lands here with n = 0)
     n = std::min(n, kControlBlock);
@@ -290,6 +315,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         for (auto& g : grains_) g.on = false;
         if (!st_.out.empty()) std::fill(st_.out.begin(), st_.out.end(), 0.0f);
         st_.n = 0; st_.hopLeft = 0;
+        cyPrimed_ = false;
         lastType_ = p.type;
     }
     double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
@@ -323,10 +349,11 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     // Unison in a bank type: the copies are spread across the field, so the slot produces two
     // channels of its own instead of one signal placed by Pan. Pan then moves the whole group.
     const int copies = clampv(p.unison, 1, kSlotUnison);
-    const bool wide = copies > 1 && p.type == SourceType::Wavetable;
+    const bool wide = copies > 1 && (p.type == SourceType::Harmonic || p.type == SourceType::Wavetable);
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
     if (wide) std::memset(scratchR_, 0, sizeof(float) * static_cast<size_t>(n));
-    if (p.type == SourceType::Wavetable) renderWavetable(scratch_, n, hz, p, table, dt, wide ? scratchR_ : nullptr);
+    if (p.type == SourceType::Harmonic) renderWavetable(scratch_, n, hz, p, table, dt, wide ? scratchR_ : nullptr);
+    else if (p.type == SourceType::Wavetable) renderCycles(scratch_, n, hz, p, cycles, dt, wide ? scratchR_ : nullptr);
     else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Stretch) renderStretch(scratch_, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
     else if (p.type == SourceType::Bow) renderBow(scratch_, n, hz, p, dt);
@@ -453,6 +480,75 @@ void SourceSlot::renderBank(const float* spec, int H, int n, float* out, int uni
     }
     for (int i = 0; i < n; ++i)
         out[i] = phasorBankStep(pc_, ps_, rc_, rs_, amp_, ampStep_, active_);
+}
+
+// The Wavetable type: single cycles read as samples (CycleTable.h). A phase per unison copy, the
+// copies detuned and placed across the field exactly as the Harmonic type places its own
+// (setBankPitch), the energy divided among them, and Position glided across the block so a turning
+// knob never steps. The level a note reads follows its highest copy; when that changes, the block
+// reads both levels and fades from the old one to the new, so a glide across a boundary is not
+// heard as the top octave of harmonics switching off.
+void SourceSlot::renderCycles(float* out, int n, double hz, const SlotParams& p, const CycleTable* table, float dt, float* outR)
+{
+    const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.5f * p.positionDrift;
+    auto silence = [&] {
+        std::memset(out, 0, sizeof(float) * static_cast<size_t>(n));
+        if (outR != nullptr) std::memset(outR, 0, sizeof(float) * static_cast<size_t>(n));
+    };
+    if (table == nullptr || table->empty()) { silence(); cyPrimed_ = false; return; }
+
+    const int copies = clampv(p.unison, 1, kSlotUnison);
+    const float width = clampv(p.uniWidth, 0.0f, 1.0f);
+    double inc[kSlotUnison] = {};
+    float wl[kSlotUnison] = {}, wr[kSlotUnison] = {};
+    double top = 0.0;
+    for (int c = 0; c < copies; ++c) {
+        const double place = copies > 1 ? (2.0 * c / (copies - 1) - 1.0) : 0.0;
+        const double ratio = copies > 1 ? std::pow(2.0, place * 0.5 * static_cast<double>(p.uniDetune) / 1200.0) : 1.0;
+        inc[c] = hz * ratio / sr_;
+        top = std::max(top, hz * ratio);
+        const float angle = (static_cast<float>(place) * width + 1.0f) * 0.25f * kPi;
+        wl[c] = std::cos(angle) * kSqrt2;
+        wr[c] = std::sin(angle) * kSqrt2;
+    }
+    const float pos = clampv(p.position + wander, 0.0f, 1.0f);
+    const int level = cycleLevelFor(top, sr_, cyPrimed_ ? cyLevel_ : -1);
+    const int levelFrom = cyPrimed_ ? cyLevel_ : level;
+    const float posFrom = cyPrimed_ ? cyPos_ : pos;
+    cyLevel_ = level;
+    cyPos_ = pos;
+    cyPrimed_ = true;
+    // Even a sine would alias: nothing to play.
+    if (static_cast<double>(CycleTable::levelHarmonics(level)) * top >= 0.5 * sr_) { silence(); return; }
+
+    const float gain = 1.0f / std::sqrt(static_cast<float>(copies));
+    const int last = table->frames - 1;
+    const float inv = 1.0f / static_cast<float>(n);
+    for (int i = 0; i < n; ++i) {
+        const float t = static_cast<float>(i + 1) * inv;
+        const float x = (posFrom + (pos - posFrom) * t) * static_cast<float>(last);
+        const int f0 = clampv(static_cast<int>(x), 0, last);
+        const int f1 = f0 < last ? f0 + 1 : last;
+        const float fr = x - static_cast<float>(f0);
+        float accL = 0.0f, accR = 0.0f;
+        for (int c = 0; c < copies; ++c) {
+            const double ph = cyPhase_[c];
+            float v = table->sample(level, f0, ph);
+            if (fr > 0.0f) v += fr * (table->sample(level, f1, ph) - v);
+            if (levelFrom != level) {
+                float u = table->sample(levelFrom, f0, ph);
+                if (fr > 0.0f) u += fr * (table->sample(levelFrom, f1, ph) - u);
+                v = u + t * (v - u);
+            }
+            double next = ph + inc[c];
+            if (next >= 1.0) next -= std::floor(next);
+            cyPhase_[c] = next;
+            if (outR != nullptr) { accL += v * wl[c]; accR += v * wr[c]; }
+            else accL += v;
+        }
+        out[i] = accL * gain;
+        if (outR != nullptr) outR[i] = accR * gain;
+    }
 }
 
 // Additive in a slot: the voice's spectrum formula (tilt, brightness window, odd/even, inharmonic

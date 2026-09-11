@@ -2088,7 +2088,7 @@ void testModulation()
                     e.prepare(48000.0, 256);
                     e.loadUserWavetable(table.data(), static_cast<int>(table.size()), 2048);
                     e.setParam(ParamId::BrainOn, 0.0f);
-                    e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Wavetable"));
+                    e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Harmonic"));
                     e.setParam(ParamId::Src1Table, paramValueFromText(paramDesc(ParamId::Src1Table), "User"));
                     e.setParam(ParamId::OscLevel, 0.9f);
                     e.setParam(ParamId::Src1Root, root);
@@ -2304,7 +2304,7 @@ void testModulation()
                 e.setParam(ParamId::BrainOn, 0.0f);
                 e.setParam(ParamId::Src1Type, paramValueFromText(paramDesc(ParamId::Src1Type), "Additive"));
                 e.setParam(ParamId::OscLevel, 0.0f);
-                e.setParam(ParamId::Src2Type, paramValueFromText(paramDesc(ParamId::Src2Type), "Wavetable"));
+                e.setParam(ParamId::Src2Type, paramValueFromText(paramDesc(ParamId::Src2Type), "Harmonic"));
                 e.setParam(ParamId::Src2Level, 0.8f);
                 e.setParam(ParamId::Src2Delay, delaySec);
                 e.setParam(ParamId::Src2Rise, 0.5f);
@@ -5748,6 +5748,228 @@ void testResearchBatch()
     }
 }
 
+// ---- the classic wavetable (CycleTable.h): single cycles read as samples, one copy per octave
+void testCycleTable()
+{
+    const double pi = 3.14159265358979323846;
+    const int L = CycleTable::kLen;
+    const size_t SL = static_cast<size_t>(L);
+    {   // a frame comes back as the wave it was -- phases kept, DC dropped, at the target level --
+        // and a poorer copy is the same wave without its upper harmonics
+        std::vector<float> frame(SL);
+        for (int n = 0; n < L; ++n) {
+            const double t = static_cast<double>(n) / L;
+            frame[static_cast<size_t>(n)] = static_cast<float>(0.5 * std::cos(2.0 * pi * 3.0 * t + 0.7) + 0.25 * std::sin(2.0 * pi * 17.0 * t) + 0.1);
+        }
+        CycleTable t;
+        CHECK(t.build(frame.data(), L, L) && t.frames == 1, "one 2048-sample cycle builds a table of one frame");
+        const double gain = CycleTable::kTargetRms / std::sqrt(0.5 * (0.5 * 0.5 + 0.25 * 0.25));
+        double worst = 1.0, worst5 = 1.0;
+        if (t.frames == 1) {
+            worst = worst5 = 0.0;
+            const float* c0 = t.cycle(0, 0);
+            const int S = CycleTable::levelLength(0);   // stored at twice the file's resolution
+            for (int n = 0; n < L; ++n)
+                worst = std::max(worst, std::fabs(static_cast<double>(c0[n * S / L]) - gain * (frame[static_cast<size_t>(n)] - 0.1)));
+            const int len5 = CycleTable::levelLength(5);
+            const float* c5 = t.cycle(5, 0);
+            for (int n = 0; n < len5; ++n)
+                worst5 = std::max(worst5, std::fabs(static_cast<double>(c5[n]) - gain * 0.5 * std::cos(2.0 * pi * 3.0 * n / len5 + 0.7)));
+            CHECK(std::fabs(c0[-1] - c0[S - 1]) < 1.0e-7f && std::fabs(c0[S] - c0[0]) < 1.0e-7f && std::fabs(c0[S + 1] - c0[1]) < 1.0e-7f,
+                  "the guard samples wrap the cycle for the four-point read");
+            CHECK(std::fabs(t.sample(0, 0, 0.25) - c0[S / 4]) < 1.0e-5f, "a read that lands on a stored sample returns that sample");
+        }
+        std::printf("  cycle table: one frame back to %.1e, its 16-harmonic copy to %.1e\n", worst, worst5);
+        CHECK(worst < 1.0e-4, "the finest copy is the waveform itself: phases kept, DC dropped, at the target level");
+        CHECK(worst5 < 1.0e-4, "a poorer copy is the same wave with the harmonics above its limit taken out");
+        const std::vector<float> quiet(SL, 0.0f);
+        CHECK(!t.build(quiet.data(), L, L), "a table of silence is refused");
+    }
+    {   // which copy a note reads, and that a pitch hovering on a boundary does not flip
+        CHECK(cycleLevelFor(20.0, 48000.0, -1) == 0, "a low note reads the whole table");
+        CHECK(cycleLevelFor(55.0, 48000.0, -1) == 1, "A1 reads 256 harmonics at 48 kHz");
+        CHECK(cycleLevelFor(94.0, 48000.0, -1) == 2, "past 93.75 Hz the 256th harmonic would alias: a copy poorer");
+        CHECK(cycleLevelFor(94.0, 48000.0, 1) == 2, "a copy that would alias is left at once");
+        CHECK(cycleLevelFor(90.0, 48000.0, 2) == 2, "just back under the boundary it stays, inside the margin");
+        CHECK(cycleLevelFor(80.0, 48000.0, 2) == 1, "well under it the richer copy returns");
+        CHECK(cycleLevelFor(30000.0, 48000.0, -1) == CycleTable::kLevels - 1, "above everything, the last copy");
+    }
+    {   // how long a cycle is: in files that do not say, and in files that do
+        std::vector<float> bank(64 * 256), frames8(8 * SL), single(600);
+        for (int k = 0; k < 64; ++k)
+            for (int n = 0; n < 256; ++n) {
+                const double t = n / 256.0, m = k / 63.0;
+                bank[static_cast<size_t>(k * 256 + n)] = static_cast<float>((1.0 - m) * std::sin(2.0 * pi * t) + m * 0.5 * std::sin(2.0 * pi * 3.0 * t));
+            }
+        for (int k = 0; k < 8; ++k)
+            for (int n = 0; n < L; ++n) {
+                const double t = static_cast<double>(n) / L;
+                frames8[static_cast<size_t>(k * L + n)] = static_cast<float>(std::sin(2.0 * pi * t) + 0.3 * k / 7.0 * std::sin(2.0 * pi * 2.0 * t));
+            }
+        for (int n = 0; n < 600; ++n)
+            single[static_cast<size_t>(n)] = static_cast<float>(std::sin(2.0 * pi * n / 600.0) + 0.2 * std::sin(2.0 * pi * 5.0 * n / 600.0));
+        CHECK(detectCycleLength(bank.data(), static_cast<int>(bank.size())) == 256, "a WaveEdit bank is 64 cycles of 256 samples, not 8 of 2048");
+        CHECK(detectCycleLength(frames8.data(), static_cast<int>(frames8.size())) == L, "eight real 2048-sample frames stay frames of 2048");
+        CHECK(detectCycleLength(single.data(), 600) == 600, "a file of 600 samples is one cycle of 600");
+        CycleTable one, morph;
+        CHECK(one.build(single.data(), 600, 600) && one.frames == 1, "a cycle of any length builds");
+        const double g = CycleTable::kTargetRms / std::sqrt(0.5 * (1.0 + 0.04));
+        CHECK(one.frames == 1 && std::fabs(one.sample(0, 0, 0.25) - g * 1.2) < 1.0e-3, "a 600-sample cycle is kept in 2048 samples without changing its shape");
+        CHECK(morph.build(bank.data(), static_cast<int>(bank.size()), 256) && morph.frames == 64, "the bank builds its 64 frames");
+
+        const auto dir = std::filesystem::temp_directory_path() / "ambient_selftest_cycles";
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        const std::string wt = (dir / "surge.wt").string(), wav = (dir / "serum.wav").string();
+        {   // Surge's format: "vawt", the wave size, the count, flags; 16-bit at the 15-bit scale here
+            std::ofstream f(wt, std::ios::binary);
+            const uint32_t size = 256;
+            const uint16_t count = 3, flags = 4;
+            f.write("vawt", 4);
+            f.write(reinterpret_cast<const char*>(&size), 4);
+            f.write(reinterpret_cast<const char*>(&count), 2);
+            f.write(reinterpret_cast<const char*>(&flags), 2);
+            for (int k = 0; k < 3; ++k)
+                for (int n = 0; n < 256; ++n) {
+                    const int16_t v = static_cast<int16_t>(std::lround(8000.0 * std::sin(2.0 * pi * (k + 1) * n / 256.0)));
+                    f.write(reinterpret_cast<const char*>(&v), 2);
+                }
+        }
+        {   // a WAV with Serum's "clm " chunk naming frames of 512. The cycles are shifted in phase one
+            // from the next, so the samples alone would not give 512 away.
+            std::ofstream f(wav, std::ios::binary);
+            const std::string clm = "<!>512 10000000 wavetable (www.xferrecords.com)";
+            const uint32_t clmSize = static_cast<uint32_t>(clm.size());
+            const uint32_t dataBytes = 4 * 512 * 4;
+            auto u32 = [&](uint32_t v) { f.write(reinterpret_cast<const char*>(&v), 4); };
+            auto u16 = [&](uint16_t v) { f.write(reinterpret_cast<const char*>(&v), 2); };
+            f.write("RIFF", 4); u32(4 + (8 + 16) + (8 + clmSize + (clmSize & 1u)) + (8 + dataBytes)); f.write("WAVE", 4);
+            f.write("fmt ", 4); u32(16); u16(3); u16(1); u32(48000); u32(48000 * 4); u16(4); u16(32);
+            f.write("clm ", 4); u32(clmSize); f.write(clm.data(), static_cast<std::streamsize>(clmSize)); if (clmSize & 1u) f.put(0);
+            f.write("data", 4); u32(dataBytes);
+            for (int k = 0; k < 4; ++k)
+                for (int n = 0; n < 512; ++n) {
+                    const float v = static_cast<float>(std::sin(2.0 * pi * n / 512.0 + 1.3 * k));
+                    f.write(reinterpret_cast<const char*>(&v), 4);
+                }
+        }
+        std::vector<float> got;
+        int cycle = 0;
+        CHECK(readWavetableFile(wt.c_str(), got, cycle) && cycle == 256 && got.size() == 768, "a Surge .wt gives its wave size and its waves");
+        CHECK(got.size() > 64 && std::fabs(got[64] - 8000.0f / 16384.0f) < 1.0e-3f, "and reads them at the 15-bit scale its flags ask for");
+        CHECK(readWavetableFile(wav.c_str(), got, cycle) && cycle == 512 && got.size() == 2048, "Serum's chunk names the frame length, over any guess");
+        CHECK(!got.empty() && detectCycleLength(got.data(), static_cast<int>(got.size())) == L, "(the samples alone would have read one frame of 2048)");
+        std::filesystem::remove_all(dir, ec);
+    }
+    {   // through the engine: the two table types at one level, a morph, and a bright table played high
+        std::vector<float> saw(SL), two(2 * SL);
+        for (int n = 0; n < L; ++n) {
+            double v = 0.0;
+            for (int h = 1; h <= 512; ++h) v += std::sin(2.0 * pi * h * n / L) / h;
+            saw[static_cast<size_t>(n)] = static_cast<float>(0.4 * v);
+            two[static_cast<size_t>(n)] = static_cast<float>(0.5 * std::sin(2.0 * pi * n / L));
+            two[SL + static_cast<size_t>(n)] = static_cast<float>(0.5 * std::sin(2.0 * pi * 3.0 * n / L));
+        }
+        auto play = [&](const std::vector<float>& table, const char* type, int note, float pos, std::vector<float>& mono) {
+            Engine e;
+            e.prepare(48000.0, 256);
+            CHECK(e.loadUserWavetable(table.data(), static_cast<int>(table.size()), L), "the test table loads");
+            auto set = [&](const char* key, const char* value) {
+                const ParamDesc* d = findParam(key);
+                if (d == nullptr) { CHECK(false, key); return; }
+                e.setParam(d->id, paramValueFromText(*d, value));
+            };
+            const std::pair<const char*, const char*> quiet[] = {
+                { "brain_on", "off" }, { "src1_table", "User" }, { "src1_pos_drift", "0" }, { "osc_level", "0.9" },
+                { "air", "0" }, { "breath", "0" }, { "sub_level", "0" }, { "strike_level", "0" }, { "far_level", "0" },
+                { "near_mix", "0" }, { "dly_mix", "0" }, { "room_level", "0" }, { "cloud_level", "0" }, { "ens_mix", "0" },
+                { "filter_on", "off" }, { "z_mix", "0" }, { "attack", "0.05" }, { "sustain", "1" }, { "itd", "0" },
+                { "depth", "0" }, { "pan_drift", "0" }, { "width", "1" }, { "side_air", "0" }, { "phase_width", "0" } };
+            for (const auto& kv : quiet) set(kv.first, kv.second);
+            set("src1_type", type);
+            e.setParam(ParamId::Src1Position, pos);
+            e.noteOn(note, 0.9f);
+            mono.clear();
+            std::vector<float> l(256), r(256);
+            for (int b = 0; b < 3 * 48000 / 256; ++b) {
+                e.process(l.data(), r.data(), 256);
+                if (b >= 48000 / 256)
+                    for (size_t k = 0; k < 256; ++k) mono.push_back(0.5f * (l[k] + r[k]));
+            }
+        };
+        auto rmsDb = [](const std::vector<float>& x) {
+            double s = 0.0;
+            for (float v : x) s += static_cast<double>(v) * v;
+            return 10.0 * std::log10(s / static_cast<double>(std::max<size_t>(x.size(), 1)) + 1e-30);
+        };
+        auto goertzel = [&](const std::vector<float>& x, double hz) {
+            const double w = 2.0 * pi * hz / 48000.0, cw = 2.0 * std::cos(w);
+            double s1 = 0.0, s2 = 0.0;
+            for (float v : x) { const double s0 = v + cw * s1 - s2; s2 = s1; s1 = s0; }
+            return s1 * s1 + s2 * s2 - cw * s1 * s2;
+        };
+        std::vector<float> a, b;
+        play(saw, "Harmonic", 45, 0.0f, a);
+        play(saw, "Wavetable", 45, 0.0f, b);
+        const double dbH = rmsDb(a), dbW = rmsDb(b);
+        std::printf("  cycle table: one saw as Harmonic %.2f dB, as Wavetable %.2f dB\n", dbH, dbW);
+        CHECK(std::fabs(dbH - dbW) < 1.0 && dbW > -40.0, "one file played by either table type enters the mix at the same level");
+
+        play(two, "Wavetable", 45, 0.0f, a);
+        play(two, "Wavetable", 45, 1.0f, b);
+        CHECK(goertzel(a, 110.0) > 1000.0 * goertzel(a, 330.0), "at Position 0 the first frame sounds (its fundamental)");
+        CHECK(goertzel(b, 330.0) > 1000.0 * goertzel(b, 110.0), "at Position 1 the last (a third harmonic alone)");
+
+        play(saw, "Wavetable", 96, 0.0f, a);   // C7: a table of 512 harmonics, eleven of them below Nyquist
+        const size_t N = 32768;
+        if (a.size() >= N) {
+            Fft fft(static_cast<int>(N));
+            std::vector<float> re(a.begin(), a.begin() + static_cast<std::ptrdiff_t>(N)), im(N, 0.0f);
+            for (size_t i = 0; i < N; ++i) re[i] *= static_cast<float>(0.5 - 0.5 * std::cos(2.0 * pi * static_cast<double>(i) / static_cast<double>(N)));
+            fft.transform(re.data(), im.data(), false);
+            auto pw = [&](size_t k) { return static_cast<double>(re[k]) * re[k] + static_cast<double>(im[k]) * im[k]; };
+            const double hzPerBin = 48000.0 / static_cast<double>(N);
+            size_t peak = 0;
+            for (size_t k = static_cast<size_t>(1900.0 / hzPerBin); k < static_cast<size_t>(2300.0 / hzPerBin); ++k)
+                if (peak == 0 || pw(k) > pw(peak)) peak = k;
+            const double la = std::log(pw(peak - 1) + 1e-30), lb = std::log(pw(peak) + 1e-30), lc = std::log(pw(peak + 1) + 1e-30);
+            const double f0 = static_cast<double>(peak) + 0.5 * (la - lc) / (la - 2.0 * lb + lc);
+            double onHarmonics = 0.0, elsewhere = 0.0;
+            for (size_t k = 1; k < N / 2; ++k) {
+                const double hn = static_cast<double>(k) / f0;
+                const bool onOne = std::round(hn) >= 1.0 && std::fabs(hn - std::round(hn)) * f0 <= 6.0;   // not "near": a Windows macro
+                (onOne ? onHarmonics : elsewhere) += pw(k);
+            }
+            const double aliasDb = 10.0 * std::log10(elsewhere / std::max(onHarmonics, 1e-30) + 1e-30);
+            std::printf("  cycle table: a 512-harmonic saw at 2093 Hz, everything off its harmonics at %.1f dB\n", aliasDb);
+            CHECK(aliasDb < -50.0, "a bright table played high does not alias");
+        }
+    }
+    {   // unison spreads the cycles across the field and keeps the centre
+        SourceSlot slot;
+        slot.prepare(48000.0, 11);
+        slot.noteOn(true);
+        SlotParams sp;
+        sp.type = SourceType::Wavetable; sp.level = 1.0f; sp.table = 0; sp.position = 0.5f; sp.positionDrift = 0.0f;
+        sp.unison = 3; sp.uniDetune = 12.0f; sp.uniWidth = 1.0f;
+        const CycleTable& classic = builtinCycleTable(0);
+        CHECK(classic.frames == 5, "the Classic table is sine, triangle, saw, square and pulse");
+        double ll = 0.0, rr = 0.0, lr = 0.0;
+        float bl[64], br[64];
+        for (int blk = 0; blk < 1500; ++blk) {
+            std::memset(bl, 0, sizeof(bl));
+            std::memset(br, 0, sizeof(br));
+            slot.render(bl, br, 64, 220.0, sp, nullptr, nullptr, 0.0f, &classic);
+            if (blk < 200) continue;
+            for (int i = 0; i < 64; ++i) { ll += static_cast<double>(bl[i]) * bl[i]; rr += static_cast<double>(br[i]) * br[i]; lr += static_cast<double>(bl[i]) * br[i]; }
+        }
+        const double corr = lr / std::sqrt(ll * rr + 1e-30);
+        const double sideDb = 10.0 * std::log10((ll + 1e-30) / (rr + 1e-30));
+        std::printf("  cycle table: three copies across the field, correlation %.2f, the sides %.2f dB apart\n", corr, sideDb);
+        CHECK(ll > 0.0 && corr < 0.9 && std::fabs(sideDb) < 1.0, "unison places the copies across the field and keeps it centred");
+    }
+}
+
 int main()
 {
     testCalibrationMenuRecorder();
@@ -5774,6 +5996,7 @@ int main()
     testFeedback();
     testStackAndWander();
     testSources();
+    testCycleTable();
     testPresetText();
     testPresetMap();
     testRoom();

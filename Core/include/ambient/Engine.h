@@ -81,7 +81,12 @@ public:
     // thread. The texture is double-buffered: the call waits (at most one block) until the
     // audio thread has left the buffer it is about to overwrite, then swaps.
     void setUserWavetable(const Wavetable& t);
-    bool loadUserWavetable(const float* mono, int n, int frameLen = 2048);   // analyses frames, then sets
+    // The same file as single cycles, for the Wavetable type. Double-buffered like a texture rather
+    // than copied on the audio thread: 256 frames at ten resolutions are megabytes.
+    void setUserCycles(const CycleTable& t);
+    // Reads the frames both ways -- spectra for the Harmonic type, cycles for the Wavetable type --
+    // and sets both. `frameLen` is one cycle's length; readWavetableFile finds it for a file.
+    bool loadUserWavetable(const float* mono, int n, int frameLen = 2048);
     // One clip per source slot, so four slots typed Texture (or Stretch) can play four different
     // recordings -- which is what makes the Vector's four corners four landscapes. The slotless
     // form loads the same clip into every slot: what the instrument always did, and what a preset
@@ -117,6 +122,11 @@ public:
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
     // For the displays (message thread, no synchronisation -- a torn read costs a pixel).
     const Wavetable* userWavetable() const { return userTable_.frames > 0 ? &userTable_ : nullptr; }
+    const CycleTable* userCycles() const
+    {
+        const int a = cyclesActive_.load(std::memory_order_relaxed);
+        return (a >= 0 && !userCycles_[a].empty()) ? &userCycles_[a] : nullptr;
+    }
     const Texture*   displayTexture(int slot = 0) const
     {
         const int k = slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot);
@@ -527,6 +537,9 @@ private:
     std::atomic<bool> tableBusy_{ false };
     int               tableSeen_ = 0;
     std::atomic<int>  userTableFrames_{ 0 };
+    // User cycles: two buffers, the audio thread reads the active one (see setUserCycles).
+    CycleTable        userCycles_[2];
+    std::atomic<int>  cyclesActive_{ -1 };
     // Texture: two buffers per slot, the audio thread reads the active one and publishes which.
     Texture           textures_[kSlots][2];
     std::atomic<int>  textureActive_[kSlots] = { -1, -1, -1, -1 };

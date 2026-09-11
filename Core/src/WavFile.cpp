@@ -9,8 +9,11 @@
 #if defined(_MSC_VER)
   #pragma warning(pop)
 #endif
+#include "ambient/CycleTable.h"   // detectCycleLength, for a wavetable file that does not say
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #if defined(_WIN32)
@@ -216,6 +219,101 @@ bool readWavChannels(const char* path, std::vector<std::vector<float>>& channels
     }
     std::fclose(f);
     return ok;
+}
+
+namespace {
+
+// How long a cycle is, as a WAV says it. Serum writes a "clm " chunk whose text begins "<!>2048"
+// and Vital writes the same; Surge writes "srge", a version and the size as two 32-bit integers.
+// 0 when the file says nothing.
+int statedCycleLength(const char* path)
+{
+    FILE* f = openRead(path);
+    if (f == nullptr) return 0;
+    auto rd32 = [&](uint32_t& v) { return std::fread(&v, 4, 1, f) == 1; };
+    char tag[4];
+    uint32_t size = 0;
+    int found = 0;
+    if (std::fread(tag, 1, 4, f) == 4 && std::memcmp(tag, "RIFF", 4) == 0 && rd32(size)
+        && std::fread(tag, 1, 4, f) == 4 && std::memcmp(tag, "WAVE", 4) == 0) {
+        while (found == 0 && std::fread(tag, 1, 4, f) == 4 && rd32(size)) {
+            const long next = std::ftell(f) + static_cast<long>(size + (size & 1u));
+            if (std::memcmp(tag, "clm ", 4) == 0) {
+                char text[64] = {};
+                const size_t want = std::min<size_t>(size, sizeof(text) - 1);
+                if (std::fread(text, 1, want, f) == want && std::strncmp(text, "<!>", 3) == 0) found = std::atoi(text + 3);
+            } else if (std::memcmp(tag, "srge", 4) == 0 && size >= 8) {
+                uint32_t version = 0, len = 0;
+                if (rd32(version) && rd32(len)) found = static_cast<int>(len);
+            }
+            if (std::fseek(f, next, SEEK_SET) != 0) break;
+        }
+    }
+    std::fclose(f);
+    return (found >= 8 && found <= 65536) ? found : 0;
+}
+
+// A frame length written into the file name, a convention some tools use: "-WT512", "_wt1024".
+// A power of two from 16 to 8192, or 0 when the name says nothing.
+int namedCycleLength(const char* path)
+{
+    const char* base = path;
+    for (const char* p = path; *p; ++p) if (*p == '/' || *p == '\\') base = p + 1;
+    for (const char* p = base; p[0] != 0 && p[1] != 0 && p[2] != 0; ++p) {
+        if ((p[0] != '-' && p[0] != '_' && p[0] != ' ') || (p[1] != 'W' && p[1] != 'w') || (p[2] != 'T' && p[2] != 't')) continue;
+        int v = 0, digits = 0;
+        for (const char* d = p + 3; *d >= '0' && *d <= '9' && digits < 6; ++d, ++digits) v = v * 10 + (*d - '0');
+        if (digits > 0 && v >= 16 && v <= 8192 && (v & (v - 1)) == 0) return v;
+    }
+    return 0;
+}
+
+// Surge's own format: "vawt", the size of one wave, how many waves, flags, then the waves -- 16-bit
+// when flag 4 is set (full scale at 32768 with flag 8, at 16384 without it), 32-bit float otherwise.
+bool readSurgeWt(const char* path, std::vector<float>& mono, int& cycleLen)
+{
+    FILE* f = openRead(path);
+    if (f == nullptr) return false;
+    char tag[4];
+    uint32_t waveSize = 0;
+    uint16_t count = 0, flags = 0;
+    bool ok = std::fread(tag, 1, 4, f) == 4 && std::memcmp(tag, "vawt", 4) == 0
+           && std::fread(&waveSize, 4, 1, f) == 1 && std::fread(&count, 2, 1, f) == 1 && std::fread(&flags, 2, 1, f) == 1
+           && waveSize >= 8 && waveSize <= 65536 && count >= 1;
+    if (ok) {
+        const size_t total = static_cast<size_t>(waveSize) * count;
+        mono.assign(total, 0.0f);
+        if (flags & 4u) {
+            std::vector<int16_t> raw(total);
+            ok = std::fread(raw.data(), 2, total, f) == total;
+            const float scale = (flags & 8u) ? 1.0f / 32768.0f : 1.0f / 16384.0f;
+            for (size_t i = 0; ok && i < total; ++i) mono[i] = static_cast<float>(raw[i]) * scale;
+        } else {
+            ok = std::fread(mono.data(), 4, total, f) == total;
+        }
+        cycleLen = static_cast<int>(waveSize);
+    }
+    std::fclose(f);
+    if (!ok) { mono.clear(); cycleLen = 0; }
+    return ok;
+}
+
+} // namespace
+
+bool readWavetableFile(const char* path, std::vector<float>& mono, int& cycleLen)
+{
+    mono.clear();
+    cycleLen = 0;
+    if (path == nullptr || *path == 0) return false;
+    if (readSurgeWt(path, mono, cycleLen)) return true;
+    int rate = 0;
+    if (!readWavMono(path, mono, rate) || mono.empty()) return false;
+    const std::string real = resolveAudioFile(path);
+    const int n = static_cast<int>(mono.size());
+    int stated = real.empty() ? 0 : statedCycleLength(real.c_str());
+    if (stated <= 0 || n < stated) stated = namedCycleLength(path);
+    cycleLen = (stated > 0 && n >= stated) ? stated : detectCycleLength(mono.data(), n);
+    return cycleLen > 0;
 }
 
 } // namespace ambient

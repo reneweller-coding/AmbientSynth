@@ -34,7 +34,7 @@ RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_rend
 # Jeder Name hier steht in `ambient_render --list`; ein unbekannter bricht den Render mit Fehler ab.
 NEUTRAL = {
     # Quelle 1: die Tabelle, fest an ihrer Position
-    "src1_type": "Wavetable", "src1_table": "User", "src1_pos_drift": "0", "src1_transport": "0",
+    "src1_type": "Harmonic", "src1_table": "User", "src1_pos_drift": "0", "src1_transport": "0",
     "src1_root": "0", "src1_unison": "1", "src1_drift": "0", "src1_octave": "0", "src1_pan": "0",
     "src2_type": "Off", "src3_type": "Off", "src4_type": "Off",
     # Straenge: einer, unverstimmt, ohne Streuung

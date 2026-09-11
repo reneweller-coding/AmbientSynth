@@ -3,12 +3,15 @@
 // Source 1 defaults to Additive, which is the voice's strand bank (Voice.h: up to six detuned or
 // stacked copies of a 32-partial spectrum, the classic Oscillator); Additive in Source 2 or 3 is
 // a single bank of the same spectrum inside the slot. Every slot can otherwise be one of:
-//   Wavetable -- not a table of samples but a table of SPECTRA (32 partial amplitudes per
+//   Harmonic  -- not a table of samples but a table of SPECTRA (32 partial amplitudes per
 //                frame); the position morphs between frames and the result is rendered by
 //                the same rotating-phasor bank as the main oscillator. Alias-free, and every
 //                partial keeps its own life (presence, low cut, feedback PM apply the same
-//                way). Built-in tables are generated; a user table is analysed from a WAV
-//                with 2048-sample frames (the common wavetable layout).
+//                way). Built-in tables are generated; a user table is analysed from the
+//                file's frames. This type was called Wavetable until the classic kind came.
+//   Wavetable -- the classic kind (CycleTable.h): up to 256 single cycles of 2048 samples,
+//                read as samples the way Serum, Vital and Hive play them, band-limited per
+//                octave. The same file and the same five built-in names as Harmonic.
 //   FM        -- a two-operator pair (carrier at the slot pitch, modulator at FM Ratio),
 //                index limited automatically for high notes.
 //   Texture   -- a granular player over a loaded sample (field recording, flute air,
@@ -26,6 +29,7 @@
 #pragma once
 #include "Dsp.h"
 #include "Cosmos.h"   // Fft, for the Stretch type
+#include "CycleTable.h"
 #include <cstdint>
 #include <vector>
 
@@ -48,10 +52,13 @@ constexpr int kSlotGrains    = 128;  // ceiling; Grains sets how many a slot may
                                      // is two percent of the render, the reverbs being the cost.
 
 // Additive sat last so the indices the presets store for the other types stayed what they were;
-// Stretch came after it and is appended for the same reason.
-enum class SourceType : int { Off = 0, Wavetable, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral };
+// Stretch came after it and is appended for the same reason. So is the classic Wavetable: index 1
+// is still the spectral table, which a saved session stores by number, and it is called Harmonic
+// now. Packs name the types in words, and a pack written before this reads "Wavetable" as
+// Harmonic (PresetPacks.cpp).
+enum class SourceType : int { Off = 0, Harmonic, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral, Wavetable };
 
-constexpr int kNumSourceTypes = 9;
+constexpr int kNumSourceTypes = 10;
 // The longest spectral window the Stretch type analyses: 16384 samples, a third of a second at
 // 48 kHz. Paulstretch's own default is a quarter of a second, which is where the smooth results
 // start; longer windows are smoother still but cost memory in every slot of every voice.
@@ -186,12 +193,12 @@ struct SlotParams {
     // Spectral: how fast the model is read (1 = the speed it was recorded at, 0 = held still),
     // and which half of it is favoured (-1 = the partials only, +1 = the noise only).
     float specRate = 1.0f, specBreath = 0.0f;
-    float transport = 0.0f;      // Wavetable: 0 crossfade between frames, 1 slide the spectral mass
+    float transport = 0.0f;      // Harmonic: 0 crossfade between frames, 1 slide the spectral mass
     // Stretch: the factor, and the crossfade at the loop seam as a fraction of the clip (ignored
     // for a clip marked seamless). The spectral window is Grain, the read position Position.
     float stretch = 40.0f;
     float xfade = 0.1f;
-    float root = 0.0f;           // Wavetable: give the fundamental at least this share of the energy
+    float root = 0.0f;           // Harmonic: give the fundamental at least this share of the energy
     int   unison = 1;            // detuned copies of the slot's bank, 1..kSlotUnison
     float uniDetune = 10.0f;     // cents between the outermost copies
     float uniWidth = 0.6f;       // how far the copies are placed apart across the field
@@ -212,7 +219,8 @@ public:
     // Adds n (<= kControlBlock) samples of this slot into outL/outR. Control values are
     // refreshed once per call; level and pan ramp across the block.
     void render(float* outL, float* outR, int n, double noteHz, const SlotParams& p,
-                const Wavetable* table, const Texture* texture, float driftRate);
+                const Wavetable* table, const Texture* texture, float driftRate,
+                const CycleTable* cycles = nullptr);
 
     // For pictures (message thread, torn reads cost a pixel): the bank's partial amplitudes as
     // they are being summed, and the grains that are sounding.
@@ -227,6 +235,7 @@ public:
 
 private:
     void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt, float* outR = nullptr);
+    void renderCycles(float* out, int n, double hz, const SlotParams& p, const CycleTable* table, float dt, float* outR = nullptr);
     void renderAdditive(float* out, int n, double hz, const SlotParams& p, float dt);
     // The phasor bank's block: targets, then the sum. `uni` copies of the spectrum end to end;
     // with more than one and an `outR`, they are spread across the field and it writes stereo.
@@ -251,6 +260,13 @@ private:
     float  wL_[kBank] = {}, wR_[kBank] = {};   // each copy's place in the field
     bool   bankStereo_ = false;                // set when more than one copy is sounding
     int    active_ = 0;
+    // Wavetable (CycleTable): a phase per unison copy, the level and position the last block read,
+    // and a stream of its own for the start phases, so the type draws nothing from the slot's dice.
+    double cyPhase_[kSlotUnison] = {};
+    float  cyPos_ = 0.0f;
+    int    cyLevel_ = 0;
+    bool   cyPrimed_ = false;
+    Rng    cyRng_;
     // Additive: per-partial shimmer and the cached tilt/odd-even shape
     Drifter shim_[kTablePartials];
     float  tiltCache_[kTablePartials] = {};

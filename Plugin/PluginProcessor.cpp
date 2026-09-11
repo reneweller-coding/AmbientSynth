@@ -820,9 +820,17 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
 
 bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)
 {
-    std::vector<float> mono; double rate = 0.0;
-    if (!readMono(file, mono, rate)) return false;
-    if (!target().loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) return false;
+    // The core's reader first: it knows the chunk in which Serum and Vital name their frame length,
+    // and Surge's .wt, and JUCE's readers know neither. What it cannot open (an AIFF, say) comes in
+    // through JUCE, and its cycle length is then worked out from the samples.
+    std::vector<float> mono;
+    int cycle = 0;
+    if (!ambient::readWavetableFile(file.getFullPathName().toRawUTF8(), mono, cycle)) {
+        double rate = 0.0;
+        if (!readMono(file, mono, rate)) return false;
+        cycle = ambient::detectCycleLength(mono.data(), static_cast<int>(mono.size()));
+    }
+    if (!target().loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle)) return false;
     wavetableFile_ = file;
     return true;
 }
@@ -942,6 +950,7 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
         if (parseScala(scalaText_.toRawUTF8(), sc)) e.setUserScale(sc);
     }
     if (const ambient::Wavetable* wt = from.userWavetable()) e.setUserWavetable(*wt);
+    if (const ambient::CycleTable* ct = from.userCycles()) e.setUserCycles(*ct);
     for (int k = 0; k < ambient::kSlots; ++k)
         if (const ambient::Texture* t = from.displayTexture(k))
             if (!t->empty())

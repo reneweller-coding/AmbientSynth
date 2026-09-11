@@ -658,6 +658,8 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
+            const CycleTable* cycles = sp.type != SourceType::Wavetable ? nullptr
+                                     : sp.table >= kNumTables - 1 ? p.userCycles : &builtinCycleTable(sp.table);
             // The slot's own entrance scales its level. A copy rather than a gain on the output,
             // because a grain that has already been given its gain keeps it until it dies: fading
             // the buffer would fade grains that are half over, fading the level lets the ones
@@ -665,7 +667,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             // is heard. Costs one struct copy per slot per control block.
             SlotParams entered = sp;
             entered.level *= slotGain_[k];
-            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), entered, table, p.texture[k], p.driftRate * rateMul_);
+            slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), entered, table, p.texture[k], p.driftRate * rateMul_, cycles);
         }
         for (int i = 0; i < len; ++i) {
             const float e = env_.process();

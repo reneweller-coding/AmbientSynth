@@ -12,6 +12,7 @@ add_library(AmbientCore STATIC
     src/Osc.cpp
     src/Recorder.cpp
     src/Sources.cpp
+    src/CycleTable.cpp
     src/WavFile.cpp
     src/PresetMeta.cpp
     src/PresetClusters.cpp

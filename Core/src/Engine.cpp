@@ -318,8 +318,22 @@ bool Engine::loadUserWavetable(const float* mono, int n, int frameLen)
 {
     Wavetable t;
     if (!t.analyse(mono, n, frameLen)) return false;
+    CycleTable c;
+    if (!c.build(mono, n, frameLen)) return false;   // silence: nothing either type could play
     setUserWavetable(t);
+    setUserCycles(c);
     return true;
+}
+
+void Engine::setUserCycles(const CycleTable& t)
+{
+    // A texture's double buffer: once no block that may still hold the other copy is running, that
+    // copy is written and published. The megabytes are copied here, on the message thread.
+    waitForQuiet();
+    const int active = cyclesActive_.load(std::memory_order_acquire);
+    const int target = active < 0 ? 0 : 1 - active;
+    userCycles_[target] = t;
+    cyclesActive_.store(target, std::memory_order_release);
 }
 
 // Message thread: returns once every block that had begun by the time it was called has ended.

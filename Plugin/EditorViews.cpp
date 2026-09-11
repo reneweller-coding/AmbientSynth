@@ -541,8 +541,9 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
     const auto r = getLocalBounds();
     const juce::String pre = "src" + juce::String(slot) + "_";
     const int type = static_cast<int>(std::lround(rawParam(proc, (pre + "type").toRawUTF8())));
-    static const char* const kTitles[] = { "SOURCE OFF", "WAVETABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR", "ADDITIVE BANK", "STRETCH" };
-    displayFrame(g, r, kTitles[juce::jlimit(0, 6, type)], ui::voiceCol);
+    static const char* const kTitles[] = { "SOURCE OFF", "HARMONIC TABLE", "FM PAIR", "TEXTURE GRAINS", "NOISE COLOUR", "ADDITIVE BANK",
+                                           "STRETCH", "BOWED STRING", "SPECTRAL MODEL", "WAVETABLE" };
+    displayFrame(g, r, kTitles[juce::jlimit(0, 9, type)], ui::voiceCol);
     const auto plot = r.toFloat().reduced(10.0f, 8.0f).withTrimmedTop(12.0f);
     const float cy = plot.getCentreY(), hh = plot.getHeight() * 0.42f;
     g.setColour(ui::track.withAlpha(0.6f));
@@ -590,6 +591,47 @@ void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
         });
         g.setColour(ui::dim); g.setFont(ui::body(10.0f));
         g.drawText(juce::String(ambient::kTableNames[juce::jlimit(0, ambient::kNumTables - 1, table)]) + "  pos " + juce::String(pos, 2),
+                   r.reduced(9, 5), juce::Justification::topRight, false);
+    } else if (type == 9) {   // wavetable: the frame at Position as the samples it is, a few neighbours faint behind it
+        const int table = static_cast<int>(std::lround(rawParam(proc, (pre + "table").toRawUTF8())));
+        const float pos = juce::jlimit(0.0f, 1.0f, rawParam(proc, (pre + "pos").toRawUTF8()));
+        const ambient::CycleTable* ct = table >= ambient::kNumTables - 1 ? proc.engine().userCycles()
+                                                                         : &ambient::builtinCycleTable(table);
+        if (ct == nullptr || ct->empty()) {
+            g.setColour(ui::faint); g.setFont(ui::body(11.0f));
+            g.drawText("no table loaded -- Wavetable... below, or a pack preset", plot, juce::Justification::centred, false);
+            return;
+        }
+        const int level = 2;   // 512 samples a cycle: more than a display this wide can show
+        const int last = ct->frames - 1;
+        auto frameAt = [&](float at, float t) {
+            const float x = juce::jlimit(0.0f, 1.0f, at) * static_cast<float>(last);
+            const int f0 = juce::jlimit(0, last, static_cast<int>(x));
+            const int f1 = juce::jmin(f0 + 1, last);
+            const float fr = x - static_cast<float>(f0);
+            const double ph = juce::jlimit(0.0, 0.99999, static_cast<double>(t));
+            const float a = ct->sample(level, f0, ph), b = ct->sample(level, f1, ph);
+            return (a + fr * (b - a)) / (ambient::CycleTable::kTargetRms * 2.4f);
+        };
+        if (last > 0) {
+            for (int k = -3; k <= 3; ++k) {
+                const float at = pos + static_cast<float>(k) * 0.06f;
+                if (k == 0 || at < 0.0f || at > 1.0f) continue;
+                juce::Path ghost;
+                for (int i = 0; i <= steps; ++i) {
+                    const float t = static_cast<float>(i) / static_cast<float>(steps);
+                    const float y = cy - juce::jlimit(-1.0f, 1.0f, frameAt(at, t)) * hh;
+                    const float x = plot.getX() + t * plot.getWidth();
+                    if (i == 0) ghost.startNewSubPath(x, y); else ghost.lineTo(x, y);
+                }
+                g.setColour(ui::voiceCol.withAlpha(0.11f - 0.025f * static_cast<float>(std::abs(k))));
+                g.strokePath(ghost, juce::PathStrokeType(1.0f));
+            }
+        }
+        plotWave([&](float t) { return frameAt(pos, t); });
+        g.setColour(ui::dim); g.setFont(ui::body(10.0f));
+        g.drawText(juce::String(ambient::kTableNames[juce::jlimit(0, ambient::kNumTables - 1, table)]) + "  " + juce::String(ct->frames)
+                       + (ct->frames == 1 ? " cycle" : " frames") + "  pos " + juce::String(pos, 2),
                    r.reduced(9, 5), juce::Justification::topRight, false);
     } else if (type == 2) {   // FM: carrier phase-modulated by the modulator at the ratio and index
         const float ratio = rawParam(proc, (pre + "fm_ratio").toRawUTF8()), idx = rawParam(proc, (pre + "fm_index").toRawUTF8());

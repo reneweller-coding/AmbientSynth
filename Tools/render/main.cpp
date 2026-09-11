@@ -514,10 +514,10 @@ static int runOnce(int argc, char** argv)
         }
         else if (a == "--wavetable") {
             const std::string path = next();
-            std::vector<float> mono; int rate = 0;
-            if (!readWavMono(path.c_str(), mono, rate) || !engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
-            { std::fprintf(stderr, "cannot read wavetable %s (needs 2048-sample frames)\n", path.c_str()); return 2; }
-            std::printf("wavetable: %s (%d frames)\n", path.c_str(), engine.userWavetableFrames());
+            std::vector<float> mono; int cycle = 0;
+            if (!readWavetableFile(path.c_str(), mono, cycle) || !engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle))
+            { std::fprintf(stderr, "cannot read wavetable %s\n", path.c_str()); return 2; }
+            std::printf("wavetable: %s (%d frames of %d samples)\n", path.c_str(), static_cast<int>(mono.size()) / cycle, cycle);
         }
         else if (a == "--notes") {
             std::stringstream ss(next()); std::string tok;
@@ -677,7 +677,8 @@ static int runOnce(int argc, char** argv)
             }
         }
         if (tab && *tab) {
-            if (readWavMono(tab, mono, rate) && engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
+            int cycle = 0;
+            if (readWavetableFile(tab, mono, cycle) && engine.loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle))
                 std::printf("preset wavetable: %s (%d frames)\n", tab, engine.userWavetableFrames());
             else std::fprintf(stderr, "preset wavetable missing or unusable: %s\n", tab);
         }

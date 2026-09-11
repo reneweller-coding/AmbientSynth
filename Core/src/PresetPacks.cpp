@@ -110,6 +110,22 @@ std::vector<std::string> split(const std::string& s, char sep)
     return out;
 }
 
+// A pack without a "format" line was written before the classic wavetable arrived, and calls the
+// spectral table type "Wavetable". That type is Harmonic now and the name belongs to the classic
+// one, so such a pack is read with the old name translated -- every pack in the library, and every
+// pack anybody wrote, keeps the sound it was voiced with. A pack that says "format 2" means what it
+// says.
+std::string migrateFormat1(std::string settings)
+{
+    const std::string from = "_type=Wavetable", to = "_type=Harmonic";
+    for (size_t at = settings.find(from); at != std::string::npos; at = settings.find(from, at + to.size())) {
+        const size_t end = at + from.size();
+        if (end < settings.size() && settings[end] != ';') continue;   // a longer word that only starts the same
+        settings.replace(at, from.size(), to);
+    }
+    return settings;
+}
+
 } // namespace
 
 bool loadPresetPack(const char* path)
@@ -130,6 +146,7 @@ bool loadPresetPack(const char* path)
     std::ifstream f(path);
     if (!f) return false;
     Pack pack;
+    int format = 1;   // no "format" line: written before the classic wavetable (see migrateFormat1)
     pack.dir = std::filesystem::path(path).parent_path().string();
     pack.name = std::filesystem::path(path).stem().string();
     std::string line;
@@ -137,11 +154,12 @@ bool loadPresetPack(const char* path)
         const std::string t = trim(line);
         if (t.empty() || t[0] == '#') continue;
         if (t.rfind("pack ", 0) == 0) { pack.name = trim(t.substr(5)); continue; }
+        if (t.rfind("format ", 0) == 0 && t.find('|') == std::string::npos) { format = std::atoi(t.substr(7).c_str()); continue; }
         const std::vector<std::string> fields = split(t, '|');
         if (fields.size() < 2) return false;
         PackEntry e;
         e.name = trim(fields[0]);
-        e.settings = trim(fields[1]);
+        e.settings = format < 2 ? migrateFormat1(trim(fields[1])) : trim(fields[1]);
         if (e.name.empty()) return false;
         if (fields.size() > 2) {   // x y bright motion width noisy bass density tagbits
             const std::vector<std::string> m = split(trim(fields[2]), ' ');

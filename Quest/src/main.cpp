@@ -493,9 +493,10 @@ public:
             }
         }
         const char* tab = presetFilePath(index, 1);
-        if (tab != nullptr && *tab && readWavMono(tab, mono, rate))
-            if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size())))
-                LOGE("%s: needs 2048-sample frames", tab);
+        int cycle = 0;
+        if (tab != nullptr && *tab && readWavetableFile(tab, mono, cycle))
+            if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle))
+                LOGE("%s: not a usable wavetable", tab);
         const char* imp = presetFilePath(index, 2);
         std::vector<std::vector<float>> ir;
         if (imp != nullptr && *imp && readWavChannels(imp, ir, rate) && !ir.empty()) {
@@ -532,9 +533,10 @@ public:
             pendingIr_ = ir; pendingIrRate_ = rate;   // set after the engine is prepared (audio start)
             LOGI("impulse.wav: %zu ch, %.2f s @ %d Hz", ir.size(), ir[0].size() / static_cast<double>(rate), rate);
         }
-        if (readWavMono((dataDir_ + "/wavetable.wav").c_str(), mono, rate)) {
-            if (engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()))) LOGI("wavetable.wav: %d frames", engine_.userWavetableFrames());
-            else LOGE("wavetable.wav: needs 2048-sample frames");
+        int cycle = 0;
+        if (readWavetableFile((dataDir_ + "/wavetable.wav").c_str(), mono, cycle)) {
+            if (engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle)) LOGI("wavetable.wav: cycles of %d samples", cycle);
+            else LOGE("wavetable.wav: not a usable wavetable");
         }
     }
 

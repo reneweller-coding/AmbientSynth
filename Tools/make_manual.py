@@ -84,6 +84,7 @@ footer { margin-top: 10mm; padding-top: 3mm; border-top: 1px solid #cfd4dc; colo
 # Which of a slot's knobs each source type lights up (by the key without its slot prefix).
 TYPE_KEYS = {
     "Additive":  ("partials", "tilt", "bright", "odd_even", "inharmonic", "shimmer", "shimmer_rate", "drift"),
+    "Harmonic":  ("table", "pos", "pos_drift", "drift"),
     "Wavetable": ("table", "pos", "pos_drift", "drift"),
     "FM":        ("fm_ratio", "fm_index", "pos_drift", "drift"),
     "Texture":   ("grain", "density", "density_sync", "follow", "grains", "spread", "pos", "pos_drift", "drift"),

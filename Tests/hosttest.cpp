@@ -17,6 +17,7 @@
 #include <cstring>
 #include <cmath>
 #include <chrono>
+#include <fstream>
 #include <thread>
 #include <vector>
 
@@ -255,6 +256,68 @@ int main()
             }
             check(any, "a program change on its own loads the clip the preset names");
         }
+    }
+
+    // ---------------------------------------------------------------- a preset's two rooms
+    // A pack preset names impulse A and, since the ninth field, impulse B. One that names both gives
+    // the Room both; one that names only A takes the old B away -- Room Morph blended into whatever
+    // B was left from before, so a preset sounded like its history. And a file longer than twelve
+    // seconds is read whole now: the Room keeps a minute.
+    {
+        const juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ambientsynth_roomtest");
+        dir.deleteRecursively();
+        dir.createDirectory();
+        auto writeIr = [](const juce::File& f, double seconds, uint32_t seed) {
+            const int sr = 48000, n = static_cast<int>(seconds * sr);
+            std::vector<float> inter(static_cast<size_t>(2 * n));
+            uint32_t s = seed;
+            for (int i = 0; i < n; ++i) {
+                // A 16-second decay: the Room drops the end whose energy falls under its budget
+                // (-107 dB), and an 8-second one would get there after 14 seconds.
+                const float g = static_cast<float>(std::pow(10.0, -3.0 * i / (16.0 * sr)));
+                for (int c = 0; c < 2; ++c) {
+                    s = s * 1664525u + 1013904223u;
+                    inter[static_cast<size_t>(2 * i + c)] = 0.5f * g * (static_cast<float>((s >> 8) & 0xFFFF) / 32767.5f - 1.0f);
+                }
+            }
+            std::ofstream o(f.getFullPathName().toStdString(), std::ios::binary);
+            auto u32 = [&](uint32_t v) { o.write(reinterpret_cast<const char*>(&v), 4); };
+            auto u16 = [&](uint16_t v) { o.write(reinterpret_cast<const char*>(&v), 2); };
+            const uint32_t bytes = static_cast<uint32_t>(inter.size() * 4);
+            o.write("RIFF", 4); u32(36 + bytes); o.write("WAVE", 4);
+            o.write("fmt ", 4); u32(16); u16(3); u16(2); u32(48000); u32(48000 * 8); u16(8); u16(32);
+            o.write("data", 4); u32(bytes);
+            o.write(reinterpret_cast<const char*>(inter.data()), bytes);
+        };
+        writeIr(dir.getChildFile("rooma.wav"), 1.0, 1);
+        writeIr(dir.getChildFile("roomb.wav"), 1.0, 2);
+        writeIr(dir.getChildFile("roomlong.wav"), 20.0, 3);
+        {
+            std::ofstream pack(dir.getChildFile("RoomTest.ambientpack").getFullPathName().toStdString());
+            pack << "pack Room Test Pack\n";
+            pack << "Room Test Both|room_level=0.5;room_morph=0.5|0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0|||rooma.wav|||roomb.wav\n";
+            pack << "Room Test One|room_level=0.5|0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0|||rooma.wav||\n";
+        }
+        check(ambient::loadPresetPack(dir.getChildFile("RoomTest.ambientpack").getFullPathName().toRawUTF8()), "a pack with two rooms loads");
+        int both = -1, one = -1;
+        for (int i = 0; i < ambient::numPresets(); ++i) {
+            if (std::strcmp(preset(i).name, "Room Test Both") == 0) both = i;
+            if (std::strcmp(preset(i).name, "Room Test One") == 0) one = i;
+        }
+        check(both >= 0 && one >= 0, "its presets are in the list");
+        auto p = std::make_unique<AmbientSynthProcessor>();
+        p->prepareToPlay(48000.0, 256);
+        if (both >= 0 && one >= 0) {
+            p->applySoundPreset(both);
+            check(p->engine().hasImpulseB() && p->impulseBName() == "roomb", "a preset that names impulse B brings it");
+            p->applySoundPreset(one);
+            check(!p->engine().hasImpulseB() && p->impulseBName().isEmpty(), "a preset that names only its room takes the old B away");
+            check(p->impulseName() == "rooma", "and keeps its own A");
+        }
+        check(p->loadImpulseFile(dir.getChildFile("roomlong.wav")), "a twenty-second impulse loads");
+        check(p->engine().impulseSeconds() > 15.0f, "and is kept longer than the old twelve-second limit");
+        p.reset();
+        dir.deleteRecursively();
     }
 
     // ---------------------------------------------------------------- parameters under two threads

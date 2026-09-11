@@ -116,12 +116,15 @@ public:
     // so a morph costs what one room costs.
     void  setImpulseB(const float* L, const float* R, int n, double sampleRate) { room_.setImpulseB(L, R, n, sampleRate); hasImpulseB_ = true; }
     bool  hasImpulseB() const { return hasImpulseB_; }
+    // The second impulse gone: Room Morph has nothing to go to, and the room is A alone.
+    void  clearImpulseB() { hasImpulseB_ = false; room_.clearImpulseB(); }
     float impulseSeconds() const { return room_.impulseSeconds(); }
     bool  hasUserImpulse() const { return userImpulse_; }
     // Longest impulse the Room keeps (memory grows with it: about 46 MB of delay line for a
     // minute); call before prepare(). A minute on the desktop; the Quest app sets 4 s, measured
     // there with the convolver before this one (a third of one of its cores).
     void  setRoomMaxSeconds(float s) { roomMaxSeconds_ = clampv(s, 0.5f, 60.0f); }
+    float roomMaxSeconds() const { return roomMaxSeconds_; }
     int  userWavetableFrames() const { return userTableFrames_.load(std::memory_order_relaxed); }
     // For the displays (message thread, no synchronisation -- a torn read costs a pixel).
     const Wavetable* userWavetable() const { return userTable_.frames > 0 ? &userTable_ : nullptr; }

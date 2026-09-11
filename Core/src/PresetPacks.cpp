@@ -16,7 +16,7 @@ namespace ambient {
 namespace {
 
 struct PackEntry {
-    std::string name, settings, texture, wavetable, impulse, mod, envs;
+    std::string name, settings, texture, wavetable, impulse, mod, envs, impulseB;
     PresetMeta  meta{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 0.0f, 0.5f, 0.5f, 0.5f, { -1, -1 }, -1 };
 };
 struct Pack {
@@ -54,7 +54,8 @@ void appendViews(const Pack& pk)
                                       e.wavetable.empty() ? nullptr : e.wavetable.c_str(),
                                       e.impulse.empty() ? nullptr : e.impulse.c_str(),
                                       e.mod.empty() ? nullptr : e.mod.c_str(),
-                                      e.envs.empty() ? nullptr : e.envs.c_str() });
+                                      e.envs.empty() ? nullptr : e.envs.c_str(),
+                                      e.impulseB.empty() ? nullptr : e.impulseB.c_str() });
             const std::filesystem::path dir(pk.dir);
             auto resolveOne = [&dir](const std::string& rel) {
                 return rel.empty() ? std::string() : (dir / rel).lexically_normal().string();
@@ -81,6 +82,7 @@ void appendViews(const Pack& pk)
             paths().push_back(resolve(e.texture));
             paths().push_back(resolve(e.wavetable));
             paths().push_back(resolve(e.impulse));
+            paths().push_back(resolve(e.impulseB));
         }
     }
 }
@@ -186,6 +188,7 @@ bool loadPresetPack(const char* path)
         if (fields.size() > 5) e.impulse = trim(fields[5]);
         if (fields.size() > 6) e.mod = trim(fields[6]);
         if (fields.size() > 7) e.envs = trim(fields[7]);
+        if (fields.size() > 8) e.impulseB = trim(fields[8]);   // the impulse Room Morph goes to
         pack.entries.push_back(std::move(e));
     }
     if (pack.entries.empty()) return false;

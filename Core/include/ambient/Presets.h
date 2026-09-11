@@ -24,6 +24,9 @@ struct Preset {
     // slot whose Env is Own). Empty, or a list that stops early, means "the defaults" for the rest.
     const char* mod = nullptr;
     const char* envs = nullptr;
+    // The impulse Room Morph goes to, for a preset that morphs its room. Appended, so every preset
+    // written before it -- and every aggregate that stops at envs -- means "no B".
+    const char* impulseB = nullptr;
 };
 
 // A preset can be the whole instrument or one section of it. The section scopes are layers: a
@@ -93,7 +96,7 @@ inline bool inScope(ParamId id, PresetScope scope)
 //   # comment
 //   pack <pack name>
 //   <name>|<settings>|<x y bright motion width noisy bass density tagbits>|<texture>|<wavetable>|
-//   <impulse>|<mod matrix>|<env shapes, '~' between them: Env 1..6, then Source 1..4's own>
+//   <impulse>|<mod matrix>|<env shapes, '~' between them: Env 1..6, then Source 1..4's own>|<impulse B>
 //
 // Everything after the settings is optional. The metadata field feeds the browser and the map
 // (see PresetMeta.h); the file fields name a sample and a wavetable relative to the pack file,
@@ -108,8 +111,8 @@ void clearPresetPacks();
 int  numPresetPacks();
 const char* presetPackName(int pack);
 // Absolute path of the file a pack preset names, or an empty string.
-// `which`: 0 texture, 1 wavetable, 2 impulse.
-constexpr int kPresetFiles = 3;
+// `which`: 0 texture, 1 wavetable, 2 impulse, 3 impulse B.
+constexpr int kPresetFiles = 4;
 const char* presetFilePath(int presetIndex, int which);
 
 // Parse a value for `d` from text: numbers, "on"/"off", or a choice name.

@@ -239,6 +239,79 @@ std::vector<float> resample(const float* x, int n, double ratio, long limit)
     return y;
 }
 
+// An impulse longer than the Room keeps, shortened rather than cut. A cut stops the tail wherever
+// it happens to be: a 56-second space cut at twelve seconds stopped at -34 dB, and every note
+// through it ended in a gate. Instead the kept part gets an exponential window that brings it to
+// -60 dB against its loudest 50 ms at the cap -- every band's decay shortened by the same extra
+// rate, so the room keeps its colour and only gets smaller (Canfield-Dafilou and Abel 2018) -- and
+// then a 50 ms fade. Measured on that space: a straight 13.8-second room that ends 76 dB down and
+// gates nowhere; on the Quest's four seconds, a 4.3-second room.
+void shrinkToCap(std::vector<float>* ch, int channels, double sr)
+{
+    const size_t len = ch[0].size();
+    const size_t k = std::max<size_t>(1, static_cast<size_t>(0.05 * sr));
+    if (len < 2 * k) return;
+    auto energy = [&](size_t i) {
+        double e = 0.0;
+        for (int c = 0; c < channels; ++c) e += static_cast<double>(ch[c][i]) * ch[c][i];
+        return e;
+    };
+    double run = 0.0, loud = 0.0;
+    for (size_t i = 0; i < len; ++i) {
+        run += energy(i);
+        if (i >= k) run -= energy(i - k);
+        if (i + 1 >= k) loud = std::max(loud, run);
+    }
+    if (loud <= 0.0) return;
+    double last = 0.0;
+    for (size_t i = len - k; i < len; ++i) last += energy(i);
+    const double levelDb = 10.0 * std::log10(std::max(last, 1.0e-300) / loud);
+    const double extraDb = std::min(0.0, -60.0 - levelDb);         // what the window adds by the cap
+    const double step = std::pow(10.0, extraDb / 20.0 / static_cast<double>(len));
+    double w = 1.0;
+    for (size_t i = 0; i < len; ++i) {
+        double g = w;
+        if (i >= len - k) {
+            const double c = std::cos(0.5 * kPiD * static_cast<double>(i - (len - k)) / static_cast<double>(k));
+            g *= c * c;
+        }
+        for (int c = 0; c < channels; ++c) ch[c][i] = static_cast<float>(ch[c][i] * g);
+        w *= step;
+    }
+}
+
+// The built-in hall's design, solved offline by the generator that makes the library's rooms
+// (Tools/ImpulseGen/roomgen.py): the initial spectrum in dB and T60 in seconds at the octaves.
+constexpr int kOct = 9;
+constexpr double kOctHz[kOct]  = { 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0 };
+constexpr double kOctB[kOct]   = { -3.7, -3.5, -2.5, -1.1, -1.4, -3.9, -7.5, -11.9, -17.9 };
+constexpr double kOctT60[kOct] = { 2.52, 2.66, 2.80, 2.80, 2.80, 2.06, 1.43, 0.85, 0.37 };
+
+// Linear in log frequency between the octaves (the T60 in its logarithm); outside them the ends
+// are held, with the design's guards: 12 dB an octave below 40 Hz, 6 dB an octave above 14 kHz.
+void octaveDesign(double f, double& bDb, double& t60)
+{
+    f = std::max(f, 1.0);
+    const double lf = std::log2(f);
+    if (f <= kOctHz[0]) {
+        bDb = kOctB[0] - 10.0 * std::log10(1.0 + std::pow(40.0 / f, 4.0)) + 10.0 * std::log10(1.0 + std::pow(40.0 / kOctHz[0], 4.0));
+        t60 = kOctT60[0];
+        return;
+    }
+    if (f >= kOctHz[kOct - 1]) {
+        const double top = kOctHz[kOct - 1] / 14000.0, here = f / 14000.0;
+        bDb = kOctB[kOct - 1] - 10.0 * std::log10(1.0 + here * here) + 10.0 * std::log10(1.0 + top * top);
+        t60 = kOctT60[kOct - 1];
+        return;
+    }
+    int i = 0;
+    while (i + 2 < kOct && f >= kOctHz[i + 1]) ++i;
+    const double a = std::log2(kOctHz[i]), b = std::log2(kOctHz[i + 1]);
+    const double u = (lf - a) / (b - a);
+    bDb = kOctB[i] + u * (kOctB[i + 1] - kOctB[i]);
+    t60 = std::exp(std::log(kOctT60[i]) + u * (std::log(kOctT60[i + 1]) - std::log(kOctT60[i])));
+}
+
 // ---------------------------------------------------------------- rings
 
 void ringWrite(std::vector<float>& ring, int at, const float* src, int m)
@@ -473,6 +546,8 @@ void Convolver::load(int which, const float* L, const float* R, int n, double ra
     if (stereo) ch[1] = resample(R, n, ratio, capSamples_);
     int len = static_cast<int>(ch[0].size());
     if (len <= 0) return;
+    if (static_cast<double>(n) * ratio >= static_cast<double>(capSamples_) + 1.0)   // longer than the Room keeps
+        shrinkToCap(ch, stereo ? 2 : 1, sr_);
     // Energy normalised to 1, so a room never changes the level of what it reverberates.
     auto energyAt = [&](int i) {
         const double l = ch[0][static_cast<size_t>(i)];
@@ -502,6 +577,16 @@ void Convolver::load(int which, const float* L, const float* R, int n, double ra
         waitForQuiet();
         imp_[which][activeNow] = Impulse{};
     }
+}
+
+void Convolver::clearImpulseB()
+{
+    if (active_[1].load(std::memory_order_acquire) < 0) return;
+    active_[1].store(-1, std::memory_order_release);
+    // A step that began while B was playing chose it back then; its memory goes once those have ended.
+    waitForQuiet();
+    imp_[1][0] = Impulse{};
+    imp_[1][1] = Impulse{};
 }
 
 void Convolver::analyse(Impulse& imp, const std::vector<float>* ch, bool stereo, int len)
@@ -579,35 +664,104 @@ void Convolver::analyse(Impulse& imp, const std::vector<float>* ch, bool stereo,
 
 void Convolver::generateDefault(uint64_t seed, float seconds)
 {
-    // Dark hall: three bands of decorrelated noise with their own decay (low 5 s, mid 3 s,
-    // high 1.2 s at RT60), a sparse early-reflection cluster in the first 60 ms, stereo from
-    // independent noise per channel. Measured against Rich's rooms in spirit, not copied.
+    std::vector<float> L, R;
+    makeDefaultImpulse(sr_, seed, seconds, L, R);
+    setImpulse(L.data(), R.data(), static_cast<int>(L.size()), sr_);
+}
+
+// The built-in hall: the statistical late field (Polack 1993; Jot 1992) the generated library's
+// rooms are made of, synthesised in the short-time Fourier domain so it needs nothing but this
+// file's own transform. Two streams of Gaussian noise, a Hann frame of 2048 samples every 512; in
+// each frame every bin gets the design's initial spectrum and its own decay at the frame's time,
+// and the two ears are rotated into each other so that they are half-coherent in the bass and
+// independent above 300 Hz. Then a 15 ms onset and a 100 ms fade.
+//
+// The design (the tables above): T60 2.8 s through the mids, the bass held just under it, the
+// treble shortened by walls and air down to 0.37 s at 16 kHz; the colour solved for what measured
+// rooms have -- 15.8 % of the energy between 150 and 500 Hz, -15.6 dB below 150 Hz, a power
+// centroid of 2.0 kHz. The hall that stood here before was three bands of noise whose top band
+// leaked into the middle: a centroid of 8.7 kHz and a T30 of 3.3 s at 8 kHz, the brightest room
+// the instrument had, and the one every fresh instance played.
+void Convolver::makeDefaultImpulse(double sampleRate, uint64_t seed, float seconds, std::vector<float>& L, std::vector<float>& R)
+{
+    const int scale = sampleRate < 64000.0 ? 1 : (sampleRate < 128000.0 ? 2 : 4);
+    const int N = 2048 * scale, hop = N / 4, half = N / 2;
+    const int n = std::max(1, static_cast<int>(std::lround(static_cast<double>(seconds) * sampleRate)));
+    constexpr double kLn1e6 = 13.815510557964274;                   // energy down 60 dB at this exponent
+    std::vector<double> amp(static_cast<size_t>(half + 1)), rate(static_cast<size_t>(half + 1));
+    std::vector<float> rotC(static_cast<size_t>(half + 1)), rotS(static_cast<size_t>(half + 1));
+    for (int k = 0; k <= half; ++k) {
+        const double f = k * sampleRate / N;
+        double bDb = 0.0, t60 = 1.0;
+        octaveDesign(f, bDb, t60);
+        amp[static_cast<size_t>(k)] = std::pow(10.0, bDb / 20.0);
+        rate[static_cast<size_t>(k)] = 0.5 * kLn1e6 / t60;        // of the amplitude, per second
+        const double rho = 0.05 + (0.5 - 0.05) / (1.0 + (f / 300.0) * (f / 300.0));
+        const double th = 0.5 * std::asin(rho);
+        rotC[static_cast<size_t>(k)] = static_cast<float>(std::cos(th));
+        rotS[static_cast<size_t>(k)] = static_cast<float>(std::sin(th));
+    }
     Rng rng; rng.seed(seed + 77);
-    const int n = static_cast<int>(seconds * sr_);
-    std::vector<float> ch[2];
-    const float rt[3] = { 5.0f, 3.0f, 1.2f };
+    const int pad = N;
+    const int frames = (n + 2 * pad + hop - 1) / hop;
+    const int total = (frames - 1) * hop + N;
+    std::vector<float> noise[2], out[2];
     for (int c = 0; c < 2; ++c) {
-        ch[c].assign(static_cast<size_t>(n), 0.0f);
-        float lp1 = 0.0f, lp2 = 0.0f;
-        const float a1 = 1.0f - std::exp(-kTwoPi * 300.0f / static_cast<float>(sr_));
-        const float a2 = 1.0f - std::exp(-kTwoPi * 3000.0f / static_cast<float>(sr_));
-        for (int i = 0; i < n; ++i) {
-            const float w = rng.bipolar();
-            lp1 += a1 * (w - lp1);           // low band
-            lp2 += a2 * (w - lp2);           // low + mid
-            const float low = lp1, mid = lp2 - lp1, high = w - lp2;
-            const float t = static_cast<float>(i) / static_cast<float>(sr_);
-            const float env0 = std::pow(10.0f, -3.0f * t / rt[0]), env1 = std::pow(10.0f, -3.0f * t / rt[1]), env2 = std::pow(10.0f, -3.0f * t / rt[2]);
-            const float onset = std::min(1.0f, t / 0.02f);   // the diffuse tail builds over 20 ms
-            ch[c][static_cast<size_t>(i)] = onset * (low * env0 * 1.2f + mid * env1 + high * env2 * 0.7f);
+        noise[c].resize(static_cast<size_t>(total));
+        for (int i = 0; i < total; ++i) {                          // Box-Muller: the late field is Gaussian
+            const double u1 = std::max(1.0e-12, static_cast<double>(rng.uniform()));
+            const double u2 = rng.uniform();
+            noise[c][static_cast<size_t>(i)] = static_cast<float>(std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * kPiD * u2));
         }
-        // early reflections: 8 taps in 8..60 ms, alternating sign, fading
-        for (int k = 0; k < 8; ++k) {
-            const int at = static_cast<int>((0.008f + 0.052f * rng.uniform()) * static_cast<float>(sr_));
-            if (at < n) ch[c][static_cast<size_t>(at)] += (k % 2 ? -1.0f : 1.0f) * (0.6f - 0.06f * k);
+        out[c].assign(static_cast<size_t>(total), 0.0f);
+    }
+    std::vector<float> win(static_cast<size_t>(N));
+    for (int i = 0; i < N; ++i) win[static_cast<size_t>(i)] = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * kPiD * i / N));
+    StepFft fft;
+    fft.init(N);
+    std::vector<float> re0(static_cast<size_t>(N)), im0(static_cast<size_t>(N)), re1(static_cast<size_t>(N)), im1(static_cast<size_t>(N));
+    std::vector<float> lr(static_cast<size_t>(N)), li(static_cast<size_t>(N)), rr(static_cast<size_t>(N)), ri(static_cast<size_t>(N));
+    std::vector<float> g(static_cast<size_t>(half + 1));
+    const float inv = 1.0f / (1.5f * static_cast<float>(N));   // the inverse is unscaled; Hann in and out at a quarter hop sums to 1.5
+    for (int j = 0; j < frames; ++j) {
+        const size_t a = static_cast<size_t>(j) * static_cast<size_t>(hop);
+        for (int i = 0; i < N; ++i) {
+            re0[static_cast<size_t>(i)] = win[static_cast<size_t>(i)] * noise[0][a + static_cast<size_t>(i)];
+            re1[static_cast<size_t>(i)] = win[static_cast<size_t>(i)] * noise[1][a + static_cast<size_t>(i)];
+            im0[static_cast<size_t>(i)] = im1[static_cast<size_t>(i)] = 0.0f;
+        }
+        FftRun r0, r1, r2, r3;
+        long long b0 = kUnlimited, b1 = kUnlimited, b2 = kUnlimited, b3 = kUnlimited;
+        runFft(fft, r0, re0.data(), im0.data(), false, b0);
+        runFft(fft, r1, re1.data(), im1.data(), false, b1);
+        const double t = std::min(static_cast<double>(seconds), std::max(0.0, (static_cast<double>(a) + 0.5 * N - pad) / sampleRate));
+        for (int k = 0; k <= half; ++k)
+            g[static_cast<size_t>(k)] = static_cast<float>(amp[static_cast<size_t>(k)] * std::exp(-rate[static_cast<size_t>(k)] * t));
+        for (int i = 0; i < N; ++i) {
+            const size_t k = static_cast<size_t>(i <= half ? i : N - i);
+            const float c = rotC[k] * g[k], s = rotS[k] * g[k];
+            const size_t u = static_cast<size_t>(i);
+            lr[u] = c * re0[u] + s * re1[u];  li[u] = c * im0[u] + s * im1[u];
+            rr[u] = s * re0[u] + c * re1[u];  ri[u] = s * im0[u] + c * im1[u];
+        }
+        runFft(fft, r2, lr.data(), li.data(), true, b2);
+        runFft(fft, r3, rr.data(), ri.data(), true, b3);
+        for (int i = 0; i < N; ++i) {
+            out[0][a + static_cast<size_t>(i)] += inv * win[static_cast<size_t>(i)] * lr[static_cast<size_t>(i)];
+            out[1][a + static_cast<size_t>(i)] += inv * win[static_cast<size_t>(i)] * rr[static_cast<size_t>(i)];
         }
     }
-    setImpulse(ch[0].data(), ch[1].data(), n, sr_);
+    L.assign(out[0].begin() + pad, out[0].begin() + pad + n);
+    R.assign(out[1].begin() + pad, out[1].begin() + pad + n);
+    const int onset = std::max(1, static_cast<int>(0.015 * sampleRate));
+    const int fadeN = std::max(1, std::min(n / 10, static_cast<int>(0.1 * sampleRate)));
+    for (int i = 0; i < n; ++i) {
+        double w = 1.0;
+        if (i < onset) { const double s = std::sin(0.5 * kPiD * i / onset); w = s * s; }
+        if (i >= n - fadeN) { const double c = std::cos(0.5 * kPiD * (i - (n - fadeN)) / fadeN); w *= c * c; }
+        L[static_cast<size_t>(i)] *= static_cast<float>(w);
+        R[static_cast<size_t>(i)] *= static_cast<float>(w);
+    }
 }
 
 // Message thread: see Engine::waitForQuiet.

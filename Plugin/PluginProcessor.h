@@ -49,6 +49,7 @@ public:
     bool loadTextureFile(const juce::File& file);
     bool loadWavetableFile(const juce::File& file);
     bool loadImpulseFile(const juce::File& file, bool second = false);   // convolution room, mono or stereo
+    void clearImpulseB();   // Room Morph's second room gone; the room is A alone
     juce::String impulseName() const { return impulseFile_.existsAsFile() ? impulseFile_.getFileNameWithoutExtension() : juce::String(); }
     juce::String impulseBName() const { return impulseBFile_.existsAsFile() ? impulseBFile_.getFileNameWithoutExtension() : juce::String(); }
     // Level matching: while it is on, loading a preset trims the master gain by the difference

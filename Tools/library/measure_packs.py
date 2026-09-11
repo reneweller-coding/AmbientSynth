@@ -48,8 +48,8 @@ GAIN_MIN, GAIN_MAX = -40.0, 12.0
 
 # Every field of a pack line, in order. Reading a short list and writing it back is how the
 # impulse, the matrix and the envelope shapes were silently dropped from all 5000 presets: the
-# measurement pass rewrote each line with five fields instead of eight.
-FIELDS = ["name", "settings", "meta", "texture", "wavetable", "impulse", "mod", "envs"]
+# measurement pass rewrote each line with five fields instead of eight. Nine since impulse B.
+FIELDS = ["name", "settings", "meta", "texture", "wavetable", "impulse", "mod", "envs", "impulse_b"]
 
 
 def read_pack(path):
@@ -228,7 +228,7 @@ def tag_bits(settings, d):
 def _fingerprint(row):
     """What this measurement was made from. The name is not enough: regenerate the library and
     most names come back -- same seed, same generator -- with other settings underneath."""
-    parts = [str(row.get(k, "")) for k in ("settings", "texture", "wavetable", "impulse", "mod", "envs")]
+    parts = [str(row.get(k, "")) for k in ("settings", "texture", "wavetable", "impulse", "mod", "envs", "impulse_b")]
     return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:16]
 
 def main():
@@ -393,7 +393,7 @@ def main():
     # Report what actually survived the rewrite: dropping a field silently is exactly how the
     # impulses, the matrix and the envelope shapes disappeared from all 5000 presets once.
     kept = {k: sum(1 for _, _, rr in packs for r in rr if r.get(k, "").strip("~ "))
-            for k in ("texture", "wavetable", "impulse", "mod", "envs")}
+            for k in ("texture", "wavetable", "impulse", "mod", "envs", "impulse_b")}
     print(f"rewrote {len(packs)} packs; presets carrying "
           + ", ".join(f"{k} {v}" for k, v in kept.items()))
     return 1 if bad else 0

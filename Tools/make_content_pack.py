@@ -39,6 +39,7 @@ OUT = os.path.join(ROOT, "Deploy", "content")
 # Four now: the field recordings sit apart from the tonal material, because a swamp and a
 # bowed cymbal are not the same kind of clip and only one of them may be transposed.
 KINDS = ("Textures", "FieldRecordings", "Wavetables", "Impulses")
+LEGACY = os.path.join(HERE, "library", "legacy_impulses.json")
 
 
 def referenced():
@@ -64,6 +65,21 @@ def referenced():
                             continue
                         want[(kind, os.path.basename(src))] = src
     return want
+
+
+def legacy():
+    """The impulse files earlier packs named, shipped whether or not a current pack still names them. Sessions
+    and user presets keep the absolute path of their room, and one reopened without the file plays whatever
+    room was loaded before -- so these stay, under their names (Tools/library/legacy_impulses.py)."""
+    if not os.path.exists(LEGACY):
+        return {}
+    with open(LEGACY, encoding="utf-8") as f:
+        files = json.load(f).get("files", {})
+    out = {}
+    for name, info in files.items():
+        src = info.get("source", "")
+        out[("Impulses", name)] = src if os.path.isabs(src) else os.path.normpath(os.path.join(ROOT, src))
+    return out
 
 
 def read_wav(path):
@@ -216,6 +232,8 @@ def main():
         return
 
     want = referenced()
+    for key, src in legacy().items():      # what a current pack names wins; the rest of the old rooms come along
+        want.setdefault(key, src)
     if a.add_new:
         # Adding presets to the library adds a handful of samples to what it needs. Repacking
         # three gigabytes to ship forty megabytes of them would be silly: this writes the

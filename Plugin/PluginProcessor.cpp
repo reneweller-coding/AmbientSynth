@@ -576,10 +576,11 @@ const juce::String AmbientSynthProcessor::getProgramName(int index)
 
 void AmbientSynthProcessor::loadPresetFiles(int index)
 {
-    // A pack preset can bring its own sample, wavetable and impulse; paths are relative to the pack.
+    // A pack preset can bring its own sample, wavetable and impulses; paths are relative to the pack.
     const juce::String tex(juce::CharPointer_UTF8(presetFilePath(index, 0)));
     const juce::String tab(juce::CharPointer_UTF8(presetFilePath(index, 1)));
     const juce::String imp(juce::CharPointer_UTF8(presetFilePath(index, 2)));
+    const juce::String impB(juce::CharPointer_UTF8(presetFilePath(index, 3)));
     // The texture field is one path (every slot gets it, as always) or up to four separated by
     // ';', one per slot, an empty one meaning that slot has none. The per-slot form is explicit
     // about every slot, so a slot it leaves empty is cleared rather than left holding whatever
@@ -608,6 +609,16 @@ void AmbientSynthProcessor::loadPresetFiles(int index)
     }
     if (tab.isNotEmpty()) { const juce::File f = onDisk(tab); if (f != juce::File()) loadWavetableFile(f); }
     if (imp.isNotEmpty()) { const juce::File f = onDisk(imp); if (f != juce::File()) loadImpulseFile(f); }
+    // Impulse B travels with the preset like A does. A preset that names its room but no B takes
+    // the old B away: Room Morph blended into whatever B was left from the preset before, or from
+    // a file opened by hand an hour ago, and the same preset sounded different depending on what
+    // had been played first.
+    if (impB.isNotEmpty()) {
+        const juce::File f = onDisk(impB);
+        if (f == juce::File() || !loadImpulseFile(f, true)) clearImpulseB();
+    } else if (imp.isNotEmpty()) {
+        clearImpulseB();
+    }
 }
 
 void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
@@ -808,7 +819,12 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
     fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(file));
     if (reader == nullptr || reader->lengthInSamples <= 0) return false;
-    const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, static_cast<juce::int64>(reader->sampleRate * 12.0)));
+    // As much as the Room keeps, and a little more for the resampling. This read twelve seconds and
+    // stopped, from the days when the Room held eight -- the Room holds a minute now, and every long
+    // space ended in a gate at twelve seconds. What is longer than the Room keeps is shortened by the
+    // Room itself, with a window instead of a cut (Convolver::load).
+    const double keep = static_cast<double>(target().roomMaxSeconds()) * reader->sampleRate + 4096.0;
+    const int n = static_cast<int>(juce::jmin(reader->lengthInSamples, static_cast<juce::int64>(keep)));
     juce::AudioBuffer<float> buf(static_cast<int>(reader->numChannels), n);
     if (!reader->read(&buf, 0, n, 0, true, true)) return false;
     const float* L = buf.getReadPointer(0);
@@ -816,6 +832,12 @@ bool AmbientSynthProcessor::loadImpulseFile(const juce::File& file, bool second)
     if (second) { target().setImpulseB(L, R, n, reader->sampleRate); impulseBFile_ = file; }
     else        { target().setImpulse(L, R, n, reader->sampleRate);  impulseFile_ = file; }
     return true;
+}
+
+void AmbientSynthProcessor::clearImpulseB()
+{
+    target().clearImpulseB();
+    impulseBFile_ = juce::File();
 }
 
 bool AmbientSynthProcessor::loadWavetableFile(const juce::File& file)

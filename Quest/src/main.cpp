@@ -455,10 +455,8 @@ public:
         if (!initHands()) LOGE("hand tracking unavailable");
         if (!scene_.init()) return false;
         if (config_.audio && !audio_.start()) LOGE("audio failed to start");
-        if (!pendingIr_.empty()) {   // the engine is prepared now; the convolver has its buffers
-            engine_.setImpulse(pendingIr_[0].data(), pendingIr_.size() > 1 ? pendingIr_[1].data() : nullptr, static_cast<int>(pendingIr_[0].size()), pendingIrRate_);
-            pendingIr_.clear();
-        }
+        audioStarted_ = true;        // the engine is prepared now; the convolver has its buffers
+        applyPendingImpulses();
         if (!calibrated_) { gestures_.startCalibration(8.0f); LOGI("no calibration file: calibrating for 8 s"); }
         return true;
     }
@@ -498,11 +496,37 @@ public:
             if (!engine_.loadUserWavetable(mono.data(), static_cast<int>(mono.size()), cycle))
                 LOGE("%s: not a usable wavetable", tab);
         const char* imp = presetFilePath(index, 2);
+        const char* impB = presetFilePath(index, 3);
         std::vector<std::vector<float>> ir;
         if (imp != nullptr && *imp && readWavChannels(imp, ir, rate) && !ir.empty()) {
             pendingIr_ = ir; pendingIrRate_ = rate;   // set once the engine is prepared
             LOGI("preset impulse %s", imp);
+            pendingIrB_.clear();                      // a preset that names its room and no B plays A alone
+            clearIrB_ = true;
         }
+        if (impB != nullptr && *impB && readWavChannels(impB, ir, rate) && !ir.empty()) {
+            pendingIrB_ = ir; pendingIrBRate_ = rate; clearIrB_ = false;
+            LOGI("preset impulse B %s", impB);
+        }
+        // A preset picked from the menu arrives after the audio started: its rooms go in now. They
+        // used to wait for a start that had already happened, and the Room kept the first preset's.
+        if (audioStarted_) applyPendingImpulses();
+    }
+
+    // Message thread, engine prepared: the impulses a preset or the data folder asked for.
+    void applyPendingImpulses()
+    {
+        if (!pendingIr_.empty()) {
+            engine_.setImpulse(pendingIr_[0].data(), pendingIr_.size() > 1 ? pendingIr_[1].data() : nullptr, static_cast<int>(pendingIr_[0].size()), pendingIrRate_);
+            pendingIr_.clear();
+        }
+        if (!pendingIrB_.empty()) {
+            engine_.setImpulseB(pendingIrB_[0].data(), pendingIrB_.size() > 1 ? pendingIrB_[1].data() : nullptr, static_cast<int>(pendingIrB_[0].size()), pendingIrBRate_);
+            pendingIrB_.clear();
+        } else if (clearIrB_) {
+            engine_.clearImpulseB();
+        }
+        clearIrB_ = false;
     }
 
     // texture.wav (a field recording etc., assumed at C4 for Pitch = Note) and wavetable.wav
@@ -1016,6 +1040,8 @@ private:
     android_app* app_;
     std::string dataDir_;
     std::vector<std::vector<float>> pendingIr_; int pendingIrRate_ = 48000;
+    std::vector<std::vector<float>> pendingIrB_; int pendingIrBRate_ = 48000;
+    bool clearIrB_ = false, audioStarted_ = false;
     Config config_;
     Engine engine_;
     GestureLayer gestures_;

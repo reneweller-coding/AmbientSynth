@@ -1,0 +1,1406 @@
+{
+ "rev": "HEAD",
+ "files": {
+  "comb_00.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_00.wav"
+  },
+  "comb_01.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_01.wav"
+  },
+  "comb_02.wav": {
+   "presets": 11,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_02.wav"
+  },
+  "comb_03.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_03.wav"
+  },
+  "comb_04.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_04.wav"
+  },
+  "comb_05.wav": {
+   "presets": 23,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_05.wav"
+  },
+  "comb_06.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_06.wav"
+  },
+  "comb_07.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_07.wav"
+  },
+  "comb_08.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_08.wav"
+  },
+  "comb_09.wav": {
+   "presets": 16,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_09.wav"
+  },
+  "comb_10.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_10.wav"
+  },
+  "comb_11.wav": {
+   "presets": 17,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_11.wav"
+  },
+  "comb_12.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_12.wav"
+  },
+  "comb_13.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_13.wav"
+  },
+  "comb_14.wav": {
+   "presets": 20,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_14.wav"
+  },
+  "comb_15.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_15.wav"
+  },
+  "comb_16.wav": {
+   "presets": 20,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_16.wav"
+  },
+  "comb_17.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_17.wav"
+  },
+  "comb_18.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_18.wav"
+  },
+  "comb_19.wav": {
+   "presets": 22,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/comb_19.wav"
+  },
+  "modal_bell_00.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_00.wav"
+  },
+  "modal_bell_03.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_03.wav"
+  },
+  "modal_bell_06.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_06.wav"
+  },
+  "modal_bell_09.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_09.wav"
+  },
+  "modal_bell_12.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_12.wav"
+  },
+  "modal_bell_15.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_15.wav"
+  },
+  "modal_bell_18.wav": {
+   "presets": 22,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_18.wav"
+  },
+  "modal_bell_21.wav": {
+   "presets": 11,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_21.wav"
+  },
+  "modal_bell_24.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_bell_24.wav"
+  },
+  "modal_plate_01.wav": {
+   "presets": 16,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_01.wav"
+  },
+  "modal_plate_04.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_04.wav"
+  },
+  "modal_plate_07.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_07.wav"
+  },
+  "modal_plate_10.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_10.wav"
+  },
+  "modal_plate_13.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_13.wav"
+  },
+  "modal_plate_16.wav": {
+   "presets": 19,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_16.wav"
+  },
+  "modal_plate_19.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_19.wav"
+  },
+  "modal_plate_22.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_plate_22.wav"
+  },
+  "modal_spring_02.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_02.wav"
+  },
+  "modal_spring_05.wav": {
+   "presets": 19,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_05.wav"
+  },
+  "modal_spring_08.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_08.wav"
+  },
+  "modal_spring_11.wav": {
+   "presets": 19,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_11.wav"
+  },
+  "modal_spring_14.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_14.wav"
+  },
+  "modal_spring_17.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_17.wav"
+  },
+  "modal_spring_20.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_20.wav"
+  },
+  "modal_spring_23.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/modal_spring_23.wav"
+  },
+  "reverse_00.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_00.wav"
+  },
+  "reverse_01.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_01.wav"
+  },
+  "reverse_02.wav": {
+   "presets": 5,
+   "source": "Library/Impulses/reverse_02.wav"
+  },
+  "reverse_03.wav": {
+   "presets": 10,
+   "source": "Library/Impulses/reverse_03.wav"
+  },
+  "reverse_04.wav": {
+   "presets": 4,
+   "source": "Library/Impulses/reverse_04.wav"
+  },
+  "reverse_05.wav": {
+   "presets": 5,
+   "source": "Library/Impulses/reverse_05.wav"
+  },
+  "reverse_06.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_06.wav"
+  },
+  "reverse_07.wav": {
+   "presets": 10,
+   "source": "Library/Impulses/reverse_07.wav"
+  },
+  "reverse_08.wav": {
+   "presets": 4,
+   "source": "Library/Impulses/reverse_08.wav"
+  },
+  "reverse_09.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_09.wav"
+  },
+  "reverse_10.wav": {
+   "presets": 9,
+   "source": "Library/Impulses/reverse_10.wav"
+  },
+  "reverse_11.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_11.wav"
+  },
+  "reverse_12.wav": {
+   "presets": 6,
+   "source": "Library/Impulses/reverse_12.wav"
+  },
+  "reverse_13.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_13.wav"
+  },
+  "reverse_14.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_14.wav"
+  },
+  "reverse_15.wav": {
+   "presets": 13,
+   "source": "Library/Impulses/reverse_15.wav"
+  },
+  "reverse_16.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_16.wav"
+  },
+  "reverse_17.wav": {
+   "presets": 9,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_17.wav"
+  },
+  "reverse_18.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/reverse_18.wav"
+  },
+  "reverse_19.wav": {
+   "presets": 3,
+   "source": "Library/Impulses/reverse_19.wav"
+  },
+  "room_bunker_00.wav": {
+   "presets": 20,
+   "source": "Library/Impulses/room_bunker_00.wav"
+  },
+  "room_bunker_01.wav": {
+   "presets": 21,
+   "source": "Library/Impulses/room_bunker_01.wav"
+  },
+  "room_bunker_02.wav": {
+   "presets": 20,
+   "source": "Library/Impulses/room_bunker_02.wav"
+  },
+  "room_bunker_03.wav": {
+   "presets": 18,
+   "source": "Library/Impulses/room_bunker_03.wav"
+  },
+  "room_bunker_04.wav": {
+   "presets": 16,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_bunker_04.wav"
+  },
+  "room_bunker_05.wav": {
+   "presets": 25,
+   "source": "Library/Impulses/room_bunker_05.wav"
+  },
+  "room_bunker_06.wav": {
+   "presets": 18,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_bunker_06.wav"
+  },
+  "room_bunker_07.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/room_bunker_07.wav"
+  },
+  "room_bunker_08.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/room_bunker_08.wav"
+  },
+  "room_cathedral_00.wav": {
+   "presets": 27,
+   "source": "Library/Impulses/room_cathedral_00.wav"
+  },
+  "room_cathedral_01.wav": {
+   "presets": 24,
+   "source": "Library/Impulses/room_cathedral_01.wav"
+  },
+  "room_cathedral_02.wav": {
+   "presets": 21,
+   "source": "Library/Impulses/room_cathedral_02.wav"
+  },
+  "room_cathedral_03.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/room_cathedral_03.wav"
+  },
+  "room_cathedral_04.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/room_cathedral_04.wav"
+  },
+  "room_cathedral_05.wav": {
+   "presets": 21,
+   "source": "Library/Impulses/room_cathedral_05.wav"
+  },
+  "room_cathedral_06.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/room_cathedral_06.wav"
+  },
+  "room_cathedral_07.wav": {
+   "presets": 23,
+   "source": "Library/Impulses/room_cathedral_07.wav"
+  },
+  "room_cathedral_08.wav": {
+   "presets": 23,
+   "source": "Library/Impulses/room_cathedral_08.wav"
+  },
+  "room_cavern_00.wav": {
+   "presets": 25,
+   "source": "Library/Impulses/room_cavern_00.wav"
+  },
+  "room_cavern_01.wav": {
+   "presets": 14,
+   "source": "Library/Impulses/room_cavern_01.wav"
+  },
+  "room_cavern_02.wav": {
+   "presets": 17,
+   "source": "Library/Impulses/room_cavern_02.wav"
+  },
+  "room_cavern_03.wav": {
+   "presets": 14,
+   "source": "Library/Impulses/room_cavern_03.wav"
+  },
+  "room_cavern_04.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/room_cavern_04.wav"
+  },
+  "room_cavern_05.wav": {
+   "presets": 32,
+   "source": "Library/Impulses/room_cavern_05.wav"
+  },
+  "room_cavern_06.wav": {
+   "presets": 21,
+   "source": "Library/Impulses/room_cavern_06.wav"
+  },
+  "room_cavern_07.wav": {
+   "presets": 29,
+   "source": "Library/Impulses/room_cavern_07.wav"
+  },
+  "room_cavern_08.wav": {
+   "presets": 16,
+   "source": "Library/Impulses/room_cavern_08.wav"
+  },
+  "room_chamber_00.wav": {
+   "presets": 20,
+   "source": "Library/Impulses/room_chamber_00.wav"
+  },
+  "room_chamber_01.wav": {
+   "presets": 26,
+   "source": "Library/Impulses/room_chamber_01.wav"
+  },
+  "room_chamber_02.wav": {
+   "presets": 22,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_chamber_02.wav"
+  },
+  "room_chamber_03.wav": {
+   "presets": 18,
+   "source": "Library/Impulses/room_chamber_03.wav"
+  },
+  "room_chamber_04.wav": {
+   "presets": 24,
+   "source": "Library/Impulses/room_chamber_04.wav"
+  },
+  "room_chamber_05.wav": {
+   "presets": 16,
+   "source": "Library/Impulses/room_chamber_05.wav"
+  },
+  "room_chamber_06.wav": {
+   "presets": 15,
+   "source": "Library/Impulses/room_chamber_06.wav"
+  },
+  "room_chamber_07.wav": {
+   "presets": 21,
+   "source": "Library/Impulses/room_chamber_07.wav"
+  },
+  "room_chamber_08.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_chamber_08.wav"
+  },
+  "room_hall_00.wav": {
+   "presets": 34,
+   "source": "Library/Impulses/room_hall_00.wav"
+  },
+  "room_hall_01.wav": {
+   "presets": 41,
+   "source": "Library/Impulses/room_hall_01.wav"
+  },
+  "room_hall_02.wav": {
+   "presets": 39,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_hall_02.wav"
+  },
+  "room_hall_03.wav": {
+   "presets": 30,
+   "source": "Library/Impulses/room_hall_03.wav"
+  },
+  "room_hall_04.wav": {
+   "presets": 38,
+   "source": "Library/Impulses/room_hall_04.wav"
+  },
+  "room_hall_05.wav": {
+   "presets": 30,
+   "source": "Library/Impulses/room_hall_05.wav"
+  },
+  "room_hall_06.wav": {
+   "presets": 36,
+   "source": "Library/Impulses/room_hall_06.wav"
+  },
+  "room_hall_07.wav": {
+   "presets": 30,
+   "source": "Library/Impulses/room_hall_07.wav"
+  },
+  "room_hall_08.wav": {
+   "presets": 43,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/room_hall_08.wav"
+  },
+  "room_plate_00.wav": {
+   "presets": 14,
+   "source": "Library/Impulses/room_plate_00.wav"
+  },
+  "room_plate_01.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/room_plate_01.wav"
+  },
+  "room_plate_02.wav": {
+   "presets": 16,
+   "source": "Library/Impulses/room_plate_02.wav"
+  },
+  "room_plate_03.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/room_plate_03.wav"
+  },
+  "room_plate_04.wav": {
+   "presets": 14,
+   "source": "Library/Impulses/room_plate_04.wav"
+  },
+  "room_plate_05.wav": {
+   "presets": 24,
+   "source": "Library/Impulses/room_plate_05.wav"
+  },
+  "room_plate_06.wav": {
+   "presets": 18,
+   "source": "Library/Impulses/room_plate_06.wav"
+  },
+  "room_plate_07.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/room_plate_07.wav"
+  },
+  "room_plate_08.wav": {
+   "presets": 17,
+   "source": "Library/Impulses/room_plate_08.wav"
+  },
+  "scatter_00.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_00.wav"
+  },
+  "scatter_01.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_01.wav"
+  },
+  "scatter_02.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_02.wav"
+  },
+  "scatter_03.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_03.wav"
+  },
+  "scatter_04.wav": {
+   "presets": 17,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_04.wav"
+  },
+  "scatter_05.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_05.wav"
+  },
+  "scatter_06.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_06.wav"
+  },
+  "scatter_07.wav": {
+   "presets": 9,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_07.wav"
+  },
+  "scatter_08.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_08.wav"
+  },
+  "scatter_09.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_09.wav"
+  },
+  "scatter_10.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_10.wav"
+  },
+  "scatter_11.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_11.wav"
+  },
+  "scatter_12.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_12.wav"
+  },
+  "scatter_13.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_13.wav"
+  },
+  "scatter_14.wav": {
+   "presets": 11,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_14.wav"
+  },
+  "scatter_15.wav": {
+   "presets": 11,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_15.wav"
+  },
+  "scatter_16.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_16.wav"
+  },
+  "scatter_17.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_17.wav"
+  },
+  "scatter_18.wav": {
+   "presets": 15,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_18.wav"
+  },
+  "scatter_19.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/scatter_19.wav"
+  },
+  "shimmer_00.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_00.wav"
+  },
+  "shimmer_01.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_01.wav"
+  },
+  "shimmer_02.wav": {
+   "presets": 12,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_02.wav"
+  },
+  "shimmer_03.wav": {
+   "presets": 18,
+   "source": "Library/Impulses/shimmer_03.wav"
+  },
+  "shimmer_04.wav": {
+   "presets": 8,
+   "source": "Library/Impulses/shimmer_04.wav"
+  },
+  "shimmer_05.wav": {
+   "presets": 10,
+   "source": "Library/Impulses/shimmer_05.wav"
+  },
+  "shimmer_06.wav": {
+   "presets": 8,
+   "source": "Library/Impulses/shimmer_06.wav"
+  },
+  "shimmer_07.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_07.wav"
+  },
+  "shimmer_08.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_08.wav"
+  },
+  "shimmer_09.wav": {
+   "presets": 14,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_09.wav"
+  },
+  "shimmer_10.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_10.wav"
+  },
+  "shimmer_11.wav": {
+   "presets": 10,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_11.wav"
+  },
+  "shimmer_12.wav": {
+   "presets": 11,
+   "source": "Library/Impulses/shimmer_12.wav"
+  },
+  "shimmer_13.wav": {
+   "presets": 15,
+   "source": "Library/Impulses/shimmer_13.wav"
+  },
+  "shimmer_14.wav": {
+   "presets": 9,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/shimmer_14.wav"
+  },
+  "spectral_00.wav": {
+   "presets": 15,
+   "source": "Library/Impulses/spectral_00.wav"
+  },
+  "spectral_01.wav": {
+   "presets": 31,
+   "source": "Library/Impulses/spectral_01.wav"
+  },
+  "spectral_02.wav": {
+   "presets": 25,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/spectral_02.wav"
+  },
+  "spectral_03.wav": {
+   "presets": 25,
+   "source": "Library/Impulses/spectral_03.wav"
+  },
+  "spectral_04.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/spectral_04.wav"
+  },
+  "spectral_05.wav": {
+   "presets": 19,
+   "source": "Library/Impulses/spectral_05.wav"
+  },
+  "spectral_06.wav": {
+   "presets": 17,
+   "source": "Library/Impulses/spectral_06.wav"
+  },
+  "spectral_07.wav": {
+   "presets": 32,
+   "source": "Library/Impulses/spectral_07.wav"
+  },
+  "spectral_08.wav": {
+   "presets": 22,
+   "source": "Library/Impulses/spectral_08.wav"
+  },
+  "spectral_09.wav": {
+   "presets": 28,
+   "source": "Library/Impulses/spectral_09.wav"
+  },
+  "spectral_10.wav": {
+   "presets": 20,
+   "source": "Library/Impulses/spectral_10.wav"
+  },
+  "spectral_11.wav": {
+   "presets": 26,
+   "source": "Library/Impulses/spectral_11.wav"
+  },
+  "spectral_12.wav": {
+   "presets": 20,
+   "source": "Library/Impulses/spectral_12.wav"
+  },
+  "spectral_13.wav": {
+   "presets": 27,
+   "source": "Library/Impulses/spectral_13.wav"
+  },
+  "spectral_14.wav": {
+   "presets": 30,
+   "source": "Library/Impulses/spectral_14.wav"
+  },
+  "spectral_15.wav": {
+   "presets": 24,
+   "source": "Library/Impulses/spectral_15.wav"
+  },
+  "struck_000.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_000.wav"
+  },
+  "struck_001.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_001.wav"
+  },
+  "struck_002.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_002.wav"
+  },
+  "struck_003.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_003.wav"
+  },
+  "struck_004.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_004.wav"
+  },
+  "struck_005.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_005.wav"
+  },
+  "struck_006.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_006.wav"
+  },
+  "struck_007.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_007.wav"
+  },
+  "struck_008.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_008.wav"
+  },
+  "struck_009.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_009.wav"
+  },
+  "struck_010.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_010.wav"
+  },
+  "struck_011.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_011.wav"
+  },
+  "struck_012.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_012.wav"
+  },
+  "struck_013.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_013.wav"
+  },
+  "struck_014.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_014.wav"
+  },
+  "struck_015.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_015.wav"
+  },
+  "struck_016.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_016.wav"
+  },
+  "struck_017.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_017.wav"
+  },
+  "struck_018.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_018.wav"
+  },
+  "struck_019.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_019.wav"
+  },
+  "struck_020.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_020.wav"
+  },
+  "struck_021.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_021.wav"
+  },
+  "struck_022.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_022.wav"
+  },
+  "struck_023.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_023.wav"
+  },
+  "struck_024.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_024.wav"
+  },
+  "struck_025.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_025.wav"
+  },
+  "struck_026.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_026.wav"
+  },
+  "struck_027.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_027.wav"
+  },
+  "struck_028.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_028.wav"
+  },
+  "struck_029.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_029.wav"
+  },
+  "struck_030.wav": {
+   "presets": 8,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_030.wav"
+  },
+  "struck_032.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_032.wav"
+  },
+  "struck_033.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_033.wav"
+  },
+  "struck_034.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_034.wav"
+  },
+  "struck_035.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_035.wav"
+  },
+  "struck_036.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_036.wav"
+  },
+  "struck_037.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_037.wav"
+  },
+  "struck_038.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_038.wav"
+  },
+  "struck_039.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_039.wav"
+  },
+  "struck_040.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_040.wav"
+  },
+  "struck_041.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_041.wav"
+  },
+  "struck_042.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_042.wav"
+  },
+  "struck_043.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_043.wav"
+  },
+  "struck_044.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_044.wav"
+  },
+  "struck_045.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_045.wav"
+  },
+  "struck_046.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_046.wav"
+  },
+  "struck_047.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_047.wav"
+  },
+  "struck_048.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_048.wav"
+  },
+  "struck_049.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_049.wav"
+  },
+  "struck_050.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_050.wav"
+  },
+  "struck_051.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_051.wav"
+  },
+  "struck_052.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_052.wav"
+  },
+  "struck_053.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_053.wav"
+  },
+  "struck_054.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_054.wav"
+  },
+  "struck_055.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_055.wav"
+  },
+  "struck_056.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_056.wav"
+  },
+  "struck_057.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_057.wav"
+  },
+  "struck_058.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_058.wav"
+  },
+  "struck_059.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_059.wav"
+  },
+  "struck_060.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_060.wav"
+  },
+  "struck_061.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_061.wav"
+  },
+  "struck_062.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_062.wav"
+  },
+  "struck_063.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_063.wav"
+  },
+  "struck_065.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_065.wav"
+  },
+  "struck_066.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_066.wav"
+  },
+  "struck_067.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_067.wav"
+  },
+  "struck_068.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_068.wav"
+  },
+  "struck_069.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_069.wav"
+  },
+  "struck_070.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_070.wav"
+  },
+  "struck_071.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_071.wav"
+  },
+  "struck_072.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_072.wav"
+  },
+  "struck_073.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_073.wav"
+  },
+  "struck_074.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_074.wav"
+  },
+  "struck_075.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_075.wav"
+  },
+  "struck_076.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_076.wav"
+  },
+  "struck_077.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_077.wav"
+  },
+  "struck_078.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_078.wav"
+  },
+  "struck_079.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_079.wav"
+  },
+  "struck_080.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_080.wav"
+  },
+  "struck_083.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_083.wav"
+  },
+  "struck_084.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_084.wav"
+  },
+  "struck_085.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_085.wav"
+  },
+  "struck_086.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_086.wav"
+  },
+  "struck_088.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_088.wav"
+  },
+  "struck_089.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_089.wav"
+  },
+  "struck_090.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_090.wav"
+  },
+  "struck_091.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_091.wav"
+  },
+  "struck_092.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_092.wav"
+  },
+  "struck_093.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_093.wav"
+  },
+  "struck_094.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_094.wav"
+  },
+  "struck_095.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_095.wav"
+  },
+  "struck_096.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_096.wav"
+  },
+  "struck_097.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_097.wav"
+  },
+  "struck_098.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_098.wav"
+  },
+  "struck_099.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_099.wav"
+  },
+  "struck_100.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_100.wav"
+  },
+  "struck_102.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_102.wav"
+  },
+  "struck_103.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_103.wav"
+  },
+  "struck_104.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_104.wav"
+  },
+  "struck_105.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_105.wav"
+  },
+  "struck_106.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_106.wav"
+  },
+  "struck_107.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_107.wav"
+  },
+  "struck_108.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_108.wav"
+  },
+  "struck_109.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_109.wav"
+  },
+  "struck_110.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_110.wav"
+  },
+  "struck_111.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_111.wav"
+  },
+  "struck_112.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_112.wav"
+  },
+  "struck_113.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_113.wav"
+  },
+  "struck_114.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_114.wav"
+  },
+  "struck_115.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_115.wav"
+  },
+  "struck_116.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_116.wav"
+  },
+  "struck_117.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_117.wav"
+  },
+  "struck_118.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_118.wav"
+  },
+  "struck_119.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_119.wav"
+  },
+  "struck_120.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_120.wav"
+  },
+  "struck_121.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_121.wav"
+  },
+  "struck_122.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_122.wav"
+  },
+  "struck_123.wav": {
+   "presets": 5,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_123.wav"
+  },
+  "struck_124.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_124.wav"
+  },
+  "struck_126.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_126.wav"
+  },
+  "struck_127.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_127.wav"
+  },
+  "struck_128.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_128.wav"
+  },
+  "struck_129.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_129.wav"
+  },
+  "struck_130.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_130.wav"
+  },
+  "struck_131.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_131.wav"
+  },
+  "struck_132.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_132.wav"
+  },
+  "struck_133.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_133.wav"
+  },
+  "struck_134.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_134.wav"
+  },
+  "struck_135.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_135.wav"
+  },
+  "struck_136.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_136.wav"
+  },
+  "struck_137.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_137.wav"
+  },
+  "struck_138.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_138.wav"
+  },
+  "struck_139.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_139.wav"
+  },
+  "struck_140.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_140.wav"
+  },
+  "struck_141.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_141.wav"
+  },
+  "struck_142.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_142.wav"
+  },
+  "struck_143.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_143.wav"
+  },
+  "struck_144.wav": {
+   "presets": 6,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_144.wav"
+  },
+  "struck_145.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_145.wav"
+  },
+  "struck_147.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_147.wav"
+  },
+  "struck_148.wav": {
+   "presets": 7,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_148.wav"
+  },
+  "struck_150.wav": {
+   "presets": 3,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_150.wav"
+  },
+  "struck_152.wav": {
+   "presets": 4,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_152.wav"
+  },
+  "struck_153.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_153.wav"
+  },
+  "struck_154.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_154.wav"
+  },
+  "struck_155.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_155.wav"
+  },
+  "struck_156.wav": {
+   "presets": 2,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_156.wav"
+  },
+  "struck_157.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_157.wav"
+  },
+  "struck_158.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_158.wav"
+  },
+  "struck_159.wav": {
+   "presets": 1,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/struck_159.wav"
+  },
+  "tuned_00.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_00.wav"
+  },
+  "tuned_01.wav": {
+   "presets": 27,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_01.wav"
+  },
+  "tuned_02.wav": {
+   "presets": 30,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_02.wav"
+  },
+  "tuned_03.wav": {
+   "presets": 13,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_03.wav"
+  },
+  "tuned_04.wav": {
+   "presets": 36,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_04.wav"
+  },
+  "tuned_05.wav": {
+   "presets": 21,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_05.wav"
+  },
+  "tuned_06.wav": {
+   "presets": 34,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_06.wav"
+  },
+  "tuned_07.wav": {
+   "presets": 41,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_07.wav"
+  },
+  "tuned_08.wav": {
+   "presets": 32,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_08.wav"
+  },
+  "tuned_09.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_09.wav"
+  },
+  "tuned_10.wav": {
+   "presets": 21,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_10.wav"
+  },
+  "tuned_11.wav": {
+   "presets": 25,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_11.wav"
+  },
+  "tuned_12.wav": {
+   "presets": 23,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_12.wav"
+  },
+  "tuned_13.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_13.wav"
+  },
+  "tuned_14.wav": {
+   "presets": 26,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_14.wav"
+  },
+  "tuned_15.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_15.wav"
+  },
+  "tuned_16.wav": {
+   "presets": 23,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_16.wav"
+  },
+  "tuned_17.wav": {
+   "presets": 27,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_17.wav"
+  },
+  "tuned_18.wav": {
+   "presets": 29,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_18.wav"
+  },
+  "tuned_19.wav": {
+   "presets": 32,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_19.wav"
+  },
+  "tuned_20.wav": {
+   "presets": 33,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_20.wav"
+  },
+  "tuned_21.wav": {
+   "presets": 34,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_21.wav"
+  },
+  "tuned_22.wav": {
+   "presets": 30,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_22.wav"
+  },
+  "tuned_23.wav": {
+   "presets": 24,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_23.wav"
+  },
+  "tuned_24.wav": {
+   "presets": 27,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_24.wav"
+  },
+  "tuned_25.wav": {
+   "presets": 21,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_25.wav"
+  },
+  "tuned_26.wav": {
+   "presets": 23,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_26.wav"
+  },
+  "tuned_27.wav": {
+   "presets": 20,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_27.wav"
+  },
+  "tuned_28.wav": {
+   "presets": 27,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_28.wav"
+  },
+  "tuned_29.wav": {
+   "presets": 24,
+   "source": "G:/Tools/VRAudio/IRSources/rejected-generated/tuned_29.wav"
+  }
+ },
+ "missing": []
+}

@@ -1332,7 +1332,28 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     matrix = add_hands(p, style, rng, matrix)
     if len(set(slot_textures.values())) > 1:
         texture_file = ";".join(slot_textures.get(k, "") for k in range(1, 5))
-    return p, texture_file, wavetable_file, impulse_file, matrix, envs
+    # Room Morph goes from the preset's impulse to a second one, and the second one travels with the
+    # preset now (the pack line's ninth field). Without it the morph did nothing -- or blended into
+    # whatever B a player had loaded before -- so a preset gets a partner or loses the morph.
+    impulse_b = morph_partner(impulse_file, impulses, extra) if (impulse_file and "room_morph" in p) else ""
+    if not impulse_b:
+        p.pop("room_morph", None)
+    return p, texture_file, wavetable_file, impulse_file, impulse_b, matrix, envs
+
+
+def morph_partner(name, pool, rng):
+    """The impulse Room Morph should go to: a designed pair's other half first (hall_012a and
+    hall_012b share their seed and their noise, so the morph between them never dips), then another
+    impulse of the same family, then any other."""
+    stem, ext = os.path.splitext(name)
+    if stem[-1:] in ("a", "b"):
+        other = stem[:-1] + ("b" if stem[-1] == "a" else "a") + ext
+        if other in pool:
+            return other
+    family = re.sub(r"_\d+[ab]?$", "", stem)
+    same = [f for f in pool if f != name and f.startswith(family + "_")]
+    rest = same or [f for f in pool if f != name]
+    return rest[rng.randrange(len(rest))] if rest else ""
 
 
 def settings_string(p):
@@ -1628,10 +1649,39 @@ def affinity_for(style_name):
     return _AFFINITY["_"].get(style_name, [])
 
 
+# The impulse families the styles still name were retired when the room generator (Tools/ImpulseGen/roomgen.py)
+# replaced make_impulses.py; each maps to the new families that do its job.
+RETIRED_IMPULSE_FAMILIES = {
+    "room_hall": ("hall",), "room_chamber": ("chamber",), "room_bunker": ("chamber",), "room_cathedral": ("cathedral",),
+    "room_cavern": ("cavern",), "room_plate": ("plate",), "diffusion": ("hall", "chamber"), "spectral": ("drift",),
+    "reverse": ("swell",), "shimmer": ("vast", "bloom"), "tuned": ("cathedral", "vast"), "modal": ("plate", "chamber"),
+    "comb": ("plate", "far"), "scatter": ("plate", "far"), "struck": ("chamber", "far"),
+}
+_LEGACY_IMPULSES = None
+
+
+def legacy_impulses():
+    """The impulses earlier packs named: kept on the shelf for old sessions, never taken by a new preset."""
+    global _LEGACY_IMPULSES
+    if _LEGACY_IMPULSES is None:
+        path = os.path.join(ROOT, "Tools", "library", "legacy_impulses.json")
+        _LEGACY_IMPULSES = set()
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                _LEGACY_IMPULSES = set(json.load(f).get("files", {}))
+    return _LEGACY_IMPULSES
+
+
 def impulse_pool(dirname, style):
-    """Impulses whose name starts with one of the style's families (see make_impulses.py)."""
-    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
-    own = [f for f in files if any(f.startswith(pre) for pre in style["impulses"])]
+    """Impulses whose name starts with one of the style's families, the retired family names translated to
+    the new ones, and never one of the legacy files."""
+    legacy = legacy_impulses()
+    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav"))
+                   if os.path.basename(f) not in legacy)
+    prefixes = []
+    for pre in style["impulses"]:
+        prefixes.extend(RETIRED_IMPULSE_FAMILIES.get(pre.rstrip("_"), (pre,)))
+    own = [f for f in files if any(f.startswith(pre.rstrip("_") + "_") for pre in prefixes)]
     return own or files
 
 
@@ -1770,7 +1820,7 @@ def main():
         impulses = impulse_pool(a.impulses, st)
         rows = []
         for k in range(a.per_style):
-            p, tex, tab, imp, matrix, envs = make_preset(st, rng, textures, tables, impulses,
+            p, tex, tab, imp, impb, matrix, envs = make_preset(st, rng, textures, tables, impulses,
                                                         SHADES[k % len(SHADES)],
                                                         random.Random(a.seed * 15485863 + si * 7919 + k))
             rows.append({"name": name_for(st, rng, used_names), "params": p, "shade": SHADES[k % len(SHADES)][0],
@@ -1782,6 +1832,7 @@ def main():
                          "texture": ";".join(f"../{part}" if part else "" for part in tex.split(";")) if tex else "",
                          "wavetable": f"../Wavetables/{tab}" if tab else "",
                          "impulse": f"../Impulses/{imp}" if imp else "",
+                         "impulse_b": f"../Impulses/{impb}" if impb else "",
                          "mod": matrix, "envs": envs,
                          "desc": descriptors(p)})
         packs.append((st, rows))
@@ -1804,7 +1855,7 @@ def main():
             f.write(f"# {st['name']} -- {len(rows)} presets for AmbientSynth, generated by Tools/library/make_presets.py\n")
             f.write(f"# In the spirit of {st['inspiration']}. Not affiliated with, sampled from or endorsed by anyone.\n")
             f.write("# Format: name|settings|x y bright motion width noisy bass density tags|"
-                    "texture|wavetable|impulse|mod matrix|env shapes\n")
+                    "texture|wavetable|impulse|mod matrix|env shapes|impulse B\n")
             f.write(f"pack {st['name']}\n")
             for r in rows:
                 d = r["desc"]
@@ -1821,7 +1872,7 @@ def main():
                 taken.add((round(x, 3), round(y, 3)))
                 meta = " ".join(f"{v:.3f}" for v in (x, y, d[0], d[1], d[2], d[3], d[4], d[5]))
                 f.write(f"{r['name']}|{r['settings']}|{meta} {r['tags']}|{r['texture']}|"
-                        f"{r['wavetable']}|{r['impulse']}|{r['mod']}|{r['envs']}\n")
+                        f"{r['wavetable']}|{r['impulse']}|{r['mod']}|{r['envs']}|{r['impulse_b']}\n")
         total += len(rows)
         print(f"{len(rows):5d}  {path}")
     print(f"{total} presets in {len(packs)} packs -> {a.out_dir}")

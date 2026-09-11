@@ -23,8 +23,8 @@
 // Two impulses, A and B, share the delay lines: the morph blends their spectra inside the sum,
 // which is exactly a crossfade between two convolutions at the cost of one; at 0 or 1 only one
 // impulse is read at all. Impulses are double-buffered like textures: the message thread writes
-// the copy the audio thread is not reading, then swaps. Without a file a generated dark hall is
-// loaded at prepare(), so the Room works out of the box.
+// the copy the audio thread is not reading, then swaps. Without a file a generated hall is loaded
+// at prepare(), so the Room works out of the box (see makeDefaultImpulse).
 #pragma once
 #include <atomic>
 #include <cstdint>
@@ -37,8 +37,9 @@ public:
     static constexpr int kStages = 3;
 
     Convolver();
-    // maxSeconds bounds the memory (and CPU) an impulse may take; longer files are cut. A minute
-    // holds about 46 MB of delay line.
+    // maxSeconds bounds the memory (and CPU) an impulse may take. A longer file is shortened, not
+    // cut: an exponential window brings its tail to -60 dB at the limit and a 50 ms fade ends it,
+    // so the room gets smaller instead of stopping like a gate. A minute holds about 46 MB of delay line.
     void prepare(double sampleRate, float maxSeconds = 60.0f);
     void reset();
     // Message thread. R may be nullptr (mono impulse). Resampled to the engine rate with a
@@ -46,8 +47,14 @@ public:
     void setImpulse(const float* L, const float* R, int n, double impulseSampleRate)  { load(0, L, R, n, impulseSampleRate); }
     // The second impulse, the one the morph goes to.
     void setImpulseB(const float* L, const float* R, int n, double impulseSampleRate) { load(1, L, R, n, impulseSampleRate); }
-    // A generated dark hall (~4 s, low end ringing longest), for a Room without a file.
+    // Forget impulse B: the room is A alone again, and B's memory goes back. Message thread.
+    void clearImpulseB();
+    // The built-in hall (makeDefaultImpulse), for a Room without a file.
     void generateDefault(uint64_t seed, float seconds = 4.0f);
+    // The built-in hall as samples, at any rate, for generateDefault and for whoever wants to
+    // measure it: the statistical late field the generated library's halls are made of (Gaussian
+    // noise, every frequency decaying at its own T60), with a colour and a decay solved offline.
+    static void makeDefaultImpulse(double sampleRate, uint64_t seed, float seconds, std::vector<float>& L, std::vector<float>& R);
     bool  hasImpulse() const  { return active_[0].load(std::memory_order_acquire) >= 0; }
     bool  hasImpulseB() const { return active_[1].load(std::memory_order_acquire) >= 0; }
     float impulseSeconds() const;   // impulse A, as kept

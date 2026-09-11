@@ -77,6 +77,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
         const bool keepUser = userImpulse_ && room_.hasImpulse() && std::fabs(room_.impulseSeconds()) > 0.0f;
         std::vector<float> keepL, keepR;   // a user impulse survives a sample-rate change only through the host reloading it
         room_.prepare(sr_, roomMaxSeconds_);
+        hasImpulseB_ = false;   // prepare empties both impulses; a B comes back only when it is loaded again
         if (!keepUser) { room_.generateDefault(static_cast<uint64_t>(seed_) + 7); userImpulse_ = false; }
         (void)keepL; (void)keepR;
     }

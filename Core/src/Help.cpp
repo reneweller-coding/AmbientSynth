@@ -243,7 +243,7 @@ const HelpEntry kHelp[] = {
     { "room_source", "What the room reverberates: the far sends (before the far reverb) or the finished near bus." },
     { "room_predelay", "Milliseconds before the room's response starts." },
     { "room_highcut", "Low-pass on the room's tail." },
-    { "room_morph", "Crossfades between the two loaded impulses, A and B: one room becomes another over as long as you like. The two are blended inside the one convolution, so a morph costs what one room costs." },
+    { "room_morph", "Crossfades between the two loaded impulses, A and B: one room becomes another over as long as you like. The two are blended inside the one convolution, so a morph costs what one room costs. A pack preset brings its B with it; one that names its room but no B plays A alone, whatever B was loaded before." },
 
     // ---- cosmos
     { "cosmos_send", "How much of the near bus goes into the Cosmos path (frequency shifter, resonator, vowel, nebula). The dry signal is untouched; Cosmos is additive." },

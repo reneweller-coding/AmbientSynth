@@ -234,13 +234,17 @@ inline void convolverChecks()
         std::vector<float> longIr(static_cast<size_t>(sr * 40));
         for (auto& v : longIr) v = 0.1f * rng.bipolar();
         c.setImpulse(longIr.data(), nullptr, sr * 40, sr);
-        CHECK(std::fabs(c.impulseSeconds() - 30.0f) < 0.01f, "a longer impulse is cut at the maximum");
+        // Shortened to the maximum: the window's last milliseconds fall under the drop budget and go
+        // with the silence at the end (about 12 ms of this one).
+        CHECK(c.impulseSeconds() > 29.95f && c.impulseSeconds() < 30.001f, "a longer impulse ends at the maximum");
         std::vector<float> ir441(44100);
         for (int i = 0; i < 44100; ++i) ir441[static_cast<size_t>(i)] = rng.bipolar() * std::exp(-3.0f * static_cast<float>(i) / 44100.0f);
         c.setImpulse(ir441.data(), nullptr, 44100, 44100.0);
         CHECK(std::fabs(c.impulseSeconds() - 1.0f) < 0.01f, "an impulse recorded at 44.1 kHz keeps its length");
     }
-    {   // The generated hall decays and is stereo.
+    {   // The generated hall decays, is stereo, and is dark: its treble dies before its middle. The
+        // one that stood here before had a power centroid of 8.7 kHz and a top band that rang as
+        // long as its mids.
         Convolver c; c.prepare(sr, 8.0f);
         c.generateDefault(5, 4.0f);
         CHECK(c.impulseSeconds() > 3.9f && c.impulseSeconds() < 4.2f, "default hall is four seconds");
@@ -253,5 +257,79 @@ inline void convolverChecks()
         double dot = 0, el = 0, er = 0;
         for (int i = 0; i < sr; ++i) { dot += outL[static_cast<size_t>(i)] * outR[static_cast<size_t>(i)]; el += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)]; er += outR[static_cast<size_t>(i)] * outR[static_cast<size_t>(i)]; }
         CHECK(std::fabs(dot / std::sqrt(el * er + 1e-12)) < 0.3, "hall is decorrelated between the ears");
+        // A first difference rises 6 dB an octave, so how much of the energy it keeps is a centroid
+        // in disguise: 2 for white noise, about 0.07 for a sound centred on 2 kHz at 48 kHz.
+        auto diffShare = [&](int from, int to) {
+            double e = 0.0, d = 0.0;
+            for (int i = from + 1; i < to; ++i) {
+                const double x = outL[static_cast<size_t>(i)], p = outL[static_cast<size_t>(i - 1)];
+                e += x * x; d += (x - p) * (x - p);
+            }
+            return d / std::max(e, 1.0e-30);
+        };
+        const double early = diffShare(c.latency() + sr / 5, c.latency() + 7 * sr / 10);
+        const double late = diffShare(c.latency() + 3 * sr / 2, c.latency() + 2 * sr);
+        CHECK(early < 0.5, "the default hall is dark");
+        CHECK(late < 0.7 * early, "and its treble dies before its middle");
+        std::vector<float> dl, dr, el2, er2;
+        Convolver::makeDefaultImpulse(48000.0, 5, 4.0f, dl, dr);
+        Convolver::makeDefaultImpulse(48000.0, 5, 4.0f, el2, er2);
+        CHECK(dl.size() == static_cast<size_t>(4 * 48000) && dl == el2 && dr == er2, "the built-in hall is the same every time");
+    }
+    {   // An impulse longer than the Room keeps is shortened, not cut: its tail reaches -60 dB at the
+        // limit instead of stopping like a gate. A room with a 40-second decay, twenty seconds of it,
+        // kept at six.
+        Convolver c; c.prepare(sr, 6.0f);
+        Rng rng; rng.seed(9);
+        const int len = sr * 20;
+        std::vector<float> L(static_cast<size_t>(len)), R(static_cast<size_t>(len));
+        for (int i = 0; i < len; ++i) {
+            const float g = std::pow(10.0f, -3.0f * static_cast<float>(i) / (40.0f * static_cast<float>(sr)));
+            L[static_cast<size_t>(i)] = g * rng.bipolar();
+            R[static_cast<size_t>(i)] = g * rng.bipolar();
+        }
+        c.setImpulse(L.data(), R.data(), len, sr);
+        const int n = sr * 7;
+        std::vector<float> inL(n, 0.0f), inR(n, 0.0f), outL(n), outR(n);
+        inL[0] = inR[0] = 1.0f;
+        c.process(inL.data(), inR.data(), outL.data(), outR.data(), n);
+        const int lat = c.latency(), w = sr / 20;
+        auto level = [&](int from) {
+            double e = 0.0;
+            for (int i = from; i < from + w; ++i) e += outL[static_cast<size_t>(i)] * outL[static_cast<size_t>(i)] + outR[static_cast<size_t>(i)] * outR[static_cast<size_t>(i)];
+            return e;
+        };
+        double loud = 0.0;
+        for (int from = lat; from < lat + sr / 2; from += sr / 200) loud = std::max(loud, level(from));
+        const double endDb = 10.0 * std::log10(level(lat + 6 * sr - 2 * w) / loud + 1e-30);
+        const double midDb = 10.0 * std::log10(level(lat + 3 * sr) / loud + 1e-30);
+        CHECK(endDb < -50.0, "a long impulse under the limit ends 60 dB down instead of being cut");
+        CHECK(midDb > -45.0 && midDb < -15.0, "and still decays through the middle of what is kept");
+    }
+    {   // Impulse B forgotten: the room is A alone again.
+        Convolver c; c.prepare(sr, 2.0f);
+        Convolver ref; ref.prepare(sr, 2.0f);
+        Rng rng; rng.seed(10);
+        const int len = sr / 2;
+        std::vector<float> A(static_cast<size_t>(len)), B(static_cast<size_t>(len));
+        for (int i = 0; i < len; ++i) {
+            const float g = std::exp(-6.0f * static_cast<float>(i) / static_cast<float>(len));
+            A[static_cast<size_t>(i)] = g * rng.bipolar();
+            B[static_cast<size_t>(i)] = g * rng.bipolar();
+        }
+        c.setImpulse(A.data(), nullptr, len, sr);
+        c.setImpulseB(B.data(), nullptr, len, sr);
+        CHECK(c.hasImpulseB(), "impulse B loads");
+        c.clearImpulseB();
+        CHECK(!c.hasImpulseB(), "and can be forgotten");
+        ref.setImpulse(A.data(), nullptr, len, sr);
+        const int n = sr;
+        std::vector<float> inL(n, 0.0f), inR(n, 0.0f), o1L(n), o1R(n), o2L(n), o2R(n);
+        inL[0] = inR[0] = 1.0f;
+        c.process(inL.data(), inR.data(), o1L.data(), o1R.data(), n);
+        ref.process(inL.data(), inR.data(), o2L.data(), o2R.data(), n);
+        double worst = 0.0;
+        for (int i = 0; i < n; ++i) worst = std::max(worst, static_cast<double>(std::fabs(o1L[static_cast<size_t>(i)] - o2L[static_cast<size_t>(i)])));
+        CHECK(worst < 1.0e-6, "after which the room is A alone");
     }
 }

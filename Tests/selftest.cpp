@@ -2284,7 +2284,7 @@ void testPresetPacks()
         f << "# a comment line\n";
         f << "pack Pack Under Test\n";
         f << "\n";
-        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav|ir/c.wav|lfo1>cutoff:0.4;lfo2>air:0.2|0:0/2:1/5:0~0:0/1:-1/3:0\n";
+        f << "Pack Alpha|brain_density=9;cutoff=440;scale=JI Minor|0.25 0.75 0.1 0.2 0.3 0.4 0.5 0.6 5|snd/a.wav|tab/b.wav|ir/c.wav|lfo1>cutoff:0.4;lfo2>air:0.2|0:0/2:1/5:0~0:0/1:-1/3:0|ir/d.wav\n";
         f << "Pack Beta|sub_level=0.5\n";
     }
     CHECK(loadPresetPack(file.string().c_str()), "pack file loads");
@@ -2308,7 +2308,10 @@ void testPresetPacks()
           "texture path resolved against the pack folder");
     CHECK(tab.find("b.wav") != std::string::npos, "wavetable path resolved");
     CHECK(imp.find("c.wav") != std::string::npos, "impulse path resolved");
-    CHECK(std::string(presetFilePath(base, 3)).empty(), "there is no fourth file slot");
+    CHECK(std::string(presetFilePath(base, 3)).find("d.wav") != std::string::npos, "impulse B path resolved");
+    CHECK(std::string(presetFilePath(base, 4)).empty(), "there is no fifth file slot");
+    CHECK(preset(base).impulseB != nullptr && std::string(preset(base).impulseB) == "ir/d.wav", "the preset carries its impulse B");
+    CHECK(std::string(presetFilePath(base + 1, 3)).empty(), "a preset without an impulse B reports none");
     CHECK(std::string(presetFilePath(base + 1, 0)).empty(), "a preset without files reports none");
     CHECK(std::string(presetFilePath(base + 1, 2)).empty(), "and no impulse either");
     CHECK(std::string(presetFilePath(0, 0)).empty(), "built-in presets carry no pack files");

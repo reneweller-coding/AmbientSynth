@@ -65,8 +65,9 @@ def pack_references():
                 if line.startswith("#") or "|" not in line:
                     continue
                 f = line.rstrip("\n").split("|")
-                if len(f) >= 6 and f[5].strip():
-                    refs[f[5].strip().split("/")[-1]] += 1
+                for field in (5, 8):   # impulse A, and impulse B since packs carry one
+                    if len(f) > field and f[field].strip():
+                        refs[f[field].strip().split("/")[-1]] += 1
     return refs
 
 

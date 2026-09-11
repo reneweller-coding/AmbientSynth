@@ -8,7 +8,8 @@
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
 //                  [--mod "lfo1>cutoff:0.4;..."] [--env 1 "0:0/2:1/8:0"] [--src-env 2 "0:0/1:1"]
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
-//                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
+//                  [--ir impulse.wav] (convolution room impulse, mono or stereo) [--ir-b impulse.wav] (Room Morph's second)
+//                  [--write-default-ir file.wav] (the Room's built-in hall as a WAV at --sr, then exit)
 //                  [--route "name or text" [speed]] (walk a route over the map; --list-routes)
 //                  [--set-file set.ambientset] (replay a recorded set; length = set + 20 s unless --seconds)
 #include "ambient/Engine.h"
@@ -413,6 +414,7 @@ static int runOnce(int argc, char** argv)
     double clockHour = -1.0;
     double mapX = 0.5, mapY = 0.5, mapRadius = 0.08;
     std::vector<std::vector<float>> irChannels; int irRate = 0; std::string irPath;
+    std::vector<std::vector<float>> irBChannels; int irBRate = 0; std::string irBPath;
     std::string routeText; double routeSpeed = 1.0;
     SetTimeline setFile; bool haveSet = false; bool secondsGiven = false;
     Score score; bool haveScore = false;
@@ -517,6 +519,22 @@ static int runOnce(int argc, char** argv)
             std::vector<std::vector<float>> ch; int rate = 0;
             if (!readWavChannels(path.c_str(), ch, rate) || ch.empty()) { std::fprintf(stderr, "cannot read impulse %s\n", path.c_str()); return 2; }
             irChannels = ch; irRate = rate; irPath = path;
+        }
+        else if (a == "--ir-b") {   // the second impulse, the one Room Morph goes to
+            const std::string path = next();
+            std::vector<std::vector<float>> ch; int rate = 0;
+            if (!readWavChannels(path.c_str(), ch, rate) || ch.empty()) { std::fprintf(stderr, "cannot read impulse %s\n", path.c_str()); return 2; }
+            irBChannels = ch; irBRate = rate; irBPath = path;
+        }
+        else if (a == "--write-default-ir") {   // the built-in hall, for measuring it; --sr before this one sets the rate
+            const std::string path = next();
+            std::vector<float> L, R;
+            Convolver::makeDefaultImpulse(sr, 7, 4.0f, L, R);
+            std::vector<float> inter(L.size() * 2);
+            for (size_t k = 0; k < L.size(); ++k) { inter[2 * k] = L[k]; inter[2 * k + 1] = R[k]; }
+            if (!writeWav(path, inter, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", path.c_str()); return 2; }
+            std::printf("default impulse: %s (%.2f s at %d Hz)\n", path.c_str(), L.size() / static_cast<double>(sr), sr);
+            return 0;
         }
         else if (a == "--wavetable") {
             const std::string path = next();
@@ -688,6 +706,21 @@ static int runOnce(int argc, char** argv)
                 std::printf("preset wavetable: %s (%d frames)\n", tab, engine.userWavetableFrames());
             else std::fprintf(stderr, "preset wavetable missing or unusable: %s\n", tab);
         }
+        // ...and its rooms. The render tool read the sample and the wavetable and never the impulse,
+        // so every measurement of the library -- loudness, the map, what a preset sounds like --
+        // heard the built-in hall instead of the preset's own room. An --ir on the command line wins.
+        const char* imp = presetFilePath(presetIndex, 2);
+        const char* impB = presetFilePath(presetIndex, 3);
+        if (imp && *imp && irChannels.empty()) {
+            std::vector<std::vector<float>> ch; int rate2 = 0;
+            if (readWavChannels(imp, ch, rate2) && !ch.empty()) { irChannels = ch; irRate = rate2; irPath = imp; }
+            else std::fprintf(stderr, "preset impulse missing: %s\n", imp);
+        }
+        if (impB && *impB && irBChannels.empty()) {
+            std::vector<std::vector<float>> ch; int rate2 = 0;
+            if (readWavChannels(impB, ch, rate2) && !ch.empty()) { irBChannels = ch; irBRate = rate2; irBPath = impB; }
+            else std::fprintf(stderr, "preset impulse B missing: %s\n", impB);
+        }
     }
 
     if (tapPath.empty() && !tapDir.empty() && presetIndex >= 0) {
@@ -707,6 +740,10 @@ static int runOnce(int argc, char** argv)
     if (!irChannels.empty()) {   // after prepare: the convolver's buffers exist now
         engine.setImpulse(irChannels[0].data(), irChannels.size() > 1 ? irChannels[1].data() : nullptr, static_cast<int>(irChannels[0].size()), irRate);
         std::printf("impulse: %s (%zu ch, %.2f s @ %d Hz -> %.2f s used)\n", irPath.c_str(), irChannels.size(), irChannels[0].size() / static_cast<double>(irRate), irRate, engine.impulseSeconds());
+    }
+    if (!irBChannels.empty()) {
+        engine.setImpulseB(irBChannels[0].data(), irBChannels.size() > 1 ? irBChannels[1].data() : nullptr, static_cast<int>(irBChannels[0].size()), irBRate);
+        std::printf("impulse B: %s (%zu ch, %.2f s @ %d Hz)\n", irBPath.c_str(), irBChannels.size(), irBChannels[0].size() / static_cast<double>(irBRate), irBRate);
     }
     for (int n : notes) engine.noteOn(n, 0.8f);
     if (!routeText.empty()) {

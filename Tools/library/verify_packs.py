@@ -182,7 +182,7 @@ def main():
                         last = t
                         if v < -1.0001 or v > 1.0001:
                             problems.append(f"{where}: envelope value {v} outside -1..1")
-            for which, field in (("texture", 3), ("wavetable", 4), ("impulse", 5)):
+            for which, field in (("texture", 3), ("wavetable", 4), ("impulse", 5), ("impulse B", 8)):
                 if len(f) > field and f[field].strip():
                     # The texture field may name up to four clips separated by ';', one per source
                     # slot (an empty one means that slot has none); the others name one file.

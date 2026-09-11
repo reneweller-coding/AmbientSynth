@@ -24,7 +24,9 @@
 // no gather at all -- a grain reads eight different places in a clip, and on NEON those are eight
 // loads whatever else happens. What vectorises there is the window and the two accumulations,
 // which is most of the arithmetic but not the memory.
-#if defined(__aarch64__) || defined(_M_ARM64) || defined(__ARM_NEON) || defined(__ARM_NEON__)
+// AMBIENT_NEON_SHIM is an x86 test build that runs the NEON paths through Tests/neonshim/arm_neon.h,
+// which spells the few intrinsics out lane by lane (see Tests/CMakeLists.txt).
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(AMBIENT_NEON_SHIM)
   #define AMBIENT_HAS_NEON 1
   #include <arm_neon.h>
 #else

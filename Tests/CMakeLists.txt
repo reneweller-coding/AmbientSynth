@@ -25,6 +25,36 @@ if(WIN32)
 endif()
 add_test(NAME racetest COMMAND ambient_racetest 4)
 
+# The convolution room's checks on their own, once per vector path: as the core is built for this
+# machine (AVX2 on the desktop, NEON on the Quest), and on x86 also through the NEON path -- with
+# neonshim/arm_neon.h, which spells the few intrinsics out lane by lane -- and scalar. The two x86
+# variants compile the convolver themselves: linking AmbientCore would bring its AVX2 flags along.
+add_executable(ambient_convtest convtest.cpp)
+target_link_libraries(ambient_convtest PRIVATE AmbientCore)
+if(ANDROID)
+    target_compile_definitions(ambient_convtest PRIVATE AMBIENT_EXPECT_PATH="neon")
+endif()
+add_test(NAME convtest COMMAND ambient_convtest)
+set(AMBIENT_CONVTEST_TARGETS ambient_convtest)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|AMD64|x64)")
+    foreach(variant neon scalar)
+        add_executable(ambient_convtest_${variant} convtest.cpp ${CMAKE_SOURCE_DIR}/Core/src/Convolution.cpp)
+        target_include_directories(ambient_convtest_${variant} PRIVATE ${CMAKE_SOURCE_DIR}/Core/include)
+        target_compile_features(ambient_convtest_${variant} PRIVATE cxx_std_20)
+        add_test(NAME convtest_${variant} COMMAND ambient_convtest_${variant})
+        list(APPEND AMBIENT_CONVTEST_TARGETS ambient_convtest_${variant})
+    endforeach()
+    target_include_directories(ambient_convtest_neon BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/neonshim)
+    target_compile_definitions(ambient_convtest_neon PRIVATE AMBIENT_NEON_SHIM=1 AMBIENT_EXPECT_PATH="neon-shim")
+    target_compile_definitions(ambient_convtest_scalar PRIVATE AMBIENT_EXPECT_PATH="scalar")
+endif()
+foreach(t ${AMBIENT_CONVTEST_TARGETS})
+    if(MSVC)
+        target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
+        target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+endforeach()
+
 # The convolution room's cost, by hand: CPU per second of audio and the worst callback, for impulse
 # lengths up to a minute. Nothing in it passes or fails, so it is not registered with ctest.
 add_executable(ambient_convbench convbench.cpp)

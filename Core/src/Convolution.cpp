@@ -23,8 +23,22 @@ inline int roundUp8(int v) { return (v + 7) & ~7; }
 
 // ---------------------------------------------------------------- the products
 // One loop in four shapes: acc += X * H over the bins [k0, k1). k1 - k0 is always a multiple of
-// eight and every array is padded to match, so the vector path covers all of it and the scalar
-// lines are only what a build without AVX runs. This is most of the Room's arithmetic.
+// eight and every array is padded to match, so the vector paths -- eight lanes with AVX2 on the
+// desktop, four with NEON on the Quest -- cover all of it, and the scalar lines are only what a
+// build with neither runs. This is most of the Room's arithmetic.
+
+#if AMBIENT_HAS_NEON
+// a + b c and a - b c. Fused where the compiler says the target has FMA (every AArch64 one, so
+// every Quest): one instruction each, rounded like the fmadd of the AVX path. The headers only
+// declare vfmaq_f32 under __ARM_FEATURE_FMA; anything else gets a plain multiply-add.
+#if defined(__ARM_FEATURE_FMA) || defined(AMBIENT_NEON_SHIM)
+inline float32x4_t neonAddMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmaq_f32(a, b, c); }
+inline float32x4_t neonSubMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmsq_f32(a, b, c); }
+#else
+inline float32x4_t neonAddMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vmlaq_f32(a, b, c); }
+inline float32x4_t neonSubMul(float32x4_t a, float32x4_t b, float32x4_t c) { return vmlsq_f32(a, b, c); }
+#endif
+#endif
 
 // One channel against one impulse, weighted.
 void sumOne(float* ar, float* ai, const float* xr, const float* xi, const float* hr, const float* hi, float w, int k0, int k1)
@@ -39,6 +53,16 @@ void sumOne(float* ar, float* ai, const float* xr, const float* xi, const float*
         const __m256 XR = _mm256_loadu_ps(xr + k), XI = _mm256_loadu_ps(xi + k);
         _mm256_storeu_ps(ar + k, _mm256_fnmadd_ps(XI, HI, _mm256_fmadd_ps(XR, HR, _mm256_loadu_ps(ar + k))));
         _mm256_storeu_ps(ai + k, _mm256_fmadd_ps(XI, HR, _mm256_fmadd_ps(XR, HI, _mm256_loadu_ps(ai + k))));
+    }
+#elif AMBIENT_HAS_NEON
+    const float32x4_t W = vdupq_n_f32(w);
+    const bool unit = w == 1.0f;
+    for (; k + 4 <= k1; k += 4) {
+        float32x4_t HR = vld1q_f32(hr + k), HI = vld1q_f32(hi + k);
+        if (!unit) { HR = vmulq_f32(W, HR); HI = vmulq_f32(W, HI); }
+        const float32x4_t XR = vld1q_f32(xr + k), XI = vld1q_f32(xi + k);
+        vst1q_f32(ar + k, neonSubMul(neonAddMul(vld1q_f32(ar + k), XR, HR), XI, HI));   // + xr hr - xi hi
+        vst1q_f32(ai + k, neonAddMul(neonAddMul(vld1q_f32(ai + k), XR, HI), XI, HR));   // + xr hi + xi hr
     }
 #endif
     for (; k < k1; ++k) {
@@ -67,6 +91,19 @@ void sumTwo(float* a0r, float* a0i, float* a1r, float* a1i,
         _mm256_storeu_ps(a1r + k, _mm256_fnmadd_ps(XI, HI, _mm256_fmadd_ps(XR, HR, _mm256_loadu_ps(a1r + k))));
         _mm256_storeu_ps(a1i + k, _mm256_fmadd_ps(XI, HR, _mm256_fmadd_ps(XR, HI, _mm256_loadu_ps(a1i + k))));
     }
+#elif AMBIENT_HAS_NEON
+    const float32x4_t W = vdupq_n_f32(w);
+    const bool unit = w == 1.0f;
+    for (; k + 4 <= k1; k += 4) {
+        float32x4_t HR = vld1q_f32(hr + k), HI = vld1q_f32(hi + k);
+        if (!unit) { HR = vmulq_f32(W, HR); HI = vmulq_f32(W, HI); }
+        float32x4_t XR = vld1q_f32(x0r + k), XI = vld1q_f32(x0i + k);
+        vst1q_f32(a0r + k, neonSubMul(neonAddMul(vld1q_f32(a0r + k), XR, HR), XI, HI));
+        vst1q_f32(a0i + k, neonAddMul(neonAddMul(vld1q_f32(a0i + k), XR, HI), XI, HR));
+        XR = vld1q_f32(x1r + k); XI = vld1q_f32(x1i + k);
+        vst1q_f32(a1r + k, neonSubMul(neonAddMul(vld1q_f32(a1r + k), XR, HR), XI, HI));
+        vst1q_f32(a1i + k, neonAddMul(neonAddMul(vld1q_f32(a1i + k), XR, HI), XI, HR));
+    }
 #endif
     for (; k < k1; ++k) {
         const float h_r = w * hr[k], h_i = w * hi[k];
@@ -90,6 +127,15 @@ void blendOne(float* ar, float* ai, const float* xr, const float* xi,
         const __m256 XR = _mm256_loadu_ps(xr + k), XI = _mm256_loadu_ps(xi + k);
         _mm256_storeu_ps(ar + k, _mm256_fnmadd_ps(XI, HI, _mm256_fmadd_ps(XR, HR, _mm256_loadu_ps(ar + k))));
         _mm256_storeu_ps(ai + k, _mm256_fmadd_ps(XI, HR, _mm256_fmadd_ps(XR, HI, _mm256_loadu_ps(ai + k))));
+    }
+#elif AMBIENT_HAS_NEON
+    const float32x4_t WA = vdupq_n_f32(wa), WB = vdupq_n_f32(wb);
+    for (; k + 4 <= k1; k += 4) {
+        const float32x4_t HR = neonAddMul(vmulq_f32(WB, vld1q_f32(hbr + k)), WA, vld1q_f32(har + k));   // wa ha + wb hb
+        const float32x4_t HI = neonAddMul(vmulq_f32(WB, vld1q_f32(hbi + k)), WA, vld1q_f32(hai + k));
+        const float32x4_t XR = vld1q_f32(xr + k), XI = vld1q_f32(xi + k);
+        vst1q_f32(ar + k, neonSubMul(neonAddMul(vld1q_f32(ar + k), XR, HR), XI, HI));
+        vst1q_f32(ai + k, neonAddMul(neonAddMul(vld1q_f32(ai + k), XR, HI), XI, HR));
     }
 #endif
     for (; k < k1; ++k) {
@@ -116,6 +162,18 @@ void blendTwo(float* a0r, float* a0i, float* a1r, float* a1i,
         XR = _mm256_loadu_ps(x1r + k); XI = _mm256_loadu_ps(x1i + k);
         _mm256_storeu_ps(a1r + k, _mm256_fnmadd_ps(XI, HI, _mm256_fmadd_ps(XR, HR, _mm256_loadu_ps(a1r + k))));
         _mm256_storeu_ps(a1i + k, _mm256_fmadd_ps(XI, HR, _mm256_fmadd_ps(XR, HI, _mm256_loadu_ps(a1i + k))));
+    }
+#elif AMBIENT_HAS_NEON
+    const float32x4_t WA = vdupq_n_f32(wa), WB = vdupq_n_f32(wb);
+    for (; k + 4 <= k1; k += 4) {
+        const float32x4_t HR = neonAddMul(vmulq_f32(WB, vld1q_f32(hbr + k)), WA, vld1q_f32(har + k));
+        const float32x4_t HI = neonAddMul(vmulq_f32(WB, vld1q_f32(hbi + k)), WA, vld1q_f32(hai + k));
+        float32x4_t XR = vld1q_f32(x0r + k), XI = vld1q_f32(x0i + k);
+        vst1q_f32(a0r + k, neonSubMul(neonAddMul(vld1q_f32(a0r + k), XR, HR), XI, HI));
+        vst1q_f32(a0i + k, neonAddMul(neonAddMul(vld1q_f32(a0i + k), XR, HI), XI, HR));
+        XR = vld1q_f32(x1r + k); XI = vld1q_f32(x1i + k);
+        vst1q_f32(a1r + k, neonSubMul(neonAddMul(vld1q_f32(a1r + k), XR, HR), XI, HI));
+        vst1q_f32(a1i + k, neonAddMul(neonAddMul(vld1q_f32(a1i + k), XR, HI), XI, HR));
     }
 #endif
     for (; k < k1; ++k) {
@@ -273,6 +331,18 @@ bool Convolver::runFft(const StepFft& f, FftRun& r, float* re, float* im, bool i
                     _mm256_storeu_ps(ib + k, _mm256_sub_ps(IA, ti));
                     _mm256_storeu_ps(ra + k, _mm256_add_ps(RA, tr));
                     _mm256_storeu_ps(ia + k, _mm256_add_ps(IA, ti));
+                }
+#elif AMBIENT_HAS_NEON
+                for (; k + 4 <= h; k += 4) {
+                    const float32x4_t C = vld1q_f32(c + k), S = vld1q_f32(s + k);
+                    const float32x4_t RB = vld1q_f32(rb + k), IB = vld1q_f32(ib + k);
+                    const float32x4_t RA = vld1q_f32(ra + k), IA = vld1q_f32(ia + k);
+                    const float32x4_t tr = neonSubMul(vmulq_f32(RB, C), IB, S);   // rb c - ib s
+                    const float32x4_t ti = neonAddMul(vmulq_f32(RB, S), IB, C);   // rb s + ib c
+                    vst1q_f32(rb + k, vsubq_f32(RA, tr));
+                    vst1q_f32(ib + k, vsubq_f32(IA, ti));
+                    vst1q_f32(ra + k, vaddq_f32(RA, tr));
+                    vst1q_f32(ia + k, vaddq_f32(IA, ti));
                 }
 #endif
                 for (; k < h; ++k) {

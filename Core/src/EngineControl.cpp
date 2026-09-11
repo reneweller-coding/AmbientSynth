@@ -942,6 +942,11 @@ void Engine::readParams()
     delay2Mix_   = g(ParamId::Delay2Mix);
     delay2ToFar_ = g(ParamId::Delay2ToFar);
     cloud_.set(syncedHz(ParamId::CloudSync, g(ParamId::CloudDensity)), g(ParamId::CloudSize), g(ParamId::CloudPitch), g(ParamId::CloudSpray), g(ParamId::CloudLevel));
+    cloud_.setLoop(g(ParamId::CloudFeedback), g(ParamId::CloudTone));
+    cloud_.setScatter(g(ParamId::CloudTranspose), g(ParamId::CloudScatter));
+    cloud_.setSwarm(g(ParamId::CloudSwarm));
+    cloud_.setResonators(g(ParamId::CloudResonance), static_cast<int>(std::lround(g(ParamId::CloudResMode))),
+                         static_cast<int>(std::lround(g(ParamId::CloudResNotes))), g(ParamId::CloudResDecay));
     cloudSend_ = g(ParamId::CloudSend);
     nearReverb_.setSpace(0.3f, 20000.0f, g(ParamId::NearLowcut));
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
@@ -985,6 +990,10 @@ void Engine::readParams()
     shifter_.set(shiftHz, shiftHz == 0.0f ? 0.0f : 1.0f);
     const float rootHz = static_cast<float>(scaleFrequency(*scale_, brain_.root(), 60 + clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11), g(ParamId::RefPitch), snapKeys_));
     resonator_.set(rootHz * g(ParamId::CosmosResPitch), g(ParamId::CosmosResFeedback), g(ParamId::CosmosRes));
+    {   // The cloud's scatter and resonators hear the same root, placed in the scale against the key's tonic.
+        const int keyRoot = 60 + clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11);
+        cloud_.setHarmony(*scale_, scaleFrequency(*scale_, keyRoot, keyRoot, g(ParamId::RefPitch), snapKeys_), rootHz);
+    }
     vowel_.set(g(ParamId::CosmosVowel), g(ParamId::CosmosVowelRate));
     nebula_.set(g(ParamId::CosmosSmear));
     cosmosShimmer_ = g(ParamId::CosmosShimmer);

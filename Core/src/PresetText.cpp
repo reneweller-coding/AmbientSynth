@@ -133,7 +133,11 @@ std::string presetDescription(int index)
     if (numberOf(st, "cosmos_send") > 0.05f) extras.push_back("the Cosmos open");
     if (numberOf(st, "fb_bus") > 0.02f || numberOf(st, "fb_fm") > 0.02f) extras.push_back("a feedback loop into the sources");
     if (numberOf(st, "strike_level") > 0.02f) extras.push_back("a struck attack");
-    if (numberOf(st, "cloud_send") > 0.05f) extras.push_back("a grain cloud");
+    if (numberOf(st, "cloud_send") > 0.05f) {
+        if (numberOf(st, "cloud_resonance") > 0.3f) extras.push_back("a grain cloud ringing on the scale's notes");
+        else if (numberOf(st, "cloud_feedback") > 0.5f) extras.push_back("a grain cloud feeding on itself");
+        else extras.push_back("a grain cloud");
+    }
     if (!valueOf(st, "z_mode").empty() && valueOf(st, "z_mode") != "Off") extras.push_back("the z-plane filter in the path");
     {
         const float decay = numberOf(st, "far_decay", 0.0f);

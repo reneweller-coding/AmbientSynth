@@ -1283,6 +1283,222 @@ void testCosmos()
     }
 }
 
+// The cloud as a granular feedback instrument (12.09.2026): the ring kernel's vector path against its
+// scalar one, the loop, the scatter's intervals, the resonators and the flocks.
+void testCloudAether()
+{
+    const int sr = 48000;
+    const auto runCloud = [](GrainCloud& c, const std::vector<float>& in, std::vector<float>& oL, std::vector<float>& oR) {
+        oL.assign(in.size(), 0.0f);
+        oR.assign(in.size(), 0.0f);
+        for (size_t p = 0; p < in.size(); p += 256) {
+            const int m = static_cast<int>(std::min<size_t>(256, in.size() - p));
+            c.process(in.data() + p, in.data() + p, oL.data() + p, oR.data() + p, m);
+        }
+    };
+    const auto rmsOf = [](const std::vector<float>& x, size_t from, size_t to) {
+        double s = 0.0;
+        for (size_t i = from; i < to && i < x.size(); ++i) s += static_cast<double>(x[i]) * x[i];
+        return std::sqrt(s / static_cast<double>(std::max<size_t>(1, to - from)));
+    };
+    {   // the kernel: vector and scalar paths agree, mono and stereo, across the seam of a ring that is not a power of two
+        for (int ch = 1; ch <= 2; ++ch) {
+            const int cap = 10007, len = 3000;
+            std::vector<float> ring(static_cast<size_t>(cap * ch));
+            Rng r; r.seed(11);
+            for (auto& v : ring) v = r.bipolar();
+            RingGrain a;
+            a.pos = cap - 700.25; a.rate = 1.37; a.len = len; a.gl = 0.8f; a.gr = 0.6f;
+            phasorFrom(1.0 / len, a.rc, a.rs);
+            RingGrain b = a;
+            std::vector<float> aL(len, 0.0f), aR(len, 0.0f), bL(len, 0.0f), bR(len, 0.0f);
+            for (int p = 0; p < len; p += 64) {
+                const int m = std::min(64, len - p);
+                renderRingGrain(ring.data(), cap, ch, a, aL.data() + p, aR.data() + p, m);
+                renderRingGrainScalar(ring.data(), cap, ch, b, bL.data() + p, bR.data() + p, m);
+            }
+            double err = 0.0, sig = 0.0;
+            for (size_t i = 0; i < aL.size(); ++i) {
+                err += static_cast<double>(aL[i] - bL[i]) * (aL[i] - bL[i]) + static_cast<double>(aR[i] - bR[i]) * (aR[i] - bR[i]);
+                sig += static_cast<double>(aL[i]) * aL[i] + static_cast<double>(aR[i]) * aR[i];
+            }
+            CHECK(sig > 0.0 && err < 1.0e-10 * sig, "ring grain: the vector path and the scalar one agree, across the ring's seam");
+            CHECK(std::fabs(a.pos - b.pos) < 1.0e-9 && a.pos < cap, "ring grain: both end at the same place, folded back into the ring");
+        }
+    }
+    {   // the loop: without feedback the cloud falls silent after its input, at 1 it holds, and it never runs away
+        std::vector<float> in(static_cast<size_t>(30 * sr), 0.0f);
+        Rng r; r.seed(5);
+        for (int i = 0; i < sr; ++i) in[static_cast<size_t>(i)] = 0.3f * r.bipolar();
+        const auto tail = [&](float fb, float& peak, bool& finite) {
+            GrainCloud c;
+            c.prepare(sr, 9);
+            c.set(20.0f, 200.0f, 0.0f, 0.5f, 1.0f);
+            c.setLoop(fb, 6000.0f);
+            std::vector<float> oL, oR;
+            runCloud(c, in, oL, oR);
+            peak = 0.0f; finite = true;
+            for (size_t i = 0; i < oL.size(); ++i) {
+                if (!std::isfinite(oL[i]) || !std::isfinite(oR[i])) finite = false;
+                peak = std::max(peak, std::max(std::fabs(oL[i]), std::fabs(oR[i])));
+            }
+            return rmsOf(oL, static_cast<size_t>(25 * sr), static_cast<size_t>(30 * sr));
+        };
+        float p0 = 0.0f, p1 = 0.0f; bool f0 = false, f1 = false;
+        const double t0 = tail(0.0f, p0, f0), t1 = tail(1.0f, p1, f1);
+        std::printf("  [probe] cloud loop: rms 25-30 s after a one-second burst %.1e without feedback, %.1e at 1 (peak %.2f)\n", t0, t1, p1);
+        CHECK(f0 && f1, "the cloud's loop stays finite");
+        CHECK(t0 < 1.0e-6, "without feedback the cloud falls silent after its input");
+        CHECK(t1 > 1.0e-3, "at feedback 1 it holds long after its input");
+        CHECK(p1 < 1.5f, "and never runs away");
+    }
+    {   // the scatter's intervals: the most consonant first, measured from the conductor's root
+        FixedScale ji;
+        CHECK(makeBuiltinScale(1, ji), "JI major scale");
+        GrainCloud c;
+        c.prepare(sr, 21);
+        c.setHarmony(ji, 261.6256, 261.6256);
+        const auto isAbout = [](float a, double b) { return std::fabs(std::log2(static_cast<double>(a) / b)) * 1200.0 < 0.5; };
+        CHECK(c.intervalCount() == 14, "a seven-note scale gives fourteen intervals within an octave either way");
+        CHECK(isAbout(c.interval(0), 0.5) && isAbout(c.interval(1), 2.0), "the octaves come first");
+        CHECK(isAbout(c.interval(2), 0.75) && isAbout(c.interval(3), 1.5), "then the fourth down and the fifth up");
+        c.setHarmony(ji, 261.6256, 261.6256 * 1.5);   // the root on G: from there the scale has a minor tone where C had a major one
+        bool tenNinths = false, nineEighths = false;
+        for (int k = 0; k < c.intervalCount(); ++k) {
+            tenNinths = tenNinths || isAbout(c.interval(k), 10.0 / 9.0);
+            nineEighths = nineEighths || isAbout(c.interval(k), 9.0 / 8.0);
+        }
+        CHECK(tenNinths && !nineEighths, "the intervals follow the conductor's root through the scale");
+        // And what the grains play: at a tenth nearly everything is on the unison, the octaves and the fifths.
+        const auto share = [&](float scatter) {
+            GrainCloud g;
+            g.prepare(sr, 23);
+            g.set(30.0f, 400.0f, 0.0f, 0.5f, 1.0f);
+            g.setHarmony(ji, 261.6256, 261.6256);
+            g.setScatter(0.0f, scatter);
+            std::vector<float> in(static_cast<size_t>(12 * sr));
+            for (size_t i = 0; i < in.size(); ++i)
+                in[i] = 0.5f * static_cast<float>(std::sin(2.0 * 3.141592653589793 * 523.2511 * static_cast<double>(i) / sr));
+            std::vector<float> oL, oR;
+            runCloud(g, in, oL, oR);
+            constexpr int N = 1 << 17;
+            std::vector<float> re(N), im(N, 0.0f);
+            for (int i = 0; i < N; ++i)
+                re[static_cast<size_t>(i)] = oL[static_cast<size_t>(6 * sr + i)]
+                    * static_cast<float>(0.5 - 0.5 * std::cos(2.0 * 3.141592653589793 * i / (N - 1)));
+            Fft fft(N);
+            fft.transform(re.data(), im.data(), false);
+            double inside = 0.0, all = 0.0;
+            const double binHz = static_cast<double>(sr) / N;
+            for (int k = 1; k < N / 2; ++k) {
+                const double hz = k * binHz;
+                if (hz < 120.0 || hz > 5000.0) continue;
+                const double pw = static_cast<double>(re[static_cast<size_t>(k)]) * re[static_cast<size_t>(k)]
+                                + static_cast<double>(im[static_cast<size_t>(k)]) * im[static_cast<size_t>(k)];
+                all += pw;
+                for (double ratio : { 1.0, 2.0, 0.5, 1.5, 0.75 })
+                    if (std::fabs(1200.0 * std::log2(hz / (523.2511 * ratio))) < 70.0) { inside += pw; break; }
+            }
+            return inside / std::max(all, 1.0e-30);
+        };
+        const double tight = share(0.1f), loose = share(1.0f);
+        std::printf("  [probe] cloud scatter: %.0f %% of the energy on the unison, octaves and fifths at 0.1, %.0f %% at 1\n", 100.0 * tight, 100.0 * loose);
+        CHECK(tight > 0.9, "a little scatter keeps the grains on the most consonant intervals");
+        CHECK(loose < 0.6, "full scatter leaves the scale");
+    }
+    {   // the resonators: on the chord of the root, and ringing on after the grains have gone
+        FixedScale ji;
+        makeBuiltinScale(1, ji);
+        {
+            GrainCloud c;
+            c.prepare(sr, 1);
+            c.setHarmony(ji, 261.6256, 261.6256);
+            const double want[6] = { 130.8128, 163.5160, 196.2192, 261.6256, 327.0320, 392.4384 };
+            bool ok = c.resonatorCount() == 6;
+            for (int k = 0; ok && k < 6; ++k) ok = std::fabs(1200.0 * std::log2(c.resonatorHz(k) / want[k])) < 0.5;
+            CHECK(ok, "the chord resonators: root, pure third and fifth, in the two octaves above C3");
+        }
+        const auto ring = [&](int mode, double& onOff, double& dbPerSecond) {
+            GrainCloud c;
+            c.prepare(sr, 4);
+            c.set(30.0f, 150.0f, 0.0f, 0.3f, 1.0f);
+            c.setHarmony(ji, 261.6256, 261.6256);
+            c.setResonators(1.0f, mode, 1, 2.0f);
+            std::vector<float> in(static_cast<size_t>(15 * sr), 0.0f);
+            Rng r; r.seed(77);
+            for (int i = 0; i < 10 * sr; ++i) in[static_cast<size_t>(i)] = 0.3f * r.bipolar();
+            std::vector<float> oL, oR;
+            runCloud(c, in, oL, oR);
+            const float* x = oL.data() + 6 * sr;
+            const int N = 4 * sr;
+            double on = 0.0, off = 0.0;
+            for (double hz : { 163.5160, 196.2192, 327.0320 }) on += goertzel(x, N, hz, sr);
+            for (double hz : { 146.8324, 174.6141, 220.0000, 293.6648 }) off += goertzel(x, N, hz, sr);
+            onOff = (on / 3.0) / std::max(off / 4.0, 1.0e-30);
+            dbPerSecond = 20.0 * std::log10(rmsOf(oL, static_cast<size_t>(11 * sr), static_cast<size_t>(11 * sr + sr / 4))
+                                           / std::max(rmsOf(oL, static_cast<size_t>(12 * sr), static_cast<size_t>(12 * sr + sr / 4)), 1.0e-30));
+        };
+        double bandRatio = 0.0, bandDecay = 0.0, combRatio = 0.0, combDecay = 0.0;
+        ring(0, bandRatio, bandDecay);
+        ring(1, combRatio, combDecay);
+        std::printf("  [probe] cloud resonators: chord notes %.0f dB over their neighbours (band), %.0f dB (comb); ring %.0f and %.0f dB per second\n",
+                    10.0 * std::log10(bandRatio), 10.0 * std::log10(combRatio), bandDecay, combDecay);
+        CHECK(bandRatio > 30.0, "band resonators ring on the chord's notes, not between them");
+        CHECK(combRatio > 10.0, "and so do the combs");
+        CHECK(bandDecay > 20.0 && bandDecay < 45.0, "the resonators ring on at their decay after the grains have gone (2 s to -60 dB)");
+    }
+    {   // flocks: the same mean rate, the counts per half second far more bunched than a Poisson stream's
+        const auto dispersion = [&](float swarm, double& mean) {
+            GrainCloud c;
+            c.prepare(sr, 8);
+            c.set(40.0f, 30.0f, 0.0f, 0.2f, 1.0f);
+            c.setSwarm(swarm);
+            const int win = sr / 2;
+            std::vector<float> in(static_cast<size_t>(win), 0.0f), oL(static_cast<size_t>(win)), oR(static_cast<size_t>(win));
+            std::vector<double> counts;
+            long long last = 0;
+            for (int w = 0; w < 240; ++w) {
+                std::fill(oL.begin(), oL.end(), 0.0f);
+                std::fill(oR.begin(), oR.end(), 0.0f);
+                for (int p = 0; p < win; p += 256) {
+                    const int m = std::min(256, win - p);
+                    c.process(in.data() + p, in.data() + p, oL.data() + p, oR.data() + p, m);
+                }
+                counts.push_back(static_cast<double>(c.grainsStarted() - last));
+                last = c.grainsStarted();
+            }
+            double mu = 0.0, var = 0.0;
+            for (double v : counts) mu += v;
+            mu /= static_cast<double>(counts.size());
+            for (double v : counts) var += (v - mu) * (v - mu);
+            var /= static_cast<double>(counts.size() - 1);
+            mean = mu;
+            return var / std::max(mu, 1.0e-9);
+        };
+        double m0 = 0.0, m1 = 0.0;
+        const double d0 = dispersion(0.0f, m0), d1 = dispersion(0.9f, m1);
+        std::printf("  [probe] cloud swarm: %.1f and %.1f grains per half second, dispersion %.2f without swarm and %.2f at 0.9\n", m0, m1, d0, d1);
+        CHECK(d0 > 0.7 && d0 < 1.3, "without swarm the onsets are a Poisson stream");
+        CHECK(d1 > 3.0, "with swarm they come in flocks");
+        CHECK(m0 > 0.0 && std::fabs(m1 / m0 - 1.0) < 0.2, "at the same mean density");
+    }
+    {   // in the engine, every new control at full at once: finite, and inside the clipper
+        Engine e;
+        e.prepare(48000.0, 256);
+        e.setParam(ParamId::CloudSend, 1.0f);
+        e.setParam(ParamId::CloudDensity, 60.0f);
+        e.setParam(ParamId::CloudSize, 800.0f);
+        e.setParam(ParamId::CloudFeedback, 1.0f);
+        e.setParam(ParamId::CloudScatter, 0.7f);
+        e.setParam(ParamId::CloudSwarm, 0.8f);
+        e.setParam(ParamId::CloudResonance, 1.0f);
+        e.setParam(ParamId::CloudTranspose, 12.0f);
+        e.noteOn(48, 0.8f); e.noteOn(55, 0.8f); e.noteOn(64, 0.8f);
+        const Stats st = render(e, 20.0);
+        CHECK(st.nonFinite == 0 && st.peak <= 1.0f, "a cloud with every new control at full stays finite and inside the clipper");
+    }
+}
+
 void testCloudAndLayers()
 {
     const int sr = 48000;
@@ -6061,6 +6277,7 @@ int main()
     testOscAndGestures();
     testMorph();
     testCloudAndLayers();
+    testCloudAether();
     testCosmos();
     testParams();
     testTuning();

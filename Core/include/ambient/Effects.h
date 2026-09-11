@@ -234,31 +234,7 @@ private:
     double sr_ = 48000.0;
 };
 
-// Granular cloud: grains of the recent past, randomly placed in time, optionally
-// transposed by octaves/fifths, Hann-windowed, scattered across the stereo field.
-// Meant for the far plane: the cloud is fed into the far reverb and smears there.
-class GrainCloud {
-public:
-    void prepare(double sampleRate, uint64_t seed);
-    void set(float densityPerSec, float sizeMs, float pitch, float spraySec, float level);
-    // Feeds the history with both channels and ADDS the cloud to outL/outR. A grain reads the left
-    // history into its left gain and the right into its right, so a wide field keeps its sides in
-    // the cloud; identical channels give exactly the cloud the mono sum (inL+inR)/2 used to.
-    void process(const float* inL, const float* inR, float* outL, float* outR, int n);
-private:
-    static constexpr int kMaxGrains = 32;
-    // The Hann window runs as a rotating phasor (wc/ws advanced by rc/rs): a std::cos per sample
-    // per grain, with up to 32 sounding, was the most expensive line in the cloud.
-    struct Grain { bool active = false; double pos = 0.0; double rate = 1.0; float len = 1.0f, phase = 0.0f,
-                   gainL = 0.0f, gainR = 0.0f, wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; };
-    std::vector<float> bufL_, bufR_;
-    Grain  grains_[kMaxGrains];
-    Rng    rng_;
-    int    mask_ = 0;
-    long long w_ = 0;
-    double sr_ = 48000.0, nextGrain_ = 0.0;
-    float  density_ = 12.0f, size_ = 250.0f, pitch_ = 0.3f, spray_ = 0.8f, level_ = 0.7f;
-};
+// The granular cloud of the far plane lives in Cloud.h.
 
 // Read `delay` samples (>= 1, fractional) behind write index `w` from a power-of-two ring.
 inline float ringRead(const float* buf, int mask, int w, float delay)

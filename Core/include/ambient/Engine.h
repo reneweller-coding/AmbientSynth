@@ -10,6 +10,7 @@
 #include "Tuning.h"
 #include "Voice.h"
 #include "Effects.h"
+#include "Cloud.h"
 #include "Cosmos.h"
 #include "Convolution.h"
 #include "Body.h"

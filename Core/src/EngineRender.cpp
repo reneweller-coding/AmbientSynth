@@ -368,7 +368,9 @@ void Engine::renderChunk(float* L, float* R, int n)
     }
     // Granular cloud on the far plane: grains of the foreground, scattered and transposed,
     // dropped into the far reverb.
-    if (cloudSend_ > 0.0f || smCloudSend_.value > 1e-4f) {
+    // Kept running while it still sounds with the send closed: its loop and its resonators ring on,
+    // and a cloud stopped mid-grain would start again from there the next time it was opened.
+    if (cloudSend_ > 0.0f || smCloudSend_.value > 1e-4f || !cloud_.quiet()) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
         for (int i = 0; i < n; ++i) { const float s = smCloudSend_.next(cloudSend_); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
         cloud_.process(cl, cr, fl, fr, n);

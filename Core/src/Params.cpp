@@ -43,6 +43,8 @@ const char* const kRoomSourceNames[2] = { "Far", "Near" };
 const char* const kAirModeNames[2] = { "Band", "Ghost" };
 const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
 const char* const kFarModeNames[4] = { "Classic", "Scattering", "Colourless", "Rotating" };
+const char* const kCloudResModeNames[2] = { "Band", "Comb" };
+const char* const kCloudResNoteNames[4] = { "Scale", "Chord", "Fifths", "Octaves" };
 const char* const kKeysFilterNames[2] = { "Classic", "One Euro" };
 const char* const kTransposeNames[7] = { "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down" };
 const char* const kBinauralNames[2] = { "Off", "Headphones" };
@@ -659,6 +661,15 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     I(ParamId::Src4Unison,    "src4_unison",     "Unison",  "Source 4", 1.f, 4.f, 1.f),
     F(ParamId::Src4UniDetune, "src4_uni_detune", "Uni Det", "Source 4", 0.f, 40.f, 10.f, 1.f, "ct"),
     F(ParamId::Src4UniWidth,  "src4_uni_width",  "Uni Wide","Source 4", 0.f, 1.f, 0.6f, 1.f, ""),
+    F(ParamId::CloudFeedback,  "cloud_feedback",  "Feedback",  "Cloud", 0.f,   1.f,     0.f,    1.f,  ""),
+    F(ParamId::CloudTone,      "cloud_tone",      "Tone",      "Cloud", 300.f, 16000.f, 5000.f, 0.3f, "Hz"),
+    I(ParamId::CloudTranspose, "cloud_transpose", "Transpose", "Cloud", -24.f, 24.f,    0.f,    "st"),
+    F(ParamId::CloudScatter,   "cloud_scatter",   "Scatter",   "Cloud", 0.f,   1.f,     0.f,    1.f,  ""),
+    F(ParamId::CloudSwarm,     "cloud_swarm",     "Swarm",     "Cloud", 0.f,   1.f,     0.f,    1.f,  ""),
+    F(ParamId::CloudResonance, "cloud_resonance", "Resonance", "Cloud", 0.f,   1.f,     0.f,    1.f,  ""),
+    C(ParamId::CloudResMode,   "cloud_res_mode",  "Res Mode",  "Cloud", kCloudResModeNames, 2, 0),
+    C(ParamId::CloudResNotes,  "cloud_res_notes", "Res Notes", "Cloud", kCloudResNoteNames, 4, 1),
+    F(ParamId::CloudResDecay,  "cloud_res_decay", "Ring",      "Cloud", 0.2f,  12.f,    2.5f,   0.4f, "s"),
 }};
 } // namespace
 

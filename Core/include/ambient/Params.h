@@ -223,6 +223,11 @@ enum class ParamId : int {
     Src2Unison, Src2UniDetune, Src2UniWidth,
     Src3Unison, Src3UniDetune, Src3UniWidth,
     Src4Unison, Src4UniDetune, Src4UniWidth,
+    // The cloud as a granular feedback instrument (12.09.2026): its loop, the scatter over the
+    // scale's intervals, its flocks and its resonators on the scale's notes. All off by default,
+    // so a preset that says nothing about them has the cloud it always had.
+    CloudFeedback, CloudTone, CloudTranspose, CloudScatter, CloudSwarm,
+    CloudResonance, CloudResMode, CloudResNotes, CloudResDecay,
     Count
 };
 
@@ -300,6 +305,8 @@ extern const char* const kAirModeNames[2];
 extern const char* const kEnsModeNames[3];      // "Chorus", "Microshift" (static detune), "Velvet" (sparse-noise decorrelation)
 extern const char* const kKeysFilterNames[2];   // "Classic" (a fixed 30 ms), "One Euro" (cutoff follows the distance still to travel)
 extern const char* const kTransposeNames[7];    // "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down"
+extern const char* const kCloudResModeNames[2]; // "Band" (Mathews-Smith phasor resonators), "Comb" (tuned feedback combs)
+extern const char* const kCloudResNoteNames[4]; // which of the scale's notes the cloud's resonators sit on
 extern const char* const kFarModeNames[4];      // "Classic", "Scattering" (all-passes in the loop), "Colourless" (also flat-searched lengths), "Rotating" (also a turning lossless matrix)
 extern const char* const kBinauralNames[2];     // "Off" or "Headphones"
 extern const char* const kStrikeTypeNames[3];   // String, Wood, Metal

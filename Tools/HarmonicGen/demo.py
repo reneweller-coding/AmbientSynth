@@ -59,23 +59,26 @@ def main():
     ap.add_argument("--type", default="Harmonic", choices=["Harmonic", "Wavetable"], help="welcher Tabellen-Typ spielt")
     ap.add_argument("--notes", default="45,52,57")
     a = ap.parse_args()
+    a.tables = os.path.abspath(a.tables)    # die Renders laufen im Projektordner: ein relativer Pfad griffe dort daneben
     os.makedirs(a.out, exist_ok=True)
     work = tempfile.mkdtemp(prefix="hgdemo_")
     score = os.path.join(work, "sweep.score")
     with open(score, "w", encoding="utf-8") as f:
         f.write(SWEEP)
 
-    files = sorted(x for x in os.listdir(a.tables) if x.endswith(".wav"))
+    # Paths below --tables: the library's tables sit on shelves (Harmonic, Classic, Ambient).
+    files = sorted(os.path.relpath(os.path.join(d, x), a.tables).replace(os.sep, "/")
+                   for d, _, names in os.walk(a.tables) for x in names if x.endswith(".wav"))
     chosen = []
     for fam in [x.strip() for x in a.families.split(",") if x.strip()]:
-        mine = [x for x in files if x.startswith(f"{a.prefix}_{fam}_")]
+        mine = [x for x in files if os.path.basename(x).startswith(f"{a.prefix}_{fam}_")]
         if mine:
             step = max(1, len(mine) // a.per_family)
             chosen += mine[::step][:a.per_family]
 
     parts, marks, t, rate = [], [], 0.0, None
     for name in chosen:
-        out = os.path.join(work, name)
+        out = os.path.join(work, os.path.basename(name))
         render_one(os.path.join(a.tables, name), score, out, a.notes, a.type)
         x, sr = sf.read(out, always_2d=True)
         rate = rate or sr

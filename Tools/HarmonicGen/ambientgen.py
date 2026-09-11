@@ -675,9 +675,10 @@ def select(cands, want, bank):
 def library_bank(folders):
     bank = np.empty((0, len(hg.SIG_FRAMES), VIEW))
     for folder in folders:
-        for fname in sorted(os.listdir(folder)):
-            if fname.lower().endswith(".wav"):
-                fr = hg.read_table(os.path.join(folder, fname))
+        # samt den Regalen darunter (Library/Wavetables/Harmonic, Classic, Ambient)
+        for path in sorted(os.path.join(d, f) for d, _, names in os.walk(folder) for f in names):
+            if path.lower().endswith(".wav"):
+                fr = hg.read_table(path)
                 if fr is not None:
                     bank = np.concatenate([bank, hg.signature(hg.at_positions(hg.analyse(fr)))[None]])
     return bank
@@ -771,7 +772,11 @@ def generate(out, count, seed, families, avoid, workers):
 
 def engine_check(folder, sample, note, seconds):
     import engine_check as ec
-    files = sorted(f for f in os.listdir(folder) if f.startswith(PREFIX + "_") and f.endswith(".wav"))
+    folder = os.path.abspath(folder)    # die Renders laufen im Projektordner: ein relativer Pfad griffe dort daneben
+    # der Ordner selbst oder ein Regal darunter (Library/Wavetables/Ambient)
+    where = {f: os.path.join(d, f) for d, _, names in os.walk(folder) for f in names
+             if f.startswith(PREFIX + "_") and f.endswith(".wav")}
+    files = sorted(where)
     if not files:
         sys.exit("keine Tabellen in " + folder)
     fams = collections.OrderedDict()
@@ -786,7 +791,7 @@ def engine_check(folder, sample, note, seconds):
     f_note = 440.0 * 2 ** ((note - 69) / 12.0)
     bad = 0
     for name in pick:
-        path = os.path.join(folder, name)
+        path = where[name]
         frames = hg.read_table(path)
         full = unit(np.abs(np.fft.rfft(frames.astype(np.float64), axis=1))[:, 1:NFULL + 1])
         line = []

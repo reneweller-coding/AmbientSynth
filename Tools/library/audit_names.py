@@ -78,7 +78,7 @@ else:
     print("note  affinity.json not written yet")
 
 # 6 -- the wavetable recipe slugs, as wavetable_pool matches them against file names
-wts = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "Library", "Wavetables", "*.wav"))]
+wts = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "Library", "Wavetables", "**", "*.wav"), recursive=True)]
 miss = set()
 for r in RECIPES:
     slug = re.sub(r"[^a-z0-9]+", "_", r.lower()).strip("_")

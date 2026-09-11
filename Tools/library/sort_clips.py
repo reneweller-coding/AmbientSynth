@@ -130,6 +130,18 @@ def move_pair(src, dst, name, dry):
             shutil.move(s, t)
 
 
+def also_folders():
+    """Wavetables and Impulses, and the shelves inside them (Wavetables/Harmonic, Classic, Ambient):
+    every folder that holds files of its own keeps its own index."""
+    out = []
+    for folder in ALSO:
+        if not os.path.isdir(folder):
+            continue
+        out.append(folder)
+        out += sorted(os.path.join(folder, d) for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)))
+    return out
+
+
 def fold(folder, dry):
     """Every sidecar in this folder into its clips.json, then away. An entry whose clip has since
     moved to the other folder is handed over rather than dropped."""
@@ -242,14 +254,13 @@ def main():
             json.dump(blob, open(path, "w", encoding="utf-8"), indent=0, sort_keys=True)
             print("%-32s %5d notes taken over from the other folder" % (os.path.basename(folder), len(extra)))
 
-        for folder in ALSO:
-            if not os.path.isdir(folder):
-                continue
+        for folder in also_folders():
             folded, orphans, _ = fold(folder, a.dry_run)
-            print("%-32s %5d notes folded in, %d without a clip" % (os.path.basename(folder), folded, orphans))
+            print("%-32s %5d notes folded in, %d without a clip"
+                  % (os.path.relpath(folder, os.path.join(ROOT, "Library")), folded, orphans))
 
-    for d in [TEX, FLD] + [x for x in ALSO if os.path.isdir(x)]:
-        files = os.listdir(d)
+    for d in [TEX, FLD] + also_folders():
+        files = [f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
         n = len([f for f in files if f.endswith(".wav")])
         rest = len(files) - n
         print("%-32s %5d clips, %d other files" % (d, n, rest))

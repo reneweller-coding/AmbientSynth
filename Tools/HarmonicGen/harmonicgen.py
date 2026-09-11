@@ -591,9 +591,10 @@ def generate(out, per_family, seed, families, avoid=()):
     bank = np.empty((0, len(SIG_FRAMES), PARTIALS))
     # Tabellen, die es schon gibt (etwa die Bibliothek): neue muessen sich auch von ihnen unterscheiden.
     for folder in avoid:
-        for fname in sorted(os.listdir(folder)):
-            if fname.lower().endswith(".wav"):
-                fr = read_table(os.path.join(folder, fname))
+        # samt den Regalen darunter (Library/Wavetables/Harmonic, Classic, Ambient)
+        for path in sorted(os.path.join(d, f) for d, _, names in os.walk(folder) for f in names):
+            if path.lower().endswith(".wav"):
+                fr = read_table(path)
                 if fr is not None:
                     bank = np.concatenate([bank, signature(at_positions(analyse(fr)))[None]])
     if len(bank):

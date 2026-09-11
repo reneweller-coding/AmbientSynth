@@ -125,7 +125,8 @@ def main():
                 if ref:
                     used[os.path.basename(ref)] += 1
         if folder:
-            shelf = len(glob.glob(os.path.join(ROOT, "Library", folder, "*.wav")))
+            # recursive: the wavetables sit on shelves (Harmonic, Classic, Ambient)
+            shelf = len(glob.glob(os.path.join(ROOT, "Library", folder, "**", "*.wav"), recursive=True))
         else:
             shelf = (len(glob.glob(os.path.join(ROOT, "Library", "Textures", "*.wav")))
                      + len(glob.glob(os.path.join(ROOT, "Library", "FieldRecordings", "*.wav"))))

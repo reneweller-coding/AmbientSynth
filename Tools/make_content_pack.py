@@ -26,6 +26,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import posixpath
 import struct
 import sys
 import zipfile
@@ -34,6 +35,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
+LIBRARY = os.path.join(ROOT, "Library")
 PACKS = os.path.join(ROOT, "Library", "Packs")
 OUT = os.path.join(ROOT, "Deploy", "content")
 # Four now: the field recordings sit apart from the tonal material, because a swamp and a
@@ -43,7 +45,7 @@ LEGACY = os.path.join(HERE, "library", "legacy_impulses.json")
 
 
 def referenced():
-    """Every media file the packs name, as (kind, filename) -> absolute source path."""
+    """Every media file the packs name, as (kind, path inside that folder) -> absolute source path."""
     want = {}
     for name in sorted(os.listdir(PACKS)):
         if not name.endswith(".ambientpack"):
@@ -59,11 +61,17 @@ def referenced():
                         if not field.lower().endswith(".wav"):
                             continue
                         src = os.path.normpath(os.path.join(PACKS, field))
-                        kind = os.path.basename(os.path.dirname(src))
-                        if kind not in KINDS:
+                        # The kind is the library folder the file lies under, and what follows it is
+                        # kept: the wavetables sit on shelves (Wavetables/Harmonic/x.wav, see
+                        # Tools/library/wavetable_folders.py) and travel on them.
+                        try:
+                            rel = os.path.relpath(src, LIBRARY).replace(os.sep, "/").split("/")
+                        except ValueError:          # another drive
+                            rel = []
+                        if len(rel) < 2 or rel[0] not in KINDS:
                             print("  ignored (not a library folder): %s" % field)
                             continue
-                        want[(kind, os.path.basename(src))] = src
+                        want[(rel[0], "/".join(rel[1:]))] = src
     return want
 
 
@@ -242,12 +250,15 @@ def main():
         import zipfile as zf
         with open(os.path.join(OUT, "content-manifest.json"), encoding="utf-8") as f:
             man = json.load(f)
+        # Compared by kind and path without the extension: the archives hold x.flac where the
+        # pack says x.wav, and a comparison of whole names found every file new.
         have = set()
         for p in man["parts"]:
             with zf.ZipFile(os.path.join(OUT, p["name"])) as z:
                 for n in z.namelist():
-                    have.add(tuple(n.split("/")))
-        new = {k: v for k, v in want.items() if k not in have}
+                    kind, _, rest = n.partition("/")
+                    have.add((kind, os.path.splitext(rest)[0]))
+        new = {k: v for k, v in want.items() if (k[0], os.path.splitext(k[1])[0]) not in have}
         print("%d files already packed, %d new" % (len(have), len(new)))
         if not new:
             write_installer_include(man)
@@ -278,12 +289,14 @@ def main():
         (kind, name), src = item
         conv, out_name, why = (None, None, "") if a.wav else to_flac(src)
         if conv is None:
-            out_name = name
+            out_name = posixpath.basename(name)
             conv, why = to_24bit(src)
             if conv is None:
                 with open(src, "rb") as f:
                     conv = f.read()
-        dst = os.path.join(OUT, kind, out_name)
+        out_name = posixpath.join(posixpath.dirname(name), out_name)    # the shelf comes along
+        dst = os.path.join(OUT, kind, *out_name.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
         with open(dst, "wb") as f:
             f.write(conv)
         return kind, out_name, dst, why, os.path.getsize(src) - len(conv)

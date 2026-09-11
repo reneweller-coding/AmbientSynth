@@ -13,8 +13,9 @@ thousand presets means five thousand renders. The built-in presets keep their me
 the map and drive the browser filters. The whole run is deterministic -- same seed, same
 library -- so texture and wavetable references can be written before those files exist.
 
-Texture and wavetable references are taken from Library/Textures and Library/Wavetables when
-they are there; presets whose sample is missing simply load nothing into that slot.
+Texture and wavetable references are taken from Library/Textures and Library/Wavetables (with its
+shelves Harmonic, Classic and Ambient, Tools/library/wavetable_folders.py) when they are there;
+presets whose sample is missing simply load nothing into that slot.
 """
 import argparse
 import io
@@ -22,6 +23,7 @@ import glob
 import json
 import math
 import os
+import posixpath
 import random
 import re
 import subprocess
@@ -33,6 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 from styles import STYLES  # noqa: E402
+from wavetable_folders import tables as shelf_tables  # noqa: E402
 
 RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_render.exe")
 
@@ -1711,8 +1714,10 @@ def wavetable_pool(dirname, style):
     the generator kept reaching for the same corner of it. The style's recipes are weighted three
     to one, so a pack still sounds like itself while every table can turn up somewhere."""
     slugs = [re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_") for t in style["tables"]]
-    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(dirname, "*.wav")))
-    own = [f for f in files if any(f.startswith(s + "_") for s in slugs)]
+    # Paths below the folder, shelf included ("Harmonic/harmonic_organ_003.wav"): the pack names a
+    # table as ../Wavetables/ and this.
+    files = shelf_tables(dirname)
+    own = [f for f in files if any(posixpath.basename(f).startswith(s + "_") for s in slugs)]
     # A table sliced out of a clip is named "clip_<the clip's name>", so it inherits that clip's
     # place in the library: if a model put the recording of a bowed cymbal near this style, the
     # table made from it belongs there too. Nineteen recipes cannot tell a style apart; a thousand
@@ -1722,7 +1727,8 @@ def wavetable_pool(dirname, style):
     close = {re.sub(r"[^A-Za-z0-9]+", "_", os.path.splitext(os.path.basename(c))[0]).strip("_")[:40]
              for c in affinity_for(style["name"])}
     if close:
-        own = own + [f for f in files if f.startswith("clip_") and f[5:45] in close]
+        own = own + [f for f in files
+                     if posixpath.basename(f).startswith("clip_") and posixpath.basename(f)[5:45] in close]
     return (own * 3 + files) if own else files
 
 

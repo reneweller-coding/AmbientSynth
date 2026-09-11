@@ -232,8 +232,15 @@ enum class ParamId : int {
     // lines and their exchange, how long and how darkly it keeps, the recalled grains, and the tape.
     MemSend, MemReturn, MemToFar, MemLines, MemSize, MemBlur, MemDrift, MemHold, MemAge,
     MemRenew, MemDrive, MemRecall, MemSeek, MemGrain, MemFreeze, MemReverse, MemHalf, MemErase,
+    // The shifter in the spectrum (12.09.2026): which shifter the shimmer's loop uses, and the
+    // cloud's loop transposed on every pass.
+    CosmosShimmerMode, CloudShift,
     Count
 };
+
+extern const char* const kShimmerModeNames[2];  // "Spectral" (phase-locked peak shifting), "Grain" (the two-head shifter)
+extern const char* const kCloudShiftNames[7];   // "Off", "+12", "+7", "+5", "-5", "-7", "-12"
+extern const float kCloudShiftSemitones[7];
 
 constexpr int kNumParams = static_cast<int>(ParamId::Count);
 

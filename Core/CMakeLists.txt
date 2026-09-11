@@ -5,6 +5,7 @@ add_library(AmbientCore STATIC
     src/Effects.cpp
     src/Cloud.cpp
     src/Memory.cpp
+    src/Shifter.cpp
     src/Engine.cpp
     src/EngineControl.cpp
     src/EngineRender.cpp

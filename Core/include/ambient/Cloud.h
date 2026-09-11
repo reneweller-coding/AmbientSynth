@@ -11,6 +11,9 @@
 //              Bilbao, Esqueda, Parker and Valimaki, IEEE SPL 2017), so the partials a saturation
 //              makes are not folded back below Nyquist again on every pass, and throttled by its
 //              own level like the shimmer loop, so at 1 it holds instead of running away.
+//   Shift      The loop transposed on every pass -- an octave, a fifth or a fourth, up or down --
+//              in the spectrum (Shifter.h), so a spiral of grains climbs or sinks cleanly instead of
+//              growing grainier on every turn.
 //   Scatter    Transpositions drawn from the intervals of the scale that is playing, measured from
 //              the conductor's root and opened from the most consonant outwards -- octaves, then
 //              fifths and fourths, then the rest -- until at a half every interval of the scale
@@ -33,6 +36,7 @@
 #pragma once
 #include "Dsp.h"
 #include "Adaa.h"
+#include "Shifter.h"
 #include "Tuning.h"
 #include "GrainRing.h"
 #include <vector>
@@ -50,6 +54,8 @@ public:
     void set(float densityPerSec, float sizeMs, float pitch, float spraySec, float level);
     // Feedback 0..1 (1 holds at the loop's ceiling) and the loop's low-pass in hertz.
     void setLoop(float feedback, float toneHz);
+    // The loop's transposition on every pass, in semitones; 0 is off.
+    void setShift(float semitones);
     // Transposition of every grain in semitones, and the scatter over the scale's intervals, 0..1.
     void setScatter(float transposeSemitones, float scatter);
     // 0: Poisson onsets, as always; towards 1 the onsets excite each other and come in flocks.
@@ -108,6 +114,8 @@ private:
     float     dcxL_ = 0.0f, dcxR_ = 0.0f, dcyL_ = 0.0f, dcyR_ = 0.0f, dcR_ = 0.997f;
     TanhAdaa  satL_, satR_;
     float     loopEnv_ = 0.0f, envC_ = 0.0002f;
+    SpectralShifter shift_;
+    float     shiftSemis_ = 0.0f;
     // the scatter
     double    transposeRatio_ = 1.0;
     float     scatter_ = 0.0f;

@@ -473,8 +473,17 @@ void Engine::renderChunk(float* L, float* R, int n)
         for (int i = 0; i < n; ++i) { const float l = fl[i], r = fr[i]; fl[i] = l * c - r * sn; fr[i] = l * sn + r * c; }
     }
     if (cosmosShimmer_ > 0.0f) {
-        shimmerL_.process(fl, sl, n);
-        shimmerR_.process(fr, sr, n);
+        // Spectral: phase-locked peak shifting (Shifter.h), as clean on the hundredth pass as on the
+        // first. Grain: the two-head shifter the shimmer always had, flutter and all. The spectral
+        // one starts empty each time the shimmer opens, rather than with what it heard last time.
+        if (shimmerMode_ == 0) {
+            if (!shimmerWasOn_) shimmerSpec_.reset();
+            shimmerSpec_.process(fl, fr, sl, sr, n);
+        } else {
+            shimmerL_.process(fl, sl, n);
+            shimmerR_.process(fr, sr, n);
+        }
+        shimmerWasOn_ = true;
         const float lpc = 1.0f - std::exp(-kTwoPi * 4000.0f / static_cast<float>(sr_));
         const float amt = cosmosShimmer_ * 0.5f;
         // Self-regulating loop: the feedback is throttled by the level of the far reverb
@@ -493,6 +502,7 @@ void Engine::renderChunk(float* L, float* R, int n)
     } else {
         shimmerLpL_ = shimmerLpR_ = 0.0f;
         shimmerEnv_ = 0.0f;
+        shimmerWasOn_ = false;
         std::memset(sl, 0, bytes); std::memset(sr, 0, bytes);
     }
 

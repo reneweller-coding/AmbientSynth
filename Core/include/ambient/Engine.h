@@ -478,6 +478,9 @@ private:
     float         cascadeNow_ = 0.0f, cascadeAvg_ = 0.0f;
     float         cosmosSwell_ = 0.5f;
     PitchShifter  shimmerL_, shimmerR_;
+    SpectralShifter shimmerSpec_;   // the shimmer's shifter in the spectrum (Shimmer Mode = Spectral)
+    int           shimmerMode_ = 0;
+    bool          shimmerWasOn_ = false;
     Drifter       shiftDrift_;
     Drifter       vecDriftX_, vecDriftY_;   // the Vector's point wandering on its own
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;

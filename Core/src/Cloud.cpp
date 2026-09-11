@@ -41,6 +41,8 @@ void GrainCloud::prepare(double sampleRate, uint64_t seed)
     dcR_ = 1.0f - static_cast<float>(kTwoPi * 20.0 / sr_);
     envC_ = 1.0f - std::exp(-1.0f / (0.1f * static_cast<float>(sr_)));
     setLoop(feedback_, toneHz_);
+    shift_.prepare(sr_);
+    shift_.setSemitones(shiftSemis_);
     comb_.assign(static_cast<size_t>(kMaxRes * 2 * kCombLen), 0.0f);
     combW_ = 0;
     combA_ = 1.0f - std::exp(-kTwoPi * 6000.0f / static_cast<float>(sr_));
@@ -71,6 +73,16 @@ void GrainCloud::setLoop(float feedback, float toneHz)
     toneHz_ = clampv(toneHz, 100.0f, 20000.0f);
     const float hz = std::min(toneHz_, 0.45f * static_cast<float>(sr_));
     toneC_ = 1.0f - std::exp(-kTwoPi * hz / static_cast<float>(sr_));
+}
+
+void GrainCloud::setShift(float semitones)
+{
+    const float s = clampv(semitones, -24.0f, 24.0f);
+    if (s == shiftSemis_) return;
+    // A shift switched on starts from silence, not from what it heard the last time it ran.
+    if (shiftSemis_ == 0.0f) shift_.reset();
+    shiftSemis_ = s;
+    if (s != 0.0f) shift_.setSemitones(s);
 }
 
 void GrainCloud::setScatter(float transposeSemitones, float scatter)
@@ -425,6 +437,7 @@ void GrainCloud::mixSub(int m, float* outL, float* outR)
     const bool loop = fb0 > 1.0e-6f || fb1 > 1.0e-6f;
     const float inv = 1.0f / static_cast<float>(m);
     float peak = 0.0f;
+    float loopL[kSub], loopR[kSub], loopG[kSub];
     for (int i = 0; i < m; ++i) {
         const float a = static_cast<float>(i + 1) * inv;
         const float res = res0 + (res1 - res0) * a;
@@ -434,7 +447,6 @@ void GrainCloud::mixSub(int m, float* outL, float* outR)
         outL[i] += yL * lev;
         outR[i] += yR * lev;
         peak = std::max(peak, std::fabs(yL) + std::fabs(yR));
-        const int fi = static_cast<int>((t_ + i) & (kFbLen - 1));
         if (loop) {
             // Tone, a DC blocker (a transposed grain can carry an offset and a loop would stack
             // it), the saturation, and the throttle on the loop's own mean level.
@@ -444,19 +456,27 @@ void GrainCloud::mixSub(int m, float* outL, float* outR)
             dcxL_ = toneL_; dcyL_ = hL;
             const float hR = toneR_ - dcxR_ + dcR_ * dcyR_;
             dcxR_ = toneR_; dcyR_ = hR;
-            const float sL = satL_(hL * kLoopDrive) / kLoopDrive;
-            const float sR = satR_(hR * kLoopDrive) / kLoopDrive;
-            loopEnv_ += envC_ * (0.5f * (std::fabs(sL) + std::fabs(sR)) - loopEnv_);
+            loopL[i] = satL_(hL * kLoopDrive) / kLoopDrive;
+            loopR[i] = satR_(hR * kLoopDrive) / kLoopDrive;
+            loopEnv_ += envC_ * (0.5f * (std::fabs(loopL[i]) + std::fabs(loopR[i])) - loopEnv_);
             const float reg = clampv((kLoopCeiling - loopEnv_) / kLoopCeiling, 0.0f, 1.0f);
-            const float fb = (fb0 + (fb1 - fb0) * a) * reg;
-            fbRingL_[fi] = sL * fb;
-            fbRingR_[fi] = sR * fb;
-        } else {
+            loopG[i] = (fb0 + (fb1 - fb0) * a) * reg;
+        }
+    }
+    if (loop) {
+        // Shifted on the way round: every pass of the loop an interval further up or down.
+        if (shiftSemis_ != 0.0f) shift_.process(loopL, loopR, loopL, loopR, m);
+        for (int i = 0; i < m; ++i) {
+            const int fi = static_cast<int>((t_ + i) & (kFbLen - 1));
+            fbRingL_[fi] = loopL[i] * loopG[i];
+            fbRingR_[fi] = loopR[i] * loopG[i];
+        }
+    } else {
+        for (int i = 0; i < m; ++i) {
+            const int fi = static_cast<int>((t_ + i) & (kFbLen - 1));
             fbRingL_[fi] = 0.0f;
             fbRingR_[fi] = 0.0f;
         }
-    }
-    if (!loop) {
         toneL_ = toneR_ = dcxL_ = dcxR_ = dcyL_ = dcyR_ = 0.0f;
         satL_.reset(); satR_.reset();
         loopEnv_ = 0.0f;

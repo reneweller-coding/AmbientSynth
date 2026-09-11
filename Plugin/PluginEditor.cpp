@@ -493,7 +493,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Autoplay") s.maxUnits = 12;   // the seven controls and the button in one row
             if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 10;                         // one row: On, Model, five knobs, Drive, Fold
-            if (s.name == "Cloud") s.maxUnits = 8;                           // two rows: the grains, then the loop and the resonators
+            if (s.name == "Cloud") s.maxUnits = 9;                           // two rows: the grains, then the loop and the resonators
             if (s.name == "Memory") s.maxUnits = 9;                          // two rows: the lines, then the recall and the tape
             if (s.name == "Z-Plane") s.maxUnits = 11;
             s.flowUnits = s.maxUnits;

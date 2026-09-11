@@ -113,6 +113,8 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     nebula_.prepare(sr_, rng_.fork());
     shimmerL_.prepare(sr_);
     shimmerR_.prepare(sr_);
+    shimmerSpec_.prepare(sr_);
+    shimmerWasOn_ = false;
     shimmerLpL_ = shimmerLpR_ = 0.0f;
     masterSmooth_.setTime(0.02f, sr_);
     loudness_.prepare(sr_);

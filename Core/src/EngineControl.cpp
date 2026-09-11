@@ -945,6 +945,7 @@ void Engine::readParams()
     cloud_.setLoop(g(ParamId::CloudFeedback), g(ParamId::CloudTone));
     cloud_.setScatter(g(ParamId::CloudTranspose), g(ParamId::CloudScatter));
     cloud_.setSwarm(g(ParamId::CloudSwarm));
+    cloud_.setShift(kCloudShiftSemitones[clampv(static_cast<int>(std::lround(g(ParamId::CloudShift))), 0, 6)]);
     cloud_.setResonators(g(ParamId::CloudResonance), static_cast<int>(std::lround(g(ParamId::CloudResMode))),
                          static_cast<int>(std::lround(g(ParamId::CloudResNotes))), g(ParamId::CloudResDecay));
     cloudSend_ = g(ParamId::CloudSend);
@@ -1014,6 +1015,8 @@ void Engine::readParams()
     const int sp = clampv(static_cast<int>(std::lround(g(ParamId::CosmosShimmerPitch))), 0, kNumShimmerPitches - 1);
     shimmerL_.setSemitones(kShimmerPitchSemitones[sp]);
     shimmerR_.setSemitones(kShimmerPitchSemitones[sp]);
+    shimmerSpec_.setSemitones(kShimmerPitchSemitones[sp]);
+    shimmerMode_ = clampv(static_cast<int>(std::lround(g(ParamId::CosmosShimmerMode))), 0, 1);
 
     // Tuning
     const int scaleIdx = clampv(static_cast<int>(std::lround(g(ParamId::Scale))), 0, kNumScaleChoices - 1);

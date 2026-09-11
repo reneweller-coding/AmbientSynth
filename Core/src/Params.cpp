@@ -46,6 +46,9 @@ const char* const kFarModeNames[4] = { "Classic", "Scattering", "Colourless", "R
 const char* const kCloudResModeNames[2] = { "Band", "Comb" };
 const char* const kCloudResNoteNames[4] = { "Scale", "Chord", "Fifths", "Octaves" };
 const char* const kMemLineNames[3] = { "2", "4", "8" };
+const char* const kShimmerModeNames[2] = { "Spectral", "Grain" };
+const char* const kCloudShiftNames[7] = { "Off", "+12", "+7", "+5", "-5", "-7", "-12" };
+const float kCloudShiftSemitones[7] = { 0.0f, 12.0f, 7.0f, 5.0f, -5.0f, -7.0f, -12.0f };
 const char* const kKeysFilterNames[2] = { "Classic", "One Euro" };
 const char* const kTransposeNames[7] = { "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down" };
 const char* const kBinauralNames[2] = { "Off", "Headphones" };
@@ -689,6 +692,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     B(ParamId::MemReverse, "mem_reverse", "Reverse",    "Memory", false),
     B(ParamId::MemHalf,    "mem_half",    "Half Speed", "Memory", false),
     B(ParamId::MemErase,   "mem_erase",   "Erase",      "Memory", false),
+    C(ParamId::CosmosShimmerMode, "cosmos_shimmer_mode", "Shimmer Mode", "Cosmos", kShimmerModeNames, 2, 0),
+    C(ParamId::CloudShift,        "cloud_shift",         "FB Shift",     "Cloud",  kCloudShiftNames, 7, 0),
 }};
 } // namespace
 

@@ -1283,6 +1283,136 @@ void testCosmos()
     }
 }
 
+// The spectral shifter (12.09.2026): a tone and a chord land where they should, a steady tone comes out
+// steady where the granular shifter modulates it, a loop through it stays bounded, and the shimmer and
+// the cloud's loop use it.
+void testSpectralShifter()
+{
+    const int sr = 48000;
+    const auto tone = [&](std::vector<float>& x, std::initializer_list<double> hz, float amp) {
+        for (size_t i = 0; i < x.size(); ++i) {
+            double v = 0.0;
+            for (double f : hz) v += std::sin(2.0 * 3.141592653589793 * f * static_cast<double>(i) / sr);
+            x[i] = amp * static_cast<float>(v);
+        }
+    };
+    const auto swing = [&](const std::vector<float>& x) {   // the level of 50 ms windows over a second, max over min
+        double lo = 1e30, hi = 0.0;
+        for (int w = 0; w < 20; ++w) {
+            double s = 0.0;
+            for (int i = 0; i < sr / 20; ++i) { const double v = x[static_cast<size_t>(sr + w * (sr / 20) + i)]; s += v * v; }
+            lo = std::min(lo, s); hi = std::max(hi, s);
+        }
+        return 10.0 * std::log10(hi / std::max(lo, 1e-30));
+    };
+    {   // an octave up: 440 Hz comes out at 880, on pitch, steady, and nothing is left at 440
+        SpectralShifter sh;
+        sh.prepare(sr);
+        sh.setSemitones(12.0f);
+        std::vector<float> L(static_cast<size_t>(3 * sr)), oL(L.size()), oR(L.size());
+        tone(L, { 440.0 }, 0.3f);
+        std::vector<float> R = L;
+        for (size_t p = 0; p < L.size(); p += 256) {
+            const int m = static_cast<int>(std::min<size_t>(256, L.size() - p));
+            sh.process(L.data() + p, R.data() + p, oL.data() + p, oR.data() + p, m);
+        }
+        const float* x = oL.data() + sr;
+        const double at880 = goertzel(x, sr, 880.0, sr), at440 = goertzel(x, sr, 440.0, sr);
+        double best = 0.0, bestCents = 0.0;
+        for (double c = -20.0; c <= 20.0; c += 0.5) {
+            const double e = goertzel(x, sr, 880.0 * std::pow(2.0, c / 1200.0), sr);
+            if (e > best) { best = e; bestCents = c; }
+        }
+        PitchShifter grain;   // the shimmer's old shifter on the same tone, for comparison
+        grain.prepare(sr);
+        grain.setSemitones(12.0f);
+        std::vector<float> g(L.size());
+        grain.process(L.data(), g.data(), static_cast<int>(L.size()));
+        const double spectralSwing = swing(oL), grainSwing = swing(g);
+        std::printf("  [probe] spectral shifter: 880 Hz %.0f dB over 440, peak at %+.1f ct; level swing %.2f dB (granular %.2f dB)\n",
+                    10.0 * std::log10(at880 / std::max(at440, 1e-30)), bestCents, spectralSwing, grainSwing);
+        CHECK(at880 > 1000.0 * at440, "an octave up, 440 Hz lands on 880 and leaves nothing behind");
+        CHECK(std::fabs(bestCents) <= 2.0, "on pitch to two cents");
+        CHECK(spectralSwing < 0.5, "and a steady tone comes out steady");
+    }
+    {   // a fifth up on a chord: every note moves by the same ratio
+        SpectralShifter sh;
+        sh.prepare(sr);
+        sh.setSemitones(7.0f);
+        std::vector<float> L(static_cast<size_t>(3 * sr)), oL(L.size()), oR(L.size());
+        tone(L, { 220.0, 277.1826, 329.6276 }, 0.15f);
+        std::vector<float> R = L;
+        for (size_t p = 0; p < L.size(); p += 512) {
+            const int m = static_cast<int>(std::min<size_t>(512, L.size() - p));
+            sh.process(L.data() + p, R.data() + p, oL.data() + p, oR.data() + p, m);
+        }
+        const float* x = oL.data() + sr;
+        const double q = std::pow(2.0, 7.0 / 12.0);
+        double moved = 0.0, stayed = 0.0;
+        for (double f : { 220.0, 277.1826, 329.6276 }) moved += goertzel(x, sr, f * q, sr);
+        for (double f : { 220.0, 277.1826 }) stayed += goertzel(x, sr, f, sr);   // 329.63 is also 220 moved up, so not counted
+        std::printf("  [probe] spectral shifter: a chord a fifth up, %.0f dB on the moved notes over the old ones\n",
+                    10.0 * std::log10(moved / std::max(stayed, 1e-30)));
+        CHECK(moved > 100.0 * stayed, "a chord a fifth up moves every note");
+    }
+    {   // a loop through it: low-passed and fed back just under unity for twenty seconds, bounded and finite
+        SpectralShifter sh;
+        sh.prepare(sr);
+        sh.setSemitones(12.0f);
+        std::vector<float> fbL(256, 0.0f), fbR(256, 0.0f), oL(256), oR(256);
+        Rng r; r.seed(21);
+        float peak = 0.0f, lpL = 0.0f, lpR = 0.0f;
+        bool finite = true;
+        for (int b = 0; b < 20 * sr / 256; ++b) {
+            for (int i = 0; i < 256; ++i) {
+                const float in = b < sr / 256 ? 0.2f * r.bipolar() : 0.0f;
+                fbL[static_cast<size_t>(i)] = in + 0.9f * lpL;
+                fbR[static_cast<size_t>(i)] = in + 0.9f * lpR;
+            }
+            sh.process(fbL.data(), fbR.data(), oL.data(), oR.data(), 256);
+            for (int i = 0; i < 256; ++i) {
+                lpL += 0.2f * (oL[static_cast<size_t>(i)] - lpL);
+                lpR += 0.2f * (oR[static_cast<size_t>(i)] - lpR);
+                if (!std::isfinite(oL[static_cast<size_t>(i)])) finite = false;
+                peak = std::max(peak, std::fabs(oL[static_cast<size_t>(i)]));
+            }
+        }
+        CHECK(finite && peak < 2.0f, "a loop through the spectral shifter stays finite and bounded");
+    }
+    {   // the shimmer in the engine: spectral by default, finite and inside the clipper
+        Engine e;
+        e.prepare(48000.0, 256);
+        CHECK(e.getParam(ParamId::CosmosShimmerMode) == 0.0f, "the shimmer shifts in the spectrum by default");
+        e.setParam(ParamId::CosmosShimmer, 1.0f);
+        e.setParam(ParamId::FarLevel, 1.0f);
+        e.noteOn(48, 0.8f); e.noteOn(55, 0.8f); e.noteOn(64, 0.8f);
+        const Stats st = render(e, 15.0);
+        CHECK(st.nonFinite == 0 && st.peak <= 1.0f && st.rms > 1.0e-3, "a spectral shimmer at full stays finite and inside the clipper");
+    }
+    {   // the cloud's loop an octave up: a 440 Hz tone grows 880 Hz in the cloud, which it does not without the shift
+        const auto octave = [&](float semis) {
+            GrainCloud c;
+            c.prepare(sr, 31);
+            c.set(20.0f, 300.0f, 0.0f, 0.5f, 1.0f);
+            c.setLoop(0.8f, 12000.0f);
+            c.setShift(semis);
+            std::vector<float> in(static_cast<size_t>(8 * sr)), oL(in.size(), 0.0f), oR(in.size(), 0.0f);
+            for (size_t i = 0; i < in.size(); ++i)
+                in[i] = i < static_cast<size_t>(2 * sr) ? 0.3f * static_cast<float>(std::sin(2.0 * 3.141592653589793 * 440.0 * static_cast<double>(i) / sr)) : 0.0f;
+            for (size_t p = 0; p < in.size(); p += 256) {
+                const int m = static_cast<int>(std::min<size_t>(256, in.size() - p));
+                c.process(in.data() + p, in.data() + p, oL.data() + p, oR.data() + p, m);
+            }
+            const float* x = oL.data() + 3 * sr;
+            return goertzel(x, 3 * sr, 880.0, sr) / std::max(goertzel(x, 3 * sr, 440.0, sr), 1e-30);
+        };
+        const double off = octave(0.0f), up = octave(12.0f);
+        std::printf("  [probe] cloud loop shift: 880 over 440 Hz %.0f dB without the shift, %.0f dB an octave up\n",
+                    10.0 * std::log10(off), 10.0 * std::log10(up));
+        CHECK(up > 30.0 * off, "the cloud's loop shifted an octave up grows the octave");
+    }
+}
+
 // The memory (12.09.2026): the lossless exchange, the decay, the two sides, the tape, freeze and erase,
 // the harmonic recall, and the engine around it.
 void testMemory()
@@ -6486,6 +6616,7 @@ int main()
     testCloudAndLayers();
     testCloudAether();
     testMemory();
+    testSpectralShifter();
     testCosmos();
     testParams();
     testTuning();

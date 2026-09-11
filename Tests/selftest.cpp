@@ -1283,6 +1283,213 @@ void testCosmos()
     }
 }
 
+// The memory (12.09.2026): the lossless exchange, the decay, the two sides, the tape, freeze and erase,
+// the harmonic recall, and the engine around it.
+void testMemory()
+{
+    const int sr = 48000;
+    const auto run = [](Memory& mem, std::vector<float>& L, std::vector<float>& R) {
+        for (size_t p = 0; p < L.size(); p += 256) {
+            const int m = static_cast<int>(std::min<size_t>(256, L.size() - p));
+            mem.process(L.data() + p, R.data() + p, m);
+        }
+    };
+    // Seconds of silence in, and the output kept (both channels) or thrown away.
+    const auto silence = [&](Memory& mem, double seconds, std::vector<float>* outL, std::vector<float>* outR) {
+        std::vector<float> L(static_cast<size_t>(seconds * sr), 0.0f), R(L.size(), 0.0f);
+        run(mem, L, R);
+        if (outL != nullptr) outL->insert(outL->end(), L.begin(), L.end());
+        if (outR != nullptr) outR->insert(outR->end(), R.begin(), R.end());
+    };
+    const auto noise = [&](Memory& mem, double seconds, uint64_t seed, bool left, bool right) {
+        std::vector<float> L(static_cast<size_t>(seconds * sr), 0.0f), R(L.size(), 0.0f);
+        Rng r; r.seed(seed);
+        for (size_t i = 0; i < L.size(); ++i) {
+            const float v = 0.3f * r.bipolar();
+            if (left) L[i] = v;
+            if (right) R[i] = v;
+        }
+        run(mem, L, R);
+    };
+    const auto energyOf = [](const std::vector<float>& x, size_t from, size_t to) {
+        double e = 0.0;
+        for (size_t i = from; i < to && i < x.size(); ++i) e += static_cast<double>(x[i]) * x[i];
+        return e;
+    };
+    {   // Hold 1 and nothing ageing: turning the matrix exchanges energy between the lines, and never changes it
+        Memory mem;
+        mem.setShape(4, 1.0f, 0.0f, 0.0f);
+        mem.setDecay(1.0f, 0.0f, 0.0f, 0.0f);
+        mem.prepare(sr, 3);
+        noise(mem, 0.5, 9, true, true);
+        silence(mem, 2.0, nullptr, nullptr);
+        const double e0 = mem.energy();
+        mem.setShape(4, 1.0f, 0.44f, 0.0f);   // towards the dense mix; the scattering stays out below 0.45
+        silence(mem, 10.0, nullptr, nullptr);
+        const double e1 = mem.energy();
+        std::printf("  [probe] memory: circulating energy %.2f, and %.2f ten seconds later with the matrix turned (%+.3f dB)\n",
+                    e0, e1, 10.0 * std::log10(e1 / std::max(e0, 1.0e-30)));
+        CHECK(e0 > 1.0 && std::fabs(10.0 * std::log10(e1 / e0)) < 0.1, "at Hold 1 turning the matrix neither adds energy nor takes any away");
+        CHECK(mem.lineCount() == 4 && mem.lineSeconds(0) > 0.99 && mem.lineSeconds(0) < 1.01 && mem.lineSeconds(3) < 0.62,
+              "the longest line is the size, the shortest six tenths of it");
+    }
+    {   // Hold 0.3: 4 s x 300^0.3 = 22.1 s to -60 dB, so ten seconds take 27 dB off
+        Memory mem;
+        mem.setShape(2, 1.0f, 0.0f, 0.0f);
+        mem.setDecay(0.3f, 0.0f, 0.0f, 0.0f);
+        mem.prepare(sr, 4);
+        noise(mem, 0.5, 10, true, true);
+        silence(mem, 1.5, nullptr, nullptr);
+        const double e0 = mem.energy();
+        silence(mem, 10.0, nullptr, nullptr);
+        const double db = 10.0 * std::log10(mem.energy() / std::max(e0, 1.0e-30));
+        std::printf("  [probe] memory: Hold 0.3 takes %.1f dB off in ten seconds (27 expected)\n", -db);
+        CHECK(db < -23.0 && db > -31.0, "Hold sets how long a memory takes to fade");
+    }
+    {   // Blur 0: what came in on the left stays on the left; Blur 1 spreads it over both sides
+        const auto sides = [&](float blur, double& eL, double& eR) {
+            Memory mem;
+            mem.setShape(4, 1.5f, blur, 0.0f);
+            mem.setDecay(0.95f, 0.0f, 0.0f, 0.0f);
+            mem.prepare(sr, 5);
+            noise(mem, 0.5, 11, true, false);
+            std::vector<float> oL, oR;
+            silence(mem, 6.0, &oL, &oR);
+            eL = energyOf(oL, static_cast<size_t>(2 * sr), oL.size());
+            eR = energyOf(oR, static_cast<size_t>(2 * sr), oR.size());
+        };
+        double aL = 0.0, aR = 0.0, bL = 0.0, bR = 0.0;
+        sides(0.0f, aL, aR);
+        sides(1.0f, bL, bR);
+        std::printf("  [probe] memory: a left input %.1f dB left of right without Blur, %.1f dB with it\n",
+                    10.0 * std::log10(aL / std::max(aR, 1.0e-30)), 10.0 * std::log10(bL / std::max(bR, 1.0e-30)));
+        CHECK(aL > 4.0 * aR, "without Blur the left input's memory stays on the left");
+        CHECK(bR > 0.3 * bL, "with Blur it spreads to the right");
+    }
+    {   // the tape backwards: a rising sweep recorded forwards comes back falling
+        Memory mem;
+        mem.setShape(2, 3.0f, 0.0f, 0.0f);
+        mem.setDecay(1.0f, 0.0f, 0.0f, 0.0f);
+        mem.prepare(sr, 6);
+        std::vector<float> L(static_cast<size_t>(sr), 0.0f), R(L.size(), 0.0f);
+        double ph = 0.0;
+        for (int i = 0; i < sr; ++i) {
+            const double hz = 300.0 * std::pow(10.0, static_cast<double>(i) / sr);
+            ph += 2.0 * 3.141592653589793 * hz / sr;
+            L[static_cast<size_t>(i)] = 0.3f * static_cast<float>(std::sin(ph));
+        }
+        run(mem, L, R);
+        silence(mem, 3.5, nullptr, nullptr);             // to 4.5 s
+        mem.setTape(true, false, false, false);
+        std::vector<float> oL, oR;
+        silence(mem, 2.0, &oL, &oR);                     // 4.5 .. 6.5 s; backwards the sweep plays 5.34 .. 6.34 s
+        const auto crossings = [&](double from, double to) {
+            int c = 0;
+            for (size_t i = static_cast<size_t>((from - 4.5) * sr) + 1; i < static_cast<size_t>((to - 4.5) * sr); ++i)
+                if ((oL[i - 1] < 0.0f) != (oL[i] < 0.0f)) ++c;
+            return c;
+        };
+        const int early = crossings(5.45, 5.55), late = crossings(6.15, 6.25);
+        std::printf("  [probe] memory tape: backwards, %d zero crossings early in the sweep and %d late\n", early, late);
+        CHECK(early > late + 100, "run backwards, a rising sweep comes back falling");
+    }
+    {   // the tape at half speed: a 1 kHz tone recorded at full speed plays at 500 Hz
+        Memory mem;
+        mem.setShape(2, 3.0f, 0.0f, 0.0f);
+        mem.setDecay(1.0f, 0.0f, 0.0f, 0.0f);
+        mem.prepare(sr, 7);
+        std::vector<float> L(static_cast<size_t>(sr), 0.0f), R(L.size(), 0.0f);
+        for (int i = 0; i < sr; ++i) L[static_cast<size_t>(i)] = 0.3f * static_cast<float>(std::sin(2.0 * 3.141592653589793 * 1000.0 * i / sr));
+        run(mem, L, R);
+        silence(mem, 0.5, nullptr, nullptr);             // to 1.5 s
+        mem.setTape(false, true, false, false);
+        std::vector<float> oL, oR;
+        silence(mem, 5.0, &oL, &oR);                     // 1.5 .. 6.5 s: the tone comes round at about 4.4 s, for two seconds
+        const float* x = oL.data() + static_cast<size_t>((4.7 - 1.5) * sr);
+        const double at500 = goertzel(x, sr, 500.0, sr), at1000 = goertzel(x, sr, 1000.0, sr);
+        std::printf("  [probe] memory tape: at half speed %.0f dB more at 500 Hz than at 1 kHz\n", 10.0 * std::log10(at500 / std::max(at1000, 1.0e-30)));
+        CHECK(at500 > 30.0 * at1000, "at half speed what was recorded plays an octave down");
+        CHECK(std::fabs(mem.velocity() - 0.5) < 1.0e-9, "and the tape runs at half speed");
+    }
+    {   // Freeze keeps what the memory holds and hears nothing new; Erase empties it
+        Memory mem;
+        mem.setShape(4, 2.0f, 0.3f, 0.0f);
+        mem.setDecay(0.5f, 0.2f, 0.0f, 0.0f);
+        mem.prepare(sr, 8);
+        noise(mem, 1.0, 12, true, true);
+        silence(mem, 1.0, nullptr, nullptr);
+        mem.setTape(false, false, true, false);          // freeze
+        silence(mem, 0.5, nullptr, nullptr);
+        const double f0 = mem.energy();
+        noise(mem, 5.0, 13, true, true);                  // loud input, which a frozen memory ignores
+        const double f1 = mem.energy();
+        std::printf("  [probe] memory freeze: %+.3f dB over five seconds of loud input\n", 10.0 * std::log10(f1 / std::max(f0, 1.0e-30)));
+        CHECK(f0 > 1.0 && std::fabs(10.0 * std::log10(f1 / f0)) < 0.3, "a frozen memory neither fades nor takes anything in");
+        mem.setTape(false, false, false, true);          // erase
+        std::vector<float> oL, oR;
+        silence(mem, 1.0, &oL, &oR);
+        CHECK(mem.energy() == 0.0 && energyOf(oL, static_cast<size_t>(0.1 * sr), oL.size()) == 0.0, "Erase empties the memory and silences it");
+        mem.setTape(false, false, false, false);
+        noise(mem, 1.0, 14, true, true);
+        CHECK(mem.energy() > 1.0, "and after it the memory records again");
+    }
+    {   // Recall with Seek: out of a memory of C major and F sharp major chords, the grains prefer C major
+        FixedScale major;   // twelve-tone equal temperament's major scale on C
+        {
+            const int steps[7] = { 0, 2, 4, 5, 7, 9, 11 };
+            major.count = 7;
+            major.period = 2.0;
+            for (int k = 0; k < 7; ++k) major.ratios[k] = std::pow(2.0, steps[k] / 12.0);
+        }
+        const auto triads = [&](float seek) {
+            Memory mem;
+            mem.setShape(2, 20.0f, 0.0f, 0.0f);
+            mem.setDecay(1.0f, 0.0f, 0.0f, 0.0f);
+            mem.setRecall(1.0f, seek, 200.0f);
+            mem.prepare(sr, 15);
+            mem.setHarmony(major, 261.6256);
+            std::vector<float> L(static_cast<size_t>(12 * sr), 0.0f);
+            const double cMaj[3] = { 261.6256, 329.6276, 391.9954 }, fsMaj[3] = { 369.9944, 466.1638, 554.3653 };
+            for (size_t i = 0; i < L.size(); ++i) {
+                const bool onC = (i / static_cast<size_t>(sr)) % 2 == 0;
+                const double* f = onC ? cMaj : fsMaj;
+                double v = 0.0;
+                for (int j = 0; j < 3; ++j) v += std::sin(2.0 * 3.141592653589793 * f[j] * static_cast<double>(i) / sr);
+                L[i] = 0.1f * static_cast<float>(v);
+            }
+            std::vector<float> R = L;
+            run(mem, L, R);
+            std::vector<float> oL, oR;
+            silence(mem, 8.0, &oL, &oR);
+            const float* x = oL.data() + 2 * sr;
+            const int N = 6 * sr;
+            double on = 0.0, off = 0.0;
+            for (double hz : cMaj) on += goertzel(x, N, hz, sr);
+            for (double hz : fsMaj) off += goertzel(x, N, hz, sr);
+            return on / std::max(off, 1.0e-30);
+        };
+        const double random = triads(0.0f), sought = triads(1.0f);
+        std::printf("  [probe] memory recall: C major over F sharp major %.1f dB at random, %.1f dB with Seek\n",
+                    10.0 * std::log10(random), 10.0 * std::log10(sought));
+        CHECK(sought > 3.0 && sought > 4.0 * random, "Seek makes the grains prefer the stretches that fit the scale");
+    }
+    {   // in the engine: a full memory with everything on stays finite and inside the clipper
+        Engine e;
+        e.prepare(48000.0, 256);
+        e.setParam(ParamId::MemSend, 1.0f);
+        e.setParam(ParamId::MemReturn, 1.0f);
+        e.setParam(ParamId::MemHold, 1.0f);
+        e.setParam(ParamId::MemBlur, 1.0f);
+        e.setParam(ParamId::MemDrift, 1.0f);
+        e.setParam(ParamId::MemDrive, 1.0f);
+        e.setParam(ParamId::MemRecall, 0.5f);
+        e.setParam(ParamId::MemSize, 4.0f);
+        e.noteOn(48, 0.8f); e.noteOn(55, 0.8f); e.noteOn(64, 0.8f);
+        const Stats st = render(e, 20.0);
+        CHECK(st.nonFinite == 0 && st.peak <= 1.0f, "a memory with everything on stays finite and inside the clipper");
+    }
+}
+
 // The cloud as a granular feedback instrument (12.09.2026): the ring kernel's vector path against its
 // scalar one, the loop, the scatter's intervals, the resonators and the flocks.
 void testCloudAether()
@@ -6278,6 +6485,7 @@ int main()
     testMorph();
     testCloudAndLayers();
     testCloudAether();
+    testMemory();
     testCosmos();
     testParams();
     testTuning();

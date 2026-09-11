@@ -54,16 +54,18 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     // plugin instance, every offline render, every sample-rate change, whether or not the map was
     // ever switched on. The host builds it in the background (PresetMap::warmupAsync); until it
     // is ready the map does not engage, and everything else in the instrument is unaffected.
-    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_, &smEnvelop_, &smComod_ })
+    for (auto* s : { &smDelayMix_, &smDelayToFar_, &smDelay2Mix_, &smDelay2ToFar_, &smCloudSend_, &smCosmosSend_, &smCosmosReturn_, &smCosmosToFar_, &smFarLevel_, &smFarWidth_, &smEnvelop_, &smComod_,
+                     &smMemSend_, &smMemReturn_, &smMemToFar_ })
         s->setTime(0.02f, sr_);
     smDelayMix_.snap(getParam(ParamId::DelayMix)); smDelayToFar_.snap(getParam(ParamId::DelayToFar));
     smDelay2Mix_.snap(getParam(ParamId::Delay2Mix)); smDelay2ToFar_.snap(getParam(ParamId::Delay2ToFar));
     smCloudSend_.snap(getParam(ParamId::CloudSend)); smCosmosSend_.snap(getParam(ParamId::CosmosSend));
+    smMemSend_.snap(getParam(ParamId::MemSend)); smMemReturn_.snap(getParam(ParamId::MemReturn)); smMemToFar_.snap(getParam(ParamId::MemToFar));
     smCosmosReturn_.snap(getParam(ParamId::CosmosReturn)); smCosmosToFar_.snap(getParam(ParamId::CosmosToFar));
     smFarLevel_.snap(getParam(ParamId::FarLevel)); smFarWidth_.snap(getParam(ParamId::FarWidth));
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
-    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_,
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_, &memL_, &memR_,
                      &roomInL_, &roomInR_, &roomOutL_, &roomOutR_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);
     {   // Room: pre-delay ring (>= 300 ms) and the convolver with a generated hall unless a file was set
@@ -101,6 +103,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     delay_.prepare(sr_);
     delay2_.prepare(sr_);
     cloud_.prepare(sr_, rng_.fork());
+    memory_.prepare(sr_, 0x4D454D4F52ull);   // its own stream: a fork here would move every voice's dice
     nearReverb_.prepare(sr_);
     farReverb_.prepare(sr_);
     midSide_.prepare(sr_);

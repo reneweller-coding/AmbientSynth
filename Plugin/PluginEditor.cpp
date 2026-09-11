@@ -55,8 +55,9 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
         { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina" } }, {}, 1 },
         // Strike shares the Cosmos group as a tab: like the Cosmos it is a sound source that is
-        // not one of the four oscillators, and beside them it read as a fifth.
-        { "COSMOS",     kCosmos,    { { "Cosmos", "Strike" } }, {}, 1 },
+        // not one of the four oscillators, and beside them it read as a fifth. The Memory is the
+        // second parallel world beside the Cosmos, and takes the third tab.
+        { "COSMOS",     kCosmos,    { { "Cosmos", "Strike", "Memory" } }, {}, 1 },
         // Last in the right column and stretchy: every page of it has a display, and whatever
         // height the left column has over goes to that display, the page refitted taller.
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1, {}, 0, true },
@@ -74,7 +75,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 0, 1, { "FILTER", "Z-PLANE", "ENVELOPE + EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope", "Expression" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "EARLY ROOM + BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Early Room", "Body", "Patina" } } },
-        { 4, 0, { "COSMOS", "STRIKE" }, { { "Cosmos" }, { "Strike" } } },
+        { 4, 0, { "COSMOS", "STRIKE", "MEMORY" }, { { "Cosmos" }, { "Strike" }, { "Memory" } } },
         // The clock shares the coherence page: three cells alone were a page three quarters empty.
         { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE + CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence", "Clock" } } },
     };
@@ -307,7 +308,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         if (scope_) scope_->setVisible(false);
         // The filter picture draws both filters, so it is the display of both filter pages.
         tabRows_[1].displays = { filterView_.get(), filterView_.get(), envView_.get() };
-        tabRows_[4].displays = { cosmosView_.get(), nullptr };                                                                    // COSMOS | STRIKE
+        tabRows_[4].displays = { cosmosView_.get(), nullptr, nullptr };                                                           // COSMOS | STRIKE | MEMORY
         tabRows_[5].displays = { brainView_.get(), brainView3_.get(), brainView2_.get(), tuningView_.get(), coherenceView_.get() };   // BRAIN | AUTOPLAY | BRAIN 2 | TUNING | COHERENCE + CLOCK
         groups_[0].displays = { nullptr, nullptr, stageView_.get() };   // VOICE: the Space / Foundation row
         groups_[1].displays = { vectorView_.get() };                    // MORPH: the vector's square
@@ -329,7 +330,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "SHAPE",      kVoice,     { { "Air", "Filter" }, { "Envelope", "Expression" }, { "Z-Plane", "Vector" } }, {}, 1,
                                     { filterView_.get(), envView_.get(), vectorView_.get() } },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike", "Memory" } }, {}, 1 },
         { "ANALYSIS",   kVoice,     { {} }, {}, 1, { spectrumView_.get() }, 80, true },
         { "MORPH",      kMorph,     { { "Morph", "Macros", "Brain 2", "Clock" } }, {}, 2 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Autoplay" }, { "Tuning" }, { "Coherence" } }, {}, 2,
@@ -492,7 +493,8 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Autoplay") s.maxUnits = 12;   // the seven controls and the button in one row
             if (s.name == "Expression") s.maxUnits = 7;
             if (s.name == "Filter") s.maxUnits = 10;                         // one row: On, Model, five knobs, Drive, Fold
-            if (s.name == "Cloud") s.maxUnits = 8;                           // one row with Sync
+            if (s.name == "Cloud") s.maxUnits = 8;                           // two rows: the grains, then the loop and the resonators
+            if (s.name == "Memory") s.maxUnits = 9;                          // two rows: the lines, then the recall and the tape
             if (s.name == "Z-Plane") s.maxUnits = 11;
             s.flowUnits = s.maxUnits;
             // The natural widths on the tabbed page. There they decide one thing only: how wide
@@ -510,6 +512,7 @@ void AmbientSynthEditor::buildCells()
             if (s.name == "Body") s.maxUnits = 4;
             if (s.name == "Room") s.maxUnits = 6;
             if (s.name == "Cloud") s.maxUnits = 4;
+            if (s.name == "Memory") s.maxUnits = 9;
             if (s.name == "Clock") s.maxUnits = 2;
             for (int gi = 0; gi < static_cast<int>(groups_.size()); ++gi)
                 for (auto& row : groups_[static_cast<size_t>(gi)].rows)
@@ -756,6 +759,7 @@ const std::vector<Closer>& closers()
         { "Source 4",   ParamId::Src4Type,     { ParamId::Src4Type, ParamId::Src4Level } },
         { "Z-Plane",    ParamId::ZMode,        { ParamId::ZMode } },
         { "Cosmos",     ParamId::CosmosSend,   { ParamId::CosmosSend, ParamId::CosmosReturn } },
+        { "Memory",     ParamId::MemSend,      { ParamId::MemSend, ParamId::MemReturn } },
         { "Strike",     ParamId::StrikeLevel,  { ParamId::StrikeLevel, ParamId::StrikeType } },
         { "Morph",      ParamId::MorphActive,  { ParamId::MorphActive, ParamId::MorphPos } },
         { "Brain 2",    ParamId::Brain2On,     { ParamId::Brain2On } },
@@ -2001,7 +2005,7 @@ void AmbientSynthEditor::HelpView::showTopic(int row)
         { { "Filter", "Z-Plane" }, 2 },                     // filters
         { { "Space", "Foundation", "Air" }, 3 },            // space
         { { "Delay", "Far Reverb" }, 0 },                   // effects
-        { { "Cosmos" }, 4 },                                // cosmos
+        { { "Cosmos", "Memory" }, 4 },                      // cosmos (and the memory beside it)
         { { "Cluster Brain", "Tuning" }, 5 },               // conductor
         { {}, 0 },                                          // modulation: the strip
         { { "Morph", "Macros" }, 6 },                       // morph

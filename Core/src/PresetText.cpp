@@ -138,6 +138,7 @@ std::string presetDescription(int index)
         else if (numberOf(st, "cloud_feedback") > 0.5f) extras.push_back("a grain cloud feeding on itself");
         else extras.push_back("a grain cloud");
     }
+    if (numberOf(st, "mem_send") > 0.05f) extras.push_back("a drifting memory");
     if (!valueOf(st, "z_mode").empty() && valueOf(st, "z_mode") != "Off") extras.push_back("the z-plane filter in the path");
     {
         const float decay = numberOf(st, "far_decay", 0.0f);

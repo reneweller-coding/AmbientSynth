@@ -4,6 +4,7 @@ add_library(AmbientCore STATIC
     src/Voice.cpp
     src/Effects.cpp
     src/Cloud.cpp
+    src/Memory.cpp
     src/Engine.cpp
     src/EngineControl.cpp
     src/EngineRender.cpp

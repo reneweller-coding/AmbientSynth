@@ -274,6 +274,25 @@ const HelpEntry kHelp[] = {
     { "cloud_res_mode", "Band: one resonance per note, which glides when the root moves. Comb: a tuned comb, every harmonic of the note ringing." },
     { "cloud_res_notes", "Which notes the resonators sit on, in the two octaves above C3: the whole scale, the chord on the conductor's root, its fifths, or its octaves." },
     { "cloud_res_decay", "How long the cloud's resonators ring, in seconds to -60 dB." },
+    // ---- memory
+    { "mem_send", "How much of the foreground goes into the Memory, a long drifting sound memory beside the Cosmos." },
+    { "mem_return", "Level of the Memory back on the near plane." },
+    { "mem_to_far", "Level of the Memory into the background, where the far reverb takes it." },
+    { "mem_lines", "How many delay lines the memory is divided into: two long ones, four, or eight shorter ones. Changing it re-divides what the memory holds." },
+    { "mem_size", "How long the longest line repeats, in seconds; the others step down from it to six tenths, every length a prime number of samples." },
+    { "mem_blur", "Exchange between the lines: at 0 every line is its own echo, towards 1 every echo runs through all of them, and beyond a half the echoes scatter into a space. It never changes the level." },
+    { "mem_drift", "The lines slide against each other and wander across the stereo field, bent by a slow chaotic signal -- at most 15 cents of pitch, so the echoes move and the notes do not warble." },
+    { "mem_hold", "How long a memory lasts: 4 seconds to -60 dB at 0, many minutes near 1, for ever at 1." },
+    { "mem_age", "How much darker a memory grows as it fades: the highs go faster than the lows, at the same rate in every line." },
+    { "mem_renew", "What arrives pushes out what the memory holds, the harder the louder it is." },
+    { "mem_drive", "Saturation in the loop, without aliasing: a hot memory holds at its limit and grows a little darker on every pass, as tape does." },
+    { "mem_recall", "Grains played out of the whole memory instead of its echoes." },
+    { "mem_seek", "How much the recalled grains prefer stretches whose notes fit the scale and what came in during the last seconds, against chance." },
+    { "mem_grain", "Length of the recalled grains, in milliseconds." },
+    { "mem_freeze", "Holds what the memory has, exactly, and takes nothing new in." },
+    { "mem_reverse", "Runs the memory's tape backwards: what was recorded plays backwards, and what is recorded now comes back as it went in." },
+    { "mem_half", "Runs the memory's tape at half speed: what was recorded plays an octave down and twice as long." },
+    { "mem_erase", "Empties the memory, and keeps it empty while on." },
 
     // ---- master
     { "master_tilt", "One broad see-saw around the pivot: turn it down and the whole instrument leans dark, up and it leans open. A single tilt does more for an ambient mix than any equaliser with more knobs, because it never carves a hole." },
@@ -556,6 +575,8 @@ VOWEL  An a-e-i-o-u formant filter at Vowel, wandering at Vowel Rate.
 NEBULA  A spectral smear: the spectrum's phases are scattered by Smear (1 is a spectral freeze); Nebula is its mix.
 
 SHIMMER sits around the far reverb rather than in the Cosmos path: the reverb's previous block, pitch-shifted (Shimmer Pitch: an octave, a fifth, a fourth, an octave and a fifth, an octave down, two up), is fed back into its input -- the rising cloud. It is regulated by the reverb's level so it cannot run into the clipper.
+
+MEMORY, the third tab, is a second parallel world: a long, drifting sound memory in the spirit of SOMA's Cosmos. Send takes the foreground into a pool of ninety seconds divided between Lines (two, four or eight) of prime lengths, the longest Size seconds; Return and To Far bring it back. Blur exchanges the lines' content through a lossless rotation -- at 0 every line is its own echo, towards 1 every echo runs through all of them, and beyond a half the echoes scatter into a space -- without ever changing the level. Drift slides the lines against each other and wanders them across the field, bent by a slow chaotic signal. Hold is how long a memory lasts (for ever at 1), Age how much darker it grows on the way, Renew lets new sound push the old out, Drive saturates the loop without aliasing. Recall plays grains out of the whole memory, and Seek makes them prefer the stretches whose notes fit the scale and the last seconds of input. Freeze holds, Erase empties, and Reverse and Half Speed move the tape itself: what was recorded plays backwards or an octave down, what is recorded now comes back as it went in.
 
 The COSMOS RETURN display shows the spectrum of what the path hands back (nothing while Send is 0).)" },
 

@@ -411,6 +411,20 @@ void Engine::renderChunk(float* L, float* R, int n)
         cosTapW_ = (cosTapW_ + n) & 4095;
         if (stems_ != nullptr) for (int i = 0; i < n; ++i) { stems_[4][stemPos_ + i] = 0.0f; stems_[5][stemPos_ + i] = 0.0f; }
     }
+    // Memory: a second parallel world off the near bus, returned to both planes like the Cosmos and
+    // counted into the Cosmos stem, where the parallel paths are heard apart from the dry one. It keeps
+    // running with the send closed for as long as it still holds anything.
+    if (memSend_ > 0.0f || smMemSend_.value > 1e-4f || !memory_.quiet()) {
+        float* ml = memL_.data(); float* mr = memR_.data();
+        for (int i = 0; i < n; ++i) { const float s = smMemSend_.next(memSend_); ml[i] = nl[i] * s; mr[i] = nr[i] * s; }
+        memory_.process(ml, mr, n);
+        for (int i = 0; i < n; ++i) {
+            const float ret = smMemReturn_.next(memReturn_), tf = smMemToFar_.next(memToFar_);
+            nl[i] += ml[i] * ret; nr[i] += mr[i] * ret;
+            fl[i] += ml[i] * tf;  fr[i] += mr[i] * tf;
+            if (stems_ != nullptr) { stems_[4][stemPos_ + i] += ml[i] * ret; stems_[5][stemPos_ + i] += mr[i] * ret; }
+        }
+    }
     nearReverb_.process(nl, nr, n);
 
     // Background plane: 100 % wet, dark, wide. Shimmer feeds the pitch-shifted previous

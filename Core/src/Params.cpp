@@ -45,6 +45,7 @@ const char* const kEnsModeNames[3] = { "Chorus", "Microshift", "Velvet" };
 const char* const kFarModeNames[4] = { "Classic", "Scattering", "Colourless", "Rotating" };
 const char* const kCloudResModeNames[2] = { "Band", "Comb" };
 const char* const kCloudResNoteNames[4] = { "Scale", "Chord", "Fifths", "Octaves" };
+const char* const kMemLineNames[3] = { "2", "4", "8" };
 const char* const kKeysFilterNames[2] = { "Classic", "One Euro" };
 const char* const kTransposeNames[7] = { "None", "Fourth up", "Fifth up", "Octave up", "Fourth down", "Fifth down", "Octave down" };
 const char* const kBinauralNames[2] = { "Off", "Headphones" };
@@ -670,6 +671,24 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     C(ParamId::CloudResMode,   "cloud_res_mode",  "Res Mode",  "Cloud", kCloudResModeNames, 2, 0),
     C(ParamId::CloudResNotes,  "cloud_res_notes", "Res Notes", "Cloud", kCloudResNoteNames, 4, 1),
     F(ParamId::CloudResDecay,  "cloud_res_decay", "Ring",      "Cloud", 0.2f,  12.f,    2.5f,   0.4f, "s"),
+    F(ParamId::MemSend,    "mem_send",    "Send",       "Memory", 0.f,  1.f,   0.f,   1.f,  ""),
+    F(ParamId::MemReturn,  "mem_return",  "Return",     "Memory", 0.f,  1.f,   0.5f,  1.f,  ""),
+    F(ParamId::MemToFar,   "mem_to_far",  "To Far",     "Memory", 0.f,  1.f,   0.4f,  1.f,  ""),
+    C(ParamId::MemLines,   "mem_lines",   "Lines",      "Memory", kMemLineNames, 3, 1),
+    F(ParamId::MemSize,    "mem_size",    "Size",       "Memory", 1.f,  40.f,  9.f,   0.4f, "s"),
+    F(ParamId::MemBlur,    "mem_blur",    "Blur",       "Memory", 0.f,  1.f,   0.25f, 1.f,  ""),
+    F(ParamId::MemDrift,   "mem_drift",   "Drift",      "Memory", 0.f,  1.f,   0.3f,  1.f,  ""),
+    F(ParamId::MemHold,    "mem_hold",    "Hold",       "Memory", 0.f,  1.f,   0.8f,  1.f,  ""),
+    F(ParamId::MemAge,     "mem_age",     "Age",        "Memory", 0.f,  1.f,   0.3f,  1.f,  ""),
+    F(ParamId::MemRenew,   "mem_renew",   "Renew",      "Memory", 0.f,  1.f,   0.f,   1.f,  ""),
+    F(ParamId::MemDrive,   "mem_drive",   "Drive",      "Memory", 0.f,  1.f,   0.f,   1.f,  ""),
+    F(ParamId::MemRecall,  "mem_recall",  "Recall",     "Memory", 0.f,  1.f,   0.f,   1.f,  ""),
+    F(ParamId::MemSeek,    "mem_seek",    "Seek",       "Memory", 0.f,  1.f,   0.5f,  1.f,  ""),
+    F(ParamId::MemGrain,   "mem_grain",   "Grain",      "Memory", 40.f, 800.f, 220.f, 0.5f, "ms"),
+    B(ParamId::MemFreeze,  "mem_freeze",  "Freeze",     "Memory", false),
+    B(ParamId::MemReverse, "mem_reverse", "Reverse",    "Memory", false),
+    B(ParamId::MemHalf,    "mem_half",    "Half Speed", "Memory", false),
+    B(ParamId::MemErase,   "mem_erase",   "Erase",      "Memory", false),
 }};
 } // namespace
 
@@ -733,7 +752,7 @@ const SectionName kSections[] = {
     { "Autoplay", ParamSection::Autoplay },
     { "Tuning", ParamSection::Tuning }, { "Coherence", ParamSection::Coherence }, { "Clock", ParamSection::Clock },
     { "Morph", ParamSection::Morph }, { "Macros", ParamSection::Macros }, { "Map", ParamSection::Map },
-    { "Route", ParamSection::Route },
+    { "Route", ParamSection::Route }, { "Memory", ParamSection::Memory },
 };
 } // namespace
 

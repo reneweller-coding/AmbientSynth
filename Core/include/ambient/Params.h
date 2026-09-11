@@ -228,6 +228,10 @@ enum class ParamId : int {
     // so a preset that says nothing about them has the cloud it always had.
     CloudFeedback, CloudTone, CloudTranspose, CloudScatter, CloudSwarm,
     CloudResonance, CloudResMode, CloudResNotes, CloudResDecay,
+    // The Memory (12.09.2026): a drifting sound memory beside the Cosmos -- a send, two returns, the
+    // lines and their exchange, how long and how darkly it keeps, the recalled grains, and the tape.
+    MemSend, MemReturn, MemToFar, MemLines, MemSize, MemBlur, MemDrift, MemHold, MemAge,
+    MemRenew, MemDrive, MemRecall, MemSeek, MemGrain, MemFreeze, MemReverse, MemHalf, MemErase,
     Count
 };
 
@@ -274,8 +278,9 @@ enum class ParamSection : int {
     Master, Source1, Strands, Source2, Source3, Source4, Strike, Foundation, Air, Envelope, Filter, ZPlane,
     Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
     Patina, Cosmos, Cloud, ClusterBrain, Brain2, Autoplay, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
-    Macros, Map, Route, Vector, Unknown
+    Macros, Map, Route, Vector, Memory, Unknown
 };
+extern const char* const kMemLineNames[3];      // "2", "4", "8": how many lines the Memory's pool is divided into
 ParamSection sectionOf(const char* sectionName);
 // By id it is a lookup, not a search. It used to take the parameter's section NAME and compare it
 // against a table of names, string by string -- and isPerformanceParam asks five of those

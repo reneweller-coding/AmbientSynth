@@ -11,6 +11,7 @@
 #include "Voice.h"
 #include "Effects.h"
 #include "Cloud.h"
+#include "Memory.h"
 #include "Cosmos.h"
 #include "Convolution.h"
 #include "Body.h"
@@ -351,6 +352,11 @@ private:
     StereoDelay  delay_, delay2_;
     GrainCloud   cloud_;
     float        delay2Mix_ = 0.0f, delay2ToFar_ = 0.5f, cloudSend_ = 0.0f;
+    // The Memory: a parallel send off the near bus like the Cosmos, with its own two returns.
+    Memory       memory_;
+    float        memSend_ = 0.0f, memReturn_ = 0.5f, memToFar_ = 0.4f;
+    Smoother     smMemSend_, smMemReturn_, smMemToFar_;
+    std::vector<float> memL_, memR_;
     Reverb       nearReverb_, farReverb_;
     Diffuser     diffuser_;
     std::vector<float> coupleBuf_;      // the previous block's foreground, for the sympathetic coupling

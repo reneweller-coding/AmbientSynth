@@ -990,10 +990,24 @@ void Engine::readParams()
     shifter_.set(shiftHz, shiftHz == 0.0f ? 0.0f : 1.0f);
     const float rootHz = static_cast<float>(scaleFrequency(*scale_, brain_.root(), 60 + clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11), g(ParamId::RefPitch), snapKeys_));
     resonator_.set(rootHz * g(ParamId::CosmosResPitch), g(ParamId::CosmosResFeedback), g(ParamId::CosmosRes));
-    {   // The cloud's scatter and resonators hear the same root, placed in the scale against the key's tonic.
+    {   // The cloud's scatter and resonators hear the same root, placed in the scale against the key's
+        // tonic; the Memory's Seek listens for the scale from that tonic.
         const int keyRoot = 60 + clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11);
-        cloud_.setHarmony(*scale_, scaleFrequency(*scale_, keyRoot, keyRoot, g(ParamId::RefPitch), snapKeys_), rootHz);
+        const double tonicHz = scaleFrequency(*scale_, keyRoot, keyRoot, g(ParamId::RefPitch), snapKeys_);
+        cloud_.setHarmony(*scale_, tonicHz, rootHz);
+        memory_.setHarmony(*scale_, tonicHz);
     }
+
+    // Memory
+    memSend_   = g(ParamId::MemSend);
+    memReturn_ = g(ParamId::MemReturn);
+    memToFar_  = g(ParamId::MemToFar);
+    memory_.setShape(2 << clampv(static_cast<int>(std::lround(g(ParamId::MemLines))), 0, 2),
+                     g(ParamId::MemSize), g(ParamId::MemBlur), g(ParamId::MemDrift));
+    memory_.setDecay(g(ParamId::MemHold), g(ParamId::MemAge), g(ParamId::MemRenew), g(ParamId::MemDrive));
+    memory_.setRecall(g(ParamId::MemRecall), g(ParamId::MemSeek), g(ParamId::MemGrain));
+    memory_.setTape(g(ParamId::MemReverse) >= 0.5f, g(ParamId::MemHalf) >= 0.5f,
+                    g(ParamId::MemFreeze) >= 0.5f, g(ParamId::MemErase) >= 0.5f);
     vowel_.set(g(ParamId::CosmosVowel), g(ParamId::CosmosVowelRate));
     nebula_.set(g(ParamId::CosmosSmear));
     cosmosShimmer_ = g(ParamId::CosmosShimmer);

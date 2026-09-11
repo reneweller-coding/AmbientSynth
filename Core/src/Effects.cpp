@@ -487,7 +487,9 @@ void Reverb::prepare(double sampleRate)
     w_ = 0;
     for (auto& l : line_) l.assign(static_cast<size_t>(size), 0.0f);
     for (auto& a : ap_)   a.assign(static_cast<size_t>(size), 0.0f);
+    for (auto& a : apR_)  a.assign(static_cast<size_t>(size), 0.0f);
     pre_.assign(static_cast<size_t>(size), 0.0f);
+    preR_.assign(static_cast<size_t>(size), 0.0f);
     const int outSize = pow2At(static_cast<int>(0.012 * sr_) + 8);
     outR_.assign(static_cast<size_t>(outSize), 0.0f);
     outMask_ = outSize - 1;
@@ -567,17 +569,33 @@ void Reverb::process(float* L, float* R, int n)
     for (int i = 0; i < n; ++i) {
         rot_ += (rotTarget - rot_) * glide;
         if (rot_ < 1.0e-6f) rot_ = 0.0f;
-        const float in = 0.5f * (L[i] + R[i]);
-        pre_[static_cast<size_t>(w_ & mask_)] = in;
+        // Both channels, each through its own pre-delay and diffusion and into its own half of the
+        // network: the left into lines 0-3, whose taps are the left output, the right into 4-7.
+        //
+        // The input used to be the mono sum, which hears nothing of what a recording keeps between
+        // its two channels -- measured, an anti-phase pair reached the near hall 16.7 dB down --
+        // and since the far plane is nothing but this hall, every voice placed there lost its side
+        // and its width on the way in. The Householder feedback still mixes all eight lines, so
+        // the tail spreads across the field as it grows; what arrives first keeps its side.
+        // Identical channels inject exactly what the mono sum did, and a hard-panned source now
+        // excites the hall as strongly as a centred one of the same power (the sum gave it 3 dB less).
+        pre_[static_cast<size_t>(w_ & mask_)] = L[i];
+        preR_[static_cast<size_t>(w_ & mask_)] = R[i];
         preCur_ += (preTarget_ - preCur_) * glide;
-        float x = ringRead(pre_.data(), mask_, w_, preCur_ + 1.0f);
+        float xl = ringRead(pre_.data(), mask_, w_, preCur_ + 1.0f);
+        float xr = ringRead(preR_.data(), mask_, w_, preCur_ + 1.0f);
 
         for (int k = 0; k < kAllpasses; ++k) {
             float* a = ap_[k].data();
+            float* ar = apR_[k].data();
             const float d = a[(w_ - apLen_[k]) & mask_];
-            const float y = d - 0.6f * x;
-            a[w_ & mask_] = x + 0.6f * y;
-            x = y;
+            const float dr = ar[(w_ - apLen_[k]) & mask_];
+            const float y = d - 0.6f * xl;
+            const float yr = dr - 0.6f * xr;
+            a[w_ & mask_] = xl + 0.6f * y;
+            ar[w_ & mask_] = xr + 0.6f * yr;
+            xl = y;
+            xr = yr;
         }
 
         float o[kLines];
@@ -602,7 +620,7 @@ void Reverb::process(float* L, float* R, int n)
         const float hh = sum * (2.0f / static_cast<float>(kLines));   // Householder reflection
         if (rot_ <= 0.0f) {
             for (int l = 0; l < kLines; ++l)
-                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (o[l] - hh) + ((l & 1) ? -inGain : inGain) * x;
+                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (o[l] - hh) + ((l & 1) ? -inGain : inGain) * (l < kLines / 2 ? xl : xr);
         } else {
             // The turning matrix: the reflection's output through two layers of Givens rotations,
             // neighbours first and then across, every angle advanced by its own tiny step per
@@ -636,7 +654,7 @@ void Reverb::process(float* L, float* R, int n)
                 u[a] = ua; u[b] = ub;
             }
             for (int l = 0; l < kLines; ++l)
-                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (v[l] + rot_ * (u[l] - v[l])) + ((l & 1) ? -inGain : inGain) * x;
+                line_[l][static_cast<size_t>(w_ & mask_)] = gain_[l] * (v[l] + rot_ * (u[l] - v[l])) + ((l & 1) ? -inGain : inGain) * (l < kLines / 2 ? xl : xr);
         }
 
         float wetL = 0.3f * (o[0] - o[1] + o[2] - o[3]);
@@ -672,7 +690,8 @@ void GrainCloud::prepare(double sampleRate, uint64_t seed)
     sr_ = sampleRate;
     rng_.seed(seed);
     const int size = pow2At(static_cast<int>(4.0 * sr_) + 64);
-    buf_.assign(static_cast<size_t>(size), 0.0f);
+    bufL_.assign(static_cast<size_t>(size), 0.0f);
+    bufR_.assign(static_cast<size_t>(size), 0.0f);
     mask_ = size - 1;
     w_ = 0;
     nextGrain_ = 0.0;
@@ -690,11 +709,13 @@ void GrainCloud::set(float densityPerSec, float sizeMs, float pitch, float spray
 
 void GrainCloud::process(const float* inL, const float* inR, float* outL, float* outR, int n)
 {
-    float* b = buf_.data();
+    float* b = bufL_.data();
+    float* br = bufR_.data();
     static const double kRates[4] = { 2.0, 0.5, 1.5, 4.0 };
     const float gain = level_ * 0.6f / std::sqrt(std::max(density_ * size_ * 0.001f, 1.0f));   // roughly constant loudness
     for (int i = 0; i < n; ++i) {
-        b[w_ & mask_] = 0.5f * (inL[i] + inR[i]);
+        b[w_ & mask_] = inL[i];
+        br[w_ & mask_] = inR[i];
         nextGrain_ -= 1.0;
         if (nextGrain_ <= 0.0) {
             nextGrain_ = -std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * sr_ / density_;
@@ -720,8 +741,9 @@ void GrainCloud::process(const float* inL, const float* inR, float* outL, float*
             const double delay = static_cast<double>(w_) - g.pos;
             if (delay < 1.0 || g.phase >= g.len) { g.active = false; continue; }
             const float win = 0.5f - 0.5f * g.wc;
-            const float s = ringRead(b, mask_, static_cast<int>(w_ & mask_), static_cast<float>(delay)) * win;
-            sl += s * g.gainL; sr += s * g.gainR;
+            const float sL = ringRead(b, mask_, static_cast<int>(w_ & mask_), static_cast<float>(delay)) * win;
+            const float sR = ringRead(br, mask_, static_cast<int>(w_ & mask_), static_cast<float>(delay)) * win;
+            sl += sL * g.gainL; sr += sR * g.gainR;
             const float r2 = g.wc * g.wc + g.ws * g.ws, fix = 1.5f - 0.5f * r2;   // keep it on the unit circle
             const float nc = (g.wc * g.rc - g.ws * g.rs) * fix;
             g.ws = (g.ws * g.rc + g.wc * g.rs) * fix;

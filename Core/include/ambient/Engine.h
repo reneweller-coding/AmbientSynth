@@ -441,7 +441,8 @@ private:
     Drifter       tideDrift_, rotDrift_;
     float         tide_ = 0.0f, tidePeriod_ = 12.0f, farRotate_ = 0.0f, farWidth_ = 1.0f;
     // Envelopment: the far bus's low-mid side channel, between Bass Mono and 500 Hz.
-    float         envelop_ = 0.0f, envCoefLo_ = 0.0f, envCoefHi_ = 0.0f, envLo_ = 0.0f, envHi_ = 0.0f;
+    float         envelop_ = 0.0f;
+    Svf           envBell_;       // the side channel's band, from Bass Mono to 500 Hz
     Smoother      smEnvelop_;
     // Comodulation. The background's gain follows one slow random envelope, shared by every
     // band of it at once. Hall, Haggard and Fernandes (1984): a tone in a noise whose bands

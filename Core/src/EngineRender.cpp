@@ -489,13 +489,19 @@ void Engine::renderChunk(float* L, float* R, int n)
     // 500 Hz, where this instrument's background has little side, because the funnel narrows it
     // and Bass Mono folds it. This lifts the far bus's side channel in the band between the two,
     // by up to six decibels, and leaves the mid exactly alone.
+    //
+    // With a bell. It used to add the difference of two one-poles, and that difference turns the
+    // phase inside the band: added to the side it came out some three and a half decibels above
+    // it at best -- 2.8 dB measured, once the halls began to hear both channels and the side they
+    // return carried the voice's own partials. At the centre of a bell nothing turns, so full
+    // Envelop is the six decibels this has always said, and about four at the band's edges.
     if (envelop_ > 0.0f || smEnvelop_.value > 1.0e-4f) {
         for (int i = 0; i < n; ++i) {
             const float mid = 0.5f * (fl[i] + fr[i]);
             float side = 0.5f * (fl[i] - fr[i]);
-            envLo_ += envCoefLo_ * (side - envLo_);
-            envHi_ += envCoefHi_ * (side - envHi_);
-            side += smEnvelop_.next(envelop_) * (envHi_ - envLo_);
+            float lp, bp, hp;
+            envBell_.tick(side, lp, bp, hp);
+            side += smEnvelop_.next(envelop_) * envBell_.k * bp;   // k * bp: unity at the centre, no phase turn
             fl[i] = mid + side; fr[i] = mid - side;
         }
     }
@@ -519,9 +525,11 @@ void Engine::renderChunk(float* L, float* R, int n)
     // The room's early reflections, from the near bus and added to it: they belong in front of
     // the listener with the dry sound, not behind it with the tail.
     if (early_.active()) {
-        float* mono = wl;   // the delay scratch is free by now
-        for (int i = 0; i < n; ++i) mono[i] = 0.5f * (nl[i] + nr[i]);
-        early_.process(mono, nl, nr, n);
+        // The room listens to both channels of the near bus and adds its reflections into the same
+        // two buffers, so it listens to copies, in the delay scratch that is free by now.
+        std::memcpy(wl, nl, bytes);
+        std::memcpy(wr, nr, bytes);
+        early_.process(wl, wr, nl, nr, n);
     }
     // Sympathy: this block's foreground is what the voices will hear of each other in the next
     // one. A block of delay is what makes the loop safe, and at these depths inaudible.

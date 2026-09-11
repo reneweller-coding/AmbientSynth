@@ -3874,8 +3874,8 @@ void testResearchBatch()
             // The source glides into place, so let it settle before the impulse: render silence
             // first, then the impulse.
             std::vector<float> warm(static_cast<size_t>(sr), 0.0f), wl(static_cast<size_t>(sr), 0.0f), wr(static_cast<size_t>(sr), 0.0f);
-            room.process(warm.data(), wl.data(), wr.data(), sr);
-            room.process(in.data(), L.data(), R.data(), n);
+            room.process(warm.data(), warm.data(), wl.data(), wr.data(), sr);
+            room.process(in.data(), in.data(), L.data(), R.data(), n);
             int first = -1;
             double peak = 0.0;
             for (int i = 0; i < n; ++i) peak = std::max(peak, std::fabs(static_cast<double>(L[static_cast<size_t>(i)]) + R[static_cast<size_t>(i)]));
@@ -3900,12 +3900,12 @@ void testResearchBatch()
         const int n = sr / 4;
         std::vector<float> in(static_cast<size_t>(n), 0.0f), aL(static_cast<size_t>(n), 0.0f), aR(static_cast<size_t>(n), 0.0f), bL(static_cast<size_t>(n), 0.0f), bR(static_cast<size_t>(n), 0.0f);
         std::vector<float> warm(static_cast<size_t>(sr), 0.0f), wl(static_cast<size_t>(sr), 0.0f), wr(static_cast<size_t>(sr), 0.0f);
-        a.process(warm.data(), wl.data(), wr.data(), sr);
+        a.process(warm.data(), warm.data(), wl.data(), wr.data(), sr);
         std::fill(wl.begin(), wl.end(), 0.0f); std::fill(wr.begin(), wr.end(), 0.0f);
-        b.process(warm.data(), wl.data(), wr.data(), sr);
+        b.process(warm.data(), warm.data(), wl.data(), wr.data(), sr);
         in[0] = 1.0f;
-        a.process(in.data(), aL.data(), aR.data(), n);
-        b.process(in.data(), bL.data(), bR.data(), n);
+        a.process(in.data(), in.data(), aL.data(), aR.data(), n);
+        b.process(in.data(), in.data(), bL.data(), bR.data(), n);
         // Measured over the first thirty milliseconds: that is where a reflection still carries the
         // direction of the wall it came off. After a few passes of the scattering the energy has
         // been round every surface and points nowhere, which is what the far reverb is for -- and
@@ -5748,6 +5748,90 @@ void testResearchBatch()
     }
 }
 
+// ---- the halls, the cloud and the early room hear both channels
+//
+// All three used to take the mono sum of what reached them. The test signal is the one the sum
+// destroys completely -- the same noise in both channels with opposite signs -- set against identical
+// channels, and a source on the left alone, which a stereo input has to keep on the left.
+void testStereoInputs()
+{
+    const int sr = 48000;
+    std::vector<float> noise(static_cast<size_t>(sr));
+    {
+        Rng r;
+        r.seed(77);
+        for (float& v : noise) v = 0.3f * r.bipolar();
+    }
+    auto energy = [](const std::vector<float>& a, size_t from, size_t to) {
+        double e = 0.0;
+        for (size_t i = from; i < std::min(to, a.size()); ++i) e += static_cast<double>(a[i]) * a[i];
+        return e;
+    };
+    auto blocks = [](size_t total, auto&& step) {
+        for (size_t p = 0; p < total; p += 256) step(p, static_cast<int>(std::min<size_t>(256, total - p)));
+    };
+    {   // the hall: two seconds out of one second of noise, fully wet
+        auto hall = [&](float sideSign, bool leftOnly, std::vector<float>& L, std::vector<float>& R) {
+            Reverb rv;
+            rv.prepare(sr);
+            rv.set(1.6f, 3.0f, 0.4f, 0.0f, false, 1.0f);
+            L.assign(2 * noise.size(), 0.0f);
+            R.assign(L.size(), 0.0f);
+            for (size_t i = 0; i < noise.size(); ++i) { L[i] = noise[i]; R[i] = leftOnly ? 0.0f : sideSign * noise[i]; }
+            blocks(L.size(), [&](size_t p, int m) { rv.process(L.data() + p, R.data() + p, m); });
+        };
+        std::vector<float> sL, sR, aL, aR, lL, lR;
+        hall(1.0f, false, sL, sR);
+        hall(-1.0f, false, aL, aR);
+        hall(1.0f, true, lL, lR);
+        const double same = energy(sL, 0, sL.size()) + energy(sR, 0, sR.size());
+        const double anti = energy(aL, 0, aL.size()) + energy(aR, 0, aR.size());
+        const size_t first = static_cast<size_t>(0.15 * sr);
+        const double eL = energy(lL, 0, first), eR = energy(lR, 0, first);
+        std::printf("  [probe] hall: anti-phase against identical channels %+.1f dB; a left source's first 150 ms %+.1f dB left of right\n",
+                    10.0 * std::log10(anti / std::max(same, 1e-30)), 10.0 * std::log10(eL / std::max(eR, 1e-30)));
+        CHECK(same > 0.0 && std::fabs(10.0 * std::log10(anti / std::max(same, 1e-30))) < 3.0,
+              "the hall hears an anti-phase pair about as loudly as identical channels (the mono sum heard nothing)");
+        CHECK(eL > 2.0 * eR, "and a source on the left enters the hall on the left");
+    }
+    {   // the cloud: the same grains in both runs, so anti-phase must give exactly the same energy
+        auto cloud = [&](float sideSign) {
+            GrainCloud c;
+            c.prepare(sr, 5);
+            c.set(30.0f, 200.0f, 0.0f, 0.5f, 1.0f);
+            std::vector<float> inR(noise.size()), oL(noise.size(), 0.0f), oR(noise.size(), 0.0f);
+            for (size_t i = 0; i < noise.size(); ++i) inR[i] = sideSign * noise[i];
+            blocks(noise.size(), [&](size_t p, int m) { c.process(noise.data() + p, inR.data() + p, oL.data() + p, oR.data() + p, m); });
+            return energy(oL, noise.size() / 2, noise.size()) + energy(oR, noise.size() / 2, noise.size());
+        };
+        const double same = cloud(1.0f), anti = cloud(-1.0f);
+        CHECK(same > 0.0 && std::fabs(10.0 * std::log10(anti / std::max(same, 1e-30))) < 0.5,
+              "the cloud hears an anti-phase pair as loudly as identical channels");
+    }
+    {   // the early room: an anti-phase pair reaches its side walls, and the left comes back left
+        auto room = [&](float sideSign, bool leftOnly, double& eL, double& eR) {
+            EarlyRoom er;
+            er.prepare(sr);
+            er.setRoom(10.0f, 0.3f, 1.0f);
+            er.setSource(0.0f, 0.4f);
+            er.setLevel(1.0f);
+            std::vector<float> inR(noise.size()), oL(noise.size(), 0.0f), oR(noise.size(), 0.0f);
+            for (size_t i = 0; i < noise.size(); ++i) inR[i] = leftOnly ? 0.0f : sideSign * noise[i];
+            blocks(noise.size(), [&](size_t p, int m) { er.process(noise.data() + p, inR.data() + p, oL.data() + p, oR.data() + p, m); });
+            eL = energy(oL, 0, oL.size());
+            eR = energy(oR, 0, oR.size());
+        };
+        double sL = 0, sR = 0, aL = 0, aR = 0, lL = 0, lR = 0;
+        room(1.0f, false, sL, sR);
+        room(-1.0f, false, aL, aR);
+        room(1.0f, true, lL, lR);
+        std::printf("  [probe] early room: anti-phase against identical channels %+.1f dB; a left source %+.1f dB left of right\n",
+                    10.0 * std::log10((aL + aR) / std::max(sL + sR, 1e-30)), 10.0 * std::log10(lL / std::max(lR, 1e-30)));
+        CHECK(sL + sR > 0.0 && aL + aR > 0.1 * (sL + sR), "the early room hears an anti-phase pair (the mono sum heard nothing)");
+        CHECK(lL > 1.26 * lR, "and a source on the left comes back from the left");
+    }
+}
+
 // ---- the classic wavetable (CycleTable.h): single cycles read as samples, one copy per octave
 void testCycleTable()
 {
@@ -5997,6 +6081,7 @@ int main()
     testStackAndWander();
     testSources();
     testCycleTable();
+    testStereoInputs();
     testPresetText();
     testPresetMap();
     testRoom();

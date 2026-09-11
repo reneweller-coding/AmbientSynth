@@ -766,9 +766,11 @@ void Engine::readParams()
     leniaMu_ = g(ParamId::LeniaGrowth);
     chaosPeriod_ = g(ParamId::ChaosPeriod);
     {
+        // A bell between the two corners, centred on their geometric mean, as wide as they are
+        // apart (Q from the bandwidth in octaves). Coefficients only: the filter's state stays.
         const float lo = std::max(125.0f, getParam(ParamId::BassMono));
-        envCoefLo_ = 1.0f - std::exp(-kTwoPi * lo / static_cast<float>(sr_));
-        envCoefHi_ = 1.0f - std::exp(-kTwoPi * 500.0f / static_cast<float>(sr_));
+        const float ratio = 500.0f / lo;
+        envBell_.setQ(std::sqrt(lo * 500.0f), std::sqrt(ratio) / std::max(ratio - 1.0f, 0.05f), static_cast<float>(sr_));
     }
     farReverb_.setMode(clampv(static_cast<int>(std::lround(getParam(ParamId::FarMode))), 0, 3));
 

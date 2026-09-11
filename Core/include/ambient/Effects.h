@@ -119,8 +119,8 @@ private:
     int    rotNorm_ = 0;
     static constexpr int kAllpasses = 4;
     std::vector<float> line_[kLines];
-    std::vector<float> ap_[kAllpasses];
-    std::vector<float> pre_, outR_;
+    std::vector<float> ap_[kAllpasses], apR_[kAllpasses];   // the input diffusion, a chain per channel
+    std::vector<float> pre_, preR_, outR_;                  // the pre-delay, a ring per channel
     int    mask_ = 0, w_ = 0, outMask_ = 0;
     double sr_ = 48000.0;
     float  lenTarget_[kLines] = {}, lenCur_[kLines] = {};
@@ -241,7 +241,9 @@ class GrainCloud {
 public:
     void prepare(double sampleRate, uint64_t seed);
     void set(float densityPerSec, float sizeMs, float pitch, float spraySec, float level);
-    // Feeds the history with (inL+inR)/2 and ADDS the cloud to outL/outR.
+    // Feeds the history with both channels and ADDS the cloud to outL/outR. A grain reads the left
+    // history into its left gain and the right into its right, so a wide field keeps its sides in
+    // the cloud; identical channels give exactly the cloud the mono sum (inL+inR)/2 used to.
     void process(const float* inL, const float* inR, float* outL, float* outR, int n);
 private:
     static constexpr int kMaxGrains = 32;
@@ -249,7 +251,7 @@ private:
     // per grain, with up to 32 sounding, was the most expensive line in the cloud.
     struct Grain { bool active = false; double pos = 0.0; double rate = 1.0; float len = 1.0f, phase = 0.0f,
                    gainL = 0.0f, gainR = 0.0f, wc = 1.0f, ws = 0.0f, rc = 1.0f, rs = 0.0f; };
-    std::vector<float> buf_;
+    std::vector<float> bufL_, bufR_;
     Grain  grains_[kMaxGrains];
     Rng    rng_;
     int    mask_ = 0;
@@ -360,7 +362,8 @@ public:
         // and seventeen milliseconds, and every delay in here is shorter than that.
         int size = 1;
         while (size < static_cast<int>(0.14 * sr_) + 8) size <<= 1;
-        in_.assign(static_cast<size_t>(size), 0.0f);
+        inL_.assign(static_cast<size_t>(size), 0.0f);
+        inR_.assign(static_cast<size_t>(size), 0.0f);
         for (auto& v : press_) v.assign(static_cast<size_t>(size), 0.0f);
         for (auto& row : pair_) for (auto& v : row) v.assign(static_cast<size_t>(size), 0.0f);
         mask_ = size - 1;
@@ -413,8 +416,14 @@ public:
     void setLevel(float level) { level_ = clampv(level, 0.0f, 1.0f); }
     bool active() const { return level_ > 0.0f || smLevel_ > 1.0e-5f; }
 
-    // Adds the room's early reflections to L/R. `in` is the near bus, mono.
-    void process(const float* in, float* L, float* R, int n)
+    // Adds the room's early reflections to L/R, from the near bus in inL/inR (which must not be
+    // the same buffers). Every wall hears one channel: the left wall the left and the right wall
+    // the right, and of the four walls straight ahead, behind, above and below, two each -- those
+    // come back from the middle whichever channel they heard, so the split only changes their
+    // delays. Identical channels excite the room exactly as the mono sum used to. Halves of both
+    // channels on the middle walls were tried first and cancel an anti-phase pair there: it
+    // reached the room 10.7 dB down, from the side walls alone.
+    void process(const float* inL, const float* inR, float* L, float* R, int n)
     {
         if (!active()) { w_ = (w_ + n) & 0x3FFFFFFF; return; }
         const float lvlStep = 1.0f / static_cast<float>(std::max(1, n));
@@ -423,7 +432,8 @@ public:
         const float g = (1.0f - absorb_) * 0.8f;
         for (int i = 0; i < n; ++i) {
             smLevel_ += (level_ - smLevel_) * lvlStep;
-            in_[static_cast<size_t>(w_ & mask_)] = in[i];
+            inL_[static_cast<size_t>(w_ & mask_)] = inL[i];
+            inR_[static_cast<size_t>(w_ & mask_)] = inR[i];
             // The source's own path glides rather than jumps: a delay that steps is a click, and
             // the near bus's centre of gravity moves whenever a voice starts or stops.
             float inc[kWalls][kWalls];
@@ -436,7 +446,8 @@ public:
                 // were set outright: automating Early Size moved six read heads by hundreds of
                 // samples at once, a click per block.
                 dEar_[k] += 0.0005f * (dEarT_[k] - dEar_[k]);
-                inject[k] = ringRead(in_.data(), mask_, w_, dSrc_[k]) * gSrc_[k];
+                inject[k] = (kFromLeft[k] * ringRead(inL_.data(), mask_, w_, dSrc_[k])
+                           + kFromRight[k] * ringRead(inR_.data(), mask_, w_, dSrc_[k])) * gSrc_[k];
                 float s = inject[k];
                 for (int j = 0; j < kWalls; ++j) {
                     if (j == k) { inc[j][k] = 0.0f; continue; }
@@ -514,7 +525,10 @@ private:
         }
     }
 
-    std::vector<float> in_;
+    // Which channel of the near bus each wall hears (left, right, front, back, ceiling, floor).
+    static constexpr float kFromLeft[kWalls]  = { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
+    static constexpr float kFromRight[kWalls] = { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f };
+    std::vector<float> inL_, inR_;
     std::vector<float> press_[kWalls];
     std::vector<float> pair_[kWalls][kWalls];
     int    mask_ = 0, w_ = 0;

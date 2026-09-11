@@ -34,9 +34,11 @@ const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" }
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
 const char* const kSubSourceNames[3] = { "Root", "Difference", "Lowest" };
-// A slot's own amplitude contour: none, or one of the six shapes the preset already carries. The
-// shape is read with its own Mode and Time, so Env 3 used here is the same Env 3 the matrix uses.
-const char* const kSlotEnvNames[kNumSlotEnvs] = { "Off", "Env 1", "Env 2", "Env 3", "Env 4", "Env 5", "Env 6" };
+// A slot's own amplitude contour: none, one of the six shapes the preset carries for modulation
+// (read with that envelope's own Mode and Time, so Env 3 used here is the same Env 3 the matrix
+// uses), or the slot's own shape. Own is last because it came last: a choice travels as its index
+// in a host's state, and a slot that named Env 3 must go on naming Env 3.
+const char* const kSlotEnvNames[kNumSlotEnvs] = { "Off", "Env 1", "Env 2", "Env 3", "Env 4", "Env 5", "Env 6", "Own" };
 // Between two samples of a clip: a straight line, or a curve through four points (Catmull-Rom).
 const char* const kInterpNames[kNumInterp] = { "Linear", "Hermite" };
 const char* const kRoomSourceNames[2] = { "Far", "Near" };
@@ -694,6 +696,24 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     B(ParamId::MemErase,   "mem_erase",   "Erase",      "Memory", false),
     C(ParamId::CosmosShimmerMode, "cosmos_shimmer_mode", "Shimmer Mode", "Cosmos", kShimmerModeNames, 2, 0),
     C(ParamId::CloudShift,        "cloud_shift",         "FB Shift",     "Cloud",  kCloudShiftNames, 7, 0),
+    // Each source's own envelope, for a slot whose Env is Own (Voice.cpp). Depth 1 is the whole
+    // contour; 0 leaves the source at its written level whatever the shape says.
+    C(ParamId::Src1EnvMode,  "src1_env_mode",  "Mode",  "Src Env 1", kEnvModeNames, kNumEnvModes, 0),
+    F(ParamId::Src1EnvTime,  "src1_env_time",  "Time",  "Src Env 1", 0.05f, 20.f, 1.f, 0.4f, "x"),
+    F(ParamId::Src1EnvDepth, "src1_env_depth", "Depth", "Src Env 1", 0.f, 1.f, 1.f, 1.f, ""),
+    C(ParamId::Src1EnvSync,  "src1_env_sync",  "Sync",  "Src Env 1", kSyncDivNames, kNumSyncDivs, 0),
+    C(ParamId::Src2EnvMode,  "src2_env_mode",  "Mode",  "Src Env 2", kEnvModeNames, kNumEnvModes, 0),
+    F(ParamId::Src2EnvTime,  "src2_env_time",  "Time",  "Src Env 2", 0.05f, 20.f, 1.f, 0.4f, "x"),
+    F(ParamId::Src2EnvDepth, "src2_env_depth", "Depth", "Src Env 2", 0.f, 1.f, 1.f, 1.f, ""),
+    C(ParamId::Src2EnvSync,  "src2_env_sync",  "Sync",  "Src Env 2", kSyncDivNames, kNumSyncDivs, 0),
+    C(ParamId::Src3EnvMode,  "src3_env_mode",  "Mode",  "Src Env 3", kEnvModeNames, kNumEnvModes, 0),
+    F(ParamId::Src3EnvTime,  "src3_env_time",  "Time",  "Src Env 3", 0.05f, 20.f, 1.f, 0.4f, "x"),
+    F(ParamId::Src3EnvDepth, "src3_env_depth", "Depth", "Src Env 3", 0.f, 1.f, 1.f, 1.f, ""),
+    C(ParamId::Src3EnvSync,  "src3_env_sync",  "Sync",  "Src Env 3", kSyncDivNames, kNumSyncDivs, 0),
+    C(ParamId::Src4EnvMode,  "src4_env_mode",  "Mode",  "Src Env 4", kEnvModeNames, kNumEnvModes, 0),
+    F(ParamId::Src4EnvTime,  "src4_env_time",  "Time",  "Src Env 4", 0.05f, 20.f, 1.f, 0.4f, "x"),
+    F(ParamId::Src4EnvDepth, "src4_env_depth", "Depth", "Src Env 4", 0.f, 1.f, 1.f, 1.f, ""),
+    C(ParamId::Src4EnvSync,  "src4_env_sync",  "Sync",  "Src Env 4", kSyncDivNames, kNumSyncDivs, 0),
 }};
 } // namespace
 
@@ -769,9 +789,11 @@ const ParamId* slotParamIds(int slot)
 ParamSection sectionOf(const char* name)
 {
     if (name == nullptr) return ParamSection::Unknown;
-    // The eight LFOs and six envelopes each have their own numbered section ("LFO 3", "Env 5").
+    // The eight LFOs and six envelopes each have their own numbered section ("LFO 3", "Env 5"), and
+    // so do the four sources' own envelopes ("Src Env 2"), which are envelopes like the six.
     if (std::strncmp(name, "LFO ", 4) == 0) return ParamSection::Lfo;
     if (std::strncmp(name, "Env ", 4) == 0) return ParamSection::ModEnvelope;
+    if (std::strncmp(name, "Src Env ", 8) == 0) return ParamSection::ModEnvelope;
     for (const SectionName& s : kSections) if (std::strcmp(s.name, name) == 0) return s.section;
     return ParamSection::Unknown;
 }

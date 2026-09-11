@@ -450,12 +450,14 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
                 juce::JUCEApplicationBase::quit();
             });
         }
-        // AMBIENT_MOD=lfo|env|matrix: which tab of the modulation strip to open. Only a dev aid,
-        // and the only way to photograph the envelope editor.
+        // AMBIENT_MOD=lfo|env|srcenv|matrix: which tab of the modulation strip to open (srcenv: the
+        // envelope tab's SOURCES page). Only a dev aid, and the only way to photograph the editor.
         {
             const juce::String md = juce::SystemStats::getEnvironmentVariable("AMBIENT_MOD", "");
-            if (mod_ != nullptr && md.isNotEmpty())
-                mod_->setTab(md == "matrix" ? 2 : (md == "env" ? 1 : 0));
+            if (mod_ != nullptr && md.isNotEmpty()) {
+                mod_->setTab(md == "matrix" ? 2 : ((md == "env" || md == "srcenv") ? 1 : 0));
+                if (md == "srcenv") mod_->setEnvPage(1);
+            }
         }
         const juce::String rt = juce::SystemStats::getEnvironmentVariable("AMBIENT_ROUTE", "");
         for (int r = 0; rt.isNotEmpty() && r < numRoutePresets(); ++r) if (rt == routePreset(r).name) proc_.setRouteText(routePreset(r).points);
@@ -1657,6 +1659,16 @@ juce::Image AmbientSynthEditor::snapshotStripTab(int tab, bool detail)
     } else img = snapshotStrip();
     mod_->setTab(was);
     return img;
+}
+
+void AmbientSynthEditor::openSourceEnvelope(int slot)
+{
+    // The pictures that call this sit on the main page, where the strip is, so it only needs its
+    // page turned. Which source asked is not singled out: the page shows all four side by side.
+    juce::ignoreUnused(slot);
+    if (!mod_) return;
+    mod_->setTab(1);
+    mod_->setEnvPage(1);
 }
 
 juce::StringArray AmbientSynthEditor::tabSectionNames(int rowIndex, int page) const

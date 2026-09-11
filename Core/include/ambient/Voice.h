@@ -97,12 +97,15 @@ struct VoiceParams {
     const Wavetable* userTable = nullptr;
     const CycleTable* userCycles = nullptr;   // the same file as single cycles, for the Wavetable type
     const Texture*   texture[kSlots] = {};
-    // The preset's six envelope shapes, for a slot that names one as its own entrance. The same
-    // shapes the modulation matrix reads, with the same Mode and Time -- a slot does not get a
-    // seventh envelope, it borrows one, and the difference is that here it runs from the note
-    // rather than from the phrase. Null for a shape that is not set.
+    // The preset's six envelope shapes, for a slot that borrows one as its entrance. The same
+    // shapes the modulation matrix reads, with the same Mode and Time; the difference is that here
+    // they run from the note rather than from the phrase. Null for a shape that is not set.
     const ModEnv*     envShape[kNumModEnvs] = {};
     const ModEnvSpec* envSpec[kNumModEnvs] = {};
+    // Each slot's own shape and its settings, for a slot whose Env is Own: read from the note in
+    // the same way, but as a level from 0 to 1, and without using up one of the six above.
+    const ModEnv*     srcEnvShape[kSlots] = {};
+    const ModEnvSpec* srcEnvSpec[kSlots] = {};
 };
 
 class Voice {
@@ -158,6 +161,11 @@ public:
     int displaySlotPartials(int slot, float* out, int maxCount) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayAmps(out, maxCount); }
     int displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount, int clipLen) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayGrains(out, maxCount, clipLen); }
     float pan() const { return centre_; }   // where the voice's centre sits right now, -1..1
+    // For the envelope editor's playhead: the time each slot's entrance shape was read at in the
+    // last control block (seconds of the shape, -1 while the slot follows none) and the gain it
+    // gave. Read without synchronisation, as above.
+    float slotEnvTime(int k) const { return slotEnvT_[k < 0 ? 0 : (k >= kSlots ? kSlots - 1 : k)]; }
+    float slotGain(int k) const    { return slotGain_[k < 0 ? 0 : (k >= kSlots ? kSlots - 1 : k)]; }
 
     // Adds `n` samples into the near (dry plane) and far (reverb send) buses. `fm` (n samples,
     // may be null) phase-modulates the partials when p.fmAmount > 0 (the feedback loop).
@@ -238,6 +246,12 @@ private:
     float    airGain_ = 0.0f;
     float    bloomT_ = 0.0f;     // seconds since note start, for Bloom and for each slot's entrance
     float    slotGain_[kSlots] = { 1.0f, 1.0f, 1.0f, 1.0f };   // each slot's own envelope, at control rate
+    // Sustain Loop entrances: how far each slot's clock was set back when the note was let go, so
+    // the shape carries on from where it was held; where each shape was read last; and whether the
+    // note was down in the last control block.
+    float    slotShift_[kSlots] = {};
+    float    slotEnvT_[kSlots] = { -1.0f, -1.0f, -1.0f, -1.0f };
+    bool     slotHeld_ = false;
     // Control-rate caches: the spectral shape only changes when its parameters do.
     float    tiltCache_[kMaxPartials + 1] = {};
     float    cachedTilt_ = -1.0f, cachedOddEven_ = -9.0f;

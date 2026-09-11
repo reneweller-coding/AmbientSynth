@@ -122,6 +122,8 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
         // An inherited note has been sounding: its Bloom is open and its sources have entered.
         bloomT_ = ageSeconds;
+        for (float& s : slotShift_) s = 0.0f;
+        slotHeld_ = false;
         prevDist_ = distance_;
     }
     press_ = pressTarget_; slide_ = slideTarget_; bend_ = bendTarget_;   // a new note starts where its controller is
@@ -305,22 +307,43 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const bool held = env_.isActive() && !env_.isReleasing();
         for (int k = 0; k < kSlots; ++k) {
             const SlotParams& sp = p.slot[k];
-            if (sp.delaySec <= 0.0f && sp.envIndex < 0) { slotGain_[k] = 1.0f; continue; }
+            slotEnvT_[k] = -1.0f;
+            if (sp.delaySec <= 0.0f && sp.envIndex < 0 && !sp.ownEnv) { slotGain_[k] = 1.0f; continue; }
             const float t = bloomT_ - sp.delaySec;
             if (t <= 0.0f) { slotGain_[k] = 0.0f; continue; }
-            const ModEnv* shape = (sp.envIndex >= 0 && sp.envIndex < kNumModEnvs) ? p.envShape[sp.envIndex] : nullptr;
-            if (shape != nullptr && shape->count() > 1) {
-                const ModEnvSpec* spec = p.envSpec[sp.envIndex];
+            // A shape: the slot's own, or one of the six borrowed. The own one may be a single
+            // point -- a level -- where a borrowed one needs two to be a contour at all.
+            const bool borrowed = !sp.ownEnv && sp.envIndex >= 0 && sp.envIndex < kNumModEnvs;
+            const ModEnv* shape = sp.ownEnv ? p.srcEnvShape[k] : (borrowed ? p.envShape[sp.envIndex] : nullptr);
+            const ModEnvSpec* spec = sp.ownEnv ? p.srcEnvSpec[k] : (borrowed ? p.envSpec[sp.envIndex] : nullptr);
+            if (shape != nullptr && shape->count() > (sp.ownEnv ? 0 : 1)) {
                 const float scale = spec != nullptr ? std::max(spec->timeScale, 0.01f) : 1.0f;
                 const EnvMode mode = spec != nullptr ? spec->mode : EnvMode::OneShot;
-                // The shapes are bipolar, as modulation shapes are; read as a level, -1 is silence
-                // and +1 is the slot at its written level.
-                slotGain_[k] = clampv(0.5f + 0.5f * shape->at(t / scale, mode, held), 0.0f, 1.0f);
+                // Sustain Loop, the moment the note is let go: carry on from where the shape was
+                // being read -- its sustain point, or wherever in its loop it had got to. The
+                // note's clock ran on while the shape held, and reading the release from that
+                // clock snapped the level to wherever the clock had got to in the tail.
+                if (mode == EnvMode::SustainLoop && slotHeld_ && !held)
+                    slotShift_[k] = t - shape->readTime((t - slotShift_[k]) / scale, mode, true) * scale;
+                const float u = (t - slotShift_[k]) / scale;
+                const float v = shape->at(u, mode, held);
+                slotEnvT_[k] = shape->readTime(u, mode, held);   // where in the shape, for the editor's playhead
+                if (sp.ownEnv) {
+                    // A slot's own shape is a level: 0 is silence, 1 the slot at its written
+                    // level, and Depth 0 leaves it at that level whatever the shape says.
+                    const float depth = spec != nullptr ? clampv(spec->depth, 0.0f, 1.0f) : 1.0f;
+                    slotGain_[k] = 1.0f - depth * (1.0f - clampv(v, 0.0f, 1.0f));
+                } else {
+                    // The six are bipolar, as modulation shapes are; read as a level, -1 is
+                    // silence and +1 is the slot at its written level.
+                    slotGain_[k] = clampv(0.5f + 0.5f * v, 0.0f, 1.0f);
+                }
             } else {
                 const float r = clampv(t / std::max(sp.riseSec, 0.01f), 0.0f, 1.0f);
                 slotGain_[k] = r * r * (3.0f - 2.0f * r);   // smoothstep, as Bloom above
             }
         }
+        slotHeld_ = held;
     }
     const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness
                                     + p.pressBright * press_, 0.0f, 1.0f);

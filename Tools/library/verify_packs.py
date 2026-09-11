@@ -156,8 +156,8 @@ def main():
                             problems.append(f"{where}: unknown via source '{extra}'")
             if len(f) > 7 and f[7].strip("~ "):      # envelope shapes
                 shapes = f[7].split("~")
-                if len(shapes) > 6:
-                    problems.append(f"{where}: {len(shapes)} envelope shapes, at most 6")
+                if len(shapes) > 10:
+                    problems.append(f"{where}: {len(shapes)} envelope shapes, at most 10 (the six, then the four sources' own)")
                 for si, sh in enumerate(shapes):
                     sh = sh.strip()
                     if not sh:

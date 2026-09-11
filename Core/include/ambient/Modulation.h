@@ -120,6 +120,10 @@ public:
 
     // Value at a time, following the mode. `held` is whether the note is still down.
     float at(float seconds, EnvMode mode, bool held) const;
+    // The time `at` reads the shape at: folded into the loop or held at the sustain point, as the
+    // mode says, and no later than the end. A release continues from here, so the value does not
+    // jump from where the shape was being held to where the clock has run on to meanwhile.
+    float readTime(float seconds, EnvMode mode, bool held) const;
 
     // Text form: "t:v:c/t:v:c/...", optionally followed by "!s<index>" for the sustain point and
     // "!l<from>-<to>" for the loop. Times in seconds. The marker is '!' and not '|' because a

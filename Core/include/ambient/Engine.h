@@ -217,6 +217,15 @@ public:
     bool setEnvShape(int index, const char* text);
     int  writeEnvShape(int index, char* buf, size_t cap) const;
     const ModEnv& envShape(int index) const { return envPending_[index < 0 ? 0 : (index >= kNumModEnvs ? kNumModEnvs - 1 : index)]; }
+    // Each source's own envelope shape, for a slot whose Env is Own: the same text form, read as a
+    // level from 0 (silent) to 1. Travels after the six in a preset's envelope field (Presets.h).
+    bool setSrcEnvShape(int slot, const char* text);
+    int  writeSrcEnvShape(int slot, char* buf, size_t cap) const;
+    const ModEnv& srcEnvShape(int slot) const { return srcEnvPending_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)]; }
+    // For the editor's playhead: where the loudest voice is reading a slot's entrance shape
+    // (seconds of the shape) and the gain the slot has from its entrance. The gain is written
+    // whenever a voice sounds; the result says whether the slot is following a shape at all.
+    bool displaySlotEnv(int slot, float& shapeSeconds, float& gain) const;
     // For the displays: the current value of every source, and each LFO's phase.
     float modSource(int source) const { return (source >= 0 && source < kNumModSources) ? modSrc_[source] : 0.0f; }
     // How fast the Beat source is turning, in hertz: zero when the chord is in tune.
@@ -382,6 +391,11 @@ private:
     LfoSpec      lfoSpec_[kNumLfos];
     ModEnv       envShape_[kNumModEnvs], envPending_[kNumModEnvs];
     ModEnvSpec   envSpec_[kNumModEnvs];
+    // The sources' own envelopes, published with the six under the same lock. A fresh one rises to
+    // the source's level over its first second (times Time) and stays there.
+    static constexpr const char* kSrcEnvDefault = "0:0/1:1";
+    ModEnv       srcEnvShape_[kSlots], srcEnvPending_[kSlots];
+    ModEnvSpec   srcEnvSpec_[kSlots];
     ModMatrix    matrix_, matrixPending_;
     std::atomic<int> modVersion_{ 0 };
     // Held by whoever is touching the pending matrix and shapes. The message thread waits for

@@ -118,8 +118,9 @@ int main(int argc, char** argv)
                 engine.setModMatrixText(turn % 2 ? "lfo1>cutoff:0.5;env2>z_x:-0.3:macro_a"
                                                  : "lfo3>drift:0.2;brain>partials:0.4");
                 break;
-            case 5:
+            case 5:   // the envelope shapes, the six and the sources' own, under the same lock
                 engine.setEnvShape(turn % kNumModEnvs, turn % 2 ? "0:0/1:1/3:0.2!s1" : "0:1/2:-1/4:0");
+                engine.setSrcEnvShape(turn % kSlots, turn % 2 ? "0:0/2:1!s1" : "0:1/1:0.5/3:0");
                 break;
             case 6:   // a tuning of the player's own
                 if (parseScala("! r.scl\nRace\n 3\n 100.0\n 3/2\n 2/1\n", scale)) engine.setUserScale(scale);

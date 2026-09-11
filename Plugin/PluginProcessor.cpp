@@ -1101,13 +1101,16 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         state.setProperty("scalaName", userScaleName_, nullptr);
     }
     state.setProperty("gestureMappings", gestureMappings(), nullptr);
-    {   // modulation: the matrix and the six envelope shapes (see ambient/Modulation.h)
+    {   // modulation: the matrix, the six envelope shapes and the four sources' own (see ambient/Modulation.h)
         char buf[4096];
         if (live().writeModMatrix(buf, sizeof(buf)) > 0) state.setProperty("modMatrix", juce::String(buf), nullptr);
         juce::String envs;
-        for (int i = 0; i < ambient::kNumModEnvs; ++i) {
-            if (live().writeEnvShape(i, buf, sizeof(buf)) > 0) envs += juce::String(buf);
-            if (i + 1 < ambient::kNumModEnvs) envs += "~";
+        const int shapes = ambient::kNumModEnvs + ambient::kSlots;
+        for (int i = 0; i < shapes; ++i) {
+            const int n = i < ambient::kNumModEnvs ? live().writeEnvShape(i, buf, sizeof(buf))
+                                                   : live().writeSrcEnvShape(i - ambient::kNumModEnvs, buf, sizeof(buf));
+            if (n > 0) envs += juce::String(buf);
+            if (i + 1 < shapes) envs += "~";
         }
         state.setProperty("modEnvs", envs, nullptr);
     }
@@ -1210,8 +1213,12 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             if (modMatrix.isNotEmpty()) live().setModMatrixText(modMatrix.toRawUTF8());
             if (modEnvs.isNotEmpty()) {
                 const juce::StringArray parts = juce::StringArray::fromTokens(modEnvs, "~", "");
-                for (int i = 0; i < juce::jmin(parts.size(), ambient::kNumModEnvs); ++i)
-                    if (parts[i].isNotEmpty()) live().setEnvShape(i, parts[i].toRawUTF8());
+                // The six, then the sources' own; a state saved before those existed has six.
+                for (int i = 0; i < juce::jmin(parts.size(), ambient::kNumModEnvs + ambient::kSlots); ++i) {
+                    if (parts[i].isEmpty()) continue;
+                    if (i < ambient::kNumModEnvs) live().setEnvShape(i, parts[i].toRawUTF8());
+                    else live().setSrcEnvShape(i - ambient::kNumModEnvs, parts[i].toRawUTF8());
+                }
             }
             if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             if (route.isNotEmpty()) setRouteText(route);

@@ -3343,6 +3343,138 @@ void testExpressionBodyPatina()
     }
 }
 
+// Each source's own envelope. A slot's Env could only borrow one of the six modulation envelopes,
+// so a preset whose sources entered on shapes had that many fewer left for modulation; Own reads
+// a shape of the slot's own, as a level from silence to the slot's written level. Measured through
+// the engine, on the gain the sounding voice gives each slot: the shape is followed from the note,
+// Depth and Delay do what they say, the six are left alone, the text form carries the four after
+// the six, and a Sustain Loop let go carries on from where it was held -- in a source's own shape,
+// in a borrowed one, and in a modulation envelope held inside its loop.
+void testSourceEnvelopes()
+{
+    CHECK(kNumSlotEnvs == kNumModEnvs + 2 && std::strcmp(kSlotEnvNames[kNumSlotEnvs - 1], "Own") == 0,
+          "Env offers Off, the six, and Own last");
+    const float own = static_cast<float>(kNumSlotEnvs - 1);
+    const float noise = static_cast<float>(SourceType::Noise);
+    std::vector<float> l(256), r(256);
+    auto run = [&](Engine& e, double seconds) {
+        const int blocks = std::max(1, static_cast<int>(seconds * 48000.0 / 256.0 + 0.5));
+        for (int i = 0; i < blocks; ++i) e.process(l.data(), r.data(), 256);
+    };
+    auto gainOf = [](const Engine& e, int slot) {
+        float t = 0.0f, g = -1.0f;
+        e.displaySlotEnv(slot, t, g);
+        return g;
+    };
+    auto following = [](const Engine& e, int slot) {
+        float t = 0.0f, g = 0.0f;
+        return e.displaySlotEnv(slot, t, g);
+    };
+    {   // the shape, from the note, as a level
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Src2Type, noise);
+        e.setParam(ParamId::Src2Env, own);
+        e.setParam(ParamId::Src3Type, noise);
+        e.setParam(ParamId::Src3Env, own);
+        e.setParam(ParamId::Src3Delay, 1.0f);
+        e.setParam(ParamId::Src3EnvDepth, 0.5f);
+        e.setParam(ParamId::Env1Mode, 0.0f);
+        e.setParam(ParamId::Env1Time, 1.0f);
+        e.prepare(48000.0, 256);
+        CHECK(e.setSrcEnvShape(1, "0:0/1:1/2:0.25"), "engine takes a source's own shape");
+        CHECK(e.setSrcEnvShape(2, "0:0"), "and a one-point shape, which is a level");
+        CHECK(e.setEnvShape(0, "0:0/1:-1/2:1"), "and a different modulation envelope");
+        e.noteOn(60, 1.0f);
+        run(e, 0.5);
+        CHECK(std::fabs(gainOf(e, 1) - 0.5f) < 0.03f, "half way up its rise after half a second");
+        CHECK(gainOf(e, 2) == 0.0f, "a source still inside its Delay is silent");
+        CHECK(gainOf(e, 0) == 1.0f && !following(e, 0), "a source with no entrance is left at its level");
+        run(e, 1.0);
+        CHECK(std::fabs(gainOf(e, 1) - 0.625f) < 0.03f, "on its way down to its last point");
+        CHECK(std::fabs(gainOf(e, 2) - 0.5f) < 1e-4f, "past its Delay, Depth 0.5 keeps half the level whatever the shape says");
+        run(e, 1.0);
+        CHECK(std::fabs(gainOf(e, 1) - 0.25f) < 0.02f, "and held at its last point");
+        CHECK(std::fabs(e.modSource(static_cast<int>(ModSource::Env1)) - 1.0f) < 0.02f,
+              "Env 1 follows its own shape, not the source's");
+    }
+    {   // Sustain Loop let go: both kinds of entrance carry on from where their shape was held.
+        // The note's clock runs on while a shape holds, and the release used to be read from it:
+        // five seconds into a shape whose sustain point is at two, it jumped three seconds ahead.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Release, 30.0f);   // the voice outlives the shapes' tails
+        e.setParam(ParamId::Src2Type, noise);
+        e.setParam(ParamId::Src2Env, own);
+        e.setParam(ParamId::Src2EnvMode, static_cast<float>(EnvMode::SustainLoop));
+        e.setParam(ParamId::Src3Type, noise);
+        e.setParam(ParamId::Src3Env, 1.0f);    // Env 1, borrowed: bipolar
+        e.setParam(ParamId::Env1Mode, static_cast<float>(EnvMode::SustainLoop));
+        e.prepare(48000.0, 256);
+        CHECK(e.setSrcEnvShape(1, "0:0/1:1/2:0.5/8:0!s2"), "a source shape with a sustain point");
+        CHECK(e.setEnvShape(0, "0:-1/1:1/2:0/8:-1!s2"), "a modulation shape with a sustain point");
+        e.noteOn(60, 1.0f);
+        run(e, 5.0);
+        const float ownHeld = gainOf(e, 1), borrowedHeld = gainOf(e, 2);
+        CHECK(std::fabs(ownHeld - 0.5f) < 0.02f, "a source's own shape is held at its sustain point");
+        CHECK(std::fabs(borrowedHeld - 0.5f) < 0.02f, "and a borrowed one at its own");
+        e.noteOff(60);
+        run(e, 256.0 / 48000.0);
+        CHECK(std::fabs(gainOf(e, 1) - ownHeld) < 0.02f, "let go, a source's own shape carries on from there instead of jumping ahead");
+        CHECK(std::fabs(gainOf(e, 2) - borrowedHeld) < 0.02f, "and so does a borrowed one");
+        run(e, 7.0);
+        CHECK(gainOf(e, 1) >= 0.0f && gainOf(e, 1) < 0.1f && gainOf(e, 2) >= 0.0f && gainOf(e, 2) < 0.1f, "and then both run out");
+    }
+    {   // The six: a Sustain Loop held inside its loop carries on from there as well. The clock used
+        // to be put on the sustain point, and a shape with a loop and no sustain point has none --
+        // the release found the clock past the end and snapped to the last value.
+        Engine e;
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Env1Mode, static_cast<float>(EnvMode::SustainLoop));
+        e.setParam(ParamId::Env1Time, 1.0f);
+        e.prepare(48000.0, 256);
+        CHECK(e.setEnvShape(0, "0:0/1:1/2:0/3:1/4:0!l1-3"), "a looping shape without a sustain point");
+        e.noteOn(60, 1.0f);
+        run(e, 5.5);
+        const float held = e.modSource(static_cast<int>(ModSource::Env1));
+        CHECK(held > 0.2f, "held inside its loop, well away from its last value");
+        e.noteOff(60);
+        run(e, 256.0 / 48000.0);
+        CHECK(std::fabs(e.modSource(static_cast<int>(ModSource::Env1)) - held) < 0.03f, "let go inside its loop, it does not jump");
+    }
+    {   // the text form: the six, then the sources' own, in the one field
+        Engine e;
+        Preset p{ "t", "" };
+        p.envs = "0:0/1:1~~0:1/2:0~~~~~0:0/3:1:0.5!s1";
+        CHECK(e.applyPresetModulation(p), "an envelope field with a source's shape in it applies");
+        CHECK(e.envShape(0).count() == 2 && e.envShape(2).count() == 2, "the six are read as they always were");
+        CHECK(e.srcEnvShape(1).count() == 2 && e.srcEnvShape(1).sustain() == 1, "and Source 2's own after them");
+        CHECK(e.srcEnvShape(0).count() == 2 && e.srcEnvShape(0).point(1).value == 1.0f, "a source left empty keeps the default rise");
+        Preset six{ "u", "" };
+        six.envs = "0:0/1:1~0:0/2:1";
+        CHECK(e.applyPresetModulation(six) && e.srcEnvShape(1).sustain() < 0, "a field written before the sources had shapes resets theirs");
+        char buf[512];
+        CHECK(e.setSrcEnvShape(3, "0:0/2:0.8:-0.4/6:1!s1") && e.writeSrcEnvShape(3, buf, sizeof(buf)) > 0, "a source shape writes");
+        Engine f;
+        CHECK(f.setSrcEnvShape(3, buf) && f.srcEnvShape(3).count() == 3 && f.srcEnvShape(3).sustain() == 1, "and reads back");
+        CHECK(!e.setSrcEnvShape(4, "0:0/1:1") && !e.setSrcEnvShape(-1, "0:0/1:1"), "there are four sources, no more");
+        // Sixteen points with long numbers are longer than the field's old 256-character buffer,
+        // which dropped such a shape without a word.
+        std::string longShape;
+        for (int k = 0; k < kMaxEnvPoints; ++k) {
+            char pt[48];
+            std::snprintf(pt, sizeof(pt), "%s%.4f:%.4f:%.3f", k ? "/" : "", 1.2345 * k, 0.5 + 0.4 * std::sin(1.7 * k), -0.321);
+            longShape += pt;
+        }
+        CHECK(longShape.size() > 256, "precondition: the shape is longer than 256 characters");
+        const std::string field = longShape + "~~~~~~" + longShape;
+        Preset lp{ "l", "" };
+        lp.envs = field.c_str();
+        CHECK(e.applyPresetModulation(lp) && e.envShape(0).count() == kMaxEnvPoints && e.srcEnvShape(0).count() == kMaxEnvPoints,
+              "a sixteen-point shape with long numbers arrives, in the six and in a source");
+    }
+}
+
 // Every filter model must do what its own magnitude curve promises: the display is drawn from
 // that function, so a model whose audio path disagrees with it would lie to the eye.
 // The Z-plane bank: 155 shapes, and no ear is going to check them one at a time. Three things
@@ -6622,6 +6754,7 @@ int main()
     testSampleRates();
     testExpressionBodyPatina();
     testEnvShapePresets();
+    testSourceEnvelopes();
     testBeatSource();
     testDelayDuck();
     testZModal();

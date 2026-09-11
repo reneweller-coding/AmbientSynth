@@ -204,12 +204,14 @@ struct SlotParams {
     float uniWidth = 0.6f;       // how far the copies are placed apart across the field
     int   interp = 0;            // 0 linear, 1 Hermite (Catmull-Rom over four samples)
     // The slot's own entrance, counted from note-on in the voice that plays it. The slot is
-    // silent for `delaySec`, then either fades in over `riseSec` or, if `envIndex` names one of
-    // the preset's six shapes, follows that shape instead. Defaults are what the instrument did
-    // before slots could enter separately: no delay, and the voice's one amplitude envelope.
+    // silent for `delaySec`, then fades in over `riseSec` -- or follows a shape instead: one of the
+    // preset's six modulation envelopes if `envIndex` names one, or its own if `ownEnv`. Defaults
+    // are what the instrument did before slots could enter separately: no delay, and the voice's
+    // one amplitude envelope.
     float delaySec = 0.0f;
     float riseSec = 1.0f;
     int   envIndex = -1;         // -1 = none, else 0..kNumModEnvs-1
+    bool  ownEnv = false;        // the slot's own shape (VoiceParams::srcEnvShape), read as a level 0..1
 };
 
 class SourceSlot {

@@ -98,6 +98,7 @@ int main()
         a->setMorphSlotFromCurrent(0);
         a->engine().setModMatrixText("lfo2>cutoff:0.4;env3>z_x:-0.2:macro_a");
         a->engine().setEnvShape(1, "0:0/2:1/5:-0.5!s1");
+        a->engine().setSrcEnvShape(2, "0:0/1.5:0.8:-0.3/4:1!s1");
         juce::MemoryBlock blob;
         a->getStateInformation(blob);
 
@@ -118,6 +119,10 @@ int main()
         a->engine().writeEnvShape(1, e1, sizeof(e1));
         b->engine().writeEnvShape(1, e2, sizeof(e2));
         check(juce::String(e1) == juce::String(e2), "an envelope shape survives a state round trip");
+        char s1[512], s2[512];
+        a->engine().writeSrcEnvShape(2, s1, sizeof(s1));
+        b->engine().writeSrcEnvShape(2, s2, sizeof(s2));
+        check(juce::String(s1) == juce::String(s2) && juce::String(s1).contains("!s1"), "a source's own envelope survives a state round trip");
         float va[kNumParams], vb[kNumParams];
         a->engine().morphSlot(0, va);
         b->engine().morphSlot(0, vb);

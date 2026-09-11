@@ -6,7 +6,7 @@
 //                  [--preset "name"] [--set key=value]... [--notes 45,52,59]
 //                  [--scl file.scl] [--stats] [--list] [--list-presets]
 //                  [--texture file.wav [baseHz]] [--wavetable file.wav]
-//                  [--mod "lfo1>cutoff:0.4;..."] [--env 1 "0:0/2:1/8:0"]
+//                  [--mod "lfo1>cutoff:0.4;..."] [--env 1 "0:0/2:1/8:0"] [--src-env 2 "0:0/1:1"]
 //                  [--map x y [radius]] (render the preset-map blend at a cursor) [--dump] (print all parameters)
 //                  [--ir impulse.wav] (convolution room impulse, mono or stereo)
 //                  [--route "name or text" [speed]] (walk a route over the map; --list-routes)
@@ -492,6 +492,12 @@ static int runOnce(int argc, char** argv)
             const std::string text = next();
             if (!engine.setEnvShape(idx, text.c_str())) { std::fprintf(stderr, "bad envelope %d\n", idx + 1); return 2; }
             std::printf("env %d: %d points\n", idx + 1, engine.envShape(idx).count());
+        }
+        else if (a == "--src-env") {   // --src-env <1..4> "<breakpoints>": a source's own envelope (its Env set to Own)
+            const int idx = std::atoi(next().c_str()) - 1;
+            const std::string text = next();
+            if (!engine.setSrcEnvShape(idx, text.c_str())) { std::fprintf(stderr, "bad source envelope %d\n", idx + 1); return 2; }
+            std::printf("source env %d: %d points\n", idx + 1, engine.srcEnvShape(idx).count());
         }
         else if (a == "--score") {   // a written score of timed ramps; length defaults to the score's
             const std::string path = next();

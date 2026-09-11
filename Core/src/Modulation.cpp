@@ -188,6 +188,24 @@ float ModEnv::at(float seconds, EnvMode mode, bool held) const
     return a.value + (b.value - a.value) * shape(u, a.curve);
 }
 
+float ModEnv::readTime(float seconds, EnvMode mode, bool held) const
+{
+    if (count_ <= 1) return 0.0f;
+    const float end = points_[count_ - 1].time;
+    float t = seconds < 0.0f ? 0.0f : seconds;
+    // The branches of at(), in the same order, so the two cannot disagree about which one applies.
+    const bool looping = (mode == EnvMode::Loop) || (mode == EnvMode::SustainLoop && held);
+    if (looping && loopFrom_ >= 0 && loopTo_ > loopFrom_ && loopTo_ < count_) {
+        const float a = points_[loopFrom_].time, b = points_[loopTo_].time;
+        if (b > a && t > b) t = a + std::fmod(t - a, b - a);
+    } else if (mode == EnvMode::Loop && end > 0.0f && t > end) {
+        t = std::fmod(t, end);
+    } else if (mode == EnvMode::SustainLoop && held && sustain_ >= 0 && sustain_ < count_) {
+        t = std::min(t, points_[sustain_].time);
+    }
+    return std::min(t, end);
+}
+
 bool ModEnv::parse(const char* text)
 {
     if (text == nullptr) return false;

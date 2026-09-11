@@ -216,6 +216,7 @@ private:
     juce::Image snapshotBrowseMap();
     juce::Image snapshotBrowseMapZoomed();   // the same view closed in on the current preset, names showing
     juce::Image snapshotStripTab(int tab, bool detail = false);
+    void openSourceEnvelope(int slot);   // the envelope tab's SOURCES page, from a click on a source's picture
     juce::StringArray tabSectionNames(int rowIndex, int page) const;
     juce::String tabName(int rowIndex, int page) const;
     // Writes the manual out as pictures and text for Tools/make_manual.py to turn into a PDF.
@@ -534,7 +535,8 @@ private:
             juce::String title;
         };
         Row lfos[ambient::kNumLfos];
-        Row envs[ambient::kNumModEnvs];
+        static constexpr int kEnvRows = ambient::kNumModEnvs + ambient::kSlots;   // the six, then the four sources' own
+        Row envs[kEnvRows];
 
         // A card in the lane: one modulation source, drawn with its own live shape.
         struct Card {
@@ -547,6 +549,7 @@ private:
         };
         std::vector<Card> cards;
         int tab = 0;                     // 0 LFO, 1 envelopes, 2 matrix
+        int envPage = 0;                 // on the envelope tab: 0 the six, 1 the sources' own
         int hoverCard = -1;
         int dragCard = -1;               // the card being dragged onto a knob
         juce::Point<int> dragPos;
@@ -554,6 +557,10 @@ private:
         int dragEnv = -1, dragPoint = -1, hoverEnv = -1, hoverPoint = -1;
 
         void setTab(int t);
+        void setEnvPage(int page);
+        bool envVisible(int env) const;                                 // on the page that is showing
+        const ambient::ModEnv& shapeOf(int env) const;                  // a row's shape, of the six or a source's
+        juce::String envKey(int env, const char* field) const;          // a row's parameter: "env3_time", "src2_env_time"
         void paintLane(juce::Graphics&);
         void paintCard(juce::Graphics&, const Card&, bool hot);
         void paintLfo(juce::Graphics&, int i);
@@ -563,7 +570,7 @@ private:
         // a curve on every segment, a sustain point and a loop -- but nothing could reach them
         // except a preset, so in the panel they were pictures of something you could not touch.
         // One row's geometry, asked for by both the drawing and the mouse so they cannot drift.
-        struct EnvGeom { float x0 = 0, w = 1, cy = 0, h = 1, len = 1, depth = 1; };
+        struct EnvGeom { float x0 = 0, w = 1, cy = 0, h = 1, len = 1, depth = 1; bool uni = false; };
         EnvGeom envGeom(int env) const;
         int  envAt(juce::Point<int> pos, int* pointOut = nullptr) const;   // -1 if not on a curve
         juce::Point<float> envToXY(int env, float time, float value) const;
@@ -578,6 +585,7 @@ private:
         AmbientSynthProcessor& proc;
         AmbientSynthEditor& owner;
         juce::TextButton tabLfo{ "LFO" }, tabEnv{ "ENVELOPES" }, tabMatrix{ "MATRIX" };
+        juce::TextButton pageMod{ "MODULATION 1-6" }, pageSrc{ "SOURCES 1-4" };
         // The matrix page: a table of routes (EditorMatrix.cpp), where a text box used to be.
         std::unique_ptr<edt::RouteTable> table;
         juce::Label matrixInfo, hint;
@@ -617,6 +625,12 @@ private:
     struct SourceView : juce::Component, juce::Timer {
         SourceView(AmbientSynthProcessor& p, int s) : proc(p), slot(s) { setInterceptsMouseClicks(true, false); startTimerHz(15); }
         void paint(juce::Graphics&) override;
+        void paintSource(juce::Graphics&);
+        // A slot that enters on a shape of its own carries a small picture of it in the corner, with
+        // the loudest voice's place in it; a click on the picture opens the shape in the editor.
+        bool ownEntrance() const;
+        juce::Rectangle<int> entranceBox() const;
+        void paintEntrance(juce::Graphics&);
         void mouseDown(const juce::MouseEvent&) override;
         // A wavetable frame, an FM cycle and a noise colour are pictures of parameters and change
         // only when one moves -- or, for a table, when a modulation moves its Position, which is
@@ -629,7 +643,7 @@ private:
             const bool alive = type == 3 || type == 5 || type == 6 || type == 7 || type == 8;
             const bool moved = (type == 1 || type == 9) && std::fabs(livePosition() - shownPos) > 0.002f;
             const uint32_t g = proc.paramGeneration();
-            if (alive || moved || g != seen) { seen = g; repaint(); }
+            if (alive || moved || ownEntrance() || g != seen) { seen = g; repaint(); }
         }
         // Position as it is playing: the knob, the morph or map blend, and what the matrix adds.
         float livePosition() const

@@ -70,6 +70,17 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
         addKnob(r, "env" + n + "_depth", "Depth");
         addKnob(r, "env" + n + "_sync", "Sync");
     }
+    // The four sources' own envelopes, on the ENV tab's second page: the same editor and the same
+    // four knobs, for a shape that is a level and runs from every note.
+    for (int k = 0; k < ambient::kSlots; ++k) {
+        Row& r = envs[static_cast<size_t>(ambient::kNumModEnvs + k)];
+        r.title = "SOURCE " + juce::String(k + 1);
+        const juce::String n(k + 1);
+        addKnob(r, "src" + n + "_env_mode", "Mode");
+        addKnob(r, "src" + n + "_env_time", "Time");
+        addKnob(r, "src" + n + "_env_depth", "Depth");
+        addKnob(r, "src" + n + "_env_sync", "Sync");
+    }
 
     // The lane: every source that can drive something, in the order the matrix names them.
     using MS = ambient::ModSource;
@@ -97,6 +108,14 @@ AmbientSynthEditor::ModView::ModView(AmbientSynthProcessor& p, AmbientSynthEdito
     tabEnv.onClick = [this] { setTab(1); };
     tabMatrix.onClick = [this] { setTab(2); };
     tabLfo.setToggleState(true, juce::dontSendNotification);
+    for (auto* b : { &pageMod, &pageSrc }) {   // the ENV tab's two pages
+        b->setClickingTogglesState(true);
+        b->setRadioGroupId(4712);
+        addChildComponent(*b);
+    }
+    pageMod.onClick = [this] { setEnvPage(0); };
+    pageSrc.onClick = [this] { setEnvPage(1); };
+    pageMod.setToggleState(true, juce::dontSendNotification);
 
     // The matrix page is a table of routes now (EditorMatrix.cpp); the text box it replaces is
     // still the format everything travels in, one level down.
@@ -125,10 +144,13 @@ void AmbientSynthEditor::ModView::setTab(int t)
         for (auto& c : lfos[static_cast<size_t>(i)].controls) c->setVisible(t == 0);
         for (auto& l : lfos[static_cast<size_t>(i)].labels) l->setVisible(t == 0);
     }
-    for (int i = 0; i < ambient::kNumModEnvs; ++i) {
-        for (auto& c : envs[static_cast<size_t>(i)].controls) c->setVisible(t == 1);
-        for (auto& l : envs[static_cast<size_t>(i)].labels) l->setVisible(t == 1);
+    for (int i = 0; i < kEnvRows; ++i) {
+        const bool on = t == 1 && envVisible(i);
+        for (auto& c : envs[static_cast<size_t>(i)].controls) c->setVisible(on);
+        for (auto& l : envs[static_cast<size_t>(i)].labels) l->setVisible(on);
     }
+    pageMod.setVisible(t == 1);
+    pageSrc.setVisible(t == 1);
     juce::Component* const matrixParts[] = { table.get(), &matrixInfo, &hint };
     for (juce::Component* c : matrixParts) c->setVisible(t == 2);
     if (t == 2) pullMatrix();
@@ -137,6 +159,33 @@ void AmbientSynthEditor::ModView::setTab(int t)
     tabMatrix.setToggleState(t == 2, juce::dontSendNotification);
     resized();
     repaint();
+}
+
+void AmbientSynthEditor::ModView::setEnvPage(int page)
+{
+    envPage = juce::jlimit(0, 1, page);
+    pageMod.setToggleState(envPage == 0, juce::dontSendNotification);
+    pageSrc.setToggleState(envPage == 1, juce::dontSendNotification);
+    hoverEnv = hoverPoint = -1;
+    setTab(tab);
+}
+
+// Rows 0..5 are the six modulation envelopes, 6..9 the sources' own; one page shows either.
+bool AmbientSynthEditor::ModView::envVisible(int env) const
+{
+    return (env < ambient::kNumModEnvs) == (envPage == 0);
+}
+
+const ambient::ModEnv& AmbientSynthEditor::ModView::shapeOf(int env) const
+{
+    return env < ambient::kNumModEnvs ? proc.engine().envShape(env) : proc.engine().srcEnvShape(env - ambient::kNumModEnvs);
+}
+
+// "env3_depth" for the six, "src2_env_depth" for the sources' own.
+juce::String AmbientSynthEditor::ModView::envKey(int env, const char* field) const
+{
+    return env < ambient::kNumModEnvs ? "env" + juce::String(env + 1) + "_" + field
+                                      : "src" + juce::String(env - ambient::kNumModEnvs + 1) + "_env_" + field;
 }
 
 void AmbientSynthEditor::ModView::pullMatrix()
@@ -188,15 +237,16 @@ ambient::LfoSpec AmbientSynthEditor::ModView::specOf(int i) const
 // ---------------------------------------------------------------- strip: drawing
 
 namespace {
-void curveFrame(juce::Graphics& g, juce::Rectangle<int> r, bool lit, juce::Colour c)
+// The line is the zero of the curve: the middle for a bipolar shape, the floor (lineY) for a level.
+void curveFrame(juce::Graphics& g, juce::Rectangle<int> r, bool lit, juce::Colour c, float lineY = -1.0f)
 {
     g.setColour(ui::bg0.withAlpha(0.6f));
     g.fillRoundedRectangle(r.toFloat(), 5.0f);
     g.setColour(lit ? c.withAlpha(0.35f) : ui::cardEdge);
     g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 5.0f, 1.0f);
     g.setColour(ui::track.withAlpha(0.7f));
-    g.drawLine(static_cast<float>(r.getX() + 4), r.toFloat().getCentreY(),
-               static_cast<float>(r.getRight() - 4), r.toFloat().getCentreY(), 1.0f);
+    const float y = lineY >= 0.0f ? lineY : r.toFloat().getCentreY();
+    g.drawLine(static_cast<float>(r.getX() + 4), y, static_cast<float>(r.getRight() - 4), y, 1.0f);
 }
 }
 
@@ -304,16 +354,20 @@ void AmbientSynthEditor::ModView::paintEnv(juce::Graphics& g, int i)
     const Row& row = envs[static_cast<size_t>(i)];
     const auto r = row.curve;
     if (r.isEmpty()) return;
-    const ambient::ModEnv& e = proc.engine().envShape(i);
-    const juce::String n(i + 1);
+    const ambient::ModEnv& e = shapeOf(i);
+    const bool source = i >= ambient::kNumModEnvs;
     auto get = [this](const juce::String& key) {
         auto* v = proc.apvts.getRawParameterValue(key);
         return v != nullptr ? v->load() : 0.0f;
     };
-    const float depth = get("env" + n + "_depth"), scale = juce::jmax(0.01f, get("env" + n + "_time"));
-    const bool lit = depth > 0.001f && e.count() > 1;
-    curveFrame(g, r, lit, ui::foreCol);
+    const float depth = get(envKey(i, "depth")), scale = juce::jmax(0.01f, get(envKey(i, "time")));
+    // A source's envelope is heard only where that source's Env is Own: drawn dim otherwise, and
+    // the title says what would make it count. One point is a level, and a level is a shape too.
+    const bool used = !source
+        || juce::roundToInt(get("src" + juce::String(i - ambient::kNumModEnvs + 1) + "_env")) == ambient::kNumSlotEnvs - 1;
+    const bool lit = used && depth > 0.001f && e.count() > (source ? 0 : 1);
     const EnvGeom geom = envGeom(i);
+    curveFrame(g, r, lit, ui::foreCol, geom.uni ? geom.cy : -1.0f);
     const float x0 = geom.x0, w = geom.w, len = geom.len;
     if (e.loopFrom() >= 0 && e.loopTo() > e.loopFrom() && e.loopTo() < e.count()) {
         const float a = e.point(e.loopFrom()).time / len, b = e.point(e.loopTo()).time / len;
@@ -355,20 +409,27 @@ void AmbientSynthEditor::ModView::paintEnv(juce::Graphics& g, int i)
         g.drawText("drag a point   -   double-click to add or remove   -   right-click for shapes",
                    r.reduced(7, 3), juce::Justification::bottomRight, false);
     }
-    const float t = proc.engine().envTime(i) / scale;
-    if (lit && t <= len * 1.02f) {
-        // The playhead. Its value already has Depth in it, so it is placed without applying it
-        // again -- envToXY would, which is why this one keeps its own arithmetic.
-        const float v = proc.engine().modSource(static_cast<int>(ambient::ModSource::Env1) + i);
-        const float dx = geom.x0 + juce::jlimit(0.0f, 1.0f, t / len) * geom.w;
-        const float dy = geom.cy - juce::jlimit(-1.0f, 1.0f, v) * geom.h;
-        g.setColour(ui::live.withAlpha(0.30f)); g.fillEllipse(dx - 7.0f, dy - 7.0f, 14.0f, 14.0f);
-        g.setColour(ui::live);                  g.fillEllipse(dx - 3.0f, dy - 3.0f, 6.0f, 6.0f);
+    {   // The playhead. Its value already has Depth in it, so it is placed without applying it
+        // again -- envToXY would, which is why this one keeps its own arithmetic. A source's
+        // envelope runs in every voice from that voice's own note: the loudest voice's is shown.
+        float t = 0.0f, v = 0.0f;
+        bool show = true;
+        if (source) show = proc.engine().displaySlotEnv(i - ambient::kNumModEnvs, t, v);
+        else {
+            t = proc.engine().envTime(i) / scale;
+            v = proc.engine().modSource(static_cast<int>(ambient::ModSource::Env1) + i);
+        }
+        if (lit && show && t <= len * 1.02f) {
+            const float dx = geom.x0 + juce::jlimit(0.0f, 1.0f, t / len) * geom.w;
+            const float dy = geom.cy - (source ? juce::jlimit(0.0f, 1.0f, v) : juce::jlimit(-1.0f, 1.0f, v)) * geom.h;
+            g.setColour(ui::live.withAlpha(0.30f)); g.fillEllipse(dx - 7.0f, dy - 7.0f, 14.0f, 14.0f);
+            g.setColour(ui::live);                  g.fillEllipse(dx - 3.0f, dy - 3.0f, 6.0f, 6.0f);
+        }
     }
     g.setColour(ui::dim); g.setFont(ui::body(10.0f));
     g.drawText(juce::String(len * scale, len * scale < 10.0f ? 1 : 0) + " s", r.reduced(7, 3), juce::Justification::topRight, false);
     g.setColour(lit ? ui::text : ui::faint); g.setFont(ui::title(10.5f));
-    g.drawText(row.title, r.reduced(7, 3), juce::Justification::topLeft, false);
+    g.drawText(used ? row.title : row.title + "   -   not heard: this source's Env is not Own", r.reduced(7, 3), juce::Justification::topLeft, false);
 }
 
 void AmbientSynthEditor::ModView::paint(juce::Graphics& g)
@@ -379,7 +440,7 @@ void AmbientSynthEditor::ModView::paint(juce::Graphics& g)
     g.drawLine(0.0f, 0.5f, static_cast<float>(getWidth()), 0.5f, 1.0f);
     paintLane(g);
     if (tab == 0) for (int i = 0; i < ambient::kNumLfos; ++i) paintLfo(g, i);
-    if (tab == 1) for (int i = 0; i < ambient::kNumModEnvs; ++i) paintEnv(g, i);
+    if (tab == 1) for (int i = 0; i < kEnvRows; ++i) if (envVisible(i)) paintEnv(g, i);
 
     // While dragging: a line from the card to the mouse, so the gesture is visible.
     if (dragCard >= 0) {
@@ -422,12 +483,12 @@ void AmbientSynthEditor::ModView::mouseMove(const juce::MouseEvent& e)
 int AmbientSynthEditor::ModView::envAt(juce::Point<int> pos, int* pointOut) const
 {
     if (tab != 1) return -1;
-    for (int i = 0; i < ambient::kNumModEnvs; ++i) {
+    for (int i = 0; i < kEnvRows; ++i) {
         const auto r = envs[static_cast<size_t>(i)].curve;
-        if (r.isEmpty() || !r.contains(pos)) continue;
+        if (!envVisible(i) || r.isEmpty() || !r.contains(pos)) continue;
         if (pointOut != nullptr) {
             *pointOut = -1;
-            const ambient::ModEnv& e = proc.engine().envShape(i);
+            const ambient::ModEnv& e = shapeOf(i);
             float best = 9.0e9f;
             for (int k = 0; k < e.count(); ++k) {
                 const auto p = envToXY(i, e.point(k).time, e.point(k).value);
@@ -447,16 +508,19 @@ int AmbientSynthEditor::ModView::envAt(juce::Point<int> pos, int* pointOut) cons
 AmbientSynthEditor::ModView::EnvGeom AmbientSynthEditor::ModView::envGeom(int env) const
 {
     const auto r = envs[static_cast<size_t>(env)].curve;
-    const ambient::ModEnv& e = proc.engine().envShape(env);
-    auto* v = proc.apvts.getRawParameterValue("env" + juce::String(env + 1) + "_depth");
+    const ambient::ModEnv& e = shapeOf(env);
+    auto* v = proc.apvts.getRawParameterValue(envKey(env, "depth"));
     EnvGeom g;
     g.x0 = static_cast<float>(r.getX() + 5);
     g.w  = juce::jmax(1.0f, static_cast<float>(r.getWidth() - 10));
-    g.cy = r.toFloat().getCentreY();
-    g.h  = juce::jmax(1.0f, r.getHeight() * 0.36f);
+    // A source's envelope is a level: 0 at the bottom and 1 at the top of the same band of the
+    // frame that the six use from -1 to 1, so cy is the floor rather than the middle.
+    g.uni = env >= ambient::kNumModEnvs;
+    g.cy = g.uni ? static_cast<float>(r.getY()) + static_cast<float>(r.getHeight()) * 0.86f : r.toFloat().getCentreY();
+    g.h  = juce::jmax(1.0f, r.getHeight() * (g.uni ? 0.72f : 0.36f));
     g.len = juce::jmax(0.001f, e.length());
     // Depth scales what is drawn, so it has to scale what is grabbed. At zero the curve is a flat
-    // line in the middle and there would be nothing to aim at, so the floor keeps it editable.
+    // line and there would be nothing to aim at, so the floor keeps it editable.
     g.depth = juce::jmax(0.05f, v != nullptr ? v->load() : 1.0f);
     return g;
 }
@@ -464,20 +528,27 @@ AmbientSynthEditor::ModView::EnvGeom AmbientSynthEditor::ModView::envGeom(int en
 juce::Point<float> AmbientSynthEditor::ModView::envToXY(int env, float time, float value) const
 {
     const EnvGeom g = envGeom(env);
-    return { g.x0 + juce::jlimit(0.0f, 1.0f, time / g.len) * g.w,
-             g.cy - juce::jlimit(-1.0f, 1.0f, value * g.depth) * g.h };
+    const float x = g.x0 + juce::jlimit(0.0f, 1.0f, time / g.len) * g.w;
+    if (g.uni)   // what the source is given: Depth lifts the whole contour towards full level
+        return { x, g.cy - juce::jlimit(0.0f, 1.0f, 1.0f - g.depth * (1.0f - juce::jlimit(0.0f, 1.0f, value))) * g.h };
+    return { x, g.cy - juce::jlimit(-1.0f, 1.0f, value * g.depth) * g.h };
 }
 
 void AmbientSynthEditor::ModView::envFromXY(int env, juce::Point<int> pos, float& time, float& value) const
 {
     const EnvGeom g = envGeom(env);
     time  = juce::jlimit(0.0f, g.len, (static_cast<float>(pos.x) - g.x0) / g.w * g.len);
+    if (g.uni) {
+        const float gain = juce::jlimit(0.0f, 1.0f, (g.cy - static_cast<float>(pos.y)) / g.h);
+        value = juce::jlimit(0.0f, 1.0f, 1.0f - (1.0f - gain) / g.depth);
+        return;
+    }
     value = juce::jlimit(-1.0f, 1.0f, (g.cy - static_cast<float>(pos.y)) / g.h / g.depth);
 }
 
 ambient::ModEnv AmbientSynthEditor::ModView::envCopy(int env) const
 {
-    return proc.engine().envShape(env);
+    return shapeOf(env);
 }
 
 void AmbientSynthEditor::ModView::envCommit(int env, const ambient::ModEnv& e, const juce::String& what)
@@ -485,7 +556,8 @@ void AmbientSynthEditor::ModView::envCommit(int env, const ambient::ModEnv& e, c
     char buf[512];
     if (e.write(buf, sizeof(buf)) <= 0) return;
     if (what.isNotEmpty()) owner.pushUndo(what);
-    proc.engine().setEnvShape(env, buf);
+    if (env < ambient::kNumModEnvs) proc.engine().setEnvShape(env, buf);
+    else proc.engine().setSrcEnvShape(env - ambient::kNumModEnvs, buf);
     repaint();
 }
 
@@ -590,6 +662,7 @@ void AmbientSynthEditor::ModView::mouseDown(const juce::MouseEvent& e)
         }
         dragCard = static_cast<int>(i);
         dragPos = e.getPosition();
+        if (cards[i].tab == 1 && envPage != 0) setEnvPage(0);   // an envelope card is one of the six
         if (cards[i].tab != 2) setTab(cards[i].tab);
         repaint();
         return;
@@ -712,6 +785,9 @@ void AmbientSynthEditor::ModView::resized()
         tabLfo.setBounds(t.removeFromLeft(90));    t.removeFromLeft(4);
         tabEnv.setBounds(t.removeFromLeft(110));   t.removeFromLeft(4);
         tabMatrix.setBounds(t.removeFromLeft(90));
+        t.removeFromLeft(24);                      // the ENV tab's pages, set a little apart from the tabs
+        pageMod.setBounds(t.removeFromLeft(130));  t.removeFromLeft(4);
+        pageSrc.setBounds(t.removeFromLeft(110));
     }
     area.removeFromTop(6);
     content = area;
@@ -739,11 +815,15 @@ void AmbientSynthEditor::ModView::resized()
             layoutRow(lfos[static_cast<size_t>(i)],
                       juce::Rectangle<int>(content.getX() + (i % cols) * w, content.getY() + (i / cols) * h, w, h).reduced(4, 2));
     } else if (tab == 1) {
-        const int cols = 3, rows = 2;
+        // The six on three columns, or the four sources' own on two: two rows of the same height.
+        const int first = envPage == 0 ? 0 : ambient::kNumModEnvs;
+        const int count = envPage == 0 ? ambient::kNumModEnvs : ambient::kSlots;
+        const int cols = envPage == 0 ? 3 : 2, rows = 2;
         const int w = content.getWidth() / cols, h = content.getHeight() / rows;
-        for (int i = 0; i < ambient::kNumModEnvs; ++i)
-            layoutRow(envs[static_cast<size_t>(i)],
-                      juce::Rectangle<int>(content.getX() + (i % cols) * w, content.getY() + (i / cols) * h, w, h).reduced(4, 2));
+        for (int i = 0; i < kEnvRows; ++i) if (!envVisible(i)) envs[static_cast<size_t>(i)].curve = {};
+        for (int j = 0; j < count; ++j)
+            layoutRow(envs[static_cast<size_t>(first + j)],
+                      juce::Rectangle<int>(content.getX() + (j % cols) * w, content.getY() + (j / cols) * h, w, h).reduced(4, 2));
     } else {
         auto m = content;
         auto bottom = m.removeFromBottom(18);

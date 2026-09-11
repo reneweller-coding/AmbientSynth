@@ -19,8 +19,9 @@ struct Preset {
     const char* texture = nullptr;    // file the host should load into the Texture slots (pack presets)
     const char* wavetable = nullptr;  // file the host should load into the User wavetable
     const char* impulse = nullptr;    // file the host should load into the convolution Room
-    // Modulation is data, not parameters (see Modulation.h): the matrix rows, and the six
-    // envelope shapes separated by '~'. Empty means "the defaults".
+    // Modulation is data, not parameters (see Modulation.h): the matrix rows, and the envelope
+    // shapes separated by '~' -- the six modulation envelopes, then the four sources' own (for a
+    // slot whose Env is Own). Empty, or a list that stops early, means "the defaults" for the rest.
     const char* mod = nullptr;
     const char* envs = nullptr;
 };
@@ -92,7 +93,7 @@ inline bool inScope(ParamId id, PresetScope scope)
 //   # comment
 //   pack <pack name>
 //   <name>|<settings>|<x y bright motion width noisy bass density tagbits>|<texture>|<wavetable>|
-//   <impulse>|<mod matrix>|<env shapes, '~' between them>
+//   <impulse>|<mod matrix>|<env shapes, '~' between them: Env 1..6, then Source 1..4's own>
 //
 // Everything after the settings is optional. The metadata field feeds the browser and the map
 // (see PresetMeta.h); the file fields name a sample and a wavetable relative to the pack file,

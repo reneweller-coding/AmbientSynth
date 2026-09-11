@@ -27,6 +27,8 @@ Engine::Engine()
     // The envelopes start from a usable shape rather than from nothing.
     for (auto& e : envPending_) e.parse("0:0/1:1/4:0");
     for (auto& e : envShape_) e.parse("0:0/1:1/4:0");
+    for (auto& e : srcEnvPending_) e.parse(kSrcEnvDefault);
+    for (auto& e : srcEnvShape_) e.parse(kSrcEnvDefault);
     for (int i = 0; i < kNumParams; ++i) {
         const float def = paramTable()[static_cast<size_t>(i)].def;
         params_[i].store(def, std::memory_order_relaxed);
@@ -549,6 +551,15 @@ int Engine::displaySlotPartials(int slot, float* out, int maxCount) const
 {
     const Voice* v = loudestVoice();
     return v != nullptr ? v->displaySlotPartials(slot, out, maxCount) : 0;
+}
+
+bool Engine::displaySlotEnv(int slot, float& shapeSeconds, float& gain) const
+{
+    const Voice* v = loudestVoice();
+    if (v == nullptr) return false;
+    shapeSeconds = v->slotEnvTime(slot);
+    gain = v->slotGain(slot);
+    return shapeSeconds >= 0.0f;
 }
 
 int Engine::displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount) const

@@ -48,6 +48,8 @@ void Engine::clearPendingModulation()
     // A default shape every envelope starts from: up over a quarter of its length, down over the
     // rest. Time is scaled by the envelope's own Time parameter, so this is a shape, not a length.
     for (auto& e : envPending_) e.parse("0:0/1:1/4:0");
+    // And every source's own: a rise to its level, which is what the plain Rise does as well.
+    for (auto& e : srcEnvPending_) e.parse(kSrcEnvDefault);
 }
 
 void Engine::resetModulation()
@@ -75,18 +77,23 @@ bool Engine::applyPresetModulation(const Preset& p)
     bool ok = true;
     if (p.mod != nullptr && *p.mod) ok = matrixPending_.parse(p.mod) && ok;
     if (p.envs != nullptr && *p.envs) {
+        // The six modulation envelopes, then the four sources' own: one list with '~' between
+        // them, so a field written before the sources had shapes simply stops after the sixth.
         const char* s = p.envs;
-        for (int i = 0; i < kNumModEnvs && *s; ++i) {
+        for (int i = 0; i < kNumModEnvs + kSlots && *s; ++i) {
             const char* end = s;
             while (*end && *end != '~') ++end;
             if (end > s) {
-                char buf[256];
+                // Sixteen points with a curve each run past 256 characters, and a buffer of that
+                // size used to drop such a shape without a word. One too long now says so.
+                char buf[1024];
                 const size_t len = static_cast<size_t>(end - s);
                 if (len < sizeof(buf)) {
                     std::memcpy(buf, s, len);
                     buf[len] = 0;
-                    ok = envPending_[i].parse(buf) && ok;
-                }
+                    ModEnv& shape = i < kNumModEnvs ? envPending_[i] : srcEnvPending_[i - kNumModEnvs];
+                    ok = shape.parse(buf) && ok;
+                } else ok = false;
             }
             s = (*end == '~') ? end + 1 : end;
         }
@@ -119,6 +126,22 @@ int Engine::writeEnvShape(int index, char* buf, size_t cap) const
 {
     if (index < 0 || index >= kNumModEnvs) return 0;
     return envPending_[index].write(buf, cap);
+}
+
+bool Engine::setSrcEnvShape(int slot, const char* text)
+{
+    if (slot < 0 || slot >= kSlots) return false;
+    lockModulation();
+    const bool ok = srcEnvPending_[slot].parse(text);
+    if (ok) publishModulation();
+    unlockModulation();
+    return ok;
+}
+
+int Engine::writeSrcEnvShape(int slot, char* buf, size_t cap) const
+{
+    if (slot < 0 || slot >= kSlots) return 0;
+    return srcEnvPending_[slot].write(buf, cap);
 }
 
 // One step of every modulator, then the matrix summed into modOut_. Called once per block, before
@@ -190,6 +213,7 @@ void Engine::stepModulation(float dt)
     if (mv != modSeen_ && !modLock_.test_and_set(std::memory_order_acquire)) {
         matrix_ = matrixPending_;
         for (int i = 0; i < kNumModEnvs; ++i) envShape_[i] = envPending_[i];
+        for (int k = 0; k < kSlots; ++k) srcEnvShape_[k] = srcEnvPending_[k];
         modLock_.clear(std::memory_order_release);
         modSeen_ = mv;
         // Whether anything reads the Lenia field, so it is only computed when it is heard.
@@ -262,19 +286,29 @@ void Engine::stepModulation(float dt)
         if (syncOn(sync))   // synced: the whole shape spans one division
             sp.timeScale = static_cast<float>(std::max(0.01, syncSeconds(sync, bpm_) / std::max(static_cast<double>(envShape_[i].length()), 1e-3)));
         sp.depth     = modulated(static_cast<ParamId>(base + 2));
-        // Sustain Loop, at the moment the last voice lets go: put the clock exactly on the
-        // sustain point, so the tail plays from where the held part ended instead of from
-        // wherever the clock had got to. Without this the value jumps on release -- the shape
-        // holds at the sustain point while held, and then the release finds t already past the
-        // end of the shape and snaps to its final value. Only this mode is touched, and no
-        // preset used it, so nothing that exists sounds different.
-        if (wasHeld && !envHeld_ && sp.mode == EnvMode::SustainLoop) {
-            const int s = envShape_[i].sustain();
-            if (s >= 0 && s < envShape_[i].count())
-                envTime_[i] = static_cast<double>(envShape_[i].point(s).time) * sp.timeScale;
-        }
+        // Sustain Loop, at the moment the last voice lets go: put the clock where the shape was
+        // being read -- the sustain point, or wherever in its loop it had got to -- so the tail
+        // plays from where the held part ended instead of from wherever the clock had got to.
+        // Without this the value jumps on release: the shape holds while the note is down, and
+        // the release finds the clock long past it. It used to be put on the sustain point
+        // always, which still jumped for a note let go before reaching it and for a shape held
+        // inside its loop. Only this mode is touched.
+        if (wasHeld && !envHeld_ && sp.mode == EnvMode::SustainLoop)
+            envTime_[i] = static_cast<double>(envShape_[i].readTime(static_cast<float>(envTime_[i]) / sp.timeScale, sp.mode, true)) * sp.timeScale;
         const float t = static_cast<float>(envTime_[i]) / sp.timeScale;
         modSrc_[static_cast<int>(ModSource::Env1) + i] = envShape_[i].at(t, sp.mode, envHeld_) * sp.depth;
+    }
+    // Each source's own envelope keeps only its settings here: its clock is every voice's own,
+    // from its note (Voice.cpp), so there is no single value of it to hand to the matrix.
+    for (int k = 0; k < kSlots; ++k) {
+        const int base = static_cast<int>(ParamId::Src1EnvMode) + k * 4;
+        ModEnvSpec& sp = srcEnvSpec_[k];
+        sp.mode      = static_cast<EnvMode>(clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 0)))), 0, kNumEnvModes - 1));
+        sp.timeScale = std::max(0.01f, modulated(static_cast<ParamId>(base + 1)));
+        const int sync = clampv(static_cast<int>(std::lround(getParam(static_cast<ParamId>(base + 3)))), 0, kNumSyncDivs - 1);
+        if (syncOn(sync))   // synced: the whole shape spans one division
+            sp.timeScale = static_cast<float>(std::max(0.01, syncSeconds(sync, bpm_) / std::max(static_cast<double>(srcEnvShape_[k].length()), 1e-3)));
+        sp.depth     = modulated(static_cast<ParamId>(base + 2));
     }
 
     // Everything else that can drive something. Sources are bipolar; the ones that are naturally
@@ -632,12 +666,17 @@ void Engine::readParams()
             s.root          = at(40);
             s.delaySec      = at(33);
             s.riseSec       = at(34);
-            // The choice is "Off" first, then the six shapes, so it is one off the shape's index.
-            s.envIndex      = static_cast<int>(std::lround(at(35))) - 1;
+            {   // The choice is "Off" first, then the six shapes -- one off the shape's index --
+                // and "Own" last, the slot's own shape.
+                const int env = static_cast<int>(std::lround(at(35)));
+                s.envIndex = (env >= 1 && env <= kNumModEnvs) ? env - 1 : -1;
+                s.ownEnv   = env == kNumModEnvs + 1;
+            }
         }
         // The shapes a slot may borrow for its entrance. Pointers into the engine, valid for the
         // block like every other pointer in VoiceParams.
         for (int i = 0; i < kNumModEnvs; ++i) { vp_.envShape[i] = &envShape_[i]; vp_.envSpec[i] = &envSpec_[i]; }
+        for (int k = 0; k < kSlots; ++k) { vp_.srcEnvShape[k] = &srcEnvShape_[k]; vp_.srcEnvSpec[k] = &srcEnvSpec_[k]; }
         // ---- the Vector
         //
         // A point in a square, after the Prophet VS and the Wavestation: the four corners are the

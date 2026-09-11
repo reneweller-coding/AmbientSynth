@@ -536,8 +536,12 @@ void AmbientSynthEditor::FilterView::paint(juce::Graphics& g)
     g.drawText(fc.legend(), r.reduced(9, 5), juce::Justification::topRight, false);
 }
 
-void AmbientSynthEditor::SourceView::mouseDown(const juce::MouseEvent&)
+void AmbientSynthEditor::SourceView::mouseDown(const juce::MouseEvent& e)
 {
+    if (ownEntrance() && entranceBox().contains(e.getPosition())) {   // the entrance picture: open it
+        if (auto* ed = findParentComponentOfClass<AmbientSynthEditor>()) ed->openSourceEnvelope(slot - 1);
+        return;
+    }
     const int type = static_cast<int>(std::lround(rawParam(proc, ("src" + juce::String(slot) + "_type").toRawUTF8())));
     if (type == 1 || type == 9) { flat = !flat; repaint(); }
 }
@@ -695,6 +699,58 @@ bool AmbientSynthEditor::SourceView::paintTable3D(juce::Graphics& g, juce::Recta
 }
 
 void AmbientSynthEditor::SourceView::paint(juce::Graphics& g)
+{
+    paintSource(g);
+    paintEntrance(g);
+}
+
+bool AmbientSynthEditor::SourceView::ownEntrance() const
+{
+    const juce::String pre = "src" + juce::String(slot) + "_";
+    return juce::roundToInt(rawParam(proc, (pre + "type").toRawUTF8())) != 0
+        && juce::roundToInt(rawParam(proc, (pre + "env").toRawUTF8())) == ambient::kNumSlotEnvs - 1;
+}
+
+// Under the right-hand line of text, where every type's picture is plot and none is text.
+juce::Rectangle<int> AmbientSynthEditor::SourceView::entranceBox() const
+{
+    return getLocalBounds().reduced(9, 0).removeFromRight(84).withY(21).withHeight(26);
+}
+
+void AmbientSynthEditor::SourceView::paintEntrance(juce::Graphics& g)
+{
+    if (!ownEntrance() || getWidth() < 200 || getHeight() < 60) return;
+    const auto box = entranceBox().toFloat();
+    g.setColour(ui::bg0.withAlpha(0.85f));
+    g.fillRoundedRectangle(box, 4.0f);
+    g.setColour(ui::foreCol.withAlpha(0.5f));
+    g.drawRoundedRectangle(box.reduced(0.5f), 4.0f, 1.0f);
+    const ambient::ModEnv& e = proc.engine().srcEnvShape(slot - 1);
+    const float depth = juce::jlimit(0.0f, 1.0f, rawParam(proc, ("src" + juce::String(slot) + "_env_depth").toRawUTF8()));
+    const auto plot = box.reduced(5.0f, 5.0f).withTrimmedLeft(20.0f);
+    const float len = juce::jmax(0.001f, e.length());
+    auto yOf = [&](float gain) { return plot.getBottom() - juce::jlimit(0.0f, 1.0f, gain) * plot.getHeight(); };
+    juce::Path p;
+    for (int s = 0; s <= 40; ++s) {
+        const float t = static_cast<float>(s) / 40.0f;
+        const float v = juce::jlimit(0.0f, 1.0f, e.at(t * len, ambient::EnvMode::OneShot, true));
+        const float x = plot.getX() + t * plot.getWidth();
+        if (s == 0) p.startNewSubPath(x, yOf(1.0f - depth * (1.0f - v))); else p.lineTo(x, yOf(1.0f - depth * (1.0f - v)));
+    }
+    g.setColour(ui::foreCol);
+    g.strokePath(p, juce::PathStrokeType(1.3f));
+    float at = 0.0f, gain = 0.0f;
+    if (proc.engine().displaySlotEnv(slot - 1, at, gain) && at <= len * 1.02f) {
+        const float x = plot.getX() + juce::jlimit(0.0f, 1.0f, at / len) * plot.getWidth();
+        g.setColour(ui::live);
+        g.fillEllipse(x - 2.5f, yOf(gain) - 2.5f, 5.0f, 5.0f);
+    }
+    g.setColour(ui::dim);
+    g.setFont(ui::body(8.5f));
+    g.drawText("ENV", box.withWidth(24.0f).toNearestInt(), juce::Justification::centred, false);
+}
+
+void AmbientSynthEditor::SourceView::paintSource(juce::Graphics& g)
 {
     const auto r = getLocalBounds();
     const juce::String pre = "src" + juce::String(slot) + "_";

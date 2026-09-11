@@ -235,6 +235,14 @@ enum class ParamId : int {
     // The shifter in the spectrum (12.09.2026): which shifter the shimmer's loop uses, and the
     // cloud's loop transposed on every pass.
     CosmosShimmerMode, CloudShift,
+    // Each source's own envelope (11.09.2026). A slot's Env could only borrow one of the six
+    // modulation envelopes, so every source that entered on a shape left one envelope fewer for
+    // modulating anything else. Env = Own reads the slot's own shape with these four, which do
+    // what an Env section's do: Mode, Time, Depth and Sync, four per slot in that order.
+    Src1EnvMode, Src1EnvTime, Src1EnvDepth, Src1EnvSync,
+    Src2EnvMode, Src2EnvTime, Src2EnvDepth, Src2EnvSync,
+    Src3EnvMode, Src3EnvTime, Src3EnvDepth, Src3EnvSync,
+    Src4EnvMode, Src4EnvTime, Src4EnvDepth, Src4EnvSync,
     Count
 };
 
@@ -308,7 +316,7 @@ extern const char* const kRootNames[12];
 extern const char* const kKeyMapNames[2];   // 0 = snap 12 keys/octave to nearest degree, 1 = consecutive degrees
 extern const char* const kSubOctaveNames[2];   // "-1", "-2"
 extern const char* const kSubSourceNames[3];   // "Root", "Difference" (ghost tone), "Lowest" (the lowest voice)
-constexpr int kNumSlotEnvs = 7;                // "Off" and the six shapes the preset carries
+constexpr int kNumSlotEnvs = 8;                // "Off", the six shapes the preset carries, and "Own"
 extern const char* const kSlotEnvNames[kNumSlotEnvs];
 constexpr int kNumInterp = 2;                  // Linear, Hermite
 extern const char* const kInterpNames[kNumInterp];

@@ -317,6 +317,35 @@ STRIKE_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "StrikePresets.inc"
 Z_BANK = bank_presets(os.path.join(ROOT, "Core", "src", "ZPlanePresets.inc"))
 
 
+def entrance_shape(rng):
+    """A source's own entrance as a level from 0 to 1, in the envelope text form, and its mode.
+
+    Four kinds, because an entrance is a gesture and one gesture everywhere is a mannerism: a rise
+    that settles; a swell past where it settles; a breath that holds while the note is down and falls
+    away when it is let go (Sustain Loop); and a slow wander between levels that never comes to rest
+    (Loop). Times are seconds at Time 1."""
+    kind = rng.choices(["rise", "swell", "breath", "wander"], weights=[35, 30, 20, 15])[0]
+    curve = lambda: round(u(rng, -0.6, 0.2), 2)
+    if kind == "rise":
+        return f"0:0/{u(rng, 1.5, 8.0):.3g}:1:{curve():g}", "One Shot"
+    if kind == "swell":
+        t1 = u(rng, 1.0, 5.0)
+        t2 = t1 + u(rng, 2.0, 8.0)
+        return f"0:0/{t1:.3g}:1:{curve():g}/{t2:.3g}:{u(rng, 0.45, 0.85):.3g}:{curve():g}", "One Shot"
+    if kind == "breath":
+        t1 = u(rng, 1.0, 5.0)
+        t2 = t1 + u(rng, 1.0, 4.0)
+        t3 = t2 + u(rng, 3.0, 12.0)
+        return (f"0:0/{t1:.3g}:1:{curve():g}/{t2:.3g}:{u(rng, 0.55, 0.9):.3g}:{curve():g}"
+                f"/{t3:.3g}:0:{curve():g}!s2"), "Sustain Loop"
+    pts, t = ["0:0"], 0.0
+    n = rng.randint(4, 7)
+    for _ in range(1, n):
+        t += u(rng, 1.5, 6.0)
+        pts.append(f"{t:.3g}:{u(rng, 0.35, 1.0):.3g}:{round(u(rng, -0.4, 0.4), 2):g}")
+    return "/".join(pts) + f"!l1-{n - 1}", "Loop"
+
+
 def stagger_entries(p, envs_text, rng):
     """Let the sources arrive one after another instead of all on the note.
 
@@ -329,26 +358,33 @@ def stagger_entries(p, envs_text, rng):
     Not every preset: a delay everywhere would be its own mannerism. Roughly two in five of the
     later slots wait, drawn over a wide range so some are a breath and some are half a minute, and
     the first sounding slot never waits -- a note has to start somewhere. A quarter of the waiting
-    slots take one of the preset's own envelope shapes as their contour instead of a plain fade,
-    which is the sixteen-breakpoint envelope doing the work of an entrance.
+    slots enter on a contour of their own instead of a plain fade: the source's own sixteen-point
+    envelope (Env = Own), which leaves all six of the preset's envelopes to the modulation. Its shape
+    goes into the envelope field after the six, and the field is returned.
     """
     sounding = [n for n in (1, 2, 3, 4)
                 if p.get(f"src{n}_type", "Additive" if n == 1 else "Off") not in ("Off", "")]
     if len(sounding) < 2:
-        return
-    # modulation_for hands the six shapes back as ONE string, "~"-separated with the trailing
-    # empties stripped -- not as a list. Enumerating it walked over characters and wrote src2_env
-    # = "Env 11", which the parameter's choice list has no name for; the slot then fell back to a
-    # plain fade and nothing said a word. Split first.
-    shaped = [i for i, text in enumerate(envs_text.split("~")) if text]
+        return envs_text
+    # modulation_for hands the shapes back as ONE string, "~"-separated with the trailing empties
+    # stripped -- not as a list. Enumerating it once walked over characters and wrote src2_env =
+    # "Env 11", which the choice list has no name for. Split, then pad to the six and the four.
+    shapes = ((envs_text.split("~") if envs_text else []) + [""] * 10)[:10]
     for n in sounding[1:]:                        # never the first: the note has to start somewhere
         if rng.random() >= 0.42:
             continue
         p[f"src{n}_delay"] = round(logu(rng, 2.5, 25.0), 2)
-        if shaped and rng.random() < 0.25:
-            p[f"src{n}_env"] = f"Env {shaped[rng.randrange(len(shaped))] + 1}"
+        if rng.random() < 0.25:
+            text, mode = entrance_shape(rng)
+            shapes[5 + n] = text                  # the field's seventh to tenth are Source 1 to 4
+            p[f"src{n}_env"] = "Own"
+            p[f"src{n}_env_mode"] = mode
+            p[f"src{n}_env_time"] = round(logu(rng, 0.6, 3.0), 3)
+            if rng.random() < 0.2:                # now and then the contour only colours the level
+                p[f"src{n}_env_depth"] = round(u(rng, 0.5, 0.9), 3)
         else:
             p[f"src{n}_rise"] = round(logu(rng, 1.5, 12.0), 2)
+    return "~".join(shapes).rstrip("~")
 
 
 def modulation_for(p, style, rng, shade_name):
@@ -1292,7 +1328,7 @@ def make_preset(style, rng, textures, wavetables, impulses, shade, extra=None):
     if "brain_hold_min" in p and "brain_hold_max" in p and p["brain_hold_max"] < p["brain_hold_min"] * 1.5:
         p["brain_hold_max"] = p["brain_hold_min"] * 2.0
     matrix, envs = modulation_for(p, style, rng, shade[0])
-    stagger_entries(p, envs, extra)
+    envs = stagger_entries(p, envs, extra)
     matrix = add_hands(p, style, rng, matrix)
     if len(set(slot_textures.values())) > 1:
         texture_file = ";".join(slot_textures.get(k, "") for k in range(1, 5))

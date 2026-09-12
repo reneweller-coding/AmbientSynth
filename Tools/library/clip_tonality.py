@@ -37,6 +37,25 @@ def measure(path):
     if x.ndim > 1:
         x = x.mean(axis=1)
     n = len(x)
+    # The whole clip's health before the middle ten seconds are taken: a clip is played from anywhere
+    # (grain positions, a Stretch head, a Spectral read point), so a gap or an offset anywhere in it is
+    # heard. dc is the offset against the level; gap the longest stretch 50 dB under the clip's own
+    # level; seam how far the end's level stands from the start's, which is the jump a loop makes.
+    blk = max(1, int(sr * 0.05))
+    nb = n // blk
+    level = float(np.sqrt(np.mean(x.astype(np.float64) ** 2))) + 1e-12
+    health = {"dc": 0.0, "gap": 0.0, "seam": 0.0, "rms_db": round(20 * np.log10(level), 2)}
+    if nb >= 4:
+        health["dc"] = round(float(abs(np.mean(x, dtype=np.float64))) / level, 4)
+        env = np.sqrt(np.mean(x[:nb * blk].astype(np.float64).reshape(nb, blk) ** 2, axis=1)) + 1e-12
+        quiet = env < level * 10 ** (-50.0 / 20.0)
+        run = best = 0
+        for q in quiet:
+            run = run + 1 if q else 0
+            best = max(best, run)
+        health["gap"] = round(best * blk / sr, 2)
+        k = max(1, min(10, nb // 4))                                     # half a second each side
+        health["seam"] = round(abs(20 * np.log10(float(np.mean(env[-k:])) / float(np.mean(env[:k])))), 2)
     take = int(sr * SECONDS)
     if n > take:
         start = (n - take) // 2
@@ -71,8 +90,9 @@ def measure(path):
     if not harms:
         return os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path), None, "silent"
     rel = os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path)
-    return rel, {"harm": round(float(np.mean(harms)), 4), "flat": round(float(np.mean(flats)), 5),
-                 "centroid": round(float(np.median(cents)), 1), "high": round(float(np.mean(highs)), 4)}, None
+    return rel, dict({"harm": round(float(np.mean(harms)), 4), "flat": round(float(np.mean(flats)), 5),
+                      "centroid": round(float(np.median(cents)), 1), "high": round(float(np.mean(highs)), 4)},
+                     **health), None
 
 
 def main():
@@ -82,7 +102,9 @@ def main():
     a = ap.parse_args()
     files = []
     for folder in ("Textures", "FieldRecordings"):
-        files += sorted(glob.glob(os.path.join(ROOT, "Library", folder, "*.wav")))
+        # FLAC since the library moved to Stable Audio 3 (10.09.2026); WAV for anything added by hand
+        files += sorted(glob.glob(os.path.join(ROOT, "Library", folder, "*.flac"))
+                        + glob.glob(os.path.join(ROOT, "Library", folder, "*.wav")))
     print(f"{len(files)} clips", flush=True)
     out, bad = {}, []
     with Pool(a.jobs) as pool:

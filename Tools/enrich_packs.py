@@ -148,7 +148,7 @@ def read_pack(path):
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             t = line.rstrip("\n")
-            if not t or t.startswith("#") or t.startswith("pack "):
+            if not t or t.startswith("#") or t.startswith("pack ") or (t.startswith("format ") and "|" not in t):
                 head.append(t)
             else:
                 rows.append(t.split("|"))

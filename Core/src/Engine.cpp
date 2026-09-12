@@ -68,6 +68,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
     for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_, &memL_, &memR_,
+                     &cloudL_, &cloudR_,
                      &roomInL_, &roomInR_, &roomOutL_, &roomOutR_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);
     {   // Room: pre-delay ring (>= 300 ms) and the convolver with a generated hall unless a file was set
@@ -554,6 +555,12 @@ int Engine::displaySlotPartials(int slot, float* out, int maxCount) const
     return v != nullptr ? v->displaySlotPartials(slot, out, maxCount) : 0;
 }
 
+float Engine::displaySlotPosition(int slot) const
+{
+    const Voice* v = loudestVoice();
+    return v != nullptr ? v->displaySlotPosition(slot) : -1.0f;
+}
+
 bool Engine::displaySlotEnv(int slot, float& shapeSeconds, float& gain) const
 {
     const Voice* v = loudestVoice();
@@ -632,7 +639,11 @@ void Engine::startNote(int note, float velocity, int owner, float distance, floa
     // silence, not on every note of a cluster, or a slow shape would never get anywhere.
     bool anySounding = false;
     for (const auto& v : voices_) if (v.isActive()) { anySounding = true; break; }
-    if (!anySounding) for (double& t : envTime_) t = 0.0;
+    // A note arriving into silence starts a phrase: the modulation envelopes go back to zero, and
+    // so does any LFO set to Retrigger. That mode had been stored by two thousand seven hundred
+    // presets and read by nobody -- Lfo::step uses the rate, the phase and the depth and has never
+    // looked at the mode at all (12.09.2026).
+    if (!anySounding) { for (double& t : envTime_) t = 0.0; phraseStart_ = true; }
     randomPerNote_ = rng_.bipolar();
     Voice* v = allocate(note, owner);
     v->order = ++order_;

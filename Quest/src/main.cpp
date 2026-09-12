@@ -8,7 +8,7 @@
 //
 // No game engine: NativeActivity + android_native_app_glue, EGL, OpenXR loader, Oboe, the core.
 // Files in <externalDataPath>:
-//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Sleep Concert  route=Night Descent  rest_zone=0.08
+//   ambient.cfg   osc_host=192.168.1.20  osc_port=9000  audio=1  preset=Consonant Hollow  route=Night Descent  rest_zone=0.08
 //   calib.txt     hand calibration, written after the calibration gesture
 //   texture.wav   optional sample for the Texture source slots (assumed recorded at C4)
 //   wavetable.wav optional user wavetable, 2048-sample frames (Table = User)

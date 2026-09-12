@@ -269,9 +269,14 @@ void Engine::stepModulation(float dt)
             sp.rateHz = static_cast<float>(syncHz(sync, bpm_));
             if (running_) lfo_[i].setPhase(static_cast<float>(syncPhase(sync, beat_)) - sp.rateHz * dt);
         }
+        // Retrigger: the phase goes back to where the knob says at the start of a phrase. Per Voice
+        // cannot be honoured here and the help says so: this modulation is computed once a block
+        // for the whole instrument, not once per voice, so there is no per-voice copy to give it.
+        if (phraseStart_ && sp.mode == LfoMode::Retrigger) lfo_[i].setPhase(sp.phase);
         const Wavetable* table = userTable_.frames > 0 ? &userTable_ : nullptr;
         modSrc_[static_cast<int>(ModSource::Lfo1) + i] = lfo_[i].step(dt, sp, table);
     }
+    phraseStart_ = false;
 
     const bool wasHeld = envHeld_;
     envHeld_ = false;
@@ -331,6 +336,15 @@ void Engine::stepModulation(float dt)
     modSrc_[static_cast<int>(ModSource::Distance)] = uni(loud ? loud->distance() : 0.5f);
     modSrc_[static_cast<int>(ModSource::RandomPerNote)] = randomPerNote_;
     modSrc_[static_cast<int>(ModSource::Beat)] = updateBeat(dt);
+    // Where the piece stands in itself. Root Age is measured against Home Time, so it reads the
+    // same whether the night is an hour or three; Layer is the role of the voice being read, which
+    // for a per-voice source is the loudest one; Section is the arc as a staircase of five, which
+    // is what a supply or a register needs when it should change rather than glide.
+    modSrc_[static_cast<int>(ModSource::RootAge)] =
+        uni(static_cast<float>(clampv(brain_.rootAgeSeconds() / std::max(60.0, static_cast<double>(bp_.homeTime) * 60.0), 0.0, 1.0)));
+    modSrc_[static_cast<int>(ModSource::Layer)] = uni(loud ? loud->layer() : 0.5f);
+    modSrc_[static_cast<int>(ModSource::Section)] =
+        uni(std::floor(clampv(0.5f + 0.5f * arcOut_, 0.0f, 0.9999f) * 5.0f) * 0.25f);
     // The cascade's excitation, smoothed: the Hawkes kick is a step, and a step on a send is a
     // click. One pole at two seconds turns it into a swell that still rises with the cluster.
     {
@@ -602,6 +616,10 @@ void Engine::readParams()
     vp_.unison      = static_cast<int>(std::lround(g(ParamId::Unison)));
     vp_.detune      = g(ParamId::Detune);
     vp_.drift       = g(ParamId::Drift);
+    vp_.lowDetune   = g(ParamId::StrandLowDetune);
+    vp_.beatCeiling = g(ParamId::BeatCeiling);
+    vp_.velAttack   = g(ParamId::EnvVelAttack);
+    layerDepth_     = g(ParamId::LayerDepth);
     vp_.driftRate   = g(ParamId::DriftRate);
     vp_.spread      = g(ParamId::Spread);
     vp_.bloom       = g(ParamId::Bloom);
@@ -863,6 +881,37 @@ void Engine::readParams()
     bp2_.homeostat = bp_.homeostat;
     bp_.dejavu = g(ParamId::BrainDejaVu);
     bp2_.dejavu = bp_.dejavu;
+    // The register roles and the intervals that belong to them. Both conductors get them: the
+    // background plane is the one that most needs to be told not to put a third in the bass.
+    bp_.layers      = g(ParamId::BrainLayers);       bp2_.layers      = bp_.layers;
+    bp_.bassHold    = g(ParamId::BrainBassHold);     bp2_.bassHold    = bp_.bassHold;
+    bp_.topSoft     = g(ParamId::BrainTopSoft);      bp2_.topSoft     = bp_.topSoft;
+    bp_.lowSpacing  = g(ParamId::BrainLowSpacing);   bp2_.lowSpacing  = bp_.lowSpacing;
+    bp_.thirdFloor  = static_cast<int>(std::lround(g(ParamId::BrainThirdFloor)));
+    bp2_.thirdFloor = bp_.thirdFloor;
+    bp_.leading     = g(ParamId::BrainLeading);      bp2_.leading     = bp_.leading;
+    bp_.thirds      = g(ParamId::BrainThirds);       bp2_.thirds      = bp_.thirds;
+    bp_.seconds     = g(ParamId::BrainSeconds);      bp2_.seconds     = bp_.seconds;
+    bp_.seventh     = g(ParamId::BrainSeventh);      bp2_.seventh     = bp_.seventh;
+    // What the clock may and may not do.
+    bp_.rateBreath   = g(ParamId::BrainRateBreath);    bp2_.rateBreath   = bp_.rateBreath;
+    bp_.breathPeriod = g(ParamId::BrainBreathPeriod);  bp2_.breathPeriod = bp_.breathPeriod;
+    bp_.overlap      = g(ParamId::BrainOverlap);       bp2_.overlap      = bp_.overlap;
+    bp_.onsetGuard   = g(ParamId::BrainOnsetGuard) >= 0.5f;
+    bp2_.onsetGuard  = bp_.onsetGuard;
+    bp_.releaseGap   = g(ParamId::BrainReleaseGap);    bp2_.releaseGap   = bp_.releaseGap;
+    bp_.retrigger    = g(ParamId::BrainRetrigger);     bp2_.retrigger    = bp_.retrigger;
+    bp_.densitySlew  = g(ParamId::BrainDensitySlew);   bp2_.densitySlew  = bp_.densitySlew;
+    bp_.silence      = g(ParamId::BrainSilence);       bp2_.silence      = bp_.silence;
+    bp_.silenceLen   = g(ParamId::BrainSilenceLen);    bp2_.silenceLen   = bp_.silenceLen;
+    // Root and long form.
+    bp_.rootSteps  = static_cast<int>(std::lround(g(ParamId::BrainRootSteps)));  bp2_.rootSteps  = bp_.rootSteps;
+    bp_.rootDown   = g(ParamId::BrainRootDown);        bp2_.rootDown   = bp_.rootDown;
+    bp_.pivot      = g(ParamId::BrainPivot);           bp2_.pivot      = bp_.pivot;
+    bp_.home       = g(ParamId::BrainHome);            bp2_.home       = bp_.home;
+    bp_.homeTime   = g(ParamId::BrainHomeTime);        bp2_.homeTime   = bp_.homeTime;
+    bp_.memory     = g(ParamId::BrainMemory);          bp2_.memory     = bp_.memory;
+    bp_.degreeSwap = g(ParamId::BrainDegreeSwap);      bp2_.degreeSwap = bp_.degreeSwap;
     bp_.loop = static_cast<int>(std::lround(g(ParamId::BrainLoop)));
     bp2_.loop = bp_.loop;
     bp_.spread = g(ParamId::BrainSpread);
@@ -927,6 +976,16 @@ void Engine::readParams()
     bp2_.wander      = 0.0f;   // it follows the first conductor's root instead of wandering itself
     brain2Depth_     = g(ParamId::Brain2Depth);
     brain2Interval_  = static_cast<int>(std::lround(g(ParamId::Brain2Interval)));
+    // Golden: the background layer's clock is stretched against the foreground's by the one ratio
+    // that has no good rational approximation, so the two never fall into a simple relation and
+    // are never heard as one (Anti 15). It overrides Brain 2's own rate and holds, which is the
+    // point -- a ratio cannot be guaranteed while both ends are set by hand.
+    if (g(ParamId::Brain2Golden) >= 0.5f) {
+        constexpr double phi = 1.6180339887498949;
+        bp2_.rateSeconds = static_cast<float>(bp_.rateSeconds * phi);
+        bp2_.holdMin     = static_cast<float>(bp_.holdMin * phi);
+        bp2_.holdMax     = static_cast<float>(bp_.holdMax * phi);
+    }
 
     // Hour-scale arc: a very slow drift that leans on density, brightness and depth.
     const float a = arcOut_ * arcAmount_;
@@ -988,6 +1047,7 @@ void Engine::readParams()
     cloud_.setResonators(g(ParamId::CloudResonance), static_cast<int>(std::lround(g(ParamId::CloudResMode))),
                          static_cast<int>(std::lround(g(ParamId::CloudResNotes))), g(ParamId::CloudResDecay));
     cloudSend_ = g(ParamId::CloudSend);
+    cloudToNear_ = g(ParamId::CloudToNear);
     nearReverb_.setSpace(0.3f, 20000.0f, g(ParamId::NearLowcut));
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
     unmask_.set(g(ParamId::FarUnmask), g(ParamId::FarUnmaskSpread));
@@ -1083,7 +1143,24 @@ void Engine::readParams()
     }
     snapKeys_ = std::lround(g(ParamId::KeyMap)) == 0;
     const int rootPc = clampv(static_cast<int>(std::lround(g(ParamId::RootNote))), 0, 11);
-    rootNote_ = 60 + rootPc;
+    {
+        // R4.7: when the root moves, the ground does not move under what is already sounding. Each
+        // voice keeps the frequency it was given, by carrying the ratio the move would have made;
+        // notes that begin afterwards take the new root's ratios, so the harmony changes by what
+        // enters rather than by everything sliding at once. Off, everything glides as before.
+        const int newRoot = 60 + rootPc;
+        if (newRoot != rootNote_ && g(ParamId::TuneHoldSounding) >= 0.5f) {
+            double before[kMaxVoices];
+            int i = 0;
+            for (const auto& v : voices_) { before[i] = v.isActive() ? frequencyOf(v.note()) : 0.0; ++i; }
+            rootNote_ = newRoot;
+            i = 0;
+            for (auto& v : voices_) {
+                const double b = before[i++];
+                if (b > 0.0) { const double a2 = frequencyOf(v.note()); if (a2 > 0.0) v.setRootComp(v.rootComp() * static_cast<float>(b / a2)); }
+            }
+        } else rootNote_ = newRoot;
+    }
     {
         const float purity = g(ParamId::TunePurity), drift = g(ParamId::TuneDrift);
         float wander = drift > 0.0f ? 0.5f * drift * purityDrift_.value() : 0.0f;   // drifter is advanced in process()

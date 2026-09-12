@@ -47,12 +47,29 @@ void Engine::adoptCluster(const int* notes, const float* vels, int count, bool s
         brain_.adopt(notes, vels, count, [this](const BrainEvent& e) {
             if (e.type == BrainEvent::Type::NoteOn) {
                 const float u = rng_.uniform();
-                const float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
-                                           : depth_ * (0.55f + 0.45f * rng_.uniform());
-                startNote(e.note, e.velocity, OwnerBrain, d, kInherited);
+                float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
+                                     : depth_ * (0.55f + 0.45f * rng_.uniform());
+                if (layerDepth_ > 0.0f) {
+                    const int n = e.note;
+                    d += (depth_ * (n < 43 ? 0.08f : n < 60 ? 0.22f : n < 84 ? 0.55f : 0.9f) - d) * layerDepth_;
+                }
+                startNote(e.note, e.velocity, OwnerBrain, clampv(d, 0.0f, 1.0f), kInherited);
             } else stopNote(e.note, OwnerBrain);
         });
     }
+    // A cluster thinner than this conductor asks for is not a cluster it can keep. What it
+    // inherited is the leaving preset's chord, and that can be one note where the arriving preset
+    // wants four -- the old one may itself have been a few seconds old. Left at that, the new
+    // conductor waits its OWN event rate for the second note, which in this library is a hundred
+    // seconds: the change lands on a thin chord and stays there. So it goes on filling from here,
+    // and ClusterBrain::update stops it the moment the cluster is full.
+    //
+    // After the adopt, because adopt() clears the flag itself; and the density is read from the
+    // parameter rather than from bp_, which is filled on the audio thread -- this runs on the
+    // message thread while the incoming engine is being prepared, before it has rendered a block.
+    const bool on = getParam(second ? ParamId::Brain2On : ParamId::BrainOn) >= 0.5f;
+    const int want = static_cast<int>(std::lround(getParam(second ? ParamId::Brain2Density : ParamId::BrainDensity)));
+    if (on && count < want) (second ? brain2_ : brain_).requestFill();
 }
 
 void Engine::process(float* L, float* R, int n)
@@ -187,7 +204,7 @@ void Engine::process(float* L, float* R, int n)
         if (std::fabs(commaCents_) < 1.0e-6 && commaTarget_ == 0.0) commaCents_ = 0.0;
     }
     if (retune_)   // tuning purity / drift: every sounding voice glides to its current frequency
-        for (auto& v : voices_) if (v.isActive()) v.setTargetFrequency(frequencyOf(v.note()));
+        for (auto& v : voices_) if (v.isActive()) v.setTargetFrequency(frequencyOf(v.note()) * v.rootComp());
 
     int pos = 0;
     while (pos < n) {
@@ -254,9 +271,17 @@ void Engine::renderChunk(float* L, float* R, int n)
         if (e.type == BrainEvent::Type::NoteOn) {
             // Rich's contrast: some notes intimately close, most of them deep in the background.
             const float u = rng_.uniform();
-            const float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
-                                       : depth_ * (0.55f + 0.45f * rng_.uniform());
-            startNote(e.note, e.velocity, OwnerBrain, d);
+            float d = (u < 0.4f) ? depth_ * 0.15f * rng_.uniform()
+                                 : depth_ * (0.55f + 0.45f * rng_.uniform());
+            // Layer Depth takes that away from the dice and gives it to the role (R8.4): the
+            // foundation and the body stand near, the colour in the middle, the air far back. The
+            // dice keep whatever share of it Layer Depth leaves them.
+            if (layerDepth_ > 0.0f) {
+                const int n = e.note;
+                const float byRole = depth_ * (n < 43 ? 0.08f : n < 60 ? 0.22f : n < 84 ? 0.55f : 0.9f);
+                d += (byRole - d) * layerDepth_;
+            }
+            startNote(e.note, e.velocity, OwnerBrain, clampv(d, 0.0f, 1.0f));
         } else {
             stopNote(e.note, OwnerBrain);
         }
@@ -329,7 +354,7 @@ void Engine::renderChunk(float* L, float* R, int n)
         }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
         const float* couple = sympathy_ > 0.0f ? coupleBuf_.data() + p : nullptr;
-        for (auto& v : voices_) if (v.isActive()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm, couple); }
+        for (auto& v : voices_) if (v.isActive() || v.isStriking()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm, couple); }
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
@@ -373,7 +398,24 @@ void Engine::renderChunk(float* L, float* R, int n)
     if (cloudSend_ > 0.0f || smCloudSend_.value > 1e-4f || !cloud_.quiet()) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
         for (int i = 0; i < n; ++i) { const float s = smCloudSend_.next(cloudSend_); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
-        cloud_.process(cl, cr, fl, fr, n);
+        if (cloudToNear_ <= 0.0f) {
+            cloud_.process(cl, cr, fl, fr, n);
+        } else {
+            // To Near: the cloud is written into its own pair and then shared between the planes,
+            // equal power, so turning it forward does not change how much of it there is. At 0 the
+            // branch above runs and the render is what it always was, sample for sample.
+            std::fill(cloudL_.begin(), cloudL_.begin() + n, 0.0f);
+            std::fill(cloudR_.begin(), cloudR_.begin() + n, 0.0f);
+            cloud_.process(cl, cr, cloudL_.data(), cloudR_.data(), n);
+            const float a = 0.5f * kPi * clampv(cloudToNear_, 0.0f, 1.0f);
+            const float near = std::sin(a), far = std::cos(a);
+            for (int i = 0; i < n; ++i) {
+                fl[i] += cloudL_[static_cast<size_t>(i)] * far;
+                fr[i] += cloudR_[static_cast<size_t>(i)] * far;
+                nl[i] += cloudL_[static_cast<size_t>(i)] * near;
+                nr[i] += cloudR_[static_cast<size_t>(i)] * near;
+            }
+        }
     }
 
     // Cosmos: a parallel send off the near bus, returned to both planes; the dry path is untouched.
@@ -852,6 +894,34 @@ void Engine::renderChunk(float* L, float* R, int n)
     outTapW_ = (outTapW_ + n) & (kOutTapLen - 1);
     // The loudness meter sees exactly what a file would: after the master gain and the clipper.
     loudness_.process(L, R, n);
+}
+
+} // namespace ambient
+
+namespace ambient {
+
+// The conductors on their own clock, with nothing rendered: the rule book's check is an hour of
+// notes measured, and an hour of audio is not the way to get them. The seed and every parameter
+// come through readParams(), so what is measured is what the render would have played.
+void Engine::auditConductor(double seconds, double dt,
+                            const std::function<void(double, int, const BrainEvent&)>& sink,
+                            const std::function<void(double, int)>& rootSink)
+{
+    readParams();
+    auto freqOf = [this](int note) { return frequencyOf(note); };
+    double t = 0.0;
+    int lastRoot = brain_.root();
+    if (rootSink) rootSink(0.0, lastRoot);
+    const long steps = static_cast<long>(seconds / dt);
+    for (long i = 0; i < steps; ++i) {
+        brain_.update(dt, bp_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 1, e); });
+        if (brain2On_) {
+            brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
+            brain2_.update(dt, bp2_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 2, e); });
+        }
+        if (brain_.root() != lastRoot) { lastRoot = brain_.root(); if (rootSink) rootSink(t, lastRoot); }
+        t += dt;
+    }
 }
 
 } // namespace ambient

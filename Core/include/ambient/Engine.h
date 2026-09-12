@@ -18,6 +18,7 @@
 #include "Route.h"
 #include "Modulation.h"
 #include "Clock.h"
+#include <functional>
 #include "ClusterBrain.h"
 #include "Presets.h"
 #include "Loudness.h"
@@ -42,6 +43,14 @@ public:
     void  setParam(ParamId id, float v) { params_[static_cast<int>(id)].store(v, std::memory_order_relaxed); }
     float getParam(ParamId id) const    { return params_[static_cast<int>(id)].load(std::memory_order_relaxed); }
     bool  applyPreset(int index);       // any thread; sets every parameter (full preset)
+    // The conductors alone -- no voices, no audio -- for `seconds` at `dt`, every event handed to
+    // `sink` with its time and which conductor made it (1 or 2), every root change to `rootSink`.
+    // The rule book's own check (its section 11): an hour of notes, measured, with the parameters
+    // exactly as the render reads them and seeded as the render seeds them. What it leaves out is
+    // the matrix -- a route onto a brain parameter is not run here -- and the adaptive tuning.
+    void  auditConductor(double seconds, double dt,
+                         const std::function<void(double, int, const BrainEvent&)>& sink,
+                         const std::function<void(double, int)>& rootSink);
     bool  applySoundPreset(int index);  // sound layer only: everything except the Cosmos section
     bool  applyCosmosPreset(int index); // Cosmos layer only, from the Cosmos preset bank
     bool  applyZPreset(int index);      // Z-plane layer only: the filter and where its point sits
@@ -250,6 +259,10 @@ public:
     float displayFrequency() const;   // that voice's frequency in Hz, 0 when nothing sounds
     // The same voice's slot bank (Additive / Wavetable in a slot) and its grains (Texture).
     int  displaySlotPartials(int slot, float* out, int maxCount) const;
+    // Where that slot is reading its table right now -- the knob, the matrix and the slot's own
+    // Pos Drift together. -1 when nothing sounds or the slot plays no table: the display then
+    // falls back to the knob, which is all it ever knew before.
+    float displaySlotPosition(int slot) const;
     int  displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount) const;
     // Every sounding voice's place, for the stage picture: pan -1..1, distance 0 near .. 1 far,
     // envelope level, note, owner (0 keys, 1 brain). Returns how many were written.
@@ -354,6 +367,8 @@ private:
     ClusterBrain brain_, brain2_;
     BrainParams  bp2_;
     float        brain2Depth_ = 0.9f;
+    float        layerDepth_ = 0.0f;   // how much of a note's plane comes from its role, not the draw
+    float        cloudToNear_ = 0.0f;  // how much of the cloud comes back in front rather than behind
     int          brain2Interval_ = 0;
     bool         brain2On_ = false;
     int          brainQuant_ = 0;      // SyncDiv: the conductor's decisions land on the grid
@@ -410,6 +425,7 @@ private:
     double       envTime_[kNumModEnvs] = {};
     bool         envHeld_ = false;
     float        randomPerNote_ = 0.0f;
+    bool         phraseStart_ = false;   // a note arrived into silence: envelopes and Retrigger LFOs restart
     // The wheel: where it was put, and where the modulation has got to. A controller sends 128
     // steps and a step on a cutoff is audible, so what the matrix reads is the smoothed one.
     float        wheelTarget_ = 0.0f, wheel_ = 0.0f;
@@ -503,6 +519,7 @@ private:
     float         cosmosSend_ = 0.0f, cosmosReturn_ = 0.5f, cosmosToFar_ = 0.5f, cosmosNebula_ = 0.0f;
     float         cosmosShimmer_ = 0.0f, shimmerLpL_ = 0.0f, shimmerLpR_ = 0.0f, shimmerEnv_ = 0.0f;
     std::vector<float> cosL_, cosR_, nebL_, nebR_, shimL_, shimR_;
+    std::vector<float> cloudL_, cloudR_;   // the cloud on its own, when it is shared between planes
     float         cosTap_[4096] = {};   // ring of the cosmos return for the display (torn reads cost a pixel)
     int           cosTapW_ = 0;
     // The same for the finished output, but four times as long. A spectrum of a drone is only

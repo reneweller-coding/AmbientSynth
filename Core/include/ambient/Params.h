@@ -243,9 +243,48 @@ enum class ParamId : int {
     Src2EnvMode, Src2EnvTime, Src2EnvDepth, Src2EnvSync,
     Src3EnvMode, Src3EnvTime, Src3EnvDepth, Src3EnvSync,
     Src4EnvMode, Src4EnvTime, Src4EnvDepth, Src4EnvSync,
+    // What a generator of this music needs and the conductor had no way to say (12.09.2026, from
+    // Rene's rule book for a self-playing ambient generator): the register roles and the spacing
+    // that follows from them, the colour of the intervals, a clock that breathes and guards what
+    // it may not do, and the root's walk over the hour. Every one of them does nothing at its
+    // default, so every preset written before them plays exactly as it did.
+    //
+    // Layers and register: the pyramid (one voice at the bottom, most in the body, few on top),
+    // the bass held longer than what moves above it, the top softer, spacing sharpened with depth,
+    // the floor under which no third is chosen, and the leading note kept off the root.
+    BrainLayers, BrainBassHold, BrainTopSoft, BrainLowSpacing, BrainThirdFloor, BrainLeading,
+    // Interval colour: thirds sought or avoided, seconds likewise (above the third floor only),
+    // the seventh lifted -- as 7/4 in a just scale, the most characteristic interval this music
+    // has -- and the chance that a root change swaps one degree of the mode instead.
+    BrainThirds, BrainSeconds, BrainSeventh, BrainDegreeSwap,
+    // Time: the mean event rate breathing on its own slow curve, the overlap that keeps a voice
+    // sounding while the one it replaces lets go, the thirty-millisecond rule as a guard, the gap
+    // between two note-offs, the silence a pitch must keep before it may sound again, density
+    // changes walked one voice at a time, and the planned silence at a section's border.
+    BrainRateBreath, BrainBreathPeriod, BrainOverlap, BrainOnsetGuard, BrainReleaseGap,
+    BrainRetrigger, BrainDensitySlew, BrainSilence, BrainSilenceLen,
+    // Root and form: where a new root may come from, which way it leans, the pivot window in which
+    // old and new root sound together, the pull back to the root the night began on, and the
+    // memory that forbids a chord the hour has already had.
+    BrainRootSteps, BrainRootDown, BrainPivot, BrainHome, BrainHomeTime, BrainMemory,
+    // The background conductor on a clock that never lines up with the foreground's; the tuning
+    // holding what already sounds when the root moves; and a ceiling on how fast a beat may beat.
+    // (Brain2 Interval was asked for too, and already existed: brain2_interval, in semitones.)
+    Brain2Golden, TuneHoldSounding, BeatCeiling,
+    // Three that are true outside the conductor: a quiet note entering slower than a loud one, the
+    // plane a voice stands in taken from its role rather than from the draw, and the strands of a
+    // low note detuned less than those of a high one, so warmth does not become wobble.
+    EnvVelAttack, LayerDepth, StrandLowDetune,
+    // How much of the granular cloud comes back on the NEAR plane instead of the far one. The cloud
+    // has always returned to the far bus alone -- a deliberate choice, written down in the concept
+    // paper: "it exists in the background and the far reverb smears it". At 0 that is exactly what
+    // still happens, so no preset changes; above it the cloud can be brought forward, which is what
+    // a listener expects of a send they have turned all the way up.
+    CloudToNear,
     Count
 };
 
+extern const char* const kRootStepNames[4];     // "Any", "Fifths", "Diatonic", "Falling"
 extern const char* const kShimmerModeNames[2];  // "Spectral" (phase-locked peak shifting), "Grain" (the two-head shifter)
 extern const char* const kCloudShiftNames[7];   // "Off", "+12", "+7", "+5", "-5", "-7", "-12"
 extern const float kCloudShiftSemitones[7];

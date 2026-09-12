@@ -177,9 +177,14 @@ class Generator:
             out = self.pipe(prompt, negative_prompt=negative, num_inference_steps=steps, guidance_scale=guidance,
                             audio_length_in_s=seconds, num_waveforms_per_prompt=1, generator=gen,
                             callback=cb, callback_steps=1)
-            audio = np.asarray(out.audios[0], dtype=np.float32)[None, :]
-        if audio.ndim == 1:
-            audio = audio[None, :]
+            audio = np.asarray(out.audios[0], dtype=np.float32)
+        # (channels, samples), whatever the pipeline handed over: AudioLDM2 returns one waveform
+        # per prompt as a plain vector, Stable Audio and MusicGen a channel pair, and a diffusers
+        # version that keeps the batch axis on each waveform would otherwise leave three dimensions
+        # here and break the mixdown two lines down.
+        audio = np.atleast_2d(np.asarray(audio, dtype=np.float32))
+        if audio.ndim > 2:
+            audio = audio.reshape(-1, audio.shape[-1])
         audio = np.nan_to_num(audio.astype(np.float32))
         peak = float(np.max(np.abs(audio))) if audio.size else 0.0
         if peak > 1e-4:
@@ -239,9 +244,13 @@ def load_batch(path, defaults):
                     if "=" not in tok:
                         continue
                     k, v = tok.split("=", 1)
-                    if k in ("seconds", "guidance"): job[k] = float(v)
-                    elif k in ("steps", "seed"): job[k] = int(v)
-                    elif k in ("model", "name", "negative", "out_dir"):
+                    try:
+                        if k in ("seconds", "guidance"): job[k] = float(v)
+                        elif k in ("steps", "seed"): job[k] = int(v)
+                    except ValueError:
+                        # One mistyped number used to end the run before a single prompt was read.
+                        emit(event="error", text=f"{os.path.basename(path)}: {k}={v!r} is not a number, keeping the default")
+                    if k in ("model", "name", "negative", "out_dir"):
                         job[k] = v
                         if k == "model": job["_model_set"] = True
             job["prompt"] = line.strip()

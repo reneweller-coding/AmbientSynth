@@ -645,9 +645,15 @@ private:
             const uint32_t g = proc.paramGeneration();
             if (alive || moved || ownEntrance() || g != seen) { seen = g; repaint(); }
         }
-        // Position as it is playing: the knob, the morph or map blend, and what the matrix adds.
+        // Position as it is playing: the knob, the morph or map blend, what the matrix adds -- and
+        // the slot's own Pos Drift, which is the one that actually moves. The drift lives inside
+        // the voice and never left it, so for a preset whose only movement was Pos Drift the
+        // picture stood still while the sound wandered a third of the table. The engine answers
+        // with -1 when nothing sounds; then the knob is all there is to draw.
         float livePosition() const
         {
+            const float live = proc.engine().displaySlotPosition(slot - 1);
+            if (live >= 0.0f) return juce::jlimit(0.0f, 1.0f, live);
             const ambient::ParamId id = ambient::slotParamIds(slot - 1)[6];
             return juce::jlimit(0.0f, 1.0f, proc.engine().effectiveParam(id) + proc.engine().modAmount(id));
         }

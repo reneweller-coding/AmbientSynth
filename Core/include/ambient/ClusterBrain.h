@@ -351,8 +351,9 @@ struct BrainParams {
     // Smooth: which voice moves. The conductor retires the one that has been sounding longest and
     // then looks for its replacement; with this up it tries every voice and keeps the exchange
     // that moves the chord the shortest distance -- the voice-leading distance of Tymoczko's
-    // geometry, which for an exchange of one note is exactly the leap that voice makes. It has no
-    // effect outside Chords mode, where the choice of which voice leaves is made differently.
+    // geometry, which for an exchange of one note is exactly the leap that voice makes. In Free
+    // mode it reads as the step size of a wandering voice instead: a candidate is weighted by how
+    // far it stands from the note chosen before it, so the conductor steps oftener than it leaps.
     float smooth = 0.0f;
     // Blend: how a chord arrives. Rasch (1979) measured the onset asynchrony of ensembles at
     // thirty to fifty milliseconds, and Bregman's rule is that tones starting together are heard
@@ -427,6 +428,48 @@ struct BrainParams {
     // instead of hearing two (Glasberg and Moore 1990; Bregman 1990). Negative values seek that
     // crowding out instead, which is what a cluster is. 0 leaves the choice as it was.
     float spacing = 0.0f;
+    // ---- the register roles, and the intervals that belong to them (12.09.2026)
+    //
+    // A conductor that draws a note from one weighted list treats the bottom of its register like
+    // the top, and the ear does not: two tones a third apart are a chord at C4 and mud at C2,
+    // because the critical band is a fixed fraction of the frequency and therefore an enormous
+    // interval down there. These say so. All of them do nothing at their defaults.
+    float layers = 0.0f;      // 0: the register weight as it was. 1: a voice at the bottom, most
+                              // in the body, few on top -- and at most two notes to an octave, one
+                              // below MIDI 36.
+    float bassHold = 1.0f;    // multiplies the hold of the lowest sounding voice: the foundation
+                              // lies while what stands on it moves.
+    float topSoft = 0.0f;     // velocity falls with height: at 1 the top of the register arrives
+                              // at half the velocity of the bottom.
+    float lowSpacing = 0.0f;  // the minimum interval grows as the register falls: an octave below
+                              // MIDI 36, a fifth to 47, a minor third to 59, a second to 71.
+    int   thirdFloor = 0;     // no third is chosen below this note (0: off). A third in the bass
+                              // is the single most reliable way to make a drone muddy.
+    float leading = 0.0f;     // penalises the semitone under a sounding root: it pulls somewhere,
+                              // and this music has nowhere to go.
+    float thirds = 0.0f;      // -1 avoids thirds, +1 seeks them. Judged against every sounding
+    float seconds = 0.0f;     // note, not against the root alone -- a tone that is a fifth to the
+                              // bass and a second to a middle voice IS a second.
+    float seventh = 0.0f;     // lifts the minor seventh, which in a just scale is 7/4: the one
+                              // interval that fuses with the root instead of pressing against it.
+    // ---- what the clock may and may not do (12.09.2026)
+    float rateBreath = 0.0f;    // the mean gap breathes between half and double on its own curve
+    float breathPeriod = 10.0f; // minutes for one breath
+    float overlap = 0.0f;       // seconds a voice keeps sounding after the one replacing it began
+    bool  onsetGuard = false;   // two onsets are either inside 30 ms or at least 3 s apart
+    float releaseGap = 0.0f;    // seconds between two note-offs
+    float retrigger = 0.0f;     // seconds a pitch must rest before it may be chosen again
+    float densitySlew = 0.0f;   // minutes a change of density is spread over, one voice at a time
+    float silence = 0.0f;       // chance of an empty pause at a root change
+    float silenceLen = 20.0f;   // its length in seconds, give or take a third
+    // ---- root and long form (12.09.2026)
+    int   rootSteps = 0;        // 0 Any, 1 Fifths, 2 Diatonic (R6.2 priorities), 3 Falling
+    float rootDown = 0.0f;      // + leans the move downwards, - upwards
+    float pivot = 0.0f;         // seconds of the changeover window: common tone, new root, old goes
+    float home = 0.0f;          // pull back towards the root the night began on
+    float homeTime = 60.0f;     // minutes after which that pull is at its strongest
+    float memory = 0.0f;        // minutes in which a chord already heard may not return
+    float degreeSwap = 0.0f;    // chance a root change also exchanges one degree of the supply
     const BrainSpectrum* spectrum = nullptr;
     // The equivalent rectangular bandwidth of the auditory filter at f, in hertz
     // (Glasberg and Moore 1990): ERB = 24.7 (0.00437 f + 1).
@@ -479,7 +522,31 @@ public:
         ringPos_ = 0;
         lastLean_ = 0.0f;
         for (float& w : ic_) w = 0.0f;
+        homeRoot_ = rootNote;
+        age_ = 0.0;
+        rootAge_ = 0.0;
+        pivotLeft_ = 0.0;
+        pivotTo_ = -1;
+        pivotOld_ = -1;
+        silenceLeft_ = 0.0;
+        densityNow_ = -1.0;
+        densityTarget_ = -1.0;
+        sinceOn_ = sinceOff_ = 1.0e9;
+        now_ = 1.0e6;
+        for (double& t : pitchOffAt_) t = 0.0;
+        for (float& b : degreeBias_) b = 1.0f;
+        for (auto& m : memo_) { m.key = 0; m.at = -1.0e9; }
+        memoHead_ = 0;
+        breathPhase_ = 0.0;
+        breathValue_ = 0.0f;
+        for (auto& l : leaving_) l = Leaving{};
+        pivotTones_ = 0;
+        rootMoves_ = 0;
+        settled_ = false;
     }
+
+    // Minutes since the last root change, for the matrix source Root Age.
+    double rootAgeSeconds() const { return rootAge_; }
 
     // What key the conductor finds itself in, and how sure it is. Measured, never set: the
     // histogram below is what has actually been sounding, weighted by how long.
@@ -489,16 +556,27 @@ public:
     int  root() const { return root_; }
     void setRoot(int note) { root_ = clampv(note, 0, 127); }
     int  activeCount() const { int c = 0; for (auto& s : slots_) if (s.note >= 0) ++c; return c; }
-    bool sounding(int note) const { for (auto& s : slots_) if (s.note == note) return true; return false; }
+    bool sounding(int note) const
+    {
+        for (auto& s : slots_) if (s.note == note) return true;
+        for (auto& l : leaving_) if (l.note == note) return true;   // exchanged, still sounding out its overlap
+        return false;
+    }
+    // For the tests: how often the root moved, and how many of those changeovers were announced
+    // by a tone belonging to both roots. Counting is the only honest answer to "does it happen?".
+    int rootMoves() const  { return rootMoves_; }
+    int pivotTones() const { return pivotTones_; }
 
     // Ask for one exchange at the next opportunity, whatever the timer says: the button on the
     // panel, a mapped controller, a footswitch. Read and cleared inside update().
     void requestStep() { stepRequested_ = true; }
     bool stepPending() const { return stepRequested_; }
 
-    // What the conductor is holding, so another one can take it over. Writes at most kSlots
-    // notes and returns how many; a slot that has been chosen but has not started yet counts,
-    // because it is about to sound.
+    // What the conductor is holding, so another one can take it over. Writes at most
+    // ClusterBrain::kSlots notes -- twelve, NOT the four of ambient::kSlots, which is the number of
+    // source slots and the trap that stands next to this one: both arrays must be twelve long, or
+    // the conductor writes past their end. Returns how many; a slot that has been chosen but has
+    // not started yet counts, because it is about to sound.
     int soundingNotes(int* notes, float* vels) const
     {
         int n = 0;
@@ -519,6 +597,7 @@ public:
     void adopt(const int* notes, const float* vels, int count, EmitFn&& emit)
     {
         for (auto& s : slots_) { if (s.note >= 0) emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f }); s = Slot{}; }
+        for (auto& l : leaving_) { if (l.note >= 0) emit(BrainEvent{ BrainEvent::Type::NoteOff, l.note, 0.0f }); l = Leaving{}; }
         for (int i = 0; i < count && i < kSlots; ++i) {
             slots_[i].note = notes[i];
             slots_[i].vel = vels[i];
@@ -527,6 +606,7 @@ public:
             remember(notes[i]);
             emit(BrainEvent{ BrainEvent::Type::NoteOn, notes[i], vels[i] });
         }
+        if (count > 0) sinceOn_ = 0.0;
         filling_ = false;
     }
 
@@ -574,13 +654,109 @@ public:
             return;
         }
         if (!wasOn_) { wasOn_ = true; timer_ = 0.5; }
+
+        // A planned silence (R5.6). At a root change -- and only there -- the conductor may let
+        // everything go and leave the room empty for a few seconds. This is the one exception to
+        // "nothing ends in the void": at a section boundary an empty stretch is a breath, anywhere
+        // else it is a dropout. The voices are not cut together, which would be Anti 1; each is
+        // given a short rest of its own and the ordinary note-off path lets it go, Release Gap and
+        // all, so the room empties from one end rather than at a stroke.
+        if (anchorNote >= 0 && anchorNote != root_ && p.silence > 0.0f && silenceLeft_ <= 0.0
+            && rng_.uniform() < p.silence) {
+            silenceLeft_ = static_cast<double>(p.silenceLen) * (0.667 + 0.667 * static_cast<double>(rng_.uniform()));
+            int n = 0;
+            for (auto& s : slots_)
+                if (s.note >= 0) s.remaining = std::min(s.remaining, 0.5 + 1.5 * static_cast<double>(rng_.uniform()) + 0.7 * n++);
+        }
         if (anchorNote >= 0) root_ = anchorNote;
+
+        // Density glides (Anti 9). A change of density -- by hand, by a macro, by the Arc -- is
+        // carried out one voice at a time over Density Slew minutes instead of at once: five voices
+        // appearing together is an edit, not a piece of music. The first tick takes the value as it
+        // stands, so nothing ramps in from nowhere when the instrument starts.
+        {
+            const double tgt = static_cast<double>(clampv(p.density, 1, kSlots));
+            if (densityNow_ < 0.0 || p.densitySlew <= 0.0f) { densityNow_ = tgt; densityTarget_ = tgt; }
+            else {
+                if (tgt != densityTarget_) {
+                    densityTarget_ = tgt;
+                    densityStep_ = std::fabs(tgt - densityNow_) / std::max(1.0, static_cast<double>(p.densitySlew) * 60.0);
+                }
+                const double d = densityTarget_ - densityNow_, s = densityStep_ * dt;
+                densityNow_ += (std::fabs(d) <= s) ? d : (d > 0.0 ? s : -s);
+            }
+        }
+
+        // A changeover in progress (R6.3). Three things in order: a tone that belongs to both roots
+        // begins now, the root itself moves at the middle of the window, and only at its end is
+        // whatever still sounds on the old root asked to go. A listener hears the harmony turn
+        // rather than switch, which is the whole of the difference.
+        if (pivotLeft_ > 0.0) {
+            if (!pivotAnnounced_ && pivotOld_ >= 0 && pivotTo_ >= 0) {
+                pivotAnnounced_ = true;
+                const int lo = std::min(p.low, p.high), hi = std::max(p.low, p.high);
+                const int span = std::max(1, hi - lo + 1);
+                const int from = lo + rng_.below(span);
+                // A tone that belongs to both roots: a perfect consonance to each if there is one,
+                // else an imperfect one, a third or a sixth. Root, fourth and fifth alone share a
+                // tone only when the two roots stand a second, a fourth or a fifth apart, and four
+                // of the six steps the root takes are thirds and sixths -- so two changeovers in
+                // three found nothing and went unannounced. The tone also has to pass what every
+                // other note passes: a pivot a third above the foundation is still a third there.
+                int found = -1;
+                for (int tier = 0; tier < 2 && found < 0; ++tier) {
+                    for (int i = 0; i < span; ++i) {
+                        const int c = lo + ((from - lo + i) % span);
+                        if (c < 0 || c > 127 || sounding(c)) continue;
+                        const int a = ((c - pivotOld_) % 12 + 12) % 12, b = ((c - pivotTo_) % 12 + 12) % 12;
+                        const bool fits = tier == 0 ? (perfectTo(a) && perfectTo(b)) : (consonantTo(a) && consonantTo(b));
+                        // Admissible like any other note -- in range, rested, not a constellation
+                        // heard lately, and by the rules -- except that a pivot tone may be the
+                        // leading note, which is the one place R4.4 allows it.
+                        if (fits && admissible(c, lo, hi, p, freqOf, true)) { found = c; break; }
+                    }
+                }
+                if (found >= 0) {
+                    ++pivotTones_;
+                    if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));   // the set that ends here
+                    startIn(found, p, emit);
+                    if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));
+                }
+            }
+            const double was = pivotLeft_;
+            pivotLeft_ -= dt;
+            if (was > 0.5 * static_cast<double>(p.pivot) && pivotLeft_ <= 0.5 * static_cast<double>(p.pivot) && pivotTo_ >= 0)
+                setRoot(pivotTo_, p);
+            if (pivotLeft_ <= 0.0) {
+                pivotLeft_ = 0.0;
+                if (pivotOld_ >= 0)
+                    for (auto& s : slots_)
+                        if (s.note >= 0 && ((s.note - pivotOld_) % 12 + 12) % 12 == 0) s.remaining = std::min(s.remaining, 1.0);
+                pivotTo_ = pivotOld_ = -1;
+            }
+        }
+
+        // The clocks the guards below read: how long since anything began, how long since anything
+        // ended, and the running time against which a pitch's own rest is measured. Counted at the
+        // control rate, which is where every decision here is made.
+        sinceOn_ += dt;
+        sinceOff_ += dt;
+        now_ += dt;
+        age_ += dt;
+        rootAge_ += dt;
+        if (p.rateBreath > 0.0f) {
+            breathPhase_ += dt / std::max(10.0, static_cast<double>(p.breathPeriod) * 60.0);
+            if (breathPhase_ > 1.0e6) breathPhase_ -= 1.0e6;
+            const double tau = 6.283185307179586;
+            breathValue_ = static_cast<float>((std::sin(tau * breathPhase_)
+                                             + 0.5 * std::sin(tau * breathPhase_ * 1.6180339887)) / 1.5);
+        }
 
         // Notes chosen a moment ago and held back so that they arrive together (Blend).
         for (auto& s : slots_) {
             if (s.note < 0 || s.startIn <= 0.0) continue;
             s.startIn -= dt;
-            if (s.startIn <= 0.0) { s.startIn = 0.0; emit(BrainEvent{ BrainEvent::Type::NoteOn, s.note, s.vel }); }
+            if (s.startIn <= 0.0) { s.startIn = 0.0; sinceOn_ = 0.0; emit(BrainEvent{ BrainEvent::Type::NoteOn, s.note, s.vel }); }
         }
 
         // What has been sounding, and for how long. A note held for four minutes tells more about
@@ -596,10 +772,43 @@ public:
         }
         if (p.mode == BrainMode::Chords) { updateChords(dt, p, freqOf, emit); return; }
 
+        bool lastVoiceDue = false;
         for (auto& s : slots_) {
             if (s.note < 0) continue;
             s.remaining -= dt;
-            if (s.remaining <= 0.0) { emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f }); s.note = -1; }
+            if (s.remaining > 0.0) continue;
+            // Two guards on letting go. Overlap keeps a voice sounding until the one that replaces
+            // it has been in the air for its seconds, so no change ever lands on an empty chord;
+            // Release Gap keeps two note-offs apart, so a cluster never collapses at once. Both
+            // only postpone: the note goes as soon as the condition is met. And nothing ends in
+            // the void (G3): the LAST voice does not go at all until its replacement is in -- it
+            // used to, when it was alone, and an hour under the rules at full had 115 seconds of
+            // silence in it and sixteen changes that landed on nothing.
+            if (p.overlap > 0.0f) {
+                if (activeCount() <= 1) { lastVoiceDue = true; continue; }
+                if (sinceOn_ < static_cast<double>(p.overlap)) continue;
+            }
+            if (p.releaseGap > 0.0f && sinceOff_ < static_cast<double>(p.releaseGap)) continue;
+            if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));   // the constellation that ends here
+            emit(BrainEvent{ BrainEvent::Type::NoteOff, s.note, 0.0f });
+            if (s.note >= 0 && s.note < 128) pitchOffAt_[static_cast<size_t>(s.note)] = now_;
+            sinceOff_ = 0.0;
+            s.note = -1;
+        }
+        // The last voice, due, simply lies until the clock's next decision brings its replacement,
+        // and goes once the newcomer has sounded its Overlap. Asking for the replacement at once
+        // was tried: where the holds are shorter than the rate, the decisions then followed the
+        // holds -- a pulse, with a coefficient of variation of 0.09 in the gaps, which is the one
+        // thing G2 forbids. The clock is the clock; the voice waits for it.
+        (void)lastVoiceDue;
+
+        // While the pause runs nothing new begins. When it ends the cluster walks back in rather
+        // than waiting out a draw made before it: a minute of nothing after the silence would read
+        // as a fault, not as a rest.
+        if (silenceLeft_ > 0.0) {
+            silenceLeft_ -= dt;
+            if (silenceLeft_ <= 0.0) { silenceLeft_ = 0.0; requestFill(); }
+            return;
         }
 
         const double mean = tickSeconds(p);
@@ -615,15 +824,38 @@ public:
         timerMean_ = mean;
         advanceTimer(dt, p, mean);
         if (timer_ > 0.0) return;
-        timer_ = clampv(-std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * mean, 0.5, mean * 4.0);
+        // A memoryless draw, with a floor: no change faster than every twenty seconds (Anti 2),
+        // which an exponential alone would give a quarter of the time at a mean of a minute. At
+        // fast rates the floor is half the mean, so a conductor asked for two seconds still gets
+        // them; the rule book's own rates begin at twenty.
+        timer_ = clampv(gapDraw(mean), std::min(20.0, 0.5 * mean), mean * 4.0);
         timerMean_ = mean;
 
+        // Two onsets belong either inside the window in which the ear fuses them into one sound,
+        // or far enough apart to be two voices. In between they are heard as one chord played
+        // inaccurately, which is the sound of a machine and not of an instrument. An event that
+        // falls there waits for the far side rather than being dropped. The entrance is exempt: a
+        // cluster walking in at a third of a second would otherwise never assemble at all.
+        if (p.onsetGuard && !filling_ && sinceOn_ > 0.03 && sinceOn_ < 3.0) { timer_ = 3.0 - sinceOn_; return; }
+        // And no decision inside twenty seconds of the last one (Anti 2) -- the floor the timer's
+        // draw has, made a guard, so that neither the breath, a rescaled wait nor a last voice
+        // asking for its replacement can get under it. Half the rate where the rate is faster.
+        // A gust (Cascade, R5.5) is the one thing allowed under it: while the excitation is up
+        // the floor comes down with it, so events can breed events as the rule intends.
+        {
+            const double least = std::min(20.0, 0.5 * static_cast<double>(p.rateSeconds)) / (1.0 + excite_);
+            if (!filling_ && sinceOn_ > 0.03 && sinceOn_ < least) { timer_ = least - sinceOn_; return; }
+        }
+
         const int low = std::min(p.low, p.high), high = std::max(p.low, p.high);
-        const int density = clampv(p.density, 1, kSlots);
+        const int density = clampv(static_cast<int>(std::lround(densityNow_)), 1, kSlots);
         if (filling_ && activeCount() >= density) filling_ = false;
         const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
 
         if (activeCount() >= density) {
+            // One over the target already: an exchange is under way, its retiring voice sounding
+            // out the overlap. Nothing else changes until it has gone.
+            if (p.overlap > 0.0f && activeCount() > density) return;
             // Room is full: half of the time retire a note, else wait.
             if (rng_.uniform() >= 0.5f) return;
             int best = -1;
@@ -648,38 +880,53 @@ public:
                 for (int i = 0; i < kSlots; ++i) if (slots_[i].note >= 0 && slots_[i].remaining < rem) { rem = slots_[i].remaining; best = i; }
             }
             if (best < 0) return;
-            emit(BrainEvent{ BrainEvent::Type::NoteOff, slots_[best].note, 0.0f });
-            slots_[best].note = -1;
-            // At the target this is an exchange: one note leaves, one arrives below, and the
-            // cluster stays the size it was. ABOVE the target it must not be -- Density had been
-            // turned down, and refilling here is what made the cluster ignore that. Measured over
-            // ninety-second stretches before this line existed: asked for two voices while ten
-            // were sounding, it held 9.99; asked for one, 7.79. Now it sheds one per tick until
-            // it is where it was asked to be.
-            if (activeCount() >= density) return;
+            if (p.overlap > 0.0f && activeCount() == density) {
+                // The exchange in the rule's order (R5.4, G3): the newcomer first, below, and
+                // the voice it replaces goes once the newcomer has sounded for Overlap seconds --
+                // through the expiry above, which is where that wait is kept. It used to be the
+                // other way round, note-off and note-on on one tick, so every change landed on a
+                // chord one voice thinner than the one the listener had been hearing.
+                slots_[best].remaining = -1.0e-9;   // due, and already "on its way out" to chordKey()
+            } else {
+                // A note retired because the room is full is a note-off like any other, and the two
+                // clocks that guard note-offs apply to it: it waits its turn rather than slipping past.
+                if (p.releaseGap > 0.0f && sinceOff_ < static_cast<double>(p.releaseGap)) return;
+                if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));
+                emit(BrainEvent{ BrainEvent::Type::NoteOff, slots_[best].note, 0.0f });
+                if (slots_[best].note >= 0 && slots_[best].note < 128) pitchOffAt_[static_cast<size_t>(slots_[best].note)] = now_;
+                sinceOff_ = 0.0;
+                slots_[best].note = -1;
+                // At the target this is an exchange: one note leaves, one arrives below, and the
+                // cluster stays the size it was. ABOVE the target it must not be -- Density had been
+                // turned down, and refilling here is what made the cluster ignore that. Measured over
+                // ninety-second stretches before this line existed: asked for two voices while ten
+                // were sounding, it held 9.99; asked for one, 7.79. Now it sheds one per tick until
+                // it is where it was asked to be.
+                if (activeCount() >= density) return;
+            }
         }
 
-        // The root wanders on Wander, and now also on Root Move, which until here did nothing in
-        // this mode: it was read only in Chords, and Free is what every one of the 8400 presets
-        // selects. So the only thing that could move the root was a 0.35 x Wander draw once an
-        // event -- at the library's rates about once a quarter of an hour -- and the Foundation
-        // standing on that root was heard as one bass note all night.
-        //
-        // Still one draw, so a preset that leaves Root Move at zero behaves down to the last bit
-        // as it did. Every preset in the library leaves it at zero.
-        const float moveChance = clampv(p.wander * 0.35f + p.rootMove * 0.5f, 0.0f, 1.0f);
-        if (anchorNote < 0 && rng_.uniform() < moveChance) wanderRoot(low, high, freqOf, p.key);
-
-        // Weighted choice of the next note.
-        const double rootFreq = freqOf(root_);
-        bool rootSounding = false;
-        for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), rootFreq)) rootSounding = true;
+        // Weighted choice of the next note. Weighed BEFORE the root is allowed to wander (below):
+        // a draw that found no candidate used to have moved the root all the same, and under the
+        // rules at full, where the vetoes empty the field now and then, that was more root
+        // changes than decisions -- sixteen an hour for sixty. If the root does move, the field
+        // is weighed again against the root that now stands.
         const double mid = 0.5 * (low + high), half = std::max(1.0, 0.5 * (high - low));
         const float lean = lastLean_;
         float weights[128] = {};
         float total = 0.0f;
+        bool wandered = false;
+      weigh:
+        std::fill(std::begin(weights), std::end(weights), 0.0f);
+        total = 0.0f;
+        const double rootFreq = freqOf(root_);
+        bool rootSounding = false;
+        for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), rootFreq)) rootSounding = true;
         for (int c = low; c <= high && c < 128; ++c) {
             if (sounding(c)) continue;
+            // A pitch that has only just been let go is not a new note, it is the same note again --
+            // which is the one repetition this music notices. It rests for its seconds first.
+            if (p.retrigger > 0.0f && now_ - pitchOffAt_[static_cast<size_t>(c)] < static_cast<double>(p.retrigger)) continue;
             const double fc = freqOf(c);
             bool duplicate = false;   // with snapped keys two keys can share one pitch
             for (auto& s : slots_) if (s.note >= 0 && std::fabs(std::log2(freqOf(s.note) / fc)) * 1200.0 < 1.0) duplicate = true;
@@ -694,11 +941,30 @@ public:
             // the old taste rule stands untouched, and as it rises the veto softens to a
             // preference.
             {
-                const float doubling = 0.15f + 0.6f * clampv(p.harmonic, 0.0f, 1.0f);
+                float doubling = 0.15f + 0.6f * clampv(p.harmonic, 0.0f, 1.0f);
+                // Under Layers the taste rule yields to the rule book, whose table has the octave
+                // and the unison at 0.18, "always allowed, low as well"; the ceiling per octave
+                // and the spacing keep them in check. Without it the octave came out at 0.06.
+                doubling += (1.0f - doubling) * clampv(p.layers, 0.0f, 1.0f);
                 for (auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) w *= doubling;
             }
             if (p.spacing != 0.0f)
                 for (auto& s : slots_) if (s.note >= 0) w *= p.crowding(fc, freqOf(s.note));
+            // How far this note may stand from the one chosen before it. In Chords mode Smooth is
+            // the voice-leading distance of an exchange; in Free mode -- the mode nearly every
+            // preset uses -- it did nothing at all, although the same idea is what a line is made
+            // of: a voice that wanders steps far more often than it leaps. A weight rather than a
+            // rule, so a leap stays possible, and short-circuited at zero so a conductor that was
+            // never asked for it draws exactly what it always drew. At 0.5 a neighbour is about
+            // ten times as likely as a note an octave away.
+            if (p.smooth > 0.0f && lastNote_ >= 0) {
+                const double steps = std::fabs(static_cast<double>(c - lastNote_));
+                w *= static_cast<float>(std::pow(1.0 / (1.0 + steps / 3.0), 3.0 * static_cast<double>(p.smooth)));
+            }
+            // The register and interval rules -- roles, spacing, the third floor, the leading note,
+            // the interval colours, a swapped degree -- as one weight, shared with chooseNote().
+            w *= ruleWeight(c, low, high, rootSounding, p);
+            if (w <= 0.0f) continue;   // a veto: the candidate is out, and weights[c] stays at nought
             // Free mode weighs a candidate against the ROOT alone, which is a weaker test than
             // the chord mode's: a note can sit well on the root and still pull the chord away
             // from having one. Harmonic is where that is caught, and it belongs here at least as
@@ -728,19 +994,74 @@ public:
             total += w;
         }
         if (total <= 0.0f) return;
-        float r = rng_.uniform() * total;
+        // The root wanders on Wander, and on Root Move, which until 12.09.2026 did nothing in this
+        // mode: it was read only in Chords, and Free is what every preset in the library selects.
+        // One draw from the stream, once a decision, and only once the field has proved to hold a
+        // candidate -- see above.
+        // Not during the exposition, though: the root stays where the night began until the
+        // cluster has once stood at its density, or for four minutes at the least (R6.5's first
+        // section has one root; R6.1 has the first change at four minutes at the earliest). A
+        // changeover announced five milliseconds after the first note was the alternative.
+        if (!settled_ && (activeCount() >= density || age_ > 240.0)) settled_ = true;
+        if (!wandered && settled_) {
+            wandered = true;
+            // The way home (R6.4) also asks for the moves that get there: away from home and ripe,
+            // the root moves oftener, so a piece two steps out at the fiftieth minute is not left
+            // waiting for a chance that comes once in ten minutes.
+            // R6.1's upper bound, as a certainty rather than a chance: past twelve minutes the
+            // next decision ASKS whether the root should move, however the dice fall. Left to the
+            // dice alone, two hours in eight had two root changes where section 11 wants three to
+            // ten -- and a conductor whose root does not move keeps one pitch class sounding for
+            // a third of the hour, which is the last line of that table. The draw is made either
+            // way, so a conductor with Wander and Root Move at nought is untouched, down to the
+            // last bit of its random stream.
+            const float chance = moveChanceOf(p);
+            const float u = rng_.uniform();
+            if (anchorNote < 0 && chance > 0.0f && (u < chance || rootAge_ > 720.0)) {
+                const int was = root_;
+                wanderRoot(low, high, freqOf, p);
+                if (root_ != was) goto weigh;
+            }
+        }
+        // The draw, and then the one thing the draw cannot see: whether this exact chord has been
+        // heard before. A pitch may return, a constellation may not (R6.6) -- so a candidate that
+        // would rebuild a chord from the last few minutes is struck out and the draw repeated, at
+        // most a few times, because a conductor that refuses everything plays nothing.
         int chosen = -1;
-        for (int c = low; c <= high && c < 128; ++c) { r -= weights[c]; if (r <= 0.0f && weights[c] > 0.0f) { chosen = c; break; } }
-        if (chosen < 0) for (int c = high; c >= low; --c) if (weights[c] > 0.0f) { chosen = c; break; }
+        for (int attempt = 0; attempt < 4 && total > 0.0f; ++attempt) {
+            float r = rng_.uniform() * total;
+            chosen = -1;
+            for (int c = low; c <= high && c < 128; ++c) { r -= weights[c]; if (r <= 0.0f && weights[c] > 0.0f) { chosen = c; break; } }
+            if (chosen < 0) for (int c = high; c >= low; --c) if (weights[c] > 0.0f) { chosen = c; break; }
+            if (chosen < 0) break;
+            if (!constellationHeard(chosen, p, freqOf)) break;
+            total -= weights[chosen];
+            weights[chosen] = 0.0f;
+            chosen = -1;
+        }
         if (chosen < 0) return;
-        chosen = viaDejaVu(chosen, p, -1);
+        chosen = viaDejaVu(chosen, p, -1, low, high, freqOf);
+        // Three constellations are stamped here, and the first of them is the one that was missing:
+        // the set that is ENDING. A constellation ends either because a voice goes -- stamped on
+        // the note-off paths -- or because one ARRIVES, and that second way was stamped only at the
+        // set's birth. Measured: a chord that had sounded until minute 48 was remembered as of
+        // minute 42, and came back at minute 57, nine minutes after it was last heard rather than
+        // fifteen. Then the set the new note makes, and the set it leaves behind once whatever is
+        // sounding out its overlap has gone.
+        if (p.memory > 0.0f) {
+            rememberChord(chordKey(-1, freqOf));
+            rememberChord(chordKey(chosen, freqOf));
+            rememberChord(chordKey(chosen, freqOf, true));
+        }
 
         for (auto& s : slots_) {
             if (s.note >= 0) continue;
-            const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
             s.note = chosen;
-            s.remaining = hmin + p.shaped(rng_.uniform()) * (hmax - hmin);
-            emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
+            s.remaining = holdFor(chosen, low, high, p, isLowest(chosen));
+            const float vel = velocityFor(chosen, low, high, p);   // nearness, not loudness (Top Soft)
+            s.vel = vel;
+            sinceOn_ = 0.0;
+            emit(BrainEvent{ BrainEvent::Type::NoteOn, chosen, vel });
             kick(p);
             remember(chosen);
             break;
@@ -750,23 +1071,29 @@ public:
         // ones already committed -- the slot is taken at once, so the next choice sees it -- and
         // released a few milliseconds later, all of them inside the window in which the ear
         // fuses onsets into one event. Short-circuited at zero, so a conductor that has not been
-        // asked for this draws nothing extra from its random stream.
-        if (p.blend > 0.0f) {
+        // asked for this draws nothing extra from its random stream. Not from silence, though:
+        // the sound builds from below, one voice first (R2.3), and a chord that lands whole on an
+        // empty room is an edit -- so the entrance, and the return after a rest, is a single note,
+        // and Blend fills what is added to a chord already there.
+        if (p.blend > 0.0f && activeCount() > 1) {
             const int missing = density - activeCount();
             const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
-            const double window = 0.030 + 0.020 * (1.0 - static_cast<double>(p.blend));   // 50 ms at a little, 30 at full
+            // Never past thirty milliseconds. It used to widen to fifty as Blend came down, and
+            // between thirty milliseconds and three seconds is exactly the zone R5.3 forbids: a
+            // second note forty milliseconds late is a chord played inaccurately, not a chord.
+            const double window = 0.029;
             for (int k = 0; k < extra; ++k) {
                 const int next = chooseNote(-1, low, high, p, freqOf);
                 if (next < 0) break;
                 remember(next);
+                if (p.memory > 0.0f) { rememberChord(chordKey(-1, freqOf)); rememberChord(chordKey(next, freqOf)); }
                 bool placed = false;
                 for (auto& s : slots_) {
                     if (s.note >= 0) continue;
-                    const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
                     s.note = next;
-                    s.remaining = hmin + p.shaped(rng_.uniform()) * (hmax - hmin);
+                    s.remaining = holdFor(next, low, high, p, isLowest(next));
                     s.startIn = 0.001 + rng_.uniform() * window;
-                    s.vel = 0.5f + 0.4f * p.shaped(rng_.uniform());
+                    s.vel = velocityFor(next, low, high, p);
                     placed = true;
                     break;
                 }
@@ -795,6 +1122,20 @@ private:
         const int density = clampv(p.density, 1, kSlots);
         for (auto& s : slots_) if (s.note >= 0) s.remaining += dt;   // in this mode it counts age, not time left
 
+        // Voices already exchanged, sounding out their overlap before they are let go (R5.4), and
+        // the release gap between note-offs applies to them as to any other.
+        for (auto& l : leaving_) {
+            if (l.note < 0) continue;
+            l.in -= dt;
+            if (l.in > 0.0) continue;
+            if (p.releaseGap > 0.0f && sinceOff_ < static_cast<double>(p.releaseGap)) continue;
+            if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));   // the constellation that ends here
+            emit(BrainEvent{ BrainEvent::Type::NoteOff, l.note, 0.0f });
+            if (l.note < 128) pitchOffAt_[static_cast<size_t>(l.note)] = now_;
+            sinceOff_ = 0.0;
+            l.note = -1;
+        }
+
         // Fill an empty chord one note per tick, so the first bars are an entrance and not a chord.
         int sounding = activeCount();
         lastLean_ = leanOf(p);
@@ -806,21 +1147,30 @@ private:
             stepRequested_ = false;
             timer_ = tickSeconds(p);
             const int add = chooseNote(-1, low, high, p, freqOf);
-            if (add >= 0) { kick(p); remember(add); startIn(add, p, emit); }
-            if (p.blend > 0.0f) {
+            if (add >= 0) {
+            kick(p);
+            remember(add);
+            if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));   // the set that ends here
+            startIn(add, p, emit);
+            if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));
+        }
+            // As in Free mode: a Blend fills what is added to a chord already there; the entrance
+            // from silence is one voice (R2.3). Four at once was what "Hush Field" opened with.
+            if (p.blend > 0.0f && activeCount() > 1) {
                 const int missing = density - activeCount();
                 const int extra = static_cast<int>(std::lround(static_cast<double>(p.blend) * missing));
-                const double window = 0.030 + 0.020 * (1.0 - static_cast<double>(p.blend));
+                const double window = 0.029;   // inside the thirty milliseconds the ear fuses (R5.3)
                 for (int k = 0; k < extra; ++k) {
                     const int next = chooseNote(-1, low, high, p, freqOf);
                     if (next < 0) break;
                     remember(next);
+                    if (p.memory > 0.0f) { rememberChord(chordKey(-1, freqOf)); rememberChord(chordKey(next, freqOf)); }
                     bool placed = false;
                     for (auto& s : slots_) {
                         if (s.note >= 0) continue;
                         s.note = next; s.remaining = 0.0;
                         s.startIn = 0.001 + rng_.uniform() * window;
-                        s.vel = 0.5f + 0.4f * p.shaped(rng_.uniform());
+                        s.vel = velocityFor(next, low, high, p);
                         placed = true;
                         break;
                     }
@@ -831,16 +1181,51 @@ private:
         }
         if (timer_ > 0.0 && !asked) return;
         stepRequested_ = false;
-        timer_ = std::max(0.5, static_cast<double>(p.rateSeconds));
+        // Memoryless, as Free mode's clock and as G2 asks -- it was a fixed interval, which
+        // measured as a pulse: a coefficient of variation of 0.05 in the gaps, and the density
+        // periodic at the rate. The same floor, and the same breath in the mean.
+        {
+            const double mean = tickSeconds(p);
+            timer_ = clampv(gapDraw(mean), std::min(20.0, 0.5 * mean), mean * 4.0);
+        }
 
+        {   // Anti 2, as in Free mode: no decision inside twenty seconds of the last one.
+            const double least = std::min(20.0, 0.5 * static_cast<double>(p.rateSeconds)) / (1.0 + excite_);
+            if (!filling_ && sinceOn_ > 0.03 && sinceOn_ < least) { timer_ = least - sinceOn_; return; }
+        }
         // Which voice goes. By default the one that has been sounding longest, which is a rule
         // about time and knows nothing about where the chord would land.
         int oldest = -1; double age = -1.0;
         for (int i = 0; i < kSlots; ++i) if (slots_[i].note >= 0 && slots_[i].remaining > age) { age = slots_[i].remaining; oldest = i; }
         if (oldest < 0) return;
+        // Above the target -- a changeover's tone took a slot, or Density came down -- the exchange
+        // sheds a voice without bringing one in, through the overlap like any other, until the
+        // chord is the size it was asked to be. Chords mode has no holds, so left alone every
+        // pivot tone stayed for good: ten to thirteen voices after an hour at a density of five.
+        if (activeCount() > density) {
+            const int leaving = slots_[oldest].note;
+            bool parked = false;
+            if (p.overlap > 0.0f)
+                for (auto& l : leaving_) if (l.note < 0) { l.note = leaving; l.in = static_cast<double>(p.overlap); parked = true; break; }
+            if (!parked) {
+                if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));
+                emit(BrainEvent{ BrainEvent::Type::NoteOff, leaving, 0.0f });
+                if (leaving >= 0 && leaving < 128) pitchOffAt_[static_cast<size_t>(leaving)] = now_;
+                sinceOff_ = 0.0;
+            }
+            slots_[oldest].note = -1;
+            return;
+        }
         // The root may travel with the chord, which is what turns a voicing change into a
-        // progression; without it the harmony circles one centre for ever.
-        if (p.rootMove > 0.0f && rng_.uniform() < p.rootMove * 0.5f) wanderRoot(low, high, freqOf, p.key);
+        // progression; without it the harmony circles one centre for ever. The same chance as
+        // Free mode's, Wander included -- Chords read Root Move alone, and at the rule book's
+        // values that was two changes an hour -- and the same exposition and the same way home.
+        if (!settled_ && (activeCount() >= density || age_ > 240.0)) settled_ = true;
+        {   // as in Free mode: the dice, or twelve minutes (R6.1), and the draw made either way
+            const float chance = moveChanceOf(p);
+            const float u = rng_.uniform();
+            if (settled_ && chance > 0.0f && (u < chance || rootAge_ > 720.0)) wanderRoot(low, high, freqOf, p);
+        }
 
         int moving = oldest, arriving = -1;
         if (p.smooth > 0.0f) {
@@ -854,9 +1239,15 @@ private:
             for (int i = 0; i < kSlots; ++i) {
                 if (slots_[i].note < 0) continue;
                 const int was = slots_[i].note;
+                // Out of its slot so that it does not vote on its successor -- but still heard by
+                // the rules, since it sounds for the overlap beside whatever replaces it. Unheard,
+                // the replacement could stand a third under it for ten seconds (measured: five an
+                // hour at the rule book's values, and thirty pairs closer than the register allows).
                 slots_[i].note = -1;
+                extraHeard_ = was;
                 double sc = 0.0;
                 const int cand = chooseNote(was, low, high, p, freqOf, &sc);
+                extraHeard_ = -1;
                 slots_[i].note = was;
                 if (cand < 0 || cand == was) continue;
                 const double travel = std::fabs(static_cast<double>(cand - was)) / 12.0;
@@ -867,32 +1258,244 @@ private:
         } else {
             const int was = slots_[oldest].note;
             slots_[oldest].note = -1;                               // it must not vote on its own replacement
+            extraHeard_ = was;                                      // but the rules still hear it (see above)
             arriving = chooseNote(was, low, high, p, freqOf);
+            extraHeard_ = -1;
             slots_[oldest].note = was;
         }
         const int leaving = slots_[moving].note;
-        arriving = viaDejaVu(arriving, p, leaving);
+        // No candidate inside the voice-leading allowance -- the rules at full leave few notes a
+        // fifth from the one that goes -- used to mean no exchange at all, and another draw of the
+        // clock before the next try: fifteen minutes without a decision, measured, then a run of
+        // them. A leap is better than a silence of the harmony: the allowance doubles until a
+        // note is found, up to the whole range.
+        for (float lead = p.voiceLead * 2.0f; arriving < 0 && lead < 128.0f; lead *= 2.0f) {
+            BrainParams wider = p;
+            wider.voiceLead = lead;
+            slots_[moving].note = -1;
+            extraHeard_ = leaving;
+            arriving = chooseNote(leaving, low, high, wider, freqOf);
+            extraHeard_ = -1;
+            slots_[moving].note = leaving;
+        }
+        arriving = viaDejaVu(arriving, p, leaving, low, high, freqOf);
         const int oldestKeep = oldest;
         (void)oldestKeep;
         if (arriving < 0 || arriving == leaving) return;
-        emit(BrainEvent{ BrainEvent::Type::NoteOff, leaving, 0.0f });
+        // The set that is ending, stamped before anything moves: a constellation ends either
+        // because a voice goes or because one arrives, and the second way used to be remembered
+        // only from its birth.
+        if (p.memory > 0.0f) rememberChord(chordKey(-1, freqOf));
+        // The voice that goes is let go only once the one replacing it has been sounding for
+        // Overlap seconds (R5.4), so the change is heard inside a chord that is still there. Its
+        // note-off used to fall on the same tick as the note-on. Without Overlap it still does.
+        bool parked = false;
+        if (p.overlap > 0.0f)
+            for (auto& l : leaving_) if (l.note < 0) { l.note = leaving; l.in = static_cast<double>(p.overlap); parked = true; break; }
+        if (!parked) {
+            emit(BrainEvent{ BrainEvent::Type::NoteOff, leaving, 0.0f });
+            if (leaving >= 0 && leaving < 128) pitchOffAt_[static_cast<size_t>(leaving)] = now_;
+            sinceOff_ = 0.0;
+        }
         recent_[recentHead_] = leaving;                             // it has had its turn
         recentHead_ = (recentHead_ + 1) % kRecent;
         slots_[moving].note = arriving;
         slots_[moving].remaining = 0.0;
         kick(p);
         remember(arriving);
-        emit(BrainEvent{ BrainEvent::Type::NoteOn, arriving, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
+        // The set with the leaving voice still in it, and the one that remains once it has gone.
+        if (p.memory > 0.0f) { rememberChord(chordKey(-1, freqOf)); rememberChord(chordKey(-1, freqOf, true)); }
+        sinceOn_ = 0.0;
+        emit(BrainEvent{ BrainEvent::Type::NoteOn, arriving, velocityFor(arriving, low, high, p) });
     }
 
     template <class EmitFn>
     void startIn(int note, const BrainParams& p, EmitFn&& emit)
     {
+        const int lo = std::min(p.low, p.high), hi = std::max(p.low, p.high);
         for (auto& s : slots_) if (s.note < 0) {
-            s.note = note; s.remaining = 0.0;
-            emit(BrainEvent{ BrainEvent::Type::NoteOn, note, 0.5f + 0.4f * p.shaped(rng_.uniform()) });
+            s.note = note;
+            // In Chords mode `remaining` counts age; in Free mode it is the hold, and a tone started
+            // here -- the pivot tone of a changeover -- is a voice like any other. At nought it
+            // expired at once and went ten seconds later: every changeover ended with a note-off.
+            s.remaining = p.mode == BrainMode::Chords ? 0.0 : holdFor(note, lo, hi, p, isLowest(note));
+            sinceOn_ = 0.0;
+            s.vel = velocityFor(note, lo, hi, p);
+            emit(BrainEvent{ BrainEvent::Type::NoteOn, note, s.vel });
             return;
         }
+    }
+
+    // The wait until the next decision: memoryless (G2), and never under the floor (Anti 2) -- but
+    // SHIFTED past the floor rather than clipped to it. Clipped, every draw that fell under twenty
+    // seconds landed on twenty exactly, and in Chords mode, where every expiry of the clock is an
+    // exchange, that was a third of all gaps: a pulse at the floor, and the density periodic at
+    // twenty seconds (measured, 0.5 at lag 20). The mean is what the rate says either way.
+    double gapDraw(double mean)
+    {
+        const double floor = std::min(20.0, 0.5 * mean);
+        const double u = -std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9);
+        return floor + u * std::max(mean - floor, 0.25 * mean);
+    }
+
+    // How likely a decision is to move the root as well: Wander, Root Move, and -- away from home
+    // and ripe -- the way home (R6.4), which asks for the moves that get there, so a piece two
+    // steps out at the fiftieth minute is not left waiting for a chance that comes once in ten
+    // minutes. One formula for both modes.
+    float moveChanceOf(const BrainParams& p) const
+    {
+        const float homing = p.home > 0.0f && root_ != homeRoot_
+            ? p.home * static_cast<float>(clampv(age_ / std::max(60.0, static_cast<double>(p.homeTime) * 60.0), 0.0, 1.0)) : 0.0f;
+        return clampv(p.wander * 0.35f + p.rootMove * 0.5f + homing * homing * 0.4f, 0.0f, 1.0f);
+    }
+
+    // Whether `note`, already in its slot, is the lowest voice sounding.
+    bool isLowest(int note) const
+    {
+        for (const auto& o : slots_) if (o.note >= 0 && o.note < note) return false;
+        return true;
+    }
+
+    // The register and interval rules of the rule book (sections 2 to 4, 12.09.2026), as one weight
+    // on a candidate: the register roles and their ceiling per octave, the minimum interval by
+    // register, the floor under which no third may stand, the leading note against a sounding
+    // root, the interval colours, and the one degree a root change may have swapped. Nought is a
+    // veto. Both draws consult it -- the weighted draw of Free mode, and chooseNote(), which scores
+    // the exchanges of Chords mode and the extra notes of a Blend. Until it was shared, chooseNote()
+    // had none of them: every note a Blend added to a chord, and every note Chords mode chose, was
+    // placed without roles, without the spacing floor, with thirds in the bass and the leading note
+    // under a sounding root. All of it on MIDI numbers, which is what the rules are written in.
+    float ruleWeight(int c, int low, int high, bool rootSounding, const BrainParams& p, bool pivotal = false) const
+    {
+        float w = 1.0f;
+        // Everything that sounds: the slots, and in Chords mode the voices sounding out their
+        // overlap on the leaving list -- which the rules did not see, so a new note could stand a
+        // third under one of them for ten seconds (five an hour at the rule book's values).
+        int heard[2 * kSlots + 1];
+        int n = 0;
+        for (const auto& s : slots_) if (s.note >= 0) heard[n++] = s.note;
+        for (const auto& l : leaving_) if (l.note >= 0) heard[n++] = l.note;
+        if (extraHeard_ >= 0) heard[n++] = extraHeard_;   // Chords: the voice being exchanged, out of its slot but still sounding
+        // The register roles. The share each part of the register wants, and the ceiling on how
+        // many notes an octave may hold -- two, and one below MIDI 36, where the critical band
+        // is wider than a fifth and a second note only makes the first one rough.
+        if (p.layers > 0.0f) {
+            const double t = high > low ? static_cast<double>(c - low) / static_cast<double>(high - low) : 0.5;
+            const double want = t < 0.15 ? 0.5 : (t < 0.55 ? 1.6 : (t < 0.85 ? 1.0 : 0.35));
+            w *= static_cast<float>(1.0 + static_cast<double>(p.layers) * (want - 1.0));
+            // The foundation is the root (table 2: one voice, its octave at most): a fifth lying
+            // there for twenty minutes was the one pitch class over a quarter of the hour that the
+            // last check of section 11 forbids.
+            if (t < 0.15 && ((c - root_) % 12 + 12) % 12 != 0) w *= 1.0f - 0.7f * p.layers;
+            int inOctave = 0;
+            for (int i = 0; i < n; ++i) if (heard[i] / 12 == c / 12) ++inOctave;
+            // At most two to an octave and one below 36 (R2.2): a veto at 1, where it left a
+            // tenth -- which was a third note in some octave for 195 seconds of an hour.
+            if (inOctave >= (c < 36 ? 1 : 2)) w *= std::max(0.0f, 1.0f - p.layers);
+        }
+        // The minimum interval, by register -- the register of the LOWER note of the pair, since
+        // the critical band is a matter of the lower frequency; judged on the candidate alone, a
+        // C3 over a sounding B2 was a second in the bass that passed (measured: 8 of 356 pairs
+        // under the rules at full). Below 36 an octave, to 47 a fifth, to 59 a minor third, to 71
+        // a second; above that a semitone is a colour and this says nothing.
+        if (p.lowSpacing > 0.0f) {
+            for (int i = 0; i < n; ++i) {
+                const int d = std::abs(c - heard[i]);
+                const int lower = std::min(c, heard[i]);
+                const int least = lower < 36 ? 12 : (lower < 48 ? 7 : (lower < 60 ? 3 : (lower < 72 ? 2 : 1)));
+                // At 1 this is a veto, not a penalty: the rule says only octaves below 36 and
+                // only fifths and fourths below 48, and a five-per-cent survivor is still a
+                // second in the bass every tenth note.
+                if (d > 0 && d < least) w *= std::max(0.0f, 1.0f - p.lowSpacing);
+                // The tritone (R3.2): out below 55 and rare above it, the one interval the rule
+                // book's table weights at a hundredth. It had no rule of its own -- consonance
+                // made it rare, and Harmonic and Key let it back in: nine in an hour, all low.
+                if (d % 12 == 6) w *= lower < 55 ? std::max(0.0f, 1.0f - p.lowSpacing) : 1.0f - 0.75f * p.lowSpacing;
+            }
+        }
+        // No third under the floor (R3.1), and a floor is a floor: a veto, not the two per cent
+        // that stood here. It is the LOWER note of the pair that has to clear it -- judged on the
+        // candidate alone, a C3 over a sounding A2 was a minor third whose bass note stood under
+        // the floor, and it passed. And it is the CLOSE third that is mud, three or four semitones:
+        // a tenth is the open voicing that avoids it, and counting pitch classes forbade that too.
+        if (p.thirdFloor > 0)
+            for (int i = 0; i < n; ++i) {
+                const int d = std::abs(c - heard[i]);
+                if ((d == 3 || d == 4) && std::min(c, heard[i]) < p.thirdFloor) return 0.0f;
+            }
+        // The leading note (R4.4, Anti 6): penalised while the root sounds, and at 1 excluded
+        // whether it sounds or not -- a root entering over a sounding leading note is the same
+        // simultaneity from the other side, and it happened twice an hour under the rules at
+        // full. The pivot tone of a changeover is the one exception the rule makes.
+        if (p.leading > 0.0f && !pivotal && ((c - root_) % 12 + 12) % 12 == 11)
+            w *= rootSounding ? 1.0f - p.leading : 1.0f - p.leading * p.leading;
+        // Interval colour, against everything that sounds.
+        if (p.thirds != 0.0f || p.seconds != 0.0f || p.seventh > 0.0f) {
+            for (int i = 0; i < n; ++i) {
+                const int ic = std::abs(c - heard[i]) % 12;
+                if ((ic == 3 || ic == 4) && p.thirds != 0.0f)
+                    w *= p.thirds >= 0.0f ? (1.0f + 1.5f * p.thirds) : (1.0f + 0.95f * p.thirds);
+                // Seconds are a colour up top and mud down below, so seeking them only counts
+                // above the floor; avoiding them counts everywhere. The major seventh belongs
+                // here: it is a minor second turned upside down, the one interval class the rule
+                // book's table of weights has no line for at all, and the conductor made it a
+                // tenth of what it played -- because harmonicity likes it (the fifteenth harmonic
+                // is a major seventh), which is a disagreement between two of the document's own
+                // instructions rather than a fault. Avoiding seconds now avoids it too.
+                // ...and not all seconds alike: the table has the minor second at 0.03 and the
+                // major at 0.11, nearly four times as much, so one knob pulling both down equally
+                // put the major second under its share while it took the minor one out. A third of
+                // the amount for the major second, the whole of it for the minor and for the major
+                // seventh, which the table does not have at all.
+                if ((ic == 1 || ic == 2 || ic == 11) && p.seconds != 0.0f
+                    && (p.seconds < 0.0f || (ic != 11 && c >= std::max(p.thirdFloor, 60)))) {
+                    const float amount = p.seconds * (ic == 2 ? 0.33f : 1.0f);
+                    w *= amount >= 0.0f ? (1.0f + 1.5f * amount) : (1.0f + 0.95f * amount);
+                }
+                if (ic == 10 && p.seventh > 0.0f) w *= 1.0f + 1.5f * p.seventh;
+            }
+        }
+        // The one degree a root change may have exchanged (Degree Swap). Nothing at all until a
+        // change has actually swapped one, and then only that pair.
+        w *= degreeBias_[static_cast<size_t>(((c - root_) % 12 + 12) % 12)];
+        return w;
+    }
+
+    // Velocity as nearness rather than as loudness: the air is far and quiet, the foundation near
+    // and steady (Rene's table of roles). One draw from the stream, the same one every path made.
+    float velocityFor(int note, int low, int high, const BrainParams& p)
+    {
+        const float u = p.shaped(rng_.uniform());
+        // Within a role velocity varies by twelve at most (R7.2), so the spread narrows with Top
+        // Soft: from the 0.5..0.9 the conductor always drew to 0.67 +- 0.095 at 1, which is 85 +-
+        // 12 for the foundation and, at forty per cent at the top, 34 +- 5 for the air -- table
+        // 2's numbers (70..100 down to 20..45). At nought the draw is exactly what it was.
+        const float soft = clampv(p.topSoft, 0.0f, 1.0f);
+        float vel = soft > 0.0f ? 0.67f + (0.2f - 0.105f * soft) * (2.0f * u - 1.0f) : 0.5f + 0.4f * u;
+        if (soft > 0.0f && high > low)
+            vel *= 1.0f - 0.6f * soft * static_cast<float>(clampv(note, low, high) - low) / static_cast<float>(high - low);
+        return vel;
+    }
+
+    // The hold a new note is given: Hold Min to Hold Max, shaped, and under Layers scaled to its
+    // role (table 2) -- the colour holds half as long as the body, the air a quarter. The
+    // foundation's multiple is Bass Hold's, applied by the caller, which knows which voice is
+    // lowest. One draw from the stream, the same one as before.
+    double holdFor(int note, int low, int high, const BrainParams& p, bool lowest)
+    {
+        const float hmin = std::min(p.holdMin, p.holdMax), hmax = std::max(p.holdMin, p.holdMax);
+        double hold = hmin + p.shaped(rng_.uniform()) * (hmax - hmin);
+        // The foundation lies while what stands on it moves: the lowest voice keeps its note for
+        // Bass Hold times everyone else's, which at 6 is table 2's three to twenty minutes. The
+        // other roles have their own times under Layers -- a second foundation voice four times
+        // the draw, the body once, the colour half, the air a quarter.
+        if (lowest && p.bassHold > 1.0f) hold *= static_cast<double>(p.bassHold);
+        else if (p.layers > 0.0f && high > low) {
+            const double t = static_cast<double>(clampv(note, low, high) - low) / static_cast<double>(high - low);
+            const double role = t < 0.15 ? 4.0 : (t < 0.55 ? 1.0 : (t < 0.85 ? 0.5 : 0.25));
+            hold *= 1.0 + static_cast<double>(p.layers) * (role - 1.0);
+        }
+        return hold;
     }
 
     // The best note to bring in, given the ones that stay. `from` is the note being replaced, or
@@ -905,6 +1508,8 @@ private:
         const KeyEstimate key = p.key > 0.0f ? findKey(pcWeight_) : KeyEstimate{};
         const float lead = std::max(p.voiceLead, 0.5f);
         const float lean = leanOf(p);
+        bool rootSounding = false;
+        for (const auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), rootFreq)) rootSounding = true;
         int best = -1; double bestScore = -1e9;
         for (int c = low; c <= high && c < 128; ++c) {
             if (sounding(c)) continue;
@@ -913,6 +1518,13 @@ private:
             // and being at zero distance it always won: the chord never moved once until this
             // line existed. The self test found it, the descriptors never would have.
             if (from >= 0 && c == from) continue;
+            // What Free mode asks of every candidate, asked here too: a pitch is resting after its
+            // release (R7.4), a constellation was heard lately (R6.6), and the register and interval
+            // rules as one weight -- a veto ends the candidate.
+            if (p.retrigger > 0.0f && now_ - pitchOffAt_[static_cast<size_t>(c)] < static_cast<double>(p.retrigger)) continue;
+            if (constellationHeard(c, p, freqOf)) continue;
+            const float rule = ruleWeight(c, low, high, rootSounding, p);
+            if (rule <= 0.0f) continue;
             const double fc = freqOf(c);
             bool duplicate = false;
             for (const auto& s : slots_) if (s.note >= 0 && std::fabs(std::log2(freqOf(s.note) / fc)) * 1200.0 < 1.0) duplicate = true;
@@ -961,6 +1573,7 @@ private:
             // An octave of something already sounding is a doubling, not a new colour.
             for (const auto& s : slots_) if (s.note >= 0 && pitchClassEqual(freqOf(s.note), fc)) score *= 0.2;
             if (pitchClassEqual(fc, rootFreq)) score *= 0.5;
+            score *= rule;
             if (lean < 0.0f) score = std::pow(score, 1.0 - 6.0 * static_cast<double>(lean));
             score *= lean > 0.0f ? (0.85 - 0.7 * static_cast<double>(lean)) + (0.3 + 1.4 * static_cast<double>(lean)) * rng_.uniform()
                                  : 0.85 + 0.3 * rng_.uniform();          // a little life, so it is not a machine
@@ -983,6 +1596,11 @@ private:
         return std::pow(stability, 2.5 * static_cast<double>(amount) * static_cast<double>(k.confidence));
     }
 
+    // Interval classes a pivot tone may stand at to a root: the perfect consonances, and the
+    // imperfect ones the second tier falls back to.
+    static bool perfectTo(int ic)   { return ic == 0 || ic == 5 || ic == 7; }
+    static bool consonantTo(int ic) { return ic == 0 || ic == 3 || ic == 4 || ic == 5 || ic == 7 || ic == 8 || ic == 9; }
+
     static bool pitchClassEqual(double fa, double fb)
     {
         double r = fa / fb;
@@ -998,8 +1616,20 @@ private:
     }
 
     template <class FreqFn>
-    void wanderRoot(int low, int high, FreqFn&& freqOf, float keyAmount = 0.0f)
+    void wanderRoot(int low, int high, FreqFn&& freqOf, const BrainParams& p)
     {
+        // R6.1: every four to twelve minutes. The lower bound is a rule as much as the upper one,
+        // and without it the way home -- which asks for more moves the later it gets -- ran to
+        // fifteen an hour where section 11 wants three to ten. R6.4 overrides it: late and away
+        // from where the night began, the music may take the step home whenever it finds it, and
+        // with the floor in force it could not, four hours in eight.
+        {
+            const double ripeNow = p.home > 0.0f
+                ? clampv(age_ / std::max(60.0, static_cast<double>(p.homeTime) * 60.0), 0.0, 1.0) : 0.0;
+            const bool goingHome = p.home > 0.0f && root_ != homeRoot_ && ripeNow > 0.55;
+            if (rootAge_ < 240.0 && !goingHome) return;
+        }
+        const float keyAmount = p.key;
         static const double kTargets[] = { 1.5, 4.0 / 3.0, 1.25, 1.2, 5.0 / 3.0, 1.6 };
         const double target = kTargets[rng_.below(6)];
         const double rootFreq = freqOf(root_);
@@ -1015,16 +1645,168 @@ private:
         int best = root_; double bestScore = 1e9;
         for (int c = low; c <= high; ++c) {
             if (c == root_) continue;
+            // Which steps the root may take at all (R6.2). Any is what it always did; the others
+            // judge the step itself -- its size and its direction -- before anything else is
+            // weighed. The ascending semitone goes out under every one of them, Any included
+            // (Anti 8): it is heard as a lift, and this music has nothing to lift towards. It
+            // stood inside the gate below until 12.09.2026, so Any still allowed it.
+            const int step = c - root_, a = std::abs(step) % 12;
+            if (step > 0 && a == 1) continue;
+            if (p.rootSteps != 0) {
+                if (p.rootSteps == 1 && a != 0 && a != 5 && a != 7) continue;                      // fifths and fourths
+                if (p.rootSteps == 2 && a != 5 && a != 7 && a != 3 && a != 2 && !(step < 0 && a == 1)) continue;
+                if (p.rootSteps == 3 && step > 0) continue;                                        // downwards only
+            }
             double r = freqOf(c) / rootFreq;
             while (r >= 2.0) r *= 0.5;
             while (r < 1.0) r *= 2.0;
-            double score = std::fabs(std::log2(r / target)) * 12.0 + std::fabs(c - root_) / 12.0;
+            // The interval the dice drew, and the size of the step. As the night ripens (Home)
+            // the interval matters less and less: the way home is whatever step leads there,
+            // not whatever the dice had in mind -- with the target in force to the end, the
+            // music came within a step of home and stayed there, six hours in eight.
+            const double homing = p.home > 0.0f
+                ? static_cast<double>(p.home) * clampv(age_ / std::max(60.0, static_cast<double>(p.homeTime) * 60.0), 0.0, 1.0) : 0.0;
+            double score = std::fabs(std::log2(r / target)) * 12.0 * (1.0 - homing) + std::fabs(c - root_) / 12.0;
             // A penalty, not a veto: the wander is what keeps the harmony moving at all.
             if (keyAmount > 0.0f) score += 2.0 * static_cast<double>(keyAmount) * (1.0 - keyWeightOf(freqOf(c), key, 1.0f));
+            // A fifth down and a fifth up are one interval to the scoring above, and they are not
+            // one move: downwards the music settles, upwards it climbs.
+            if (p.rootDown != 0.0f) score += (step > 0 ? 1.5 : -1.5) * static_cast<double>(p.rootDown);
+            // A root that turns a sounding note into its own leading note breaks Anti 6 the moment
+            // it arrives, and nothing can be done about it afterwards: R4.7 forbids retuning what
+            // already sounds. So it is decided here, where there is still a choice. Measured: two
+            // or three such simultaneities an hour, all of them just after a root change.
+            if (p.leading > 0.0f)
+                for (const auto& s : slots_)
+                    if (s.note >= 0 && ((s.note - c) % 12 + 12) % 12 == 11) { score += 2.0 * static_cast<double>(p.leading); break; }
+            // The way home (R6.4). It grows with the hours since the night began and with how far
+            // the root has travelled, so a piece left running returns to where it started without
+            // ever being told to -- and a piece switched off after ten minutes never notices.
+            if (p.home > 0.0f) {
+                const double ripe = clampv(age_ / std::max(60.0, static_cast<double>(p.homeTime) * 60.0), 0.0, 1.0);
+                const double away = std::fabs(static_cast<double>(root_ - homeRoot_)) / 12.0;
+                const double closer = (std::fabs(static_cast<double>(c - homeRoot_))
+                                     - std::fabs(static_cast<double>(root_ - homeRoot_))) / 12.0;
+                score += static_cast<double>(p.home) * ripe * (1.0 + away) * closer * 3.0;
+                // And the home root itself, ripe, outranks any interval the dice have in mind: the
+                // pull alone brought the music CLOSER and left it a step off home at the hour's end
+                // six times in eight, because home was seldom the interval that had been drawn.
+                // Once home and ripe, it stays: leaving again at the fifty-fifth minute is what
+                // happened next, four times in eight.
+                if (c == homeRoot_) score -= static_cast<double>(p.home) * ripe * 6.0;
+                // Once home and ripe, it stays -- against any step, not only a wide one: a penalty
+                // that grew with the distance let a semitone slip out at the fifty-eighth minute.
+                // Cubed, so that the first half of the night is not nailed to its root.
+                if (away <= 0.0) score += static_cast<double>(p.home) * ripe * ripe * 12.0;
+            }
             if (score < bestScore) { bestScore = score; best = c; }
         }
-        if (bestScore < 0.5 + 3.0) root_ = best;
+        // A move has to be worth making -- but the threshold is on a score that Home, Key and Root
+        // Down all add penalties to, and with the three of them up every candidate can stand above
+        // it: measured, an hour at the rule book's own values in which the root never moved once.
+        // R6.1 wants it every four to twelve minutes, so past twelve the best candidate goes
+        // through whatever it scores. A conductor whose Wander and Root Move are nought never asks
+        // this question at all, and the profiles that want a fixed root keep it.
+        // A move has to be worth making, and past twelve minutes the best candidate goes through
+        // whatever it scores (R6.1's upper bound) -- except at home and late, where that release
+        // was what let the root wander off again after it had come back: one hour in eight ended a
+        // step away from where the night began, having been home at minute 33.
+        {
+            const double ripeNow = p.home > 0.0f
+                ? clampv(age_ / std::max(60.0, static_cast<double>(p.homeTime) * 60.0), 0.0, 1.0) : 0.0;
+            const bool restingAtHome = p.home > 0.0f && root_ == homeRoot_ && ripeNow > 0.55;
+            if ((bestScore >= 3.5 && (rootAge_ < 720.0 || restingAtHome)) || best == root_) return;
+        }
+        ++rootMoves_;
+        // The changeover (R6.3). Without Pivot the root simply moves, as it always did. With it the
+        // new root is announced rather than declared: a tone belonging to both is started at once,
+        // the root itself follows halfway through the window, and the voice on the old root is let
+        // go only at the end of it.
+        if (p.pivot > 0.0f) { pivotTo_ = best; pivotOld_ = root_; pivotLeft_ = static_cast<double>(p.pivot); pivotAnnounced_ = false; return; }
+        setRoot(best, p);
     }
+
+    // Take the new root, and with it what the change is allowed to carry: a single exchanged degree
+    // of the supply, so the mode wanders instead of being swapped (R4.1).
+    void setRoot(int note, const BrainParams& p)
+    {
+        root_ = note;
+        rootAge_ = 0.0;
+        if (p.degreeSwap > 0.0f && rng_.uniform() < p.degreeSwap) {
+            const bool sixth = rng_.uniform() < 0.5f;
+            const int lo = sixth ? 8 : 3, hi = sixth ? 9 : 4;   // minor/major sixth, minor/major third
+            const bool toMajor = degreeBias_[lo] >= degreeBias_[hi];
+            degreeBias_[lo] = toMajor ? 0.25f : 1.6f;
+            degreeBias_[hi] = toMajor ? 1.6f : 0.25f;
+        }
+    }
+
+    // What a chord is, for the purpose of not hearing it twice: the pitch classes that sound,
+    // together with the octave the bottom of it sits in. Two voicings of the same set in the same
+    // register are the same chord; the same set an octave apart is not. `extra` is added if given. For a candidate (`forNew`) a voice that is on its way out -- exchanged, and
+    // sounding out its overlap, which in Free mode is a negative `remaining` -- is left out: it
+    // will not be in the constellation the candidate makes. Counted in, the memory judged a
+    // four-note chord that lasted ten seconds and never the three-note one that followed, and a
+    // voice could go A, B, A, B between two notes for an hour (Glacier Bloom, measured).
+    template <class FreqFn>
+    uint32_t chordKey(int extra, FreqFn&& freqOf, bool forNew = false) const
+    {
+        uint32_t mask = 0;
+        int lowest = 127;
+        for (const auto& s : slots_) {
+            if (s.note < 0 || (forNew && s.remaining < 0.0)) continue;
+            mask |= 1u << pitchClassOf(freqOf(s.note)); lowest = std::min(lowest, s.note);
+        }
+        // Chords mode's exchanged voices, sounding out their overlap: in the constellation heard
+        // now, not in the one a candidate will leave behind.
+        if (!forNew) {
+            for (const auto& l : leaving_) if (l.note >= 0) { mask |= 1u << pitchClassOf(freqOf(l.note)); lowest = std::min(lowest, l.note); }
+            if (extraHeard_ >= 0) { mask |= 1u << pitchClassOf(freqOf(extraHeard_)); lowest = std::min(lowest, extraHeard_); }
+        }
+        if (extra >= 0) { mask |= 1u << pitchClassOf(freqOf(extra)); lowest = std::min(lowest, extra); }
+        return mask | (static_cast<uint32_t>(clampv(lowest, 0, 127) / 12) << 12);
+    }
+    bool heardLately(uint32_t k, const BrainParams& p) const
+    {
+        const double within = static_cast<double>(p.memory) * 60.0;
+        for (const auto& m : memo_) if (m.key == k && now_ - m.at < within) return true;
+        return false;
+    }
+    // Whether adding `c` would rebuild a constellation heard within the memory. A note that adds no
+    // pitch class and lowers nothing -- an octave or a unison of what sounds -- makes no new
+    // constellation, it thickens the one there is, and R6.6 is about constellations; asked of it,
+    // the memory forbade every doubling, and the octave the rule book's table has at 0.18 came out
+    // at 0.06.
+    template <class FreqFn>
+    bool constellationHeard(int c, const BrainParams& p, FreqFn&& freqOf) const
+    {
+        if (p.memory <= 0.0f) return false;
+        const uint32_t k = chordKey(c, freqOf, true);
+        if (k == chordKey(-1, freqOf, true)) return false;
+        // Both the constellation the candidate makes and the one it makes for the ten seconds
+        // an exchanged voice is still sounding: the listener hears that one too.
+        const uint32_t during = chordKey(c, freqOf, false);
+        const bool heard = heardLately(k, p) || (during != k && heardLately(during, p));
+        if (trace) trace(heard ? "veto" : "pass", c, k);
+        return heard;
+    }
+    // A constellation is remembered from the last moment it sounded, not from the moment it was
+    // made: stamped when it is created and again whenever a note leaves it, so the ten minutes of
+    // R6.6 run from its end. Stamped at creation only, a chord that had lasted eleven minutes
+    // could come straight back.
+    void rememberChord(uint32_t k)
+    {
+        if (trace) trace("stamp", -1, k);
+        for (auto& m : memo_) if (m.key == k) { m.at = now_; return; }
+        memo_[memoHead_] = Memo{ k, now_ };
+        memoHead_ = (memoHead_ + 1) % kMemo;
+    }
+
+public:
+    // A hook for the audit tool: every stamp of the memory and every verdict it gives, so that a
+    // constellation that comes back can be traced to the check that let it. Off unless set.
+    static inline void (*trace)(const char* what, int note, uint32_t key) = nullptr;
+private:
 
     // The Hawkes clock. Time runs faster for the timer while the excitation is up: an
     // inhomogeneous Poisson process is a homogeneous one in rescaled time, so the gap is drawn
@@ -1045,7 +1827,14 @@ private:
         // 0.685 -> 0.694): with the chord always full, notes are only ever chosen at an
         // exchange, and that is where Even has least to decide. Left as it is until the two
         // can be had together.
-        return filling_ ? 0.35 : std::max(0.5, static_cast<double>(p.rateSeconds));
+        if (filling_) return 0.35;
+        // The mean gap breathes. A constant mean is the one thing a Poisson clock cannot hide: the
+        // density is then the same at minute three and at minute fifty, and the piece has no
+        // shape. At 1 the mean swings between half and double over its period, which for the
+        // library's rates is a slow tide rather than a change of tempo.
+        double mean = std::max(0.5, static_cast<double>(p.rateSeconds));
+        if (p.rateBreath > 0.0f) mean *= std::pow(2.0, static_cast<double>(p.rateBreath * breathValue_));
+        return mean;
     }
 
     void advanceTimer(double dt, const BrainParams& p, double mean)
@@ -1083,7 +1872,24 @@ private:
 
     // The deja-vu ring. Moves one place per choice; offers what it holds with probability
     // Deja Vu, and keeps it when it was taken. Nothing is drawn at zero.
-    int viaDejaVu(int fresh, const BrainParams& p, int avoid)
+    // Whether a note may sound at all under the rules that every draw applies: in range, not
+    // resting after its release (R7.4), not rebuilding a constellation heard lately (R6.6), and
+    // not vetoed by the register and interval rules. For the paths that do not draw -- the ring
+    // of Deja Vu offers a PAST note, and until this was asked of it the offer went past every
+    // rule: a second in the bass, a leading note under a sounding root, a pitch inside its rest.
+    template <class FreqFn>
+    bool admissible(int c, int low, int high, const BrainParams& p, FreqFn&& freqOf, bool pivotal = false) const
+    {
+        if (c < std::min(low, high) || c > std::max(low, high) || c < 0 || c > 127) return false;
+        if (p.retrigger > 0.0f && now_ - pitchOffAt_[static_cast<size_t>(c)] < static_cast<double>(p.retrigger)) return false;
+        if (constellationHeard(c, p, freqOf)) return false;
+        bool rootSounding = false;
+        for (const auto& s : slots_) if (s.note >= 0 && ((s.note - root_) % 12 + 12) % 12 == 0) rootSounding = true;
+        return ruleWeight(c, std::min(low, high), std::max(low, high), rootSounding, p, pivotal) > 0.0f;
+    }
+
+    template <class FreqFn>
+    int viaDejaVu(int fresh, const BrainParams& p, int avoid, int low, int high, FreqFn&& freqOf)
     {
         if (p.dejavu <= 0.0f || fresh < 0) return fresh;
         const int len = clampv(p.loop, 1, kRing);
@@ -1091,7 +1897,7 @@ private:
         int out = fresh;
         if (ring_[ringPos_] >= 0 && rng_.uniform() < p.dejavu) {
             const int old = ring_[ringPos_];
-            if (old != avoid && !sounding(old)) out = old;
+            if (old != avoid && !sounding(old) && admissible(old, low, high, p, freqOf)) out = old;
         }
         ring_[ringPos_] = out;
         return out;
@@ -1106,6 +1912,46 @@ private:
     float  ic_[12] = {};          // Homeostat: fading histogram of chosen interval classes
     int    lastNote_ = -1;
     float  lastLean_ = 0.0f;
+    // The clocks the guards read (12.09.2026). Seconds since the last onset and the last release,
+    // and the moment each of the 128 pitches was last let go. The running clock starts at a
+    // million seconds rather than at zero so that a zeroed stamp reads as "long ago": every pitch
+    // is free before it has ever sounded, without filling 128 entries by hand.
+    double sinceOn_ = 1.0e9, sinceOff_ = 1.0e9;
+    double now_ = 1.0e6;
+    double pitchOffAt_[128] = {};
+    // The breath behind the event rate: two sines whose periods stand in the golden ratio, so the
+    // sum never repeats within a piece and the tide does not become a pulse.
+    double breathPhase_ = 0.0;
+    float  breathValue_ = 0.0f;
+    double densityNow_ = -1.0;    // the density actually in force; negative until the first tick
+    double densityTarget_ = -1.0;
+    double densityStep_ = 0.0;    // voices per second while a change is being carried out
+    double silenceLeft_ = 0.0;    // seconds of planned pause still to run
+    // ---- root and long form
+    int    homeRoot_ = 48;        // the root the night began on
+    double age_ = 0.0;            // seconds since the conductor was reset
+    double rootAge_ = 0.0;        // seconds since the root last moved
+    int    pivotTo_ = -1, pivotOld_ = -1;
+    double pivotLeft_ = 0.0;      // seconds left of the changeover window
+    bool   pivotAnnounced_ = false;
+    int    pivotTones_ = 0;       // changeovers that found a tone belonging to both roots
+    int    rootMoves_ = 0;        // times the root was sent somewhere else
+    bool   settled_ = false;      // the cluster has once stood at its density: the exposition is over
+    int    extraHeard_ = -1;      // Chords: the voice being exchanged, out of its slot for the vote, still heard by the rules
+    // Chords: a voice that has been exchanged keeps sounding until the one replacing it has been
+    // in the air for Overlap seconds (R5.4), and only then is let go. Its slot has gone to the
+    // arriving note, so it waits here -- and while it waits it still counts as sounding.
+    struct Leaving { int note = -1; double in = 0.0; };
+    Leaving leaving_[kSlots];
+    float  degreeBias_[12] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+    struct Memo { uint32_t key; double at; };
+    // One entry per constellation, kept from the last moment it sounded. An hour has a hundred to
+    // two hundred of them, and at 48 the ring overwrote entries younger than the memory: a chord
+    // three minutes gone came back, twice an hour under the rules at full. Thirty minutes of
+    // memory at the rule book's rates want a few hundred.
+    static constexpr int kMemo = 256;
+    Memo   memo_[kMemo] = {};
+    int    memoHead_ = 0;
     double timer_ = 1.0;
     double timerMean_ = 0.0;   // the rate the standing wait was drawn against, so it can be rescaled
     bool   filling_ = false;   // fill the cluster at speed, then go back to the event rate

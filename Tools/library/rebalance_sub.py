@@ -165,4 +165,6 @@ def main():
         print("\nThe library has to be measured again: this changes loudness and descriptors.")
 
 
-main()
+
+if __name__ == "__main__":
+    main()

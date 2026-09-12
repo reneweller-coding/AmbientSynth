@@ -1,5 +1,12 @@
 """Generate the preset library: thousands of presets as runtime packs.
 
+Superseded by Tools/library/make_library.py, which generates the 2.0 library (56 packs and the
+built-ins) from Tools/library/artists.py and the catalogue in Tools/library/clip_catalog.py. What
+lives on here is the machinery both generations use: the parameter table read from the synth, the
+eight shades, the modulation matrix, the entrance contours, the optional blocks in open_up, the
+descriptors, the tags, the map layout and the names. This module still generates the library it
+was written for, from styles.py.
+
 Each style in styles.py becomes one .ambientpack file (see Core/include/ambient/Presets.h for
 the format). A preset is drawn from the style's parameter ranges, then a handful of optional
 blocks -- z-plane filter, Cosmos, granular cloud, feedback, the two source slots, the sub, the
@@ -270,6 +277,7 @@ MOD_TARGETS = [
 # Targets that only make sense for a slot that is actually running, keyed by the slot's type.
 MOD_SLOT_TARGETS = {
     "Wavetable": [("{p}pos", 0.10, 0.40), ("{p}level", 0.08, 0.25)],
+    "Harmonic":  [("{p}pos", 0.10, 0.40), ("{p}level", 0.08, 0.25), ("{p}transport", 0.10, 0.40)],
     "FM":        [("{p}fm_index", 0.08, 0.30), ("{p}level", 0.08, 0.25)],
     "Texture":   [("{p}pos", 0.10, 0.40), ("{p}density", 0.08, 0.25), ("{p}spread", 0.10, 0.35),
                   ("{p}level", 0.08, 0.25)],
@@ -294,7 +302,12 @@ LFO_SHAPES = ["Sine", "Sine", "Sine", "Triangle", "Random", "Random", "Steps", "
 # movement a rate or an amplitude, never a step -- so these are rare and only ever aimed at
 # parameters that take effect at the next note. A scale that changes while nothing new is played
 # changes nothing; a filter model that changes mid-tail is a click, and is not in this list.
-SWITCH_TARGETS = ["scale", "stack", "root", "strike_type", "brain_quantize", "keys_filter"]
+#
+# "scale" and "brain_quantize" were in this list and are not any more. Both are decided per artist
+# by the ranges document, and an LFO walking through the scales is exactly what R4.1 forbids: a
+# supply stands for at least eight minutes and changes by exchanging a single degree, which is what
+# brain_degree_swap does and what every preset now carries. The grid is the artist's too.
+SWITCH_TARGETS = ["stack", "root", "strike_type", "keys_filter"]
 
 
 def bank_presets(path, first_is_off=True):
@@ -474,7 +487,11 @@ def modulation_for(p, style, rng, shade_name):
             # Per Voice gives every note its own phase -- a cluster then breathes in parts rather
             # than as one block; Retrigger starts it at the note. Neither was ever used.
             if rng.random() < 0.30:
-                p[f"lfo{lfo}_mode"] = "Per Voice" if rng.random() < 0.7 else "Retrigger"
+                # Retrigger or nothing. "Per Voice" stood in 6855 presets and was read by nobody --
+                # this instrument computes its matrix once a block, not once per voice, so there is
+                # no per-voice copy for an LFO to have. The name stays in the choice list so an old
+                # preset still loads; the library stops asking for something it cannot get.
+                p[f"lfo{lfo}_mode"] = "Retrigger"
             # And now and then a rate from the clock instead of from seconds.
             if rng.random() < 0.12:
                 p[f"lfo{lfo}_sync"] = rng.choice(["64 bars", "32 bars", "16 bars", "8 bars", "4 bars"])
@@ -619,8 +636,14 @@ def open_up(p, mod, extra, rng):
                 p["brain_harmonic"] = round(u(extra, 0.2, 0.8), 3)
         if want("quantize"):
             p["brain_quantize"] = extra.choice(["8 bars", "4 bars", "2 bars", "1 bar", "1/2"])
+        # Spacing keeps the voices out of each other's critical bands; NEGATIVE seeks that crowding
+        # instead, which is what a cluster is -- the seconds that sit next to each other in a
+        # Rich-style voicing and beat against each other on purpose. Only a style that asks for
+        # clusters draws from the negative half.
         if extra.random() < 0.25:
             p["brain_spacing"] = round(u(extra, 0.2, 0.9), 3)
+        elif extra.random() < mod.get("cluster", 0.0):
+            p["brain_spacing"] = round(u(extra, -0.8, -0.25), 3)
     # A second conductor for the background plane: its own slower clock, its own register.
     if want("brain2"):
         p["brain2_on"] = "on"
@@ -633,7 +656,11 @@ def open_up(p, mod, extra, rng):
         p["brain2_depth"] = round(u(extra, 0.55, 1.0), 3)
         p["brain2_consonance"] = round(u(extra, 0.2, 0.8), 3)
         if extra.random() < 0.4:
-            p["brain2_interval"] = round(u(extra, 0.1, 0.7), 3)
+            # SEMITONES, not an amount. This was drawn as 0.1 to 0.7 for a long time, as though it
+            # were a 0..1 knob, which put the whole background layer ten to seventy cents beside
+            # the foreground's root -- a mistuned unison rather than a degree of its own, which is
+            # the one thing it was there to be. A fifth, a fourth, an octave down or the seventh.
+            p["brain2_interval"] = extra.choice([7, 5, 12, -12, 10, -5])
 
     # ---- tuning -----------------------------------------------------------------------
     if want("adaptive"):
@@ -673,8 +700,14 @@ def open_up(p, mod, extra, rng):
             p["far_rotate"] = round(u(extra, 0.25, 0.8), 3)
     if want("fardiffuse"):
         p["far_diffuse"] = round(u(extra, 0.2, 0.9), 3)
+    # far_freeze is NOT written any more (12.09.2026). It closes the far reverb's input and holds
+    # whatever is in its tail -- which is a performance control and a good one, but a preset is
+    # loaded into an EMPTY reverb, so it freezes silence and there is no far reverb for the rest of
+    # the session. Measured on Init: with freeze on, the far plane's share of the output is 0.000
+    # and the render is identical to far_level=0. It stood in 930 presets, and it is exactly what
+    # Rene heard as "the far reverb hardly does anything". The knob stays, for hands.
     if want("farfreeze"):
-        p["far_freeze"] = "on"
+        pass
     if want("earlyroom"):
         p["early_level"] = round(u(extra, 0.15, 0.6), 3)
         p["early_size"] = round(logu(extra, 3.0, 30.0), 2)
@@ -715,7 +748,9 @@ def open_up(p, mod, extra, rng):
     if float(p.get("cosmos_send", 0) or 0) > 0.05 and want("cosmosswell"):
         p["cosmos_swell"] = round(u(extra, 0.3, 1.0), 3)
     for n in (1, 2, 3, 4):
-        if p.get("src%d_type" % n) == "Wavetable" and want("transport"):
+        # Transport morphs spectra, so it belongs to the Harmonic type (the spectral table type was called
+        # Wavetable in packs without a "format 2" line, which the loader translates).
+        if p.get("src%d_type" % n) in ("Harmonic", "Wavetable") and want("transport"):
             p["src%d_transport" % n] = round(u(extra, 0.3, 1.0), 3)
 
     # ---- the body, and the patina ------------------------------------------------------
@@ -731,7 +766,12 @@ def open_up(p, mod, extra, rng):
         # default -- this is a patina, not a lo-fi effect.
         p["patina"] = round(u(extra, 0.1, 0.5), 3)
         p["patina_wow"] = round(u(extra, 0.1, 0.6), 3)
-        p["patina_hiss"] = round(u(extra, 0.05, 0.4), 3)
+        # The hiss is the one part of the patina that measures as noise, and it is the third largest
+        # source of it in the whole instrument: on a pure sine, patina 0.5 alone gives a spectral
+        # flatness of 0.0008 and its hiss at 0.5 lifts that to 0.0019, against 0.000001 for the
+        # untouched tone. (Air at 0.2 gives 0.0149, which is why that one is the exception now.)
+        # Kept under a fifth: the medium should be heard as a medium, not as a bed of noise.
+        p["patina_hiss"] = round(u(extra, 0.03, 0.2), 3)
         p["patina_age"] = round(u(extra, 0.1, 0.7), 3)
 
     # ---- the Vector --------------------------------------------------------------------

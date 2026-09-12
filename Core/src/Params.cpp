@@ -30,6 +30,11 @@ const char* const kScaleNames[kNumScaleChoices] = {
 };
 
 const char* const kRootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+// Where a new root may come from. Any is the draw the conductor always made; Fifths keeps it to
+// the fourth and the fifth; Diatonic weights the steps the way this music moves (a fifth or a
+// fourth down before anything else); Falling allows only downward steps, the semitone included,
+// which is the dark profiles' walk.
+const char* const kRootStepNames[4] = { "Any", "Fifths", "Diatonic", "Falling" };
 const char* const kKeyMapNames[2] = { "Snap to 12 keys", "Consecutive degrees" };
 const char* const kShimmerPitchNames[kNumShimmerPitches] = { "+12", "+7", "+5", "+19", "-12", "+24" };
 const char* const kSubOctaveNames[2] = { "-1", "-2" };
@@ -326,7 +331,12 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::CloudSize,    "cloud_size",    "Grain",   "Cloud", 30.f,  800.f,  250.f, 0.5f, "ms"),
     F(ParamId::CloudPitch,   "cloud_pitch",   "Pitch",   "Cloud", 0.f,   1.f,    0.3f,  1.f,  ""),
     F(ParamId::CloudSpray,   "cloud_spray",   "Spray",   "Cloud", 0.05f, 2.f,    0.8f,  0.5f, "s"),
-    F(ParamId::CloudLevel,   "cloud_level",   "Level",   "Cloud", 0.f,   1.f,    0.7f,  1.f,  ""),
+    // Up to 2, which is what the grain engine has always accepted (GrainCloud::set clamps there):
+    // the knob stopped at 1 and half the range was unreachable. Measured before the change, with
+    // send, level, density and size all at their tops, the cloud moved the output by 0.6 dB and
+    // sat nine decibels under the preset -- "fully up" was inaudible, which is not what a send is
+    // for. Everything written before this keeps its value, and 0.7 is still the default.
+    F(ParamId::CloudLevel,   "cloud_level",   "Level",   "Cloud", 0.f,   2.f,    0.7f,  1.f,  ""),
 
     F(ParamId::BodyLevel,    "body_level",    "Body",     "Body",   0.f,   1.f,    0.f,   1.f,  ""),
     C(ParamId::BodyMaterial, "body_material", "Material", "Body",   kBodyMaterialNames, kNumBodyMaterials, 0),
@@ -714,6 +724,40 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::Src4EnvTime,  "src4_env_time",  "Time",  "Src Env 4", 0.05f, 20.f, 1.f, 0.4f, "x"),
     F(ParamId::Src4EnvDepth, "src4_env_depth", "Depth", "Src Env 4", 0.f, 1.f, 1.f, 1.f, ""),
     C(ParamId::Src4EnvSync,  "src4_env_sync",  "Sync",  "Src Env 4", kSyncDivNames, kNumSyncDivs, 0),
+    // ---- what a self-playing generator needs (12.09.2026). Every default is the behaviour the
+    // conductor already had, so no preset written before these changes by a single sample.
+    F(ParamId::BrainLayers,      "brain_layers",       "Layers",       "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainBassHold,    "brain_bass_hold",    "Bass Hold",    "Cluster Brain", 1.f,  8.f,   1.f,  0.5f, "x"),
+    F(ParamId::BrainTopSoft,     "brain_top_soft",     "Top Soft",     "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainLowSpacing,  "brain_low_spacing",  "Low Spacing",  "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    I(ParamId::BrainThirdFloor,  "brain_third_floor",  "Third Floor",  "Cluster Brain", 0.f,  72.f,  0.f),
+    F(ParamId::BrainLeading,     "brain_leading",      "Leading",      "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainThirds,      "brain_thirds",       "Thirds",       "Cluster Brain", -1.f, 1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainSeconds,     "brain_seconds",      "Seconds",      "Cluster Brain", -1.f, 1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainSeventh,     "brain_seventh",      "Seventh",      "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainDegreeSwap,  "brain_degree_swap",  "Degree Swap",  "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainRateBreath,  "brain_rate_breath",  "Rate Breath",  "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainBreathPeriod,"brain_breath_period","Breath Period","Cluster Brain", 2.f,  30.f,  10.f, 0.6f, "min"),
+    F(ParamId::BrainOverlap,     "brain_overlap",      "Overlap",      "Cluster Brain", 0.f,  60.f,  0.f,  0.6f, "s"),
+    B(ParamId::BrainOnsetGuard,  "brain_onset_guard",  "Onset Guard",  "Cluster Brain", false),
+    F(ParamId::BrainReleaseGap,  "brain_release_gap",  "Release Gap",  "Cluster Brain", 0.f,  10.f,  0.f,  0.6f, "s"),
+    F(ParamId::BrainRetrigger,   "brain_retrigger",    "Retrigger",    "Cluster Brain", 0.f,  120.f, 0.f,  0.5f, "s"),
+    F(ParamId::BrainDensitySlew, "brain_density_slew", "Density Slew", "Cluster Brain", 0.f,  10.f,  0.f,  0.6f, "min"),
+    F(ParamId::BrainSilence,     "brain_silence",      "Silence",      "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainSilenceLen,  "brain_silence_len",  "Silence Len",  "Cluster Brain", 5.f,  60.f,  20.f, 0.7f, "s"),
+    C(ParamId::BrainRootSteps,   "brain_root_steps",   "Root Steps",   "Cluster Brain", kRootStepNames, 4, 0),
+    F(ParamId::BrainRootDown,    "brain_root_down",    "Root Down",    "Cluster Brain", -1.f, 1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainPivot,       "brain_pivot",        "Pivot",        "Cluster Brain", 0.f,  90.f,  0.f,  0.6f, "s"),
+    F(ParamId::BrainHome,        "brain_home",         "Home",         "Cluster Brain", 0.f,  1.f,   0.f,  1.f, ""),
+    F(ParamId::BrainHomeTime,    "brain_home_time",    "Home Time",    "Cluster Brain", 10.f, 180.f, 60.f, 0.6f, "min"),
+    F(ParamId::BrainMemory,      "brain_memory",       "Memory",       "Cluster Brain", 0.f,  30.f,  0.f,  0.6f, "min"),
+    B(ParamId::Brain2Golden,     "brain2_golden",      "Golden",       "Brain 2", false),
+    B(ParamId::TuneHoldSounding, "tuning_hold_sounding","Hold Sounding","Tuning", false),
+    F(ParamId::BeatCeiling,      "beat_ceiling",       "Beat Ceiling", "Tuning", 0.f, 4.f, 0.f, 0.7f, "Hz"),
+    F(ParamId::EnvVelAttack,     "env_vel_attack",     "Vel to Attack","Envelope", -1.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::LayerDepth,       "layer_depth",        "Layer Depth",  "Space", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::StrandLowDetune,  "strand_low_detune",  "Low Detune",   "Source 1", 0.f, 1.f, 0.f, 1.f, ""),
+    F(ParamId::CloudToNear,      "cloud_to_near",      "To Near",      "Cloud", 0.f, 1.f, 0.f, 1.f, ""),
 }};
 } // namespace
 

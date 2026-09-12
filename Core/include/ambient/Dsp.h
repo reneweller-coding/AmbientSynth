@@ -104,6 +104,22 @@ public:
         sus_   = sustain;
     }
     void noteOn()  { stage_ = Stage::Attack; }            // continues from the current level
+    // A note that has ALREADY been sounding for `seconds`, handed over rather than begun: it enters
+    // at the level it would have reached by now instead of climbing its attack from silence. The
+    // conductor of an arriving preset adopts the cluster of the one that is leaving -- those notes
+    // are sounding, and starting them at zero is why a preset with a twelve-second attack dipped
+    // four to five dB after a two-second crossfade. The attack is one pole toward 1.3, so its level
+    // after n samples is 1.3 (1 - (1 - aCoef)^n) in closed form; past the attack it lands where the
+    // decay would have left it, at the sustain.
+    void noteOnAged(float seconds)
+    {
+        stage_ = Stage::Attack;
+        if (!(seconds > 0.0f)) return;
+        const double n = static_cast<double>(seconds) * sr_;
+        const double reached = 1.3 * (1.0 - std::pow(1.0 - static_cast<double>(aCoef_), n));
+        if (reached >= 1.0) { level_ = sus_; stage_ = sus_ > 1e-4f ? Stage::Sustain : Stage::Idle; if (sus_ <= 1e-4f) level_ = 0.0f; }
+        else level_ = std::max(level_, static_cast<float>(reached));
+    }
     void noteOff() { if (stage_ != Stage::Idle) stage_ = Stage::Release; }
     void kill()    { stage_ = Stage::Idle; level_ = 0.0f; }
     bool isActive() const    { return stage_ != Stage::Idle; }

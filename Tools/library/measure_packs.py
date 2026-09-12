@@ -56,7 +56,11 @@ def read_pack(path):
     head, rows = [], []
     for line in open(path, encoding="utf-8"):
         t = line.rstrip("\n")
-        if not t.strip() or t.lstrip().startswith("#") or t.lstrip().startswith("pack "):
+        s = t.lstrip()
+        # "format 2" belongs to the head. Read as a preset it would be written back as
+        # "format 2||||||||", and the loader only takes a format line without a '|' -- so the pack
+        # would fall back to format 1 and read every Harmonic source as a classic wavetable.
+        if not s or s.startswith("#") or s.startswith("pack ") or (s.startswith("format ") and "|" not in s):
             head.append(t)
             continue
         f = t.split("|")
@@ -126,7 +130,7 @@ def parse_measure(text):
     return d
 
 
-def render_batch(names, packs, seconds, tapdir=None):
+def render_batch(names, packs, seconds, tapdir=None, skip=0.0):
     """One process, many presets: {name: measurements}. The renderer's --batch reuses the command
     line for every name in a list, so each preset is measured exactly as a single call would
     measure it -- what is saved is starting a process and reading the 42 pack files, which was
@@ -142,6 +146,8 @@ def render_batch(names, packs, seconds, tapdir=None):
                "--notes", "45,52,59", "--set", "brain_rate=6", "--hour", "21", "--measure"]
         if tapdir:
             cmd += ["--tap-dir", tapdir]
+        if skip > 0.0:
+            cmd += ["--skip", f"{skip:.0f}"]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                              env=_packs_env(packs), **LOW_PRIORITY)
     finally:
@@ -225,10 +231,34 @@ def tag_bits(settings, d):
     return sum(1 << TAGS.index(x) for x in t)
 
 
-def _fingerprint(row):
-    """What this measurement was made from. The name is not enough: regenerate the library and
-    most names come back -- same seed, same generator -- with other settings underneath."""
+def warm_up(settings):
+    """How long this preset is played and thrown away before the measured minute begins. A preset
+    is described after it has ARRIVED: the library's median attack is eighteen seconds and an
+    eighth of it is above forty, and measured during the climb a preset reads quieter, thinner,
+    drier and far more 'evolving' than it really is. Bucketed to fifteen seconds, because one
+    --batch call shares one command line -- a bucket is a run of presets that wait equally long."""
+    try:
+        attack = float(dict(kv.split("=", 1) for kv in str(settings).split(";") if "=" in kv).get("attack", 6.0))
+    except (ValueError, AttributeError):
+        attack = 6.0
+    step = 15.0
+    return min(75.0, step * round(max(0.0, attack - 15.0) / step))
+
+
+def _fingerprint(row, method=""):
+    """What this measurement was made from. The name is not enough: regenerate the library and most
+    names come back -- same seed, same generator -- with other settings underneath.
+
+    And neither are the settings enough, which cost an afternoon to learn. Change HOW a preset is
+    measured -- the length of the window, the notes held, the warm-up before it -- and every cached
+    number belongs to the old method while the settings that key it have not moved. The safe answer
+    used to be to throw the whole cache away, which is how a change touching an eighth of the
+    library came to re-measure all of it. So the method is part of the key, and it is DERIVED
+    rather than remembered: a preset whose warm-up is zero before and after keeps its measurement,
+    one whose warm-up moved is measured again, and nobody has to bump a version by hand."""
     parts = [str(row.get(k, "")) for k in ("settings", "texture", "wavetable", "impulse", "mod", "envs", "impulse_b")]
+    parts.append(str(method))
+    parts.append(f"skip={warm_up(row.get('settings', '')):.0f}")
     return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:16]
 
 def main():
@@ -286,7 +316,8 @@ def main():
         # numbers for them without a word. It happened: a work directory left over from an earlier
         # run held ninety entries, and ninety presets went into the map with the descriptors and
         # the excerpt of a library that no longer existed. So the settings are part of the key.
-        fps = {r["name"]: _fingerprint(r) for r in rows}
+        method = f"sec={a.seconds}|notes=45,52,59|hour=21|rate=6"
+        fps = {r["name"]: _fingerprint(r, method) for r in rows}
         fpfile = a.cache + ".fp" if a.cache else ""
         known = {}
         if fpfile and os.path.exists(fpfile):
@@ -323,10 +354,33 @@ def main():
         # that an interruption loses little and the cache is written often, large enough that the
         # fixed cost of a process is paid once for many.
         by_name = {r["name"]: r for r in todo}
-        chunks = [[r["name"] for r in todo[i:i + a.chunk]] for i in range(0, len(todo), a.chunk)]
+        # A preset is described AFTER it has arrived. The 2.0 library has a median attack of
+        # eighteen seconds and an eighth of it above forty: those presets were being described, and
+        # their loudness set, while they were still climbing -- measured on six of them, the sound
+        # stands about 3 dB under where it settles. The renderer plays a warm-up and throws it away
+        # (--skip); the measured window that follows is sixty seconds for every preset, so the
+        # descriptors stay comparable. The warm-up is bucketed because one --batch call shares one
+        # command line: a bucket is a run of presets that wait the same length of time.
+        def lead_of(row):
+            try:
+                attack = float(dict(kv.split("=", 1) for kv in row["settings"].split(";") if "=" in kv)
+                               .get("attack", 6.0))
+            except (ValueError, AttributeError):
+                attack = 6.0
+            step = 15.0
+            return min(75.0, step * round(max(0.0, attack - 15.0) / step))
+        buckets = {}
+        for r in todo:
+            buckets.setdefault(lead_of(r), []).append(r["name"])
+        chunks = [(lead, names[i:i + a.chunk])
+                  for lead, names in sorted(buckets.items())
+                  for i in range(0, len(names), a.chunk)]
+        if len(buckets) > 1:
+            print("  warm-up before the measured minute: "
+                  + ", ".join(f"{int(k)} s x{len(v)}" for k, v in sorted(buckets.items())), flush=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as ex:
             done = 0
-            for got in ex.map(lambda c: render_batch(c, a.packs, a.seconds, a.taps or None), chunks):
+            for got in ex.map(lambda c: render_batch(c[1], a.packs, a.seconds, a.taps or None, c[0]), chunks):
                 for name, m in got.items():
                     if name in by_name:
                         by_name[name]["m"] = m
@@ -390,6 +444,17 @@ def main():
             head.insert(1, "# Descriptors and map positions measured by Tools/library/measure_packs.py "
                            "from a 12 s render of every preset.")
         write_pack(os.path.join(a.packs, name), head, rr)
+    # The gain correction rewrote the settings these measurements were made from. The cache follows
+    # them -- only the loudness moved, and by exactly the gain -- and so do the fingerprints beside
+    # it. Without this a second --resume run calls every corrected preset stale and renders the
+    # whole library again for nothing.
+    if a.cache and not a.from_cache:
+        with open(a.cache, "w", encoding="utf-8") as fh:
+            json.dump({r["name"]: dict(r["m"], rms_db=r["m"]["rms_db"] + r.get("gain_delta", 0.0))
+                       for r in rows if r["m"]}, fh)
+        with open(a.cache + ".fp", "w", encoding="utf-8") as fh:
+            json.dump({r["name"]: _fingerprint(r, f"sec={a.seconds}|notes=45,52,59|hour=21|rate=6")
+                       for r in rows if r["m"]}, fh)
     # Report what actually survived the rewrite: dropping a field silently is exactly how the
     # impulses, the matrix and the envelope shapes disappeared from all 5000 presets once.
     kept = {k: sum(1 for _, _, rr in packs for r in rr if r.get(k, "").strip("~ "))

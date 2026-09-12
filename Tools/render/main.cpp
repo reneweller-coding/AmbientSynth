@@ -406,6 +406,7 @@ static int runOnce(int argc, char** argv)
 {
     std::string out = "ambient.wav";
     double seconds = 60.0;
+    double skipSeconds = 0.0;   // played and thrown away before the measured window begins
     int sr = 48000, block = 256;
     bool stats = false, dump = false, useMap = false, measure = false, loudness = false;
     bool tonal = false;
@@ -430,6 +431,7 @@ static int runOnce(int argc, char** argv)
         auto next = [&]() -> std::string { return (i + 1 < argc) ? argv[++i] : ""; };
         if (a == "--out") out = next();
         else if (a == "--seconds") { seconds = std::atof(next().c_str()); secondsGiven = true; }
+        else if (a == "--skip") skipSeconds = std::atof(next().c_str());
         else if (a == "--sr") sr = std::atoi(next().c_str());
         else if (a == "--block") block = std::atoi(next().c_str());
         else if (a == "--stats") stats = true;
@@ -778,6 +780,20 @@ static int runOnce(int argc, char** argv)
         engine.setStemBuffers(stemPtr);
     }
 
+    // --skip: play this much first and throw it away, then measure what follows. A preset is
+    // described by its FIRST minute otherwise, and the 2.0 library has a median attack of eighteen
+    // seconds and an eighth of it above forty: those presets were being described, and their gain
+    // set, while they were still on their way up. Measured on six of them, the voice stands 4.0 dB
+    // lower against its bed at forty seconds than at ninety. Nothing changes for a preset that has
+    // arrived by then -- skip 0 renders exactly what it always did, sample for sample.
+    if (skipSeconds > 0.0) {
+        const long warm = static_cast<long>(skipSeconds * sr);
+        for (long done = 0; done < warm; done += block) {
+            const int n = static_cast<int>(std::min<long>(block, warm - done));
+            engine.process(L.data(), R.data(), n);
+        }
+    }
+
     double sumSq[2] = { 0, 0 }; float peak = 0.0f; long nans = 0;
     double secSq[2] = { 0, 0 }; long secCount = 0; int sec = 0;
     // How many voices are sounding, averaged over the settled half of the render. It used to be
@@ -933,7 +949,16 @@ int main(int argc, char** argv)
     // measured a different sound than the same command line one preset at a time.
     size_t slot = 0;
     for (size_t i = 1; i + 1 < args.size(); ++i) if (args[i] == "--preset") { slot = i + 1; break; }
-    if (slot == 0) { args.insert(args.begin() + 1, { "--preset", "" }); slot = 2; }
+    if (slot == 0) {
+        // Behind a --packs, never in front of it: the arguments are read in order, so a preset
+        // inserted at the very front is looked up before the packs are loaded and a batch reports
+        // every pack preset as unknown (it worked only because the callers also set AMBIENT_PACKS).
+        // Still before any --set, which the preset would otherwise undo.
+        size_t at = 1;
+        for (size_t i = 1; i + 1 < args.size(); ++i) if (args[i] == "--packs") { at = i + 2; break; }
+        args.insert(args.begin() + static_cast<std::ptrdiff_t>(at), { "--preset", "" });
+        slot = at + 1;
+    }
 
     int worst = 0;
     for (const std::string& name : names) {

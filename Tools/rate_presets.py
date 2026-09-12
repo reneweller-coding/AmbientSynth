@@ -97,7 +97,7 @@ def preset_names(with_packs):
             with open(os.path.join(packs, fn), encoding="utf-8", errors="replace") as f:
                 for line in f:
                     t = line.strip()
-                    if not t or t.startswith("#") or t.startswith("pack "):
+                    if not t or t.startswith("#") or t.startswith("pack ") or (t.startswith("format ") and "|" not in t):
                         continue
                     parts = t.split("|")
                     if len(parts) >= 2:

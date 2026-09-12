@@ -10,3 +10,13 @@ endif()
 if(WIN32)
     target_link_options(ambient_render PRIVATE "LINKER:/STACK:16777216")
 endif()
+
+# The conductor's hour, measured without audio: the rule book's section 11 as a tool.
+add_executable(ambient_brain_audit brain_audit.cpp)
+target_link_libraries(ambient_brain_audit PRIVATE AmbientCore)
+if(MSVC)
+    target_compile_options(ambient_brain_audit PRIVATE /W4 /permissive- /utf-8)
+endif()
+if(WIN32)
+    target_link_options(ambient_brain_audit PRIVATE "LINKER:/STACK:16777216")
+endif()

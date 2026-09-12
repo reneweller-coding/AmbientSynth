@@ -25,18 +25,38 @@ import zipfile
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 LIB = os.path.join(ROOT, "Library")
 FOLDERS = ("Textures", "FieldRecordings")
+# The rest of the library, added after the recordings were already up (12.09.2026): the wavetables
+# in their three shelves and the impulse responses, each table and each impulse with the .json
+# beside it that describes it, and the credits files. Planned as their OWN group, which is what
+# keeps the 51 archives already on the release byte for byte what they were -- filling the last of
+# them up would have meant uploading ninety-four gigabytes again to add five.
+#
+# Both are ours to pass on: the wavetables are generated, apart from AKWF and WaveEdit, which are
+# CC0; the impulses are generated apart from the Aula Carolina responses from the AIR database,
+# whose licence permits distribution with the notice that Impulses/CREDITS.txt carries. Nothing
+# from EchoThief is in the library -- that material was for developing the convolver and stays here.
+EXTRA_FOLDERS = ("Wavetables", "Impulses")
+KEEP = (".flac", ".wav", ".json", ".txt", ".md")
 REPO = "reneweller-coding/AmbientSynth"
 DEFAULT_STAGE = os.path.normpath(os.path.join(ROOT, "..", "AmbientSynth-Upload"))
 
 
-def plan(version, max_bytes):
-    files = []
-    for kind in FOLDERS:
-        folder = os.path.join(LIB, kind)
-        for name in sorted(os.listdir(folder)):
-            path = os.path.join(folder, name)
-            if os.path.isfile(path) and name.lower().endswith((".flac", ".wav")):
-                files.append([kind, name, os.path.getsize(path)])
+def _walk(kind, audio_only):
+    """Every file of a library folder, as [kind, relative path, bytes], deepest paths included."""
+    out = []
+    root = os.path.join(LIB, kind)
+    for base, dirs, names in os.walk(root):
+        dirs.sort()
+        for name in sorted(names):
+            if not name.lower().endswith((".flac", ".wav") if audio_only else KEEP):
+                continue
+            path = os.path.join(base, name)
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            out.append([kind, rel, os.path.getsize(path)])
+    return out
+
+
+def _pack(files, max_bytes):
     parts, current, size = [], [], 0
     for entry in files:
         # zip headers cost about 100 bytes plus twice the name per file; keep a margin for them
@@ -48,6 +68,20 @@ def plan(version, max_bytes):
         size += cost
     if current:
         parts.append(current)
+    return parts
+
+
+def plan(version, max_bytes, extras=True):
+    # The recordings keep their own packing, unchanged, or every archive after the first added file
+    # would have different contents and a different hash.
+    first = []
+    for kind in FOLDERS:
+        first += _walk(kind, audio_only=True)
+    second = []
+    if extras:
+        for kind in EXTRA_FOLDERS:
+            second += _walk(kind, audio_only=False)
+    parts = _pack(first, max_bytes) + _pack(second, max_bytes)
     return [{"name": f"AmbientSynth-library-{version}-part{i + 1}.zip", "files": p} for i, p in enumerate(parts)]
 
 
@@ -67,7 +101,8 @@ def ensure_release(tag, version, summary):
     if gh("release", "view", tag, "--json", "name", check=False).returncode == 0:
         return
     notes = (f"Sample library {version}: {summary}. Draft, not published: the preset packs that use it are "
-             "being rebuilt. Each archive unpacks into the AmbientSynth folder (Textures/, FieldRecordings/); "
+             "being rebuilt. Each archive unpacks into the AmbientSynth folder (Textures/, FieldRecordings/, "
+             "Wavetables/, Impulses/); "
              f"AmbientSynth-library-{version}-manifest.json lists every part with its SHA-256 and files.")
     gh("release", "create", tag, "--draft", "--title", f"AmbientSynth sample library {version}", "--notes", notes)
 
@@ -100,10 +135,13 @@ def main():
     ap.add_argument("--max-part-mb", type=int, default=1800)
     ap.add_argument("--stage", default=DEFAULT_STAGE)
     ap.add_argument("--plan-only", action="store_true")
+    ap.add_argument("--no-extras", action="store_true",
+                    help="only the recordings, the way the first upload ran (Wavetables and Impulses left out)")
     a = ap.parse_args()
 
-    parts = plan(a.version, a.max_part_mb * 1024 * 1024)
-    counts = {k: sum(1 for p in parts for f in p["files"] if f[0] == k) for k in FOLDERS}
+    parts = plan(a.version, a.max_part_mb * 1024 * 1024, extras=not a.no_extras)
+    kinds = FOLDERS if a.no_extras else FOLDERS + EXTRA_FOLDERS
+    counts = {k: sum(1 for p in parts for f in p["files"] if f[0] == k) for k in kinds}
     total = sum(f[2] for p in parts for f in p["files"])
     summary = ", ".join(f"{n} {k}" for k, n in counts.items()) + f", {total / 1e9:.1f} GB in {len(parts)} archives"
     print(summary)
@@ -118,8 +156,17 @@ def main():
     if os.path.exists(state_path):
         with open(state_path, encoding="utf-8") as f:
             state = json.load(f)
-        if [p["files"] for p in state["parts"]] != [p["files"] for p in parts]:
+        # A run may ADD archives -- the wavetables and the impulses went up after the recordings --
+        # but it may never change one that is already on the release, because the manifest a
+        # downloaded installer carries names it by its hash. So the old plan has to be a prefix of
+        # the new one: same archives, same files, in the same order, with more after them.
+        old = [p["files"] for p in state["parts"]]
+        now = [p["files"] for p in parts]
+        if old != now[:len(old)]:
             sys.exit(f"the library changed since the upload began ({state_path}); not mixing two states")
+        if len(now) > len(old):
+            print(f"{len(now) - len(old)} archives to add to the {len(old)} already on the release")
+            state["parts"] = parts
     else:
         state = {"tag": a.tag, "version": a.version, "parts": parts, "done": {}}
 
@@ -148,7 +195,7 @@ def main():
         print(f"[{i}/{len(state['parts'])}] {name}: {size / 2**30:.2f} GiB, built {t1 - t0:.0f} s, "
               f"uploaded {t2 - t1:.0f} s ({size * 8 / 1e6 / max(t2 - t1, 1e-3):.0f} Mbit/s)", flush=True)
 
-    manifest = {"version": a.version, "kind": "library", "folders": list(FOLDERS),
+    manifest = {"version": a.version, "kind": "library", "folders": list(kinds),
                 "parts": [{"name": p["name"], "bytes": state["done"][p["name"]]["bytes"],
                            "sha256": state["done"][p["name"]]["sha256"],
                            "files": [f"{k}/{n}" for k, n, _ in p["files"]]} for p in state["parts"]]}

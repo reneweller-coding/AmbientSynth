@@ -90,7 +90,7 @@ def packs():
         with open(os.path.join(PACKS, fn), encoding="utf-8", errors="replace") as f:
             for line in f:
                 t = line.strip()
-                if not t or t.startswith("#") or t.startswith("pack "):
+                if not t or t.startswith("#") or t.startswith("pack ") or (t.startswith("format ") and "|" not in t):
                     continue
                 p = t.split("|")
                 if len(p) >= 2:

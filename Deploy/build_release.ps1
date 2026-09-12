@@ -210,15 +210,15 @@ $manualWork = Join-Path $root "Deploy\manual-work"
 if (-not $SkipManual) {
     if (Test-Path $manualWork) { Remove-Item $manualWork -Recurse -Force }
     New-Item -ItemType Directory -Force $manualWork | Out-Null
-    $env:AMBIENT_PRESET = "Three Voices, One Key"
+    $env:AMBIENT_PRESET = "Recall Grains"
     $env:AMBIENT_MANUAL = $manualWork
     # A clip for the manual's gallery of source types: the Texture and Stretch pictures show it
     # loaded and playing. Any seamless field recording will do; the first one alphabetically is
     # the same one every time.
-    $clip = Get-ChildItem (Join-Path $root "Library\Textures") -Filter "field_recordings_*_loop.wav" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
+    $clip = Get-ChildItem (Join-Path $root "Library\FieldRecordings") -Filter "*_loop.flac" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
     if ($clip) { $env:AMBIENT_MANUAL_CLIP = $clip.FullName }
     # And the library: the browser and the map are photographed too, and without the packs they
-    # show the 196 built-in presets of an instrument that ships with 6400.
+    # show the 256 built-in presets of an instrument that ships with 14592.
     $env:AMBIENT_PACKS = Join-Path $root "Library\Packs"
     $mp = Start-Process $exe -PassThru
     if (-not $mp.WaitForExit(90000)) { $mp.Kill() ; throw "the manual export did not finish" }

@@ -234,6 +234,10 @@ public:
     }
     struct GrainInfo { float pos = 0.0f, age = 0.0f, gain = 0.0f, pan = 0.0f; };   // clip position 0..1, age 0..1, level, pan -1..1
     int displayGrains(GrainInfo* out, int maxCount, int clipLen) const;
+    // Where the table is actually being read, Pos Drift included: the knob plus the slot's own
+    // slow wander, which is what the ear hears moving and what no display could show as long as
+    // it only knew the knob. -1 until this slot has rendered a table.
+    float displayPosition() const { return dispPos_; }
 
 private:
     void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt, float* outR = nullptr);
@@ -338,6 +342,7 @@ private:
     StretchState st_;
     Drifter noiseDrift_;
     Drifter posDrift_, idxDrift_, pitchDrift_;
+    float   dispPos_ = -1.0f;    // the position last read, for the picture (see displayPosition)
     Rng    rng_;
     double sr_ = 48000.0;
     float  gL_ = 0.0f, gR_ = 0.0f;

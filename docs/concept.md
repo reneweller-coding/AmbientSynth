@@ -1877,6 +1877,377 @@ a single strand's L/R correlation drops from ~0.96 to below 0.7 at unchanged
 energy (+0.06 dB). Found on the way: Time Width at its default gives even a
 centred single strand an interaural delay (render tool: width 0.88 vs 0.04).
 
+## The voicing rules (12.09.2026)
+
+Rene's *Regelwerk für einen selbstspielenden Noten- und Akkordgenerator*, built
+as 31 parameters and three modulation sources, every one of them appended to
+the table and neutral at its default, so a preset saved before them plays
+exactly as it did. The document's own numbering is kept in the help texts.
+
+*Register as a role* (`brain_layers`, `brain_bass_hold`, `brain_top_soft`,
+`brain_low_spacing`, `brain_third_floor`, `brain_leading`). A conductor drawing
+from one weighted list treats the bottom of its register like the top, and the
+ear does not: the critical band is a fixed fraction of the frequency, so a
+third is a chord at C4 and mud at C2. Layers turns the draw into a pyramid --
+one voice in the foundation, most in the body, few above, at most two to an
+octave and one below MIDI 36. Low Spacing is a **veto at 1**, not a penalty:
+built as `w *= 1 - 0.95x` it still let five per cent through, which measured as
+one basspair in ten closer than a fourth. Now zero of 567.
+
+*Interval colour* (`brain_thirds`, `brain_seconds`, `brain_seventh`,
+`brain_degree_swap`), judged against every sounding note rather than against
+the root alone -- a tone that is a fifth to the bass and a second to a middle
+voice *is* a second. Degree Swap exchanges one degree of the supply at a root
+change, so the mode wanders instead of being switched.
+
+*Time* (`brain_rate_breath` + `brain_breath_period`, `brain_overlap`,
+`brain_onset_guard`, `brain_release_gap`, `brain_retrigger`,
+`brain_density_slew`, `brain_silence` + `brain_silence_len`). The mean gap
+breathes on two sines whose periods stand in the golden ratio, so the tide
+never repeats and never becomes a pulse; measured over eight minutes the mean
+gap moves 7.9 s -> 3.3 s where a plain clock moves 5.8 -> 4.8. The Onset Guard
+is Rasch's and Bregman's thirty milliseconds: an event falling between 30 ms
+and 3 s is postponed to the far side, never dropped, and the entrance after a
+preset change is exempt or a cluster walking in at a third of a second would
+never assemble. Density is walked one voice at a time (3 voices, not 8, half a
+minute after 1 -> 8 with a two-minute slew). A planned silence is allowed only
+at a root change, and the voices are released *staggered* -- all of them ending
+together is the one ending this music must not have.
+
+*Root and long form* (`brain_root_steps`, `brain_root_down`, `brain_pivot`,
+`brain_home` + `brain_home_time`, `brain_memory`). The ascending semitone is
+excluded outright by every step set but Any: 0 of 202 root moves climb one.
+Pivot announces a change rather than declaring it -- a tone belonging to both
+roots begins, the root follows at the middle of the window, the old root's
+voice is released at its end. Memory forbids a *constellation* within its
+minutes while single pitches may return as often as they like, which is Deja
+Vu's business; a repeated chord is where a listener starts to hear a loop.
+
+*Outside the conductor*: `brain2_golden` stretches the background layer's clock
+by the one ratio with no good rational approximation; `tuning_hold_sounding`
+keeps a sounding voice's frequency when the root moves, so the harmony changes
+by what enters rather than by everything sliding; `beat_ceiling` bounds the
+beat the strands make (`f (2^(c/1200) - 1)`, halved under 150 Hz) and
+`strand_low_detune` thins the detuning towards the bottom, where a beat that is
+warmth at 300 Hz is a wobble at 100; `env_vel_attack` reads velocity as an
+attack time; `layer_depth` takes a note's plane from its role instead of the
+dice. Three sources join the matrix: `root_age`, `layer` and `section` (the
+Arc as five steps). The table asks for `layer` per voice, and that is not what
+it is: the matrix is computed once a block for the whole instrument, so the
+source carries the role of the loudest sounding voice, and a route from it
+moves every voice together. Per-voice evaluation would be a different matrix.
+
+Three traps, all found by measuring rather than by reading. **The parameter
+table is indexed by position** (`paramTable()[int(id)]`) and nothing checked
+that row *i* describes parameter *i* -- one row in the wrong place silently
+turns the wrong knob for every parameter after it; now a selftest, and the same
+for the modulation sources' names, which carry the text form of every route.
+**Note-offs are emitted at five places** in the conductor, and a guard that
+stamps only the main loop measures Retrigger and Release Gap wrong.
+**`brain2_interval` was drawn as an amount**, 0.1 to 0.7, though the parameter
+is semitones: the background conductor stood ten to seventy cents beside the
+foreground's root -- a mistuned unison instead of a degree of its own, which is
+the one thing it was there to be.
+
+`Tools/library/conductor_ranges.json` (seven families, 56 artists, each
+artist's ranges resolved against its family) now decides **what is played**,
+while the style still decides **how it sounds**; `Tools/library/conductor.py`
+draws from it and half of every pack gets the document's "astir" variant --
+except where the artist's row pins a value, because "nothing wanders" is the
+whole of Paul Bradley. Applying it once was not enough: the style pipeline
+writes twenty-six of the same keys further down, so it is applied again, last,
+minus the four the material is allowed to take back (`brain_low`, `brain_high`,
+`scale`, `brain_on`). Checked over the generated library: 92 pinned values
+kept, and 745490 drawn values all inside their artist's range.
+
+## Every control, asked (12.09.2026)
+
+Two sweeps in one day, one by machine and one by eye, after a preset was found
+whose Stretch and Cloud could be turned to the stop without being heard.
+
+*The machine sweep* (`Tools/library/module_sweep.py`). Every parameter set to
+each end of its range in a context where it should be audible, rendered twice,
+and the two renders compared by the hash the render tool prints: identical
+bytes mean the control did nothing. 1772 questions, and the harness is most of
+the work -- a source needs a clip, a conductor needs forty seconds and no held
+note, a modulator needs a route and a target, a macro needs somewhere to point,
+`brain_surprise` is multiplied by `brain_homeostat` and reads as dead when that
+is zero. Three passes of fixing the harness took 250 "dead" controls to 155 to
+59, and every one of those 59 was then reproduced by hand. Fifty-eight were the
+harness or the physics -- `brain2_interval` at ±12 is an octave and consonance
+is octave-invariant; a held note pins the root, so `brain_wander` cannot move
+it; three routes at one target saturate past the filter's floor. One was real:
+
+- **`lfoN_mode` was set by 9644 presets and read by nothing.** `Lfo::step` uses
+  rate, phase, depth and table; the mode never reached it. Retrigger is built
+  now -- the phase returns to the Phase knob when a note begins in silence,
+  which is a phrase rather than every note of a cluster. Per Voice cannot be
+  built honestly: the matrix is computed once a block for the whole instrument,
+  not per voice, so there is no copy to hand out. The name stays so old presets
+  load, and the help text says plainly that it behaves as Global and where
+  per-voice movement actually comes from (strand drift, shimmer, rate wander).
+
+Three more came out of the same week's listening and are measured, not argued:
+`far_freeze=on` rendered bit-identical to `far_level=0` (930 presets had it, the
+generator no longer writes it); the Cloud at its stop moved the sum by 0.6 dB
+because its level was clamped at 2 and the parameter stopped at 1 (ceiling
+raised, `cloud_to_near` added so it can be heard on the near plane at all); and
+the balance measured a flat forty seconds while an eighth of the library has a
+longer attack than that, which was 4.0 dB of error on the six presets it was
+measured on (`--skip`, and the warm-up is now part of the fingerprint so
+changing the rule re-measures exactly the presets whose warm-up moved).
+
+*The reading* went through the source for algorithms that do something other
+than what their name promises. Six were real, and all six are fixed:
+
+- **The bowed string played sharp, unevenly.** Its two halves were whole
+  numbers of samples, and `a + (len/2 - a)` is `floor(period/2)` whatever the
+  bow position: the period was rounded to an EVEN number of samples. A3 sits on
+  218 and was fine; C5 was +28 cents and C6 +63, which breaks intervals and not
+  merely pitch. The bridge filter's own delay, `(1-g)/g` samples, was in the
+  loop and never subtracted, so the pitch also moved with Bright -- 17 cents
+  across the knob. Both halves are fractions now, read between two taps, and
+  the filter's share is subtracted. Measured against the note the instrument
+  itself asked for: +0.2, +0.8, +0.5 cents at A3, C5, C6, and 1.4 cents across
+  Bright. 492 presets play a bowed slot, half of them above C5.
+- **Partial Spread deleted partials off the centre.** The spread hands each
+  partial a pair of weights -- an angle in the field -- and the pair was then
+  multiplied by the strand's two pan gains, one side each. That is not a pan:
+  a partial leaning away from it is attenuated by how far it leans, eleven
+  decibels at the outer strand of a six-strand fan, and since the pattern turns
+  once every fifty seconds they come and go. The two angles are composed now
+  (which needs no trigonometry of its own -- the pair's sum and difference are
+  the cosine and sine of the composition), stopped AT the ear rather than
+  wrapped past it into an inverted partial, so every partial keeps its power
+  wherever the pan puts it. Measured, one partial panned hard, over a quarter
+  turn of the pattern: 0.03 dB of level swing. 2343 presets spread partials.
+  The old test missed it for a good reason: it placed its one strand in the
+  middle, and in the middle the two ways of combining agree exactly.
+- **A slot's unison copies were placed the same way, and thinned the same way.**
+  Reading the one above made the question worth asking of every stereo pair in
+  the instrument, and the Harmonic and Wavetable types spread their copies
+  across the field exactly as the bank spreads its partials -- with the same
+  multiplication afterwards, against the code's own comment that "Pan then
+  moves the whole group". A copy standing where the pan came from was
+  attenuated by how far it stood there and, at the end of the knob, deleted:
+  2048 slots in the library have a spread group and an off-centre pan, 526 of
+  them near the stop. The Pan is composed into each copy's place now, in the
+  same pan units and with the same clamp a voice uses for its strand fan, so a
+  group panned hard is squeezed against that ear rather than halved. The test
+  is the beating: two copies detuned twenty-five cents, spread to the ends,
+  slot panned hard -- 5.4 dB of it, where a deleted copy leaves nothing to beat
+  against. (The remaining pairs are fine by construction: a texture's grains
+  and a noise slot's two channels carry the slot's Pan in their own place, and
+  every other source type is mono until the slot places it.)
+- **A struck string was cut off by the amplitude envelope.** The block loop ran
+  `while (env.isActive())`, and the strike has its own physics and its own
+  decay of up to 4.5 s; a short release, or a sustain of nought with a short
+  decay, ended the loop mid-swing. The engine renders a voice while either is
+  still going now. No preset in the library can reach it -- the shortest
+  release is 6.0 s and sustain never falls below 0.7 -- but a hand-built
+  staccato patch reaches it in one note.
+- **A texture slot could fall silent for good.** A grain longer than the clip
+  can give is shortened to fit, and what is left for Position to choose from is
+  then very nearly nothing -- and exactly nothing when `(len-2)/rate` lands on
+  a whole number, which it does at every power-of-two rate, so at every Free
+  slot standing at its own speed. `span <= 0` then spawned no grain at all,
+  forever, rather than the one grain the clip can hold. No library preset
+  reaches it (the shortest clip is 13.5 s against a 1 s grain), a user with a
+  short sample reaches it at once.
+- **The body's modes jumped around the stereo field.** `Body::set` rebuilds
+  whenever any of its five arguments moves, and it drew each mode's place from
+  the random generator while it was there. Tone, Decay and the root all move,
+  so an LFO on Tone re-drew all twelve places a hundred times a second. Drawn
+  once now, in `prepare`. No pack preset uses the body; the GUI reaches it.
+
+Two of the reported findings were **not** defects, and the arithmetic says so.
+The frequency shifter lets its phase run to 10^6 before resetting it to zero,
+which looks like a click every few hours; but the right ear runs at 0.97 of it
+and 0.97·10^6 is a whole number too, so both ears cross with a discontinuity
+smaller than a single sample's advance. And the Harmonic type is not a
+time-domain wavetable player and does not claim to be: it reads a file's
+*spectra* into a bank of 32 partials, which is what its name, the help text for
+`srcN_table` and the manual's "wavetable as spectra" all say. Waveforms are the
+`Wavetable` type, through `CycleTable`, added for exactly that distinction.
+
+*A second reading, of the conductor against the rule book.* Eight findings;
+five real, one of them larger than reported, two not defects, one a design
+choice worth stating. Every fix below is measured in `testVoicingRules`.
+
+- **The rules lived in one of the two draws.** Free mode weighs every
+  candidate by the register roles, the spacing floor, the third floor, the
+  leading note and the interval colours; `chooseNote()`, which scores the
+  exchanges of Chords mode and the extra notes of a Blend, had none of them.
+  No preset uses Chords mode, but 14335 have Blend above nought -- at a median
+  of 0.03 it adds nothing, at the top decile it adds a note to every fill --
+  and those notes arrived without any rule at all. The rules are one function
+  now (`ruleWeight`), both draws consult it, and `chooseNote()` also honours
+  Retrigger and Memory. Measured with Blend at one, so every note after the
+  first takes that path: 0 close thirds on a bass note under the floor in
+  10068 pairs, against 728 of 13208 with the floor off.
+- **The third floor was one-sided and soft.** It fired when the *candidate*
+  stood under the floor, so a C3 over a sounding A2 -- a minor third whose
+  bass note stood under it -- passed; and it left two per cent, where a floor
+  is a veto. It also counted pitch classes, so a tenth, the open voicing that
+  avoids the mud, was forbidden along with the third. Now: the lower note of
+  the pair, the close interval only, and nought. 0 of 10213 pairs in Free mode.
+- **Blend widened past thirty milliseconds.** The window grew to fifty as Blend
+  came down, and thirty to three thousand milliseconds is exactly what R5.3
+  forbids; the Onset Guard cannot see it, those notes are timed after it runs.
+  Twenty-nine milliseconds now, whatever Blend says. At five-millisecond ticks:
+  139 onsets fused, 0 in the forbidden zone.
+- **Two changeovers in three went unannounced.** The pivot tone had to be a
+  root, fourth or fifth of both roots, and that exists only when the roots
+  stand a second, a fourth or a fifth apart -- four of the six steps the root
+  takes are thirds and sixths. A second tier admits the imperfect consonances,
+  and the tone has to pass `ruleWeight` like any other. 291 of 291 root moves
+  announced over half an hour, where the old set could manage two kinds in six.
+  (The report's other two pivot claims do not hold: the tone *is* emitted, by
+  `startIn`, and the old root *is* released by name -- the code keeps
+  `pivotOld_` for exactly that, and the quoted `root_ % 12` is not in the file.)
+- **Chords mode exchanged voices on one tick.** Note-off and note-on of an
+  exchange fell together; Overlap (R5.4) lived in Free mode only. An exchanged
+  voice now waits out Overlap in a holding list, still counted as sounding, and
+  goes through the release gap like any other. 190 note-offs, every one ten
+  seconds after the note-on that replaced it; the chord is one voice larger
+  while it waits.
+- **The ascending semitone was gated.** The veto stood inside `if (rootSteps
+  != Any)`, so Any still climbed -- in a narrow register whose better
+  candidates are out of range, 192 moves and it would. Anti 8 is unconditional
+  and so is the veto now; no library preset uses Any (Fifths 7685, Diatonic
+  4523, Falling 2128), so nothing in the library changes for it.
+- **`layer` is not per voice**, as noted above, and the help text now says so.
+- **`brain2_interval` stays in semitones.** The table asks for a choice of
+  Root, Fifth, Fourth, Octave and Seventh; the parameter is -24..24 semitones,
+  which contains all five and is what fourteen thousand presets already store
+  (an enum would read their 7 as an index). The generator draws only the
+  table's degrees.
+
+*And one the reviews did not raise*, found while checking whether the
+conductor's changes moved the balance: **the balance did not converge, and
+could not tell.** A sample of 48 presets balanced a second time cut the bed of
+15 of them by exactly the 4 dB a run may cut, and a third time cut them again.
+"Bog Winter" explains it: its bed is the Foundation, already at its floor of
+0.25; breath at its floor moved the bed by 0.00 dB; the voice -- three clip
+sources -- stood at level 1.0 and 7.9 dB under the bed. Each run cut breath by
+four decibels, changed nothing, and re-stamped the line as balanced. The tool
+now renders the bed a third time, with every movable key at its floor, only
+where a cut is due; what that render still contains is what the balance cannot
+reach, and a preset the voice cannot be brought up to is written down as *am
+Anschlag* rather than counted. Over the sample: 34 in balance, 0 with a cut
+left to make, **9 at the limit, a median 6 dB under the target** -- one preset
+in five, every one a clip-voiced or wavetable preset whose whole bed is the
+sub at its floor. That is the generator's to answer (a quieter foundation
+under a clip voice, or more level for the clip), not the balance's.
+(`rebalance_voice.py` also ran `main()` at import, which a helper script found
+out by starting a full balance of the library; guarded, with two siblings.)
+
+## The rule book, measured (12.09.2026)
+
+Reading the conductor against the rule book found where the rules were not
+applied; it could not say whether what comes out of it *obeys* them. The rule
+book says how to find out (its section 11): generate an hour and measure it.
+So `Tools/render/brain_audit.cpp` steps the engine's own conductors for an hour
+with the parameters exactly as a render reads them -- no audio, a minute of
+wall clock -- and `Tools/library/brain_audit.py` turns the events into the
+table of section 11, the fifteen anti-rules and the roles of table 2.
+`--rulebook` sets section 14's parameters to the values the document names;
+`--seeds 8` runs eight hours, because one hour is one throw of the dice;
+`--sweep 200` asks the same of every two-hundredth preset in the library.
+
+The first hour kept 19 of 30 checks. What the other eleven were:
+
+| Broken | Why | Now |
+|---|---|---|
+| 115 s of silence, 16 changes landing on nothing | the LAST voice went when its hold ran out, Overlap or no | it stays until its replacement is in (G3) |
+| 8 close pairs in the bass, 9 low tritones, 195 s with three notes in an octave | the spacing rules judged the CANDIDATE's register, not the pair's lower note; R2.2 was a 10 % penalty; R3.2 had no rule at all | all three on the lower note, all three vetoes |
+| a leading note under a sounding root | the rule fired only when the root already sounded | at 1 the leading note is out either way; the pivot tone is the rule's own exception |
+| a pitch back inside its 30 s rest | Deja Vu offered a past note and no rule was asked of the offer | the ring's offer passes the same tests as a draw |
+| 51 chord changes under 20 s | the exponential clock draws short gaps, and nothing stopped them | a floor of 20 s (or half the rate), as a guard and as a shifted draw -- clipping it made a pulse AT the floor |
+| a four-note chord landing on an empty room | Blend filled a chord that was not there yet | the entrance is one voice (R2.3); Blend fills what joins a chord already sounding |
+| 10 constellations back inside ten minutes | the memory held 48 entries for an hour's 100-200, stamped them at birth rather than at their end, counted a doubling as a new chord, and never saw the voice sounding out its overlap | 256 entries, stamped whenever one ends, doublings excepted, the leaving voice counted |
+| the hour ending a step away from home | Home pulled the root CLOSER but the target interval still decided; and once home, it left again | ripe, home outranks the interval and holds |
+| 16 root changes an hour, or none at all | the root moved even when the draw found no note; Home, Key and Root Down together could put every candidate above the threshold | the root moves only when a note is actually chosen, not inside four minutes (R6.1), and past twelve whatever it scores |
+| Chords: note-offs on the tick of the note-on, 10-13 voices, a pulse at the rate | Overlap lived in Free mode; nothing shed the pivot tone's slot; the clock was a fixed interval | the overlap list, a shedding exchange, and Free mode's own clock |
+| Chords: thirds and seconds under a voice that was still sounding | the voice being exchanged was taken out of its slot for the vote and the rules stopped hearing it | it is out of the vote and still in the rules |
+
+Four more came out of measuring what was left, and each of them was a rule that
+was implemented and still not kept:
+
+- **A constellation that ends by an ARRIVAL was never stamped at its end.** The
+  memory recorded a set when it was created and again when a voice left it, but
+  a set that stops because a note joins it was remembered only from its birth:
+  a chord sounding until minute 48 was on record as of minute 42 and came back
+  at 57, nine minutes after it was last heard. Every path that changes the
+  sounding set now stamps the set it is ending. 10 returns an hour at the start
+  of the day, 1 in three hours of eight now.
+- **The way home was undone by R6.1's own release.** Past twelve minutes the
+  best root goes through whatever it scores -- which, once the music had come
+  home late in the hour, let it wander off again: one hour in eight ended a step
+  away, having been home at minute 33. The release does not apply at home when
+  the night is ripe. Eight hours of eight end at home now, in both modes.
+- **The major seventh was a tenth of everything played**, where section 4.2's
+  table has no line for it at all. It is harmonicity that puts it there -- the
+  fifteenth harmonic is a major seventh -- so this is two of the document's own
+  instructions disagreeing rather than a fault; but Seconds is the knob for the
+  minor second, and a major seventh is a minor second turned upside down, so it
+  avoids that too now (and the major second at a third of the amount, which is
+  the proportion the table has between them). 0.10 to 0.03.
+- **A root change could make a sounding note into its own leading note**, which
+  breaks Anti 6 the moment it arrives and cannot be repaired afterwards, since
+  R4.7 forbids retuning what already sounds. The root is now chosen with that
+  in mind, which is the only place where there is still a choice.
+
+Eight hours in each mode, measured on the finished conductor: **207 of 216
+checks kept in Free, 209 of 216 in Chords.** What is left is stated rather than
+claimed, and no rule is broken in every hour:
+
+- the **interval histogram** sits at a total variation of 0.20 (Free) and 0.14
+  (Chords) against section 4.2's weights where the rule asks for under 0.2, and
+  four hours of eight in Free are a little over. What is heavy is the major
+  third and the minor sixth -- 5:4 and 8:5, the intervals `brain_harmonic` is
+  built to find. Section 9 asks for Harmonic high and section 4.2 weights those
+  two at 0.08 and 0.05: the two cannot both be had, and this is where the
+  instrument sits between them.
+- **one pitch class over a quarter of the sounding time** in one hour of eight,
+  and **two root changes** in one or two hours of eight where section 11 wants
+  three. Both are the way home holding the root still through the last third of
+  the hour, which is R6.4 doing exactly what it says.
+- **one constellation returns** inside its ten minutes in two or three hours of
+  eight, always a three-note set in a register the vetoes have made narrow.
+
+The library's own presets are a different matter again: they are drawn from the
+artist ranges, and a Paul Bradley whose root never moves is not breaking R6.1,
+he is P5. The sweep is there to be read that way.
+
+## The foreground (12.09.2026, late)
+
+A third reading of the day asked not what was broken but why a soundscape can
+come out flat, and answered it well: depth is contrast, a dry near reference
+against a dark far plane, and the instrument has every tool for it. What it
+could not know was whether the *library* uses them, so that was counted:
+
+| Cue | The reading asks | The library had |
+|---|---|---|
+| `far_unmask` | 0.3–0.5 | nought in all 14336 presets -- the generator never wrote the key |
+| `presence` | 2.5–4.5 dB | nought in 79 %; written with a 6–22 % chance |
+| `far_highcut` | 1.8–2.5 kHz | median 3.6 kHz, half the library's tail inside the presence bell's band |
+| `layer_depth`, `near_mix`, `bass_mono`, the scales | -- | already where it wants them |
+
+The two empty rows are the same defect the balance had measured that afternoon
+from the other side: one preset in five with its voice under a bed that is the
+sub at its floor, and the tool for exactly that -- the background stepping
+aside under the voice, band by band -- lying unused. `conductor.depth_cues()`
+now writes all three, by family (the dark and the cold profiles want nothing
+near; P1, P6 and P7 want it most), from a stream seeded by the preset's name so
+nothing else in a preset moves, and `add_depth_cues.py` wrote the same values
+into the existing packs, to the byte a regeneration would give. Two of the
+reading's numbers were refused: `pad_low_cut` at 120–180 Hz would take the
+fundamental from the whole body register (the concept's own measurement: a
+300 Hz cut costs a C3 80 % of it), and "purity 0.98, beat-free" contradicts
+P1, whose Rich wants the beats -- the generator's 0.76 with drift is the rule
+book's side, not the reading's.
+
 ## Presets
 
 `Core/src/Presets.cpp`: a preset is a name and a `key=value;…` string over the
@@ -1911,13 +2282,125 @@ they exist. Each pack becomes one family after the built-in ones.
 preset's own sample and wavetable when it applies it, through
 `presetFilePath(index, 0|1)`.
 
-`Library/` holds a generated library of 8400 presets in 42 packs, with 6355
-clips (3030 tonal in Textures, 3325 environments in FieldRecordings), 2096
-wavetables and 546 impulse responses (see
+`Library/` holds a generated library of 14336 presets in 56 packs, with 8686
+clips (5748 tonal in Textures, 2938 environments in FieldRecordings), 2191
+wavetables on three shelves and 1100 impulse responses (see
 `Library/README.md` and `Tools/library/`). Its descriptors and map positions
-are measured, not estimated: `Tools/library/measure_packs.py` renders all six
-thousand and writes the result back into the pack files, and corrects each
-preset's master gain to the loudness it actually came out at.
+are measured, not estimated: `Tools/library/measure_packs.py` renders every one
+of them for a minute and writes the result back into the pack files, and
+corrects each preset's master gain to the loudness it actually came out at. The
+256 compiled-in presets are generated from the same styles and go through the
+same mill, as packs in a staging folder, before they are compiled in
+(`Tools/library/write_builtins.py`).
+
+**The library rebuilt from what the material knows (2.0).** The clips were
+generated from prompt lists, and every line of those lists says more than a file
+name can: the clip's category, its gesture, its harmony, its world, the source
+types it was written for -- and the artists it was written for. Until 2.0 the
+generator matched clips to styles by ear-tuned affinity over file names; now
+`Tools/library/clip_catalog.py` joins the prompt lists, the wavetable and impulse
+sidecars and the measurements in `Library/tonality.json` into one table, and
+`Tools/library/artists.py` names, for each of 56 artists, the clips it owns, the
+neighbours it borrows from at a weight, and the categories, worlds and gestures
+that lean the draw. A style with no clips of its own is seeded by its categories.
+Health is part of the join: a clip with an offset above five per cent of its
+level, a hole longer than 1.5 s, or -- for a loop -- a jump at the seam above
+6 dB never reaches a preset (358 of 8686 are kept out that way).
+
+Four rules follow the material rather than the style. The three types that read a
+clip take only clips written for them. A table plays as the type its shelf says
+(Harmonic, classic Wavetable, or either for the ambient shelf), a table without a
+fundamental never carries the first slot, a sung vowel keeps the conductor inside
+the range it was sung in, and a table measured from a recording gets a floor
+under its fundamental. The key follows the voice's clip: its note becomes the
+root, its mode picks the scale where the style has that scale (F# Dorian is E
+major's notes, so it plays as JI Major on E), and a clip that follows the note is
+played at the octave nearest the one it was recorded in -- a transposition of two
+octaves is an artefact, not a performance. And a designed room's partner is its
+Room Morph B, so the morph never dips.
+
+Three traps on the way, all silent by nature. `measure_packs.py` read the pack's
+own `format 2` line as a preset and would have written it back as
+`format 2||||||||` -- and the loader only counts a format line without a `|`, so
+every pack would have fallen back to format 1 and read its Harmonic sources as
+classic wavetables. The renderer's batch mode inserted `--preset` at the
+front of the command line, ahead of `--packs`: the arguments are read in order,
+so every pack preset came back as unknown. It had never shown because the callers
+also set `AMBIENT_PACKS`; the insert now goes behind `--packs`.
+
+And the third was not in the library at all. A crossfade hands the leaving
+conductor's cluster to the arriving one, and the plugin read it into
+`int notes[ambient::kSlots]` -- four, the number of source slots -- while
+`ClusterBrain::soundingNotes` writes up to `ClusterBrain::kSlots`, which is
+twelve. Two constants of the same name, one scope apart. A conductor holding
+more than four notes therefore wrote eight ints and eight floats past the end of
+two stack arrays, and `/GS` answered with `__report_gsfailure` and `int 29h`:
+the process dies on the spot, so no crash handler runs, Windows writes no dump
+and no event-log entry, and the exit looks clean from outside. That is exactly
+the vanishing act the crash log in `PluginProcessor.cpp` had been written for an
+earlier round, and the log could never catch it. It needs a preset whose
+conductor is holding a full chord, which is why the transition test -- which
+changes preset a fifth of a second after the first one, when the conductor holds
+one note -- had never seen it in hundreds of runs. The host test now waits for
+five voices before it changes.
+
+**Where the noise was (2.0).** The first library was heard as "nearly all
+presets sound extremely noisy", and the way to an answer was not to listen harder
+but to feed the instrument something that cannot be noisy: a pure sine, as a
+single-cycle wavetable and as a clip, through every source type with every other
+block switched off. All six types came back transparent -- Additive, Harmonic,
+the classic Wavetable, Texture's grains, Stretch's Paulstretch and Spectral's
+resynthesis all measured a spectral flatness of 0.000001 to 0.000004 against
+white noise's 1.0. Then the blocks were switched back on one at a time:
+
+    Air 0.2                                          0.0149
+    Air 0.4                                          0.0257
+    a Noise slot at 0.2                              0.0055
+    Spectral with Breath +0.8                        0.0027
+    Patina 0.5 with Hiss 0.5                         0.0019
+    Patina 0.5                                       0.0008
+    the Foundation at 0.35, Feedback with Tape       0.00003
+    everything else                                  0.000007 or below
+
+"Everything else" is the far reverb, the near reverb, the Cloud with scatter,
+swarm, resonators and feedback, all four Cosmos characters, the Memory with blur,
+drive and age, both delays, every filter model, the wavefolder, the ensemble,
+coherence, blur, the Strike, the z-plane, shimmer, inharmonicity, purity drift,
+grains from 60 to 400 ms, a stretch factor of 300 and a frozen spectral read
+head. One knob accounted for the whole impression, and the library measured at
+0.012 -- exactly Air at its median of 0.2.
+
+The reason it was in every preset was not the styles but the ground they stand
+on: `styles.BASE` carried `air: (0.05, 0.3)`, so a style that never mentioned air
+still drew one, and `air`'s own default of 0.15 means a preset has to write a
+zero to be without it. Air is the exception now (73 % of presets at zero, the
+rest under a tenth unless the style is about air), Breath's hiss is capped at a
+fifth, and the spectral Breath leans tonal.
+
+**The conductor's judgement, put to use (2.0).** The instrument had grown a great
+deal of musical judgement that almost nothing used. The chord-level harmonicity
+(Harrison and Pearce 2020) was set in 8 % of the generated presets and in none of
+the 195 hand-written built-ins; the key profiles (Krumhansl and Kessler 1982) in
+23 %; the critical-band spacing (Glasberg and Moore 1990) in 23 % and never
+negative, although negative is the setting that *seeks* the crowding a cluster is
+made of; the second conductor, which is what makes the background plane a plane
+of its own, was rare. Measured on nine presets with the clock run fast so that
+the conductor actually decides, switching the chord harmonicity on halves the
+roughness of what it plays (median 0.0058 against 0.0026, better in five cases of
+nine, worse in two). So the weights are used now: harmonicity in 60 % of presets,
+spacing in 43 % with a fifth of the library seeking clusters rather than avoiding
+them, the key in 42 %, evenness and step size in 38 %, a second conductor in 33 %.
+
+Two of them changed in the core rather than in the generator. *Smooth* was the
+voice-leading distance of an exchange and did nothing at all in Free mode -- the
+mode nearly every preset uses -- although the same idea is what a line is made
+of; it now weights a candidate by how far it stands from the note chosen before
+it, so the conductor steps oftener than it leaps, and a leap stays possible. And
+the two conductors' clocks are no longer drawn independently: the background's
+period is a crooked multiple of the foreground's (2.3, 3.7, 5.3 or 7.1 times), so
+the state the two of them share comes round after hours instead of after a few
+minutes. Drawn on their own the two rates landed within a factor of two often
+enough that the planes were heard as one.
 
 **The impulse shelf, rebuilt (1.11.0).** The same question as the wavetables, asked about the
 Room, and the same answer: 240 impulses were eight families, and 238 of them were used, so the
@@ -2079,8 +2562,8 @@ existed to spread the library evenly, which is precisely what destroyed the info
 on a synthetic library of five blobs, the share of each preset's ten nearest neighbours that
 survive as one of its twenty nearest on the plane: rank grid 0.065, plain PCA 0.08, springs 0.16.
 
-*One map instead of two.* `Tools/preset_map.py` embedded the 191 built-ins and
-`Tools/library/measure_packs.py` the 6800 pack presets, each standardising its own descriptors,
+*One map instead of two.* `Tools/preset_map.py` embedded the built-ins and
+`Tools/library/measure_packs.py` the pack presets, each standardising its own descriptors,
 and the browser drew both on one square -- so a built-in and a pack preset at the same spot had
 nothing to do with each other. `Tools/library/map_all.py` now ranks and lays out the union and
 writes all three products: `Core/src/PresetMeta.cpp`, the packs' meta fields, and
@@ -2173,11 +2656,11 @@ parameter set (MapActive, MapX, MapY, MapRadius, never part of a preset),
 so MIDI, OSC, automation and the gesture layer can steer it; on the Quest
 the hand menu has MAP ON/OFF and the left hand's reach and height move the
 cursor. `ambient_render --map x y [radius]` renders any cursor position
-offline and prints the neighbours and weights. Measured: on Sleep
-Concert's point the blend reproduces its parameters to 0.1 %; half-way
-between two presets a float lies between their values; the engine glides
-to Distant Storm's far decay within the glide time and reports the value
-through `blendValue`.
+offline and prints the neighbours and weights. Measured: on a preset's own
+point the blend reproduces its parameters to 0.1 %; half-way between two
+presets a float lies between their values; the engine glides to the far
+decay of the preset under the cursor within the glide time and reports the
+value through `blendValue`.
 
 ## Route (the map plays itself)
 
@@ -2192,7 +2675,7 @@ are performance state like the map itself. The text form
 `Preset Name|travel|hold[|radius]` (or `x,y|travel|hold[|radius]`) names
 presets rather than coordinates, so routes survive a re-measurement of the
 map; twelve **route presets** (`Core/src/Route.cpp`) are 20–40 minute
-sets — Night Descent from Dawn Drift into Deep Sleep Sub, Glass to Storm,
+sets — Night Descent from Sleeping Drone into Bedrock Field, Glass to Storm,
 Cosmos Crossing, Ninety Minute Arc and so on. The plugin's map view has the
 route strip (route preset, play, loop, speed, *+ point* appends the cursor
 as a waypoint, *Route…* edits the text) and draws the route with numbered
@@ -2349,8 +2832,8 @@ arm64-v8a. Details in `docs/quest-plan.md`.
   folder of the installer's own rather than into Documents, so that removing
   them again can never take a pack the user put there themselves with it.
 
-* **The sample library** (`Tools/make_content_pack.py`). The 8400 presets in
-  the packs name 1584 samples, wavetables and impulse responses that are far
+* **The sample library** (`Tools/make_content_pack.py`). The 14336 presets in
+  the packs name 9983 samples, wavetables and impulse responses that are far
   too big for git -- so they are a downloaded package, and the setup fetches
   and unpacks it. Two things happen on the way in. Only what is referenced
   travels: the library folder holds more than the packs use, and shipping the

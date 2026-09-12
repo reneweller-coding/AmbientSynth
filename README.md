@@ -55,13 +55,14 @@ host if you want the plugin.
   Kuramoto oscillators, a Lenia field, the Lorenz and Rössler attractors on a scale of minutes,
   aftertouch, wheel and slide — all through one matrix onto any knob, including the modulators'
   own.
-* **8400 presets in 42 packs**, each written in the spirit of an artist of the genre, every one
-  rendered, measured and gain-matched; 6354 samples, 2096 wavetables and 546 impulse responses,
-  two thirds of the wavetables and half the impulses cut from the recordings rather than designed.
+* **14336 presets in 56 packs**, each written in the spirit of an artist of the genre, and 256
+  compiled into the instrument; every one rendered, measured and gain-matched. 8686 samples, 2191
+  wavetables and 1100 impulse responses, generated for this instrument: the clips carry the artist
+  they were written for, so a pack plays the material made for it.
 
 ![The preset map](docs/map.png)
 
-The map is a free cloud of all 8400 presets, dense where the library repeats itself and empty
+The map is a free cloud of all 14592 presets, dense where the library repeats itself and empty
 where it is thin, laid out from nine measured descriptors: dark is left, evolving is up, and the
 colours are groups named after what makes each one itself. Put the cursor between points and the
 instrument plays a blend of the presets around it, a sound nobody saved. Changing presets is a

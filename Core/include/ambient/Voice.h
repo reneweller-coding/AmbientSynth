@@ -33,6 +33,10 @@ struct VoiceParams {
     float shimmer = 0.4f, shimmerRate = 0.15f;
     int   unison = 3;
     float detune = 8.0f, drift = 4.0f, driftRate = 0.08f, spread = 0.7f;
+    // Two ceilings on the beating the strands make (R4.6). Both do nothing at zero.
+    float lowDetune = 0.0f;     // how much the detuning thins out towards the bottom of the range
+    float beatCeiling = 0.0f;   // Hz: the fastest beat a strand may make, halved under 150 Hz
+    float velAttack = 0.0f;     // velocity to attack time: + lets a quiet note enter slower
     float bloom = 0.0f, bloomTime = 60.0f;   // spectrum opens from brightness*(1-bloom) to brightness over bloomTime
     int   stack = 0;            // index into kStackRatios: strands at pure ratios (0 = classic detuned unison)
     float rateWander = 0.3f;    // drift/shimmer/breath rates wander by up to +-1 octave on a 100 s curve
@@ -126,11 +130,21 @@ public:
     // test counts them, and it is the only honest answer to "does it ever strike?".
     unsigned strikes() const { return strikes_; }
     bool isActive() const    { return env_.isActive(); }
+    // A struck string rings on its own physics, not on the amplitude envelope: a short release
+    // (or a sustain of nought and a short decay) used to end the block loop mid-swing and cut the
+    // strike to zero, which is a click. The engine renders a voice while EITHER is still going;
+    // the note itself is given back as soon as the envelope is done, so nothing waits for a tail.
+    bool isStriking() const  { return ksOn_; }
     bool isReleasing() const { return env_.isReleasing(); }
     float level() const      { return env_.level(); }
     int  note() const        { return note_; }
     int  owner() const       { return owner_; }
     float distance() const   { return distEff_; }   // where the voice is right now (breath included)
+    float layer() const      { return layer_; }     // the role it took, for the matrix source Layer
+    // R4.7: what the root moved under a voice that was already sounding, so it can go on sounding
+    // where it was. 1 for every note that began after the move.
+    float rootComp() const      { return rootComp_; }
+    void  setRootComp(float m)  { rootComp_ = m; }
     double frequency() const { return freq_; }
     // Retune a sounding voice (tuning purity/drift): glides in the log domain, ~1 s time constant.
     void setTargetFrequency(double hz) { freqTarget_ = hz; }
@@ -160,6 +174,7 @@ public:
     // The same for a slot's own bank (Additive / Wavetable in Source 1..3), and its grains.
     int displaySlotPartials(int slot, float* out, int maxCount) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayAmps(out, maxCount); }
     int displayGrains(int slot, SourceSlot::GrainInfo* out, int maxCount, int clipLen) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayGrains(out, maxCount, clipLen); }
+    float displaySlotPosition(int slot) const { return slots_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].displayPosition(); }
     float pan() const { return centre_; }   // where the voice's centre sits right now, -1..1
     // For the envelope editor's playhead: the time each slot's entrance shape was read at in the
     // last control block (seconds of the shape, -1 while the slot follows none) and the gain it
@@ -186,6 +201,12 @@ private:
         Drifter shimmer[kMaxPartials];
         Drifter pitch;
         float  gainL = 0.7f, gainR = 0.7f;
+        // Partial Spread renders this strand as a stereo pair instead of one sum, and a pair
+        // cannot be panned by multiplying each side with its own gain: that does not move the
+        // field, it deletes whatever leans the wrong way. The strand's place is folded into the
+        // partials' own weights instead (see control()), so what is left here is one gain.
+        float  wL[kMaxPartials] = {}, wR[kMaxPartials] = {};
+        float  spreadGain = 0.7f;
         int    active = 0;
     };
     void control(int blockLen, const VoiceParams& p);
@@ -241,6 +262,9 @@ private:
     float    bend_ = 0.0f, bendTarget_ = 0.0f;
     float    centre_ = 0.0f;     // pan centre after drift and Source 1's Pan, for the stage picture
     float    distance_ = 0.0f;   // the plane the note was placed on
+    float    layer_ = 0.5f;      // the role this note took: foundation 0, body .25, colour .5, air .75, shadow 1
+    float    attackMul_ = 1.0f;  // what Vel to Attack made of the written attack, fixed at note-on
+    float    rootComp_ = 1.0f;   // the frequency this voice keeps across a root change
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
@@ -283,7 +307,8 @@ private:
     float    ildAmt_ = 0.0f, ildCoef_ = 0.0f, ildL_ = 0.0f, ildR_ = 0.0f, ildLpL_ = 0.0f, ildLpR_ = 0.0f;
     // Partial Spread: per-partial left/right weights (equal power, so the sum of each pair is
     // exactly what the mono path gives), and the slow turn of their pattern.
-    float    spreadAmt_ = 0.0f, spreadL_[kMaxPartials] = {}, spreadR_[kMaxPartials] = {};
+    float    spreadAmt_ = 0.0f;
+    float    spreadSum_[kMaxPartials] = {}, spreadDif_[kMaxPartials] = {};
     double   spreadPhase_ = 0.0;
     int      note_ = -1;
     int      owner_ = 0;

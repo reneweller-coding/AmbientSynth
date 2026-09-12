@@ -95,4 +95,6 @@ def main():
           else "\nMeasure the library again: the balance is part of every descriptor and of the loudness matching.")
 
 
-main()
+
+if __name__ == "__main__":
+    main()

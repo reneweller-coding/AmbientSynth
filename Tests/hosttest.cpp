@@ -373,9 +373,11 @@ int main()
     {
         auto a = std::make_unique<AmbientSynthProcessor>();
         a->prepareToPlay(48000.0, 256);
-        int which = -1;
-        for (int i = 0; i < numPresets(); ++i) if (juce::String(preset(i).name) == "Cathedral Bell") which = i;
-        check(which > 0, "the preset the round trip is built on exists");
+        // Any preset but the empty one. It used to name a built-in, which tied a host test to a
+        // library that is regenerated whole -- and what is under test here is the name, not which
+        // preset carries it.
+        const int which = numPresets() / 2;
+        check(which > 0 && preset(which).name[0] != 0, "the preset the round trip is built on exists");
         a->applySoundPreset(which);
         a->applyCosmosPreset(3);
         juce::MemoryBlock blob;
@@ -532,15 +534,23 @@ int main()
             if (k == 187) mid = p->morphProgress();
         }
         const double arrived = rmsOf();
+        // The yardstick, and it has to be a long one. A preset carrying a looping modulation
+        // envelope moves its own level by several dB on a cycle of ten or twenty seconds -- Fell
+        // Span, which this test happened to pick out of the 2.0 library, swings 3.3 dB at six
+        // seconds and again at ten, cold, with no transition anywhere near it. Measured over four
+        // seconds it looked perfectly steady and the transition looked broken; measured over forty
+        // the preset is seen for what it is. What this check is for is a CUT in the middle of a
+        // crossfade, which is twenty dB and more, not a preset breathing on its own clock.
         double steadyJump = 0.0; win = 0.0; prevWin = -1.0;
-        for (int k = 0; k < 800; ++k) { buf.clear(); p->processBlock(buf, midi); step(k, steadyJump, nullptr, nullptr, nullptr); }
+        for (int k = 0; k < 3800; ++k) { buf.clear(); p->processBlock(buf, midi); step(k, steadyJump, nullptr, nullptr, nullptr); }
         const double later = rmsOf();
         std::printf("  [probe] transition %d -> %d: level before %.1f dBFS, head start %d blocks, worst 85 ms step %.2f dB at block %d (%.1f -> %.1f dBFS; steady preset alone %.2f dB), half way at %.2f, on arrival %.1f dBFS, 4 s later %.1f dBFS, voices %d\n",
                     a, b, 20.0 * std::log10(before), head, worstJump, jumpAt, 20.0 * std::log10(jumpFrom), 20.0 * std::log10(jumpTo), steadyJump, mid,
                     20.0 * std::log10(arrived), 20.0 * std::log10(later), p->engine().activeVoices());
         check(ok, "both engines stay finite through a transition");
         check(head < 2000, "the incoming engine speaks and the ramp starts");
-        check(worstJump < 3.0, "a transition never steps in level from one 85 ms window to the next");
+        check(worstJump < std::max(3.0, steadyJump + 1.5),
+              "a transition never steps in level more than the arriving preset does on its own");
         check(mid > 0.3 && mid < 0.7, "half way through the time given, the fade is about half way");
         check(arrived > 1e-3, "when the old preset is gone the new one is already audible");
         // What the player loaded by hand has to survive the change of engine -- and the engine
@@ -573,10 +583,56 @@ int main()
                 feed(*q, buf, static_cast<int>(4.0 * sr / block), false);   // four seconds
                 const int want = static_cast<int>(q->engine().getParam(ParamId::BrainDensity));
                 const int got = q->engine().activeVoices();
-                std::printf("  [probe] four seconds after a change into %s: %d of %d voices\n",
-                            preset(slow).name, got, want);
+                // The conductor's own count beside the voices: they answer different questions.
+                // Notes it holds but that never became voices mean the voices were the problem;
+                // one note held means the filling itself never ran.
+                int cn[ambient::ClusterBrain::kSlots]; float cv[ambient::ClusterBrain::kSlots];
+                const int cluster = q->engine().soundingCluster(cn, cv);
+                std::printf("  [probe] four seconds after a change into %s: %d of %d voices, conductor holds %d\n",
+                            preset(slow).name, got, want, cluster);
                 check(got >= juce::jmin(want, 3), "the conductor fills its cluster when it takes over from one that was sounding");
             }
+        }
+        {   // A change made while the conductor holds a FULL chord. The handover reads the leaving
+            // conductor's cluster into two arrays, and those were sized by the number of source
+            // slots (four) instead of the conductor's twelve: with more than four notes sounding it
+            // wrote past their end, and /GS ended the process on the spot -- no crash handler, no
+            // dump, no event, an exit that looked clean. The instrument simply vanished when a
+            // preset was picked, which is what the crash log in PluginProcessor.cpp was written for.
+            //
+            // The transition test above never showed it: two seconds after its own change the
+            // conductor is still holding one or two notes. So this one waits for five.
+            auto q = std::make_unique<AmbientSynthProcessor>();
+            q->prepareToPlay(sr, block);
+            q->setMorphSelectSeconds(1.0f);
+            q->selectPreset(1, false);
+            auto set = [&](const char* key, float v) {
+                if (auto* p = q->apvts.getParameter(key)) p->setValueNotifyingHost(p->convertTo0to1(v));
+            };
+            set("brain_density", 10.0f);     // a wide cluster...
+            set("brain_rate", 2.0f);         // ...filled quickly, so the test is seconds and not minutes
+            set("brain_density_slew", 0.0f); // ...and at once: the library's presets ramp a change of
+                                             // density over minutes now (Anti 9), which is right and
+                                             // which would keep this test under five voices for ever
+            set("brain_onset_guard", 0.0f);  // and two onsets may be closer than three seconds here
+            set("brain_sync", 0.0f);         // Free. Sync does not put the events on a grid, it REPLACES
+                                             // the rate with a number of bars -- the preset this test
+                                             // starts from carried one, and Event Rate 2 s meant nothing:
+                                             // three voices in a minute instead of thirteen.
+            set("brain_hold_min", 600.0f);
+            set("brain_hold_max", 1200.0f);
+            juce::AudioBuffer<float> buf(2, block);
+            int held = 0;
+            for (int k = 0; k < static_cast<int>(60.0 * sr / block) && held <= 4; ++k) {
+                feed(*q, buf, 1, false);
+                held = q->engine().activeVoices();
+            }
+            std::printf("  [probe] conductor holding %d voices at the change\n", held);
+            check(held > 4, "the conductor filled a cluster wider than the four source slots");
+            q->selectPreset(2, true);        // the handover: this is where it used to die
+            q->servePresetRequests();
+            feed(*q, buf, static_cast<int>(3.0 * sr / block), false);
+            check(q->engine().activeVoices() > 0, "a preset change under a full cluster survives and goes on sounding");
         }
         check(p->morphingTo() < 0 && p->morphingFrom() < 0 && p->morphProgress() >= 1.0f,
               "when the time is up the change has arrived and nothing travels");

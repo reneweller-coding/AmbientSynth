@@ -1046,7 +1046,16 @@ void AmbientSynthProcessor::beginTransition(int index)
     // With nothing to inherit, from silence or from a preset whose conductor was off, it fills
     // instead, so a change never lands on an empty instrument either.
     {
-        int notes[ambient::kSlots]; float vels[ambient::kSlots];
+        // The CONDUCTOR's cluster, which is twelve notes -- not ambient::kSlots, which is the four
+        // source slots. Two constants of the same name, and these arrays had the wrong one: a
+        // conductor holding more than four notes wrote up to eight ints and eight floats past the
+        // end of them. /GS answers that with __report_gsfailure and int 29h, which kills the
+        // process on the spot -- no crash handler, no minidump, no entry in the event log, and an
+        // exit that looks clean from outside. That is the "instrument vanished while a preset was
+        // picked" this file's crash log was written for; it takes a preset whose conductor is
+        // holding a full chord, which is why a change made a second after the last one never
+        // showed it.
+        int notes[ambient::ClusterBrain::kSlots]; float vels[ambient::ClusterBrain::kSlots];
         for (int which = 0; which < 2; ++which) {
             const bool second = which == 1;
             const int n = live().soundingCluster(notes, vels, second);

@@ -81,13 +81,14 @@ def main():
         path = os.path.join(a.packs, fname)
         for ln, line in enumerate(open(path, encoding="utf-8"), 1):
             t = line.strip()
-            if not t or t.startswith("#") or t.startswith("pack "):
+            if not t or t.startswith("#") or t.startswith("pack ") or (t.startswith("format ") and "|" not in t):
                 continue
             total += 1
             where = f"{fname}:{ln}"
             f = t.split("|")
-            if len(f) > 8:
-                problems.append(f"{where}: {len(f)} fields, at most 8 (a '|' inside a field?)")
+            # Nine since the impulse the Room Morph goes to travels with the preset.
+            if len(f) > 9:
+                problems.append(f"{where}: {len(f)} fields, at most 9 (a '|' inside a field?)")
             if len(f) < 2:
                 problems.append(f"{where}: no settings field")
                 continue

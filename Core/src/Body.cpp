@@ -28,6 +28,7 @@ void Body::prepare(double sampleRate, uint64_t seed)
 {
     sr_ = static_cast<float>(sampleRate);
     rng_.seed(seed);
+    for (float& m : modePan_) m = 0.45f + 0.55f * rng_.uniform();
     reset();
     lastMat_ = BodyMaterial::Count;   // force a rebuild
 }
@@ -69,7 +70,11 @@ void Body::set(BodyMaterial material, float baseHz, float decaySeconds, float to
         // driven by the same mono signal the two channels came out correlated: the body collapsed
         // the stereo image (measured: width 0.69 -> 0.11). Alternating sides gives each ear a
         // different set of modes, which is both what a real body does and what keeps the width.
-        const float pan = sp * ((i & 1) ? 1.0f : -1.0f) * (0.45f + 0.55f * rng_.uniform());
+        // How far out each mode sits is drawn ONCE, in prepare(): this function rebuilds whenever
+        // any of its five arguments moves, and Tone, Decay and the root all move -- an LFO on Tone
+        // called it every block, so a fresh draw here meant all twelve modes jumping to new places
+        // a hundred times a second. The body is a body; where its modes are does not flutter.
+        const float pan = sp * ((i & 1) ? 1.0f : -1.0f) * modePan_[i];
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         gainL_[i] = std::cos(angle);
         gainR_[i] = std::sin(angle);

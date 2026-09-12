@@ -186,6 +186,14 @@ enum class ModSource : int {
     // the piece is doing rather than from a clock, a shape or a field of its own, so a route
     // from it makes the instrument swell where it is busy and rest where it is not.
     Cascade,
+    // Three that come from the piece's own shape rather than from a clock (12.09.2026).
+    // Root Age: how long the root has stood, over Home Time -- 0 the moment it moves, climbing
+    // towards 1 the longer it holds, so a sound can open after a change instead of being there
+    // already. Layer: the role of the voice being read (foundation 0, body .25, colour .5, air
+    // .75, shadow 1), which gives every register its own brightness, its own air, its own plane
+    // without the conductor needing to know. Section: the hour's arc as five steps rather than a
+    // glide, for the things that should switch rather than slide.
+    RootAge, Layer, Section,
     Count
 };
 constexpr int kNumModSources = static_cast<int>(ModSource::Count);

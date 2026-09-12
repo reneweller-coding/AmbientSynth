@@ -2,7 +2,7 @@
 
 The pack files carry ranks (0..1 across the library), and a rank cannot say whether the library
 got more tonal: half of it is always above the median. The measurement caches hold the raw
-numbers -- spectral flatness, centroid, roughness, RMS -- and the 196 built-ins, measured the same
+numbers -- spectral flatness, centroid, roughness, RMS -- and the 256 built-ins, measured the same
 way, are a yardstick that does not move when the packs do.
 
     python Tools/library/absolute_census.py <work dir with packs.json and builtins.json>

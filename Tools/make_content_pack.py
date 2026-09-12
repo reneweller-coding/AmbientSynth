@@ -1,6 +1,6 @@
 """AmbientSynth -- build the downloadable content package: the media the preset packs name.
 
-The 25 packs in Library/Packs reference samples, wavetables and impulse responses by relative
+The 56 packs in Library/Packs reference samples, wavetables and impulse responses by relative
 path. They are far too big for git and are not in it; this makes the archives that the installer
 downloads instead, and the manifest the installer needs to verify them.
 
@@ -58,7 +58,11 @@ def referenced():
                 for field in t.split("|"):
                     # a texture field may carry up to four clips, one per slot, separated by ';'
                     for field in (x.strip() for x in field.split(";")):
-                        if not field.lower().endswith(".wav"):
+                        # .flac as well as .wav: the clip library has been FLAC since it was
+                        # regenerated, and a check for .wav alone quietly left every sample out of
+                        # the package -- the tables and the impulse responses would have travelled
+                        # alone and 14336 presets would have loaded nothing.
+                        if not field.lower().endswith((".wav", ".flac")):
                             continue
                         src = os.path.normpath(os.path.join(PACKS, field))
                         # The kind is the library folder the file lies under, and what follows it is
@@ -287,7 +291,14 @@ def main():
     # really do run side by side here. Twelve of the machine's twenty-four, which leaves it usable.
     def convert(item):
         (kind, name), src = item
-        conv, out_name, why = (None, None, "") if a.wav else to_flac(src)
+        if src.lower().endswith(".flac"):
+            # Already FLAC -- copied through, bit for bit. Re-encoding seven thousand files into the
+            # format they are already in costs an hour and changes nothing.
+            with open(src, "rb") as f:
+                conv = f.read()
+            out_name, why = posixpath.basename(name), "already flac"
+        else:
+            conv, out_name, why = (None, None, "") if a.wav else to_flac(src)
         if conv is None:
             out_name = posixpath.basename(name)
             conv, why = to_24bit(src)

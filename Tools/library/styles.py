@@ -1,6 +1,11 @@
-"""Style corpus for the generated preset library.
+"""Style corpus for the generated preset library -- and, since 2.0, its shared ground.
 
-Twenty-five packs, each written in the spirit of one corner of the ambient/drone repertoire.
+The library is generated from Tools/library/artists.py now (56 packs and the 16 built-in
+families, with the material each of them plays); what stays here is what both generations share:
+BASE, MODULES_BASE, COMMON_SECOND, GRANULAR_BASE and NOISE_BASE, which artists.py builds on, and
+the twenty-five styles the library before it was written from, kept as the record of where the
+ranges came from.
+
 The pack names are descriptive; the `inspiration` line names the artist whose sound world the
 settings aim at. Nothing here is sampled from or affiliated with those artists -- the ranges
 were chosen by ear from the synth's own parameters.
@@ -60,7 +65,15 @@ BASE = {
     "arc_period":    ("log", 20.0, 120.0),
     "breath":        (0.0, 0.4),
     "breath_rate":   ("log", 0.01, 0.06),
-    "air":           (0.05, 0.3),
+    # Air is filtered noise on the note, and measured against everything else in the instrument it
+    # is the loudest source of noise there is: on a pure sine with every other block off, the
+    # spectral flatness goes from 0.000001 to 0.0149 at air 0.2, where the far reverb, the near
+    # reverb, the Cloud with all its extras, the Cosmos with all four of its characters, the
+    # Memory, the delays, the filters, the wavefolder and the ensemble all measure 0.000007 or
+    # below. Every style that does not name its own air inherits this range -- which is why every
+    # preset of a fourteen-thousand-preset library carried a noise band, and why the whole of it
+    # was heard as "extremely noisy". A style that is about air says so itself.
+    "air":           (0.0, 0.08),
     "air_color":     ("log", 1.5, 8.0),
     "air_q":         ("log", 4.0, 20.0),
     "ens_mix":       (0.2, 0.6),

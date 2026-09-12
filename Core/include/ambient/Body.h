@@ -37,6 +37,7 @@ public:
 private:
     Resonator res_[kBodyModes];
     float     gainL_[kBodyModes] = {}, gainR_[kBodyModes] = {};
+    float     modePan_[kBodyModes] = {};   // how far out each mode sits: drawn once, in prepare()
     float     sr_ = 48000.0f;
     float     norm_ = 1.0f;
     Rng       rng_;

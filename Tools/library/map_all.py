@@ -1,7 +1,7 @@
 """One map for the whole library.
 
-Until now two tools laid out two maps that shared a plane: Tools/preset_map.py embedded the 191
-built-ins and Tools/library/measure_packs.py embedded the 6800 pack presets, each standardising
+Until now two tools laid out two maps that shared a plane: Tools/preset_map.py embedded the
+built-ins and Tools/library/measure_packs.py embedded the pack presets, each standardising
 its own descriptors and running its own projection. The browser then drew both on one square, so
 a built-in and a pack preset at the same spot had nothing to do with each other.
 

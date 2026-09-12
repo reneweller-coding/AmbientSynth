@@ -26,6 +26,8 @@ struct HarmonicNumbers {
 };
 const HarmonicNumbers kHf;
 constexpr float kFmMaxStep = 0.4f;   // per-sample deviation clamp (tan of the angle): keeps the two-step normalisation exact
+constexpr float kSqrt2 = 1.41421356237f;
+constexpr float kSqrt2Half = 0.70710678119f;
 }
 
 void Voice::prepare(double sampleRate, uint64_t seed)
@@ -96,8 +98,10 @@ static inline float perceivedDistance(float d, float law)
 void Voice::noteOn(int note, double freqHz, float velocity, int owner, float distance, const VoiceParams& p,
                    bool allowStrike, float ageSeconds)
 {
+    const bool wasSounding = env_.isActive();   // asked before anything below can change it
     note_ = note;
     freq_ = freqTarget_ = freqHz;
+    rootComp_ = 1.0f;            // a note beginning now takes the ratios to the root as it is now
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
     distance_ = clampv(distance, 0.0f, 1.0f);
@@ -105,7 +109,18 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     gNear_  = std::cos(distEff_ * 0.5f * kPi);
     gFar_   = std::sin(distEff_ * 0.5f * kPi);
     gLevel_ = 1.0f - 0.5f * distEff_;
-    env_.setTimes(p.attack, p.decay, p.sustain, p.release);
+    // Which of the five roles this note belongs to, for the matrix and for the plane it stands in.
+    // The second conductor is the shadow whatever it plays; everything else is read off the
+    // register, because in this music the register IS the role (Rene's table).
+    layer_ = (owner == 2) ? 1.0f                        // 2 = the second conductor (Engine::OwnerBrain2)
+           : (note < 43 ? 0.0f : note < 60 ? 0.25f : note < 84 ? 0.5f : 0.75f);
+    // Velocity as an attack time rather than as a level (R7.1): the air floats in, the foundation
+    // simply stands. Positive lets a quiet note enter slower and a loud one faster; at the extreme
+    // the slowest is four times the written attack and the fastest a quarter of it. The factor is
+    // fixed here, at the note's own velocity, because control() rewrites the times every block.
+    attackMul_ = p.velAttack != 0.0f
+               ? std::pow(4.0f, p.velAttack * (0.5f - clampv(velocity, 0.0f, 1.0f)) * 2.0f) : 1.0f;
+    env_.setTimes(p.attack * attackMul_, p.decay, p.sustain, p.release);
     for (auto& s : slots_) s.noteOn(!env_.isActive());
     if (!env_.isActive()) {
         // Fresh start: random phases (no two voices share a waveform), silent partials.
@@ -127,7 +142,10 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         prevDist_ = distance_;
     }
     press_ = pressTarget_; slide_ = slideTarget_; bend_ = bendTarget_;   // a new note starts where its controller is
-    env_.noteOn();
+    // An inherited note enters at the level its age says it has reached; anything else climbs its
+    // attack as it always did. Only a preset change passes an age at all.
+    if (ageSeconds > 0.0f && !wasSounding) env_.noteOnAged(ageSeconds);
+    else env_.noteOn();
     if (p.strikeLevel > 0.0f && allowStrike && (owner == 0 || p.strikeBrain)) { strikeStart(freqHz, p); ++strikes_; }
 }
 
@@ -174,7 +192,9 @@ inline float Voice::strikeTick()
 }
 
 void Voice::noteOff() { env_.noteOff(); }
-void Voice::kill()    { env_.kill(); note_ = -1; portaLeft_ = 0.0f; }
+// Silence at once, and that includes a strike still ringing on its own physics: the render loop
+// now runs while EITHER the envelope or the strike is going, and a reset has to stop both.
+void Voice::kill()    { env_.kill(); note_ = -1; portaLeft_ = 0.0f; ksOn_ = false; }
 
 void Voice::glideFrom(double fromHz, float seconds, float gravity)
 {
@@ -189,7 +209,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // Freeze: the movement clock stops (spectrum, pitch drift, breath, bloom hold still); the
     // envelope, filter and effects keep their own time.
     const float dt = p.freeze ? 0.0f : dtReal;
-    env_.setTimes(p.attack, p.decay, p.sustain, p.release);
+    env_.setTimes(p.attack * attackMul_, p.decay, p.sustain, p.release);
 
     // Portamento: slide in the log domain from portaFrom_ to the target; the speed drops near
     // consonant ratios to the root (gravity), so the slide dwells on the harmonic nodes and
@@ -247,8 +267,11 @@ void Voice::control(int blockLen, const VoiceParams& p)
         for (int h = 0; h < kMaxPartials; ++h) {
             const float w = spreadAmt_ * std::sin(static_cast<float>(h) * 2.39996f + static_cast<float>(spreadPhase_) * kTwoPi);
             const float g = 1.0f / std::sqrt(1.0f + w * w);
-            spreadL_[h] = (1.0f + w) * g;
-            spreadR_[h] = (1.0f - w) * g;
+            const float wl = (1.0f + w) * g, wr = (1.0f - w) * g;   // equal power: wl^2 + wr^2 = 2
+            // Kept as the pair's sum and difference, which is all a strand needs to carry its own
+            // place into it -- they are the cosine and sine of the partial's angle less 45 degrees.
+            spreadSum_[h] = wl + wr;
+            spreadDif_[h] = wl - wr;
         }
     }
     const float driftRate = p.driftRate * rateMul, shimmerRate = p.shimmerRate * rateMul;
@@ -393,7 +416,24 @@ void Voice::control(int blockLen, const VoiceParams& p)
     for (int si = 0; si < unison; ++si) {
         Strand& s = strands_[si];
         const float pos = (unison == 1) ? 0.0f : (2.0f * static_cast<float>(si) / static_cast<float>(unison - 1) - 1.0f);
-        const float cents = pos * p.detune + s.pitch.update(dt, driftRate, rng_) * p.drift;
+        float cents = pos * p.detune + s.pitch.update(dt, driftRate, rng_) * p.drift;
+        // Two limits on how far a strand may stand from its note, and both are about the beat
+        // rather than about the pitch. The beat between a strand and its note is f (2^(c/1200) - 1),
+        // so the same cents beat faster the higher the note sits: Low Detune thins the detuning
+        // out towards the bottom, where warmth turns into wobble, and Beat Ceiling is the flat
+        // upper bound on the rate itself, halved under 150 Hz (R4.6).
+        if (p.lowDetune > 0.0f || p.beatCeiling > 0.0f) {
+            const double fHz = freq_ * bankMul;
+            if (p.lowDetune > 0.0f) {
+                const double t = clampv(std::log2(std::max(fHz, 20.0) / 150.0), 0.0, 1.0);   // 0 at 150 Hz, 1 at 300
+                cents *= 1.0f - 0.5f * p.lowDetune * static_cast<float>(1.0 - t);
+            }
+            if (p.beatCeiling > 0.0f && fHz > 0.0) {
+                const double lim = static_cast<double>(p.beatCeiling) * (fHz < 150.0 ? 0.5 : 1.0);
+                const double maxCents = 1200.0 * std::log2(1.0 + lim / fHz);
+                if (std::fabs(cents) > maxCents) cents = static_cast<float>(cents > 0.0f ? maxCents : -maxCents);
+            }
+        }
         // Stack: the strand sits at a pure ratio to the note (a just chord from one key);
         // detune and drift still apply on top, so Detune 0 makes it beat-free.
         const double f = freq_ * bankMul * kStackRatios[stack][si] * std::pow(2.0, cents / 1200.0);
@@ -401,6 +441,31 @@ void Voice::control(int blockLen, const VoiceParams& p)
         const float angle = (pan + 1.0f) * 0.25f * kPi;
         s.gainL = std::cos(angle) * norm;
         s.gainR = std::sin(angle) * norm;
+        // Partial Spread and the strand's own place, composed instead of multiplied. The spread
+        // gives partial h a pair of weights, which is an angle in the field; the strand's pan is
+        // another; and what the ear should get is their SUM. Multiplying the pair by the strand's
+        // two gains one side at a time is not that: it attenuates every partial by how far it
+        // leans away from the pan -- eleven decibels at the outer strand of a six-strand fan, and
+        // since the pattern turns once every fifty seconds, coming and going. Which is why the
+        // test for this passed: it placed one strand in the middle, and in the middle the two
+        // agree exactly.
+        //   Composing two angles needs no trigonometry of its own: cos and sin of (angle + phi -
+        // 45 degrees) come out of the pair's own sum and difference. Past an ear the sum would
+        // carry on to the far side and arrive inverted, which is a partial cancelling itself in
+        // mono, so it is stopped AT the ear -- and a stop is still a place, so every partial
+        // keeps cos^2 + sin^2 = 1 of its power wherever the pan puts it. A centred strand comes
+        // out exactly as it did; a hard-panned one squeezes its field onto that ear.
+        if (spreadAmt_ > 0.0f) {
+            const float ca = std::cos(angle), sa = std::sin(angle);
+            for (int h = 0; h < kMaxPartials; ++h) {
+                float l = kSqrt2Half * (ca * spreadSum_[h] + sa * spreadDif_[h]);
+                float r = kSqrt2Half * (sa * spreadSum_[h] - ca * spreadDif_[h]);
+                if (l < 0.0f)      { l = 0.0f;   r = kSqrt2; }
+                else if (r < 0.0f) { l = kSqrt2; r = 0.0f;   }
+                s.wL[h] = l; s.wR[h] = r;
+            }
+            s.spreadGain = norm * kSqrt2Half;
+        }
 
         float target[kMaxPartials];
         float sumSq = 0.0f;
@@ -554,7 +619,9 @@ void Voice::control(int blockLen, const VoiceParams& p)
 
     // Filter: cutoff follows key, envelope, a slow drift, and distance (air absorption).
     const float fd = filterDrift_.update(dt, driftRate * 0.5f, rng_);
-    const float octaves = p.keyTrack * static_cast<float>(note_ - 60) / 12.0f
+    // note_ is given back the moment the envelope is done, and a strike may still be ringing out
+    // after that: no key tracking in that case rather than tracking the filter down to note -1.
+    const float octaves = p.keyTrack * static_cast<float>((note_ >= 0 ? note_ : 60) - 60) / 12.0f
                         + p.filterEnv * 4.0f * env_.level()
                         + p.filterDrift * 2.0f * fd
                         + p.slideCutoff * slide_
@@ -653,7 +720,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
     fmHpCoef_ = 1.0f - kTwoPi * 10.0f / static_cast<float>(sr_);
     if (!doFm) { fmHpXL_ = fmHpXR_ = fmHpYL_ = fmHpYR_ = 0.0f; }
     int pos = 0;
-    while (pos < n && env_.isActive()) {
+    while (pos < n && (env_.isActive() || ksOn_)) {
         const int len = std::min(kControlBlock, n - pos);
         control(len, p);
         // Source 1 is the strand bank only while its type is Additive; any other type renders in
@@ -722,9 +789,9 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                     }
                 } else if (spreadAmt_ > 0.0f) {
                     float sumL, sumR;
-                    phasorBankStepStereo(pc, ps, rc, rs, amp, step, act, spreadL_, spreadR_, sumL, sumR);
-                    accL += sumL * s.gainL;
-                    accR += sumR * s.gainR;
+                    phasorBankStepStereo(pc, ps, rc, rs, amp, step, act, s.wL, s.wR, sumL, sumR);
+                    accL += sumL * s.spreadGain;
+                    accR += sumR * s.spreadGain;
                     continue;
                 } else {
                     sum = phasorBankStep(pc, ps, rc, rs, amp, step, act);

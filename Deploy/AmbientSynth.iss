@@ -76,14 +76,14 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 [CustomMessages]
 en.CompStandalone=Standalone application
 en.CompVst3=VST3 plug-in (for a DAW)
-en.CompPacks=Preset library (42 packs, 8400 presets)
+en.CompPacks=Preset library (56 packs, 14336 presets)
 en.CompContent=Sample library: the samples, wavetables and impulse responses the presets use (downloaded, %1 GB)
 en.TaskDesktop=Create a desktop shortcut
 en.DownloadFailed=The sample library could not be downloaded:%n%n%1%n%nEverything else installs and works without it; presets that want a sample fall back to the built-in sources. You can install the library later by unpacking the content archives from the release into the AmbientSynth folder.%n%nInstall without the sample library?
 en.NoAvx2=This processor reports no AVX2 support.%n%nAmbientSynth is built for AVX2, which every x86-64 processor since 2013 has. Without it, it will not start.%n%nInstall anyway?
 de.CompStandalone=Eigenstaendiges Programm
 de.CompVst3=VST3-Plugin (fuer eine DAW)
-de.CompPacks=Preset-Bibliothek (42 Pakete, 8400 Presets)
+de.CompPacks=Preset-Bibliothek (56 Pakete, 14336 Presets)
 de.CompContent=Sample-Bibliothek: die Samples, Wavetables und Impulsantworten der Presets (wird geladen, %1 GB)
 de.TaskDesktop=Verknuepfung auf dem Desktop anlegen
 de.DownloadFailed=Die Sample-Bibliothek konnte nicht geladen werden:%n%n%1%n%nAlles andere wird installiert und funktioniert auch ohne sie; Presets, die ein Sample moechten, greifen auf die eingebauten Quellen zurueck. Die Bibliothek laesst sich spaeter nachlegen, indem man die Content-Archive aus dem Release in den AmbientSynth-Ordner entpackt.%n%nOhne die Sample-Bibliothek installieren?

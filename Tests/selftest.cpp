@@ -177,6 +177,34 @@ void testEnvelope()
     env.noteOff();
     for (int i = 0; i < 48000; ++i) lv = env.process();
     CHECK(!env.isActive(), "release ends");
+
+    // A note handed over rather than begun. The conductor of an arriving preset adopts the cluster
+    // of the one that is leaving: those notes ARE sounding, and starting their envelope at zero is
+    // why a preset with a twelve-second attack dipped after a two-second crossfade. Checked against
+    // the envelope actually run for that long, which is the only definition that cannot drift.
+    {
+        const float attack = 12.0f;
+        auto runFor = [&](double seconds) {
+            Envelope e; e.setSampleRate(48000.0); e.setTimes(attack, 0.1f, 0.5f, 0.2f); e.noteOn();
+            float v = 0.0f;
+            for (int i = 0; i < static_cast<int>(seconds * 48000.0); ++i) v = e.process();
+            return v;
+        };
+        for (double age : { 1.0, 4.0, 8.0 }) {
+            Envelope e; e.setSampleRate(48000.0); e.setTimes(attack, 0.1f, 0.5f, 0.2f);
+            e.noteOnAged(static_cast<float>(age));
+            const float want = runFor(age), got = e.level();
+            CHECK(std::fabs(got - want) < 0.02f, "an inherited note enters at the level its age has reached");
+            if (age == 4.0) std::printf("  [probe] 12 s attack, inherited at 4 s: %.3f against %.3f run for real\n", got, want);
+        }
+        Envelope e; e.setSampleRate(48000.0); e.setTimes(attack, 0.1f, 0.5f, 0.2f);
+        e.noteOnAged(60.0f);
+        CHECK(std::fabs(e.level() - 0.5f) < 1e-3f && e.stage() == Envelope::Stage::Sustain,
+              "an inherited note older than its attack enters at the sustain");
+        Envelope f; f.setSampleRate(48000.0); f.setTimes(attack, 0.1f, 0.5f, 0.2f);
+        f.noteOnAged(0.0f);
+        CHECK(f.level() == 0.0f && f.stage() == Envelope::Stage::Attack, "an age of zero is an ordinary note-on");
+    }
 }
 
 void testEngineMidi()
@@ -327,7 +355,8 @@ void testMidSide()
 
 void testPresets()
 {
-    CHECK(builtinPresetCount() == 196, "exactly 196 built-in presets");
+    CHECK(builtinPresetCount() == 256, "exactly 256 built-in presets");
+    CHECK(std::strcmp(preset(0).name, "Init") == 0, "the empty preset opens the list");
     CHECK(numPresets() == builtinPresetCount(), "no packs loaded during the test");
     for (int p = 0; p < numPresets(); ++p)
         for (int q = 0; q < p; ++q) CHECK(std::strcmp(preset(p).name, preset(q).name) != 0, "preset names unique");
@@ -342,10 +371,18 @@ void testPresets()
     }
     Engine e;
     CHECK(e.applyPreset(1), "apply preset 1");
-    CHECK(e.getParam(ParamId::BrainDensity) == 6.0f, "Sleep Concert density");
-    CHECK(e.applyPreset(2), "apply preset 2");
-    CHECK(e.getParam(ParamId::Scale) == 6.0f, "Glass Cathedral selects Harmonic 8-16 by name");
-    CHECK(e.getParam(ParamId::RootNote) == 4.0f, "root E by name");
+    {   // A choice may be written by name instead of by index, which is how the whole library
+        // writes them -- an index would silently mean the wrong scale the day one is inserted.
+        const Preset byName = { "choice by name", "scale=Harmonic 8-16;root=E" };
+        Engine t;
+        CHECK(applyPreset(byName, [&](ParamId id, float v) { t.setParam(id, v); }), "settings by name parse");
+        CHECK(t.getParam(ParamId::Scale) == 6.0f, "Harmonic 8-16 chosen by name");
+        CHECK(t.getParam(ParamId::RootNote) == 4.0f, "root E by name");
+        int named = 0;
+        for (int p = 0; p < builtinPresetCount(); ++p)
+            if (std::strstr(preset(p).settings, "scale=") != nullptr) ++named;
+        CHECK(named > 20, "and the built-ins do name their scales");
+    }
     CHECK(!e.applyPreset(999), "out of range preset rejected");
 }
 
@@ -983,9 +1020,16 @@ void testPresetMap()
         Engine e;
         e.setParam(ParamId::BrainOn, 0.0f);
         e.prepare(48000.0, 256);
-        const int p = 7;   // Distant Storm: depth 1, far decay 60
-        const PresetMeta& m = presetMeta(p);
+        // Any built-in whose far decay is a long way from where the engine stands: the glide has to
+        // be visible to be measured, and naming one preset here tied the test to a library that is
+        // regenerated whole.
         const float before = e.effectiveParam(ParamId::FarDecay);
+        int p = -1;
+        for (int i = 1; i < builtinPresetCount() && p < 0; ++i)
+            if (std::fabs(PresetMap::presetValues(i)[static_cast<int>(ParamId::FarDecay)] - before) > 15.0f) p = i;
+        CHECK(p > 0, "a built-in whose far decay is far from the default exists");
+        if (p < 0) p = 1;
+        const PresetMeta& m = presetMeta(p);
         e.setParam(ParamId::MorphGlide, 0.5f);
         e.setParam(ParamId::MapActive, 1.0f); e.setParam(ParamId::MapX, m.x); e.setParam(ParamId::MapY, m.y); e.setParam(ParamId::MapRadius, 0.005f);
         render(e, 0.05);
@@ -1831,7 +1875,19 @@ void testCloudAndLayers()
         e.setParam(ParamId::Partials, 4.0f);
         CHECK(e.applySoundPreset(1), "sound preset applies");
         CHECK(e.getParam(ParamId::CosmosSend) == 0.9f, "sound preset leaves the Cosmos layer alone");
-        CHECK(e.getParam(ParamId::Partials) == 16.0f, "sound preset resets sound parameters to the preset");
+        // The preset decides, not whatever was set before it. This used to be written as "Partials
+        // comes back to 16", which was true of built-in 1 in the library of the day and of nothing
+        // since -- a test that measured the library rather than the behaviour. Two engines started
+        // from opposite values have to land on the same one, and it has to be the preset's.
+        {
+            Engine a, b;
+            a.setParam(ParamId::Partials, 4.0f);
+            b.setParam(ParamId::Partials, 28.0f);
+            CHECK(a.applySoundPreset(1) && b.applySoundPreset(1), "sound preset applies from either side");
+            CHECK(a.getParam(ParamId::Partials) == b.getParam(ParamId::Partials)
+                  && a.getParam(ParamId::Partials) == e.getParam(ParamId::Partials),
+                  "sound preset resets sound parameters to the preset");
+        }
         CHECK(numCosmosPresets() >= 16, "cosmos bank exists");
         for (int p = 0; p < numCosmosPresets(); ++p) {
             bool onlyCosmos = true;
@@ -2935,6 +2991,341 @@ void testParamTable()
     }
     for (const ParamDesc& d : paramTable())
         CHECK(sectionOf(d.section) != ParamSection::Unknown, (std::string("section known: ") + d.section).c_str());
+    // The table is indexed by the enumerator, and nothing anywhere checks that the row at position
+    // i actually describes parameter i. Get one row out of order and every parameter after it is
+    // read as its neighbour -- silently, with no compiler error and no crash: a knob that turns the
+    // wrong thing. Adding a row in the wrong place is exactly the mistake that is easy to make, so
+    // it is caught here.
+    for (int i = 0; i < kNumParams; ++i)
+        CHECK(static_cast<int>(paramTable()[static_cast<size_t>(i)].id) == i,
+              (std::string("the parameter table is in enumerator order at ") + paramTable()[static_cast<size_t>(i)].key).c_str());
+    // The same for the names of every modulation source: they are stored by position too, and the
+    // text form of a route is written and read through them.
+    for (int i = 0; i < kNumModSources; ++i) {
+        ModSource back = ModSource::None;
+        const char* nm = modSourceName(static_cast<ModSource>(i));
+        CHECK(modSourceFromName(nm, back) && static_cast<int>(back) == i,
+              (std::string("modulation source name round-trips: ") + nm).c_str());
+    }
+}
+
+// The voicing rules (Rene's rule book, 12.09.2026). Each of these drives the conductor directly
+// and counts what it did, because a descriptor averaged over a minute cannot show whether a
+// single rule was kept. Every one is checked at its default first: the whole point of these
+// parameters is that a preset written before them plays exactly as it did.
+void testVoicingRules()
+{
+    auto freqOf = [](int n) { return 440.0 * std::pow(2.0, (n - 69) / 12.0); };
+    struct Ev { double t; int note; bool on; float vel; };
+
+    // Run a conductor for a stretch of simulated time and collect what it played.
+    auto run = [&](const BrainParams& base, double seconds, uint64_t seed) {
+        std::vector<Ev> evs;
+        ClusterBrain b;
+        b.reset(seed, 48);
+        const double dt = 0.05;
+        double t = 0.0;
+        for (int i = 0; i < static_cast<int>(seconds / dt); ++i) {
+            b.update(dt, base, -1, freqOf, [&](const BrainEvent& e) {
+                evs.push_back(Ev{ t, e.note, e.type == BrainEvent::Type::NoteOn, e.velocity });
+            });
+            t += dt;
+        }
+        return evs;
+    };
+
+    BrainParams p;
+    p.on = true; p.mode = BrainMode::Free;
+    p.density = 5; p.low = 36; p.high = 84;
+    p.rateSeconds = 4.0f; p.holdMin = 8.0f; p.holdMax = 20.0f;
+
+    // Nothing at the defaults: the same seed and the same parameters give the same events, whether
+    // or not the new fields exist. This is the check that protects every preset ever saved.
+    {
+        const auto a = run(p, 300.0, 0x51E5D);
+        const auto b = run(p, 300.0, 0x51E5D);
+        bool same = a.size() == b.size();
+        for (size_t i = 0; same && i < a.size(); ++i) same = a[i].note == b[i].note && a[i].on == b[i].on;
+        CHECK(same && !a.empty(), "the conductor at its defaults is reproducible");
+    }
+
+    // R7.4 -- Retrigger: a pitch that has ended may not come back for its seconds.
+    {
+        BrainParams q = p; q.retrigger = 30.0f; q.rateSeconds = 2.0f;
+        const auto evs = run(q, 600.0, 0xA11CE);
+        double lastOff[128];
+        for (double& x : lastOff) x = -1e9;
+        int violations = 0;
+        for (const Ev& e : evs) {
+            if (e.note < 0 || e.note > 127) continue;
+            if (e.on) { if (e.t - lastOff[e.note] < 30.0 - 1e-6) ++violations; }
+            else lastOff[e.note] = e.t;
+        }
+        CHECK(violations == 0, "Retrigger: no pitch returns inside its rest");
+        BrainParams r = p; r.rateSeconds = 2.0f;
+        const auto free_ = run(r, 600.0, 0xA11CE);
+        double off2[128]; for (double& x : off2) x = -1e9;
+        int without = 0;
+        for (const Ev& e : free_) {
+            if (e.note < 0 || e.note > 127) continue;
+            if (e.on) { if (e.t - off2[e.note] < 30.0) ++without; } else off2[e.note] = e.t;
+        }
+        std::printf("  [probe] retriggers inside 30 s: %d without the lock, %d with it\n", without, violations);
+    }
+
+    // R5.3 -- Onset Guard: two onsets lie either inside thirty milliseconds or three seconds apart.
+    {
+        BrainParams q = p; q.onsetGuard = true; q.rateSeconds = 2.0f;
+        const auto evs = run(q, 900.0, 0x0A5E7);
+        double last = -1e9;
+        int between = 0, onsets = 0;
+        for (const Ev& e : evs) {
+            if (!e.on) continue;
+            ++onsets;
+            const double gap = e.t - last;
+            if (gap > 0.031 && gap < 2.999) ++between;
+            last = e.t;
+        }
+        CHECK(onsets > 10 && between == 0, "Onset Guard: no onset falls between 30 ms and 3 s");
+    }
+
+    // R8.3 -- Release Gap: two note-offs never arrive together.
+    {
+        BrainParams q = p; q.releaseGap = 2.0f; q.rateSeconds = 2.0f; q.holdMin = 4.0f; q.holdMax = 6.0f;
+        const auto evs = run(q, 900.0, 0x6A9);
+        double last = -1e9;
+        int tooClose = 0, offs = 0;
+        for (const Ev& e : evs) {
+            if (e.on) continue;
+            ++offs;
+            if (e.t - last < 2.0 - 1e-6) ++tooClose;
+            last = e.t;
+        }
+        CHECK(offs > 10 && tooClose == 0, "Release Gap: two note-offs stay apart");
+    }
+
+    // R5.1 -- Rate Breath: the mean gap is no longer constant. Compared over the first and the
+    // second half of a long run, a breathing clock must differ and a plain one must not.
+    {
+        auto meanGap = [&](const std::vector<Ev>& evs, double from, double to) {
+            double last = -1; double sum = 0; int n = 0;
+            for (const Ev& e : evs) {
+                if (!e.on || e.t < from || e.t >= to) continue;
+                if (last >= 0) { sum += e.t - last; ++n; }
+                last = e.t;
+            }
+            return n > 0 ? sum / n : 0.0;
+        };
+        BrainParams q = p; q.rateSeconds = 6.0f; q.rateBreath = 1.0f; q.breathPeriod = 4.0f;
+        const auto evs = run(q, 480.0, 0xB4EA7);
+        const double a = meanGap(evs, 0.0, 120.0), b = meanGap(evs, 120.0, 240.0);
+        BrainParams r = p; r.rateSeconds = 6.0f;
+        const auto plain = run(r, 480.0, 0xB4EA7);
+        const double c = meanGap(plain, 0.0, 120.0), d = meanGap(plain, 120.0, 240.0);
+        std::printf("  [probe] mean gap first vs second minute: %.1f / %.1f breathing, %.1f / %.1f plain\n", a, b, c, d);
+        CHECK(a > 0.0 && b > 0.0 && std::fabs(a - b) > std::fabs(c - d), "Rate Breath: the mean gap moves");
+    }
+
+    // Anti 9 -- Density Slew: the cluster may not gain more than a voice at a time.
+    {
+        BrainParams q = p; q.density = 1; q.rateSeconds = 1.0f; q.densitySlew = 2.0f;
+        ClusterBrain b;
+        b.reset(0xD3115, 48);
+        int sounding = 0, peak = 0;
+        double t = 0.0;
+        for (int i = 0; i < 12000; ++i) {          // ten minutes at 50 ms
+            if (i == 1200) q.density = 8;          // after a minute, ask for eight voices at once
+            b.update(0.05, q, -1, freqOf, [&](const BrainEvent& e) {
+                sounding += (e.type == BrainEvent::Type::NoteOn) ? 1 : -1;
+            });
+            if (i > 1200 && i < 1800 && sounding > peak) peak = sounding;   // the half minute after
+            t += 0.05;
+        }
+        std::printf("  [probe] voices half a minute after density 1 -> 8 with a 2 min slew: %d\n", peak);
+        CHECK(peak <= 4, "Density Slew: the cluster does not jump to the new density");
+    }
+
+    // R6.2 -- Root Steps and Anti 8: the root never climbs by a semitone.
+    {
+        BrainParams q = p; q.rootSteps = 2; q.wander = 1.0f; q.rateSeconds = 1.0f;
+        ClusterBrain b;
+        b.reset(0x9007, 48);
+        int last = b.root(), climbs = 0, moves = 0;
+        for (int i = 0; i < 24000; ++i) {
+            b.update(0.05, q, -1, freqOf, [](const BrainEvent&) {});
+            if (b.root() != last) { ++moves; if (b.root() - last == 1) ++climbs; last = b.root(); }
+        }
+        std::printf("  [probe] root moves in twenty minutes: %d, of them ascending semitones: %d\n", moves, climbs);
+        CHECK(moves > 0 && climbs == 0, "Root Steps: the root never climbs a semitone");
+    }
+
+    // R6.6 -- Memory: a constellation already heard does not return inside the window.
+    {
+        BrainParams q = p; q.memory = 10.0f; q.density = 3; q.low = 48; q.high = 60; q.rateSeconds = 1.0f;
+        const auto evs = run(q, 1200.0, 0x11E11);
+        CHECK(!evs.empty(), "Memory: the conductor still plays with the memory on");
+        BrainParams r = q; r.memory = 0.0f;
+        const auto loose = run(r, 1200.0, 0x11E11);
+        std::printf("  [probe] events in a narrow register over twenty minutes: %d with memory, %d without\n",
+                    static_cast<int>(evs.size()), static_cast<int>(loose.size()));
+    }
+
+    // Tab. 2 -- Bass Hold: the lowest voice outlasts the others.
+    {
+        auto meanHold = [&](float bassHold) {
+            BrainParams q = p; q.bassHold = bassHold; q.rateSeconds = 2.0f; q.holdMin = 10.0f; q.holdMax = 20.0f;
+            const auto evs = run(q, 1800.0, 0xBA55);
+            double on[128]; for (double& x : on) x = -1;
+            double lowSum = 0, highSum = 0; int lowN = 0, highN = 0;
+            for (const Ev& e : evs) {
+                if (e.note < 0 || e.note > 127) continue;
+                if (e.on) on[e.note] = e.t;
+                else if (on[e.note] >= 0) {
+                    const double held = e.t - on[e.note];
+                    if (e.note < 48) { lowSum += held; ++lowN; } else { highSum += held; ++highN; }
+                    on[e.note] = -1;
+                }
+            }
+            return std::pair<double, double>(lowN ? lowSum / lowN : 0.0, highN ? highSum / highN : 0.0);
+        };
+        const auto plain = meanHold(1.0f), held = meanHold(6.0f);
+        std::printf("  [probe] mean hold under MIDI 48 vs above: %.1f / %.1f s plain, %.1f / %.1f with Bass Hold 6\n",
+                    plain.first, plain.second, held.first, held.second);
+        CHECK(held.first > plain.first * 1.5, "Bass Hold: the foundation lies longer");
+    }
+
+    // Section 3 -- Low Spacing: no seconds survive down in the bass.
+    {
+        BrainParams q = p; q.lowSpacing = 1.0f; q.spacing = 0.6f; q.low = 30; q.high = 72; q.density = 8; q.rateSeconds = 0.5f;
+        ClusterBrain b;
+        b.reset(0x105BA, 42);
+        int tight = 0, looked = 0;
+        for (int i = 0; i < 24000; ++i) {
+            b.update(0.05, q, -1, freqOf, [](const BrainEvent&) {});
+            if (i % 20) continue;
+            int notes[ClusterBrain::kSlots]; float vels[ClusterBrain::kSlots];
+            const int n = b.soundingNotes(notes, vels);
+            for (int x = 0; x < n; ++x) for (int y = 0; y < x; ++y) {
+                if (notes[x] >= 48 || notes[y] >= 48) continue;
+                ++looked;
+                if (std::abs(notes[x] - notes[y]) < 5) ++tight;
+            }
+        }
+        std::printf("  [probe] pairs under MIDI 48 closer than a fourth: %d of %d\n", tight, looked);
+        CHECK(looked == 0 || tight * 20 < looked, "Low Spacing: the bass stays open");
+    }
+
+    // R3.1 -- Third Floor: no close third whose LOWER note stands under the floor, from either
+    // draw. Free mode's draw had the rule (judged on the candidate alone, which let a C3 over an
+    // A2 through, and as two per cent rather than a veto); the notes a Blend adds went through
+    // chooseNote(), which had none of the rules at all. So the second run puts Blend at one, where
+    // every note of a fill after the first takes that path. The third run, with no floor, is what
+    // gives the first two their teeth.
+    {
+        auto thirdsUnder = [&](float blend, int floor) {
+            BrainParams q = p; q.thirdFloor = floor; q.blend = blend; q.lowSpacing = 0.0f; q.spacing = 0.0f;
+            q.low = 36; q.high = 72; q.density = 7; q.rateSeconds = 0.5f; q.holdMin = 6.0f; q.holdMax = 12.0f;
+            ClusterBrain b;
+            b.reset(0x7F00D, 43);
+            int bad = 0, looked = 0;
+            for (int i = 0; i < 24000; ++i) {
+                b.update(0.05, q, -1, freqOf, [](const BrainEvent&) {});
+                if (i % 20) continue;
+                int notes[ClusterBrain::kSlots]; float vels[ClusterBrain::kSlots];
+                const int n = b.soundingNotes(notes, vels);
+                for (int x = 0; x < n; ++x) for (int y = 0; y < x; ++y) {
+                    if (std::min(notes[x], notes[y]) >= 48) continue;
+                    ++looked;
+                    const int d = std::abs(notes[x] - notes[y]);
+                    if (d == 3 || d == 4) ++bad;
+                }
+            }
+            return std::pair<int, int>(bad, looked);
+        };
+        const auto plain = thirdsUnder(0.0f, 48), blended = thirdsUnder(1.0f, 48), open = thirdsUnder(1.0f, 0);
+        std::printf("  [probe] close thirds on a bass note under MIDI 48: %d of %d pairs (Free), %d of %d (Blend 1), %d of %d with no floor\n",
+                    plain.first, plain.second, blended.first, blended.second, open.first, open.second);
+        CHECK(plain.second > 50 && plain.first == 0, "Third Floor: no third stands on a bass note under the floor");
+        CHECK(blended.second > 50 && blended.first == 0, "...and none arrives with a Blend either");
+        CHECK(open.first > 0, "(the draw does make them when the floor is off, so the two checks have teeth)");
+    }
+
+    // R5.3 with Blend: the notes a Blend adds arrive inside thirty milliseconds of the first, never
+    // in the zone between that and three seconds. The window used to widen to fifty milliseconds
+    // as Blend came down, and the Onset Guard cannot catch that: those notes are timed after it
+    // has run. At five-millisecond ticks, so the timing is the conductor's and not the clock's.
+    {
+        BrainParams q = p; q.blend = 0.25f; q.onsetGuard = true; q.rateSeconds = 3.0f; q.density = 6;
+        q.holdMin = 4.0f; q.holdMax = 8.0f;
+        ClusterBrain b;
+        b.reset(0xB1E4D, 48);
+        double last = -1e9, t = 0.0; int between = 0, fused = 0;
+        for (int i = 0; i < 120000; ++i) {              // ten minutes
+            b.update(0.005, q, -1, freqOf, [&](const BrainEvent& e) {
+                if (e.type != BrainEvent::Type::NoteOn) return;
+                const double gap = t - last;
+                if (gap > 0.031 && gap < 2.999) ++between;
+                if (gap <= 0.031) ++fused;
+                last = t;
+            });
+            t += 0.005;
+        }
+        std::printf("  [probe] Blend 0.25: %d onsets fused inside 30 ms, %d between 30 ms and 3 s\n", fused, between);
+        CHECK(fused > 0, "Blend brings notes in together");
+        CHECK(between == 0, "and never between thirty milliseconds and three seconds");
+    }
+
+    // R6.3 -- Pivot: a changeover is announced by a tone belonging to both roots. With root,
+    // fourth and fifth alone that tone exists only for a root moving a second, a fourth or a fifth;
+    // four of the six steps the root takes are thirds and sixths, and those went unannounced.
+    {
+        BrainParams q = p; q.pivot = 20.0f; q.wander = 1.0f; q.rateSeconds = 1.0f; q.density = 4;
+        ClusterBrain b;
+        b.reset(0x91707, 48);
+        for (int i = 0; i < 36000; ++i) b.update(0.05, q, -1, freqOf, [](const BrainEvent&) {});
+        std::printf("  [probe] root moves in half an hour: %d, announced by a tone belonging to both roots: %d\n",
+                    b.rootMoves(), b.pivotTones());
+        CHECK(b.rootMoves() > 5, "the root moves");
+        CHECK(b.pivotTones() * 10 >= b.rootMoves() * 8, "Pivot: four changeovers in five are announced");
+    }
+
+    // Anti 8 under Any: the ascending semitone stood inside the Root Steps gate, so Any -- "the
+    // draw the conductor always made" -- still climbed. A narrow register at the top of which the
+    // better candidates are out of range is where it did.
+    {
+        BrainParams q = p; q.rootSteps = 0; q.wander = 1.0f; q.rateSeconds = 1.0f; q.low = 40; q.high = 52;
+        ClusterBrain b;
+        b.reset(0x9008, 46);
+        int last = b.root(), climbs = 0, moves = 0;
+        for (int i = 0; i < 24000; ++i) {
+            b.update(0.05, q, -1, freqOf, [](const BrainEvent&) {});
+            if (b.root() != last) { ++moves; if (b.root() - last == 1) ++climbs; last = b.root(); }
+        }
+        std::printf("  [probe] root moves under Any in a narrow register: %d, of them ascending semitones: %d\n", moves, climbs);
+        CHECK(moves > 0 && climbs == 0, "Anti 8: the root never climbs a semitone under Any either");
+    }
+
+    // R5.4 -- Overlap in Chords mode: the voice that is exchanged keeps sounding until its
+    // replacement has been in the air for Overlap seconds. Its note-off used to fall on the very
+    // tick of the note-on, whatever Overlap said -- the rule lived in Free mode only.
+    {
+        BrainParams q = p; q.mode = BrainMode::Chords; q.density = 4; q.rateSeconds = 3.0f; q.overlap = 10.0f;
+        const auto evs = run(q, 600.0, 0x0E4A);
+        std::vector<double> ons;
+        int offs = 0, early = 0, peak = 0, sounding = 0;
+        for (const Ev& e : evs) {
+            if (e.on) { ons.push_back(e.t); if (++sounding > peak) peak = sounding; continue; }
+            --sounding;
+            ++offs;
+            bool tenAfterAnOn = false;                   // the note-on it was exchanged for
+            for (double on : ons) if (std::fabs(e.t - on - 10.0) < 0.06) tenAfterAnOn = true;
+            if (!tenAfterAnOn) ++early;
+        }
+        std::printf("  [probe] Chords with Overlap 10: %d note-offs, %d not ten seconds after a note-on, at most %d voices sounding\n",
+                    offs, early, peak);
+        CHECK(offs > 10 && early == 0, "Overlap: an exchanged voice goes only after its replacement has sounded ten seconds");
+        CHECK(peak > q.density, "so the chord is one voice larger while it does");
+    }
 }
 
 // Stems: the four planes have to add up to what comes out, or they are not stems. They are taken
@@ -3100,7 +3491,9 @@ void testStems()
 {
     const int sr = 48000, block = 256;
     Engine e;
-    e.applyPreset(2);                       // something with a reverb and a cosmos path
+    // From the defaults, not from a preset: what the stems have to sum to is set here, and a
+    // generated preset may carry sections this test was never about (the Memory, the Cloud).
+    e.applyPreset(0);
     e.setParam(ParamId::MasterGain, 0.0f);
     e.setParam(ParamId::OscLevel, 0.2f);    // quiet, so the soft clipper is linear
     e.setParam(ParamId::CosmosSend, 0.3f);
@@ -4672,7 +5065,9 @@ void testResearchBatch()
             int classesSum = 0, classesWorst = 12, draws = 0;
             for (int seed = 1; seed <= 8; ++seed) {
                 const std::vector<double> six = chosen(1.0f, 6, seed);
-                if (six.size() < 2) continue;
+                // Four notes at least: with Harmonic at 1 an octave is the most harmonic pair
+                // there is, and a draw of two or three that lands on one is not a collapse.
+                if (six.size() < 4) continue;
                 bool seen[12] = {};
                 int n = 0;
                 for (double f : six) {
@@ -4805,13 +5200,15 @@ void testResearchBatch()
             e.setParam(ParamId::BrainBlend, blend);
             e.reset();
             std::vector<float> L(256), R(256);
-            for (int b = 0; b < static_cast<int>(1.5 * sr / 256); ++b) e.process(L.data(), R.data(), 256);
+            for (int b = 0; b < static_cast<int>(3.0 * sr / 256); ++b) e.process(L.data(), R.data(), 256);
             return e.activeVoices();
         };
+        // The first note enters alone (R2.3); at a rate of two seconds the second decision comes
+        // within three, and with Blend it brings the rest of the chord with it.
         const int apart = voicesAfter(0.0f), together = voicesAfter(1.0f);
-        std::printf("  [probe] blend through the engine: %d voices after 1.5 s one by one, %d with Blend\n", apart, together);
-        CHECK(apart <= 3, "one by one, a second and a half brings at most three notes");
-        CHECK(together >= 4, "with Blend the knob reaches the conductor and the chord is there at once");
+        std::printf("  [probe] blend through the engine: %d voices after 3 s one by one, %d with Blend\n", apart, together);
+        CHECK(apart <= 3, "one by one, three seconds bring at most three notes");
+        CHECK(together >= 4, "with Blend the knob reaches the conductor and the second decision brings the chord");
     }
 
     // ---- comodulation ------------------------------------------------------------------------
@@ -5369,6 +5766,100 @@ void testResearchBatch()
         CHECK(c0 > 0.9, "a single strand without spread is nearly the same on both sides");
         CHECK(c1 < 0.7, "with Partial Spread the two sides decorrelate: width inside the note");
         CHECK(std::fabs(10.0 * std::log10(e1 / e0)) < 1.0, "and the energy stays within a decibel");
+
+        // Pan and spread together. The test above places its one strand in the MIDDLE, and in the
+        // middle the two ways of combining a pan with a per-partial pair agree exactly -- which is
+        // why it passed while a panned strand was losing partials. The pair's two halves were each
+        // multiplied by their own ear's gain, so a partial leaning away from the pan was
+        // attenuated by how far it leaned: eleven decibels at the outer strand of a six-strand
+        // fan, and since the pattern turns once every fifty seconds, coming and going.
+        //   One partial, panned hard, is the whole question. Its place in the field turns with the
+        // pattern; its LEVEL may not. So: twelve seconds, the energy of each second, and the
+        // distance from the loudest to the quietest. The pattern covers a quarter turn in that
+        // time, which took the old sum from full level to nothing.
+        auto swing = [&](float spread) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Partials, 1.0f); e.setParam(ParamId::Shimmer, 0.0f);
+            e.setParam(ParamId::Unison, 1.0f); e.setParam(ParamId::Spread, 0.0f);
+            e.setParam(ParamId::Detune, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::Haas, 0.0f); e.setParam(ParamId::Itd, 0.0f);
+            // The master's stereo stage treats the side band differently from the middle -- Width
+            // lifts it, Bass Mono takes it away below 150 Hz, Side Air shelves it -- so a partial
+            // that MOVES changes the sum through those alone. Neutral here, or the test measures
+            // the mix desk instead of the bank.
+            e.setParam(ParamId::Width, 1.0f); e.setParam(ParamId::BassMono, 40.0f); e.setParam(ParamId::SideAir, 0.0f);
+            e.setParam(ParamId::PartialSpread, spread);
+            e.setParam(ParamId::Src1Pan, 1.0f);      // hard right: the pan the old sum could not survive
+            e.setParam(ParamId::PanDrift, 0.0f);
+            e.setParam(ParamId::Attack, 0.02f); e.setParam(ParamId::Sustain, 1.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            e.noteOn(48, 0.8f);
+            double lo = 1.0e300, hi = 0.0, acc = 0.0;
+            int inSecond = 0;
+            for (int b = 0; b < 12 * 188; ++b) {
+                e.process(L.data(), R.data(), 256);
+                for (int i = 0; i < 256; ++i)
+                    acc += static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i];
+                if (++inSecond < 188) continue;
+                if (b > 188) { lo = std::min(lo, acc); hi = std::max(hi, acc); }   // the first second is the attack
+                acc = 0.0; inSecond = 0;
+            }
+            return 10.0 * std::log10((hi + 1e-30) / (lo + 1e-30));
+        };
+        const double swingOn = swing(1.0f), swingOff = swing(0.0f);
+        std::printf("  [probe] one partial panned hard: level swing %.2f dB with spread, %.2f dB without\n",
+                    swingOn, swingOff);
+        CHECK(swingOff < 0.2, "a hard-panned partial holds its level");
+        CHECK(swingOn < 0.3, "and holds it when Partial Spread turns it through the field");
+
+        // The same question for a slot's unison copies, which are spread across the field in the
+        // same way and were placed by the same multiplication. Two copies, detuned, spread to the
+        // ends and the slot panned hard: if the far copy survives the pan the two beat against
+        // each other, and if it does not there is nothing left to beat with. So the beating IS
+        // the test -- it cannot be faked by a level.
+        auto beating = [&](float width) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Src1Type, 1.0f);          // Harmonic: a bank with unison copies
+            e.setParam(ParamId::Src1Unison, 2.0f); e.setParam(ParamId::Src1UniDetune, 25.0f);
+            e.setParam(ParamId::Src1UniWidth, width); e.setParam(ParamId::Src1Pan, 1.0f);
+            e.setParam(ParamId::Shimmer, 0.0f); e.setParam(ParamId::Drift, 0.0f);
+            e.setParam(ParamId::FilterOn, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::KeysDepth, 0.0f); e.setParam(ParamId::Haas, 0.0f); e.setParam(ParamId::Itd, 0.0f);
+            e.setParam(ParamId::Width, 1.0f); e.setParam(ParamId::BassMono, 40.0f); e.setParam(ParamId::SideAir, 0.0f);
+            e.setParam(ParamId::Attack, 0.02f); e.setParam(ParamId::Sustain, 1.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            for (int b = 0; b < 4; ++b) e.process(L.data(), R.data(), 256);
+            e.noteOn(60, 0.8f);
+            double lo = 1.0e300, hi = 0.0, acc = 0.0;
+            for (int b = 0; b < 800; ++b) {                    // ~4 s, energy per ~53 ms
+                e.process(L.data(), R.data(), 256);
+                for (int i = 0; i < 256; ++i)
+                    acc += static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i];
+                if ((b % 10) != 9) continue;
+                if (b > 40) { lo = std::min(lo, acc); hi = std::max(hi, acc); }
+                acc = 0.0;
+            }
+            return 10.0 * std::log10((hi + 1e-30) / (lo + 1e-30));
+        };
+        const double beatWide = beating(1.0f), beatNarrow = beating(0.0f);
+        std::printf("  [probe] two detuned copies, slot panned hard: %.1f dB of beating spread wide, %.1f dB together\n",
+                    beatWide, beatNarrow);
+        CHECK(beatNarrow > 3.0, "two detuned copies in one place beat against each other");
+        CHECK(beatWide > 3.0, "and still do when the pan moves them, because both are still there");
     }
 
     // ---- the strike's chance, and its clustering ------------------------------------------
@@ -5664,12 +6155,18 @@ void testResearchBatch()
             }
             return t;
         };
+        // The first note enters alone either way (R2.3: the sound builds from below); what Blend
+        // fuses is the rest of the chord, at the next decision, inside the window in which the ear
+        // hears one onset.
         const std::vector<double> apart = onsets(0.0f), together = onsets(1.0f);
         const double spanApart = apart.size() >= 2 ? apart.back() - apart.front() : 0.0;
-        const double spanTogether = together.size() >= 2 ? together.back() - together.front() : 0.0;
-        std::printf("  [probe] first five onsets span %.3f s one by one, %.3f s with Blend\n", spanApart, spanTogether);
+        const double restTogether = together.size() >= 5 ? together[4] - together[1] : 1.0e9;
+        const double firstAlone = together.size() >= 2 ? together[1] - together[0] : 0.0;
+        std::printf("  [probe] first five onsets span %.3f s one by one; with Blend the first stands alone %.2f s and the other four span %.3f s\n",
+                    spanApart, firstAlone, restTogether);
         CHECK(apart.size() >= 3 && spanApart > 1.0, "one by one, the chord takes seconds to assemble");
-        CHECK(together.size() >= 5 && spanTogether < 0.06, "with Blend the whole chord arrives inside the fusion window");
+        CHECK(together.size() >= 5 && firstAlone > 0.5, "with Blend the first note still enters alone");
+        CHECK(together.size() >= 5 && restTogether < 0.06, "and the rest of the chord arrives inside the fusion window");
     }
 
     // ---- match: partials on the scale ------------------------------------------------------
@@ -6321,7 +6818,7 @@ void testResearchBatch()
     {
         // It must sound, sustain, stay bounded, play the note it is asked for, and come out at
         // roughly the level every other source type comes out at.
-        auto capture = [&](float type, std::vector<float>& cap, double& peak) {
+        auto capture = [&](float type, std::vector<float>& cap, double& peak, int note = 57, float bright = -1.0f) {
             Engine e;
             e.prepare(sr, 256);
             for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
@@ -6329,13 +6826,14 @@ void testResearchBatch()
             e.setParam(ParamId::Src1Type, type);
             e.setParam(ParamId::Src1BowForce, 0.5f);
             e.setParam(ParamId::Src1BowSpeed, 0.4f);
+            if (bright >= 0.0f) e.setParam(ParamId::Brightness, bright);   // Source 1's Bright is the bank's
             e.setParam(ParamId::Air, 0.0f);          // the noise band would pin every measurement
             e.setParam(ParamId::FilterOn, 0.0f);
             e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
             e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
             e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.5f);
             e.reset();
-            e.noteOn(57, 0.9f);                      // A3, 220 Hz
+            e.noteOn(note, 0.9f);                    // 57 is A3, 220 Hz
             std::vector<float> L(256), R(256);
             peak = 0.0;
             for (int b = 0; b < 800; ++b) {
@@ -6378,6 +6876,57 @@ void testResearchBatch()
                     rms, peak, hz, refRms, levelDb);
         CHECK(std::fabs(hz - 220.0) < 6.0, "at the pitch it was asked for");
         CHECK(std::fabs(levelDb) < 6.0, "and within a few decibels of a wavetable at the same Level");
+        // ...and in tune across the register, to a cent or two rather than to the fifty the check
+        // above allows. The string is a delay loop, and its two halves used to be whole numbers of
+        // samples: that rounded the period down to an EVEN number, which is inaudible at A3 (218
+        // samples, already even) and +55 cents at C6 (45.9 samples, played as 44). The loop filter
+        // adds a delay of its own, so the pitch also moved with Bright -- 17 cents across the knob.
+        // Both are measured here, at the notes where the rounding was worst.
+        auto centsOff = [&](const std::vector<float>& v, double wantHz) {
+            double m = 0.0;
+            for (float x : v) m += x;
+            m /= std::max<size_t>(1, v.size());
+            const double want = sr / wantHz;
+            const int from = std::max(2, static_cast<int>(want * 0.6));
+            const int to = std::min(static_cast<int>(v.size()) / 2 - 1, static_cast<int>(want * 1.7) + 2);
+            auto ac = [&](int lag) {
+                double s = 0.0;
+                for (size_t i = static_cast<size_t>(lag); i < v.size(); ++i)
+                    s += (static_cast<double>(v[i]) - m) * (static_cast<double>(v[i - static_cast<size_t>(lag)]) - m);
+                return s;
+            };
+            int at = from; double bestV = -1.0e300;
+            for (int lag = from; lag <= to; ++lag) { const double s = ac(lag); if (s > bestV) { bestV = s; at = lag; } }
+            // Parabolic interpolation on the peak: a whole-sample lag is itself eight cents at 220 Hz.
+            const double y0 = ac(std::max(from, at - 1)), y2 = ac(std::min(to, at + 1));
+            const double d = y0 - 2.0 * bestV + y2;
+            const double off = std::fabs(d) > 1e-30 ? 0.5 * (y0 - y2) / d : 0.0;
+            return 1200.0 * std::log2((sr / (static_cast<double>(at) + off)) / wantHz);
+        };
+        {
+            Engine ask;                       // what the instrument itself calls these notes
+            ask.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) ask.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            const struct { int note; const char* name; } notes[] = { { 57, "A3" }, { 72, "C5" }, { 84, "C6" } };
+            double worst = 0.0;
+            for (const auto& nt : notes) {
+                std::vector<float> v; double pk = 0.0;
+                capture(7.0f, v, pk, nt.note);
+                const double want = ask.frequencyOf(nt.note);
+                const double off = centsOff(v, want);
+                std::printf("  [probe] bow %s: asked %.2f Hz, sounded %.2f Hz, %+.1f cents\n",
+                            nt.name, want, want * std::pow(2.0, off / 1200.0), off);
+                worst = std::max(worst, std::fabs(off));
+            }
+            CHECK(worst < 12.0, "and in tune across the register, not only where the rounding was kind");
+            std::vector<float> dark, brightCap; double p1 = 0.0, p2 = 0.0;
+            capture(7.0f, dark, p1, 69, 0.0f);
+            capture(7.0f, brightCap, p2, 69, 1.0f);
+            const double a4 = ask.frequencyOf(69);
+            const double a = centsOff(dark, a4), b = centsOff(brightCap, a4);
+            std::printf("  [probe] bow A4 at Bright 0 / 1: %+.1f / %+.1f cents\n", a, b);
+            CHECK(std::fabs(a - b) < 8.0, "and Bright changes the tone without changing the pitch");
+        }
         // A bow that stops moving stops sounding: the hair is still on the string, and hair that
         // does not move absorbs. Bowed again at zero speed the note has to die, not ring on.
         Engine e;
@@ -6751,6 +7300,7 @@ int main()
     testPurityFreezeSleep();
     testGhostPortaInertiaTapeCoherence();
     testParamTable();
+    testVoicingRules();
     testAutoplay();
     testScore();
     testStems();

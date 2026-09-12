@@ -10,7 +10,10 @@ import collections
 ROOT = r"G:\Tools\VRAudio\AmbientSynth"
 CLIP = re.compile(r"(Textures|FieldRecordings)/[^|;,\s]+")
 TAG_TONAL, TAG_NOISY = 1 << 4, 1 << 5
-TONAL_TYPES = {"Additive", "Wavetable", "FM", "Bow"}
+# The spectral table type is called Harmonic since the classic wavetable arrived, and leaving it
+# out of this set counted every preset anchored by one as "no tonal slot" -- 17.7 % of the 2.0
+# library against the 3 % that are really unanchored (the two field-recording packs).
+TONAL_TYPES = {"Additive", "Harmonic", "Wavetable", "FM", "Bow"}
 SAMPLE_TYPES = {"Texture", "Stretch", "Spectral"}
 
 import sys

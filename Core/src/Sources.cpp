@@ -17,6 +17,8 @@ const char* const kNoiseKindNames[kNumNoiseKinds] = {
 const char* const kTableNames[kNumTables] = { "Classic", "Organ", "Vocal", "Glass", "Metal", "User" };
 const char* const kSlotRatioNames[kNumSlotRatios] = { "1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1" };
 const double      kSlotRatios[kNumSlotRatios] = { 1.0, 9.0 / 8.0, 6.0 / 5.0, 5.0 / 4.0, 4.0 / 3.0, 3.0 / 2.0, 8.0 / 5.0, 5.0 / 3.0, 7.0 / 4.0, 2.0 };
+static constexpr float kSqrt2    = 1.41421356237f;
+static constexpr float kSqrt2Inv = 0.70710678119f;
 const char* const kFollowNames[2] = { "Free", "Note" };
 
 // ---------------------------------------------------------------- wavetables
@@ -323,9 +325,19 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     // beat like an ensemble in a room whose temperature moves, never in lockstep.
     if (p.drift > 0.0f) hz *= std::pow(2.0, static_cast<double>(p.drift * pitchDrift_.update(dt, driftRate > 0.0f ? driftRate : 0.05f, rng_)) / 1200.0);
 
+    // Unison in a bank type: the copies are spread across the field, so the slot produces two
+    // channels of its own instead of one signal placed by Pan -- and a pair of channels is not
+    // placed by multiplying each of them with its own ear's gain. That does not move the group,
+    // it filters it: a copy standing where the pan came from is attenuated by how far it stands
+    // there, and at the end of the knob it is gone. So for a spread group the Pan is composed
+    // into the copies' own places instead (setBankPitch and renderCycles do it), exactly as a
+    // voice composes its strand fan into its own centre, and what is left here is the level.
+    const int copies = clampv(p.unison, 1, kSlotUnison);
+    const bool wide = copies > 1 && (p.type == SourceType::Harmonic || p.type == SourceType::Wavetable);
     // Level and pan ramp across the block (equal power).
     const float angle = (clampv(p.pan, -1.0f, 1.0f) + 1.0f) * 0.25f * kPi;
-    const float tL = p.level * std::cos(angle), tR = p.level * std::sin(angle);
+    const float tL = wide ? p.level * kSqrt2Inv : p.level * std::cos(angle);
+    const float tR = wide ? p.level * kSqrt2Inv : p.level * std::sin(angle);
     const float sL = (tL - gL_) / static_cast<float>(n), sR = (tR - gR_) / static_cast<float>(n);
 
     if (p.type == SourceType::Noise) {
@@ -346,10 +358,6 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         return;
     }
 
-    // Unison in a bank type: the copies are spread across the field, so the slot produces two
-    // channels of its own instead of one signal placed by Pan. Pan then moves the whole group.
-    const int copies = clampv(p.unison, 1, kSlotUnison);
-    const bool wide = copies > 1 && (p.type == SourceType::Harmonic || p.type == SourceType::Wavetable);
     std::memset(scratch_, 0, sizeof(float) * static_cast<size_t>(n));
     if (wide) std::memset(scratchR_, 0, sizeof(float) * static_cast<size_t>(n));
     if (p.type == SourceType::Harmonic) renderWavetable(scratch_, n, hz, p, table, dt, wide ? scratchR_ : nullptr);
@@ -363,7 +371,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     else renderFm(scratch_, n, hz, p, dt);
     for (int i = 0; i < n; ++i) {
         gL_ += sL; gR_ += sR;
-        outL[i] += (wide ? scratch_[i] : scratch_[i]) * gL_;
+        outL[i] += scratch_[i] * gL_;
         outR[i] += (wide ? scratchR_[i] : scratch_[i]) * gR_;
     }
     gL_ = tL; gR_ = tR;
@@ -373,6 +381,7 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
 {
     // Control: spectrum at the (wandering) position, targets normalised, rotations refreshed.
     const float wander = posDrift_.update(dt, 0.02f, rng_) * 0.5f * p.positionDrift;
+    dispPos_ = clampv(p.position + wander, 0.0f, 1.0f);        // what the picture should show
     float spec[kTablePartials];
     if (table != nullptr) table->spectrumAt(p.position + wander, spec, p.transport);
     else std::memset(spec, 0, sizeof(spec));
@@ -412,7 +421,6 @@ void SourceSlot::renderWavetable(float* out, int n, double hz, const SlotParams&
 // same way, so the sound stays centred however many there are. At one copy the ratio is exactly
 // 1.0 and the arithmetic below is `hz * h`, which is what stood here before unison existed: every
 // preset in the library renders to the bit.
-static constexpr float kSqrt2 = 1.41421356237f;
 
 int SourceSlot::setBankPitch(double hz, const SlotParams& p, int partials)
 {
@@ -425,10 +433,14 @@ int SourceSlot::setBankPitch(double hz, const SlotParams& p, int partials)
         const double place = copies > 1 ? (2.0 * c / (copies - 1) - 1.0) : 0.0;
         const double ratio = copies > 1 ? std::pow(2.0, place * 0.5 * static_cast<double>(p.uniDetune) / 1200.0) : 1.0;
         // Equal power about the centre, scaled so that a copy standing in the middle arrives at
-        // full strength in both channels rather than at 0.707 of it. The slot's own Pan is applied
-        // by the caller afterwards; without this factor it would be applied twice and turning
-        // unison on would drop the level by three decibels instead of thickening it. Measured.
-        const float angle = (static_cast<float>(place) * width + 1.0f) * 0.25f * kPi;
+        // full strength in both channels rather than at 0.707 of it. What the caller adds is the
+        // level alone; the slot's Pan is composed into the copy's own place here (and stopped at
+        // the ear, as a voice stops its strands), because a group that is placed one channel at a
+        // time is not moved by its Pan but thinned by it. Without the factor the level would drop
+        // three decibels when unison is turned on instead of thickening. Measured.
+        const float panC = clampv((copies > 1 ? clampv(p.pan, -1.0f, 1.0f) : 0.0f)
+                                  + static_cast<float>(place) * width, -1.0f, 1.0f);
+        const float angle = (panC + 1.0f) * 0.25f * kPi;
         const float wl = std::cos(angle) * kSqrt2, wr = std::sin(angle) * kSqrt2;
         const int base = c * kTablePartials;
         int fit = 0;
@@ -507,11 +519,15 @@ void SourceSlot::renderCycles(float* out, int n, double hz, const SlotParams& p,
         const double ratio = copies > 1 ? std::pow(2.0, place * 0.5 * static_cast<double>(p.uniDetune) / 1200.0) : 1.0;
         inc[c] = hz * ratio / sr_;
         top = std::max(top, hz * ratio);
-        const float angle = (static_cast<float>(place) * width + 1.0f) * 0.25f * kPi;
+        // The slot's Pan is part of the copy's place, not a gain on each channel: see setBankPitch.
+        const float panC = clampv((copies > 1 ? clampv(p.pan, -1.0f, 1.0f) : 0.0f)
+                                  + static_cast<float>(place) * width, -1.0f, 1.0f);
+        const float angle = (panC + 1.0f) * 0.25f * kPi;
         wl[c] = std::cos(angle) * kSqrt2;
         wr[c] = std::sin(angle) * kSqrt2;
     }
     const float pos = clampv(p.position + wander, 0.0f, 1.0f);
+    dispPos_ = pos;                                            // what the picture should show
     const int level = cycleLevelFor(top, sr_, cyPrimed_ ? cyLevel_ : -1);
     const int levelFrom = cyPrimed_ ? cyLevel_ : level;
     const float posFrom = cyPrimed_ ? cyPos_ : pos;
@@ -809,8 +825,12 @@ void SourceSlot::renderTexture(float* outL, int n, double hz, double speed, cons
         const double room = (static_cast<double>(len) - 2.0) / std::max(rate, 1e-9);
         if (room < 64.0) continue;                      // a clip too short for any grain at all
         if (static_cast<double>(glen) > room) glen = static_cast<int>(room);
-        const double span = static_cast<double>(len) - static_cast<double>(glen) * rate - 2.0;
-        if (span <= 0.0) continue;
+        // What is left for Position to choose from. Shortening the grain above leaves a span of
+        // very nearly nothing, and when `room` lands on a whole number -- which it does exactly
+        // whenever the rate is a power of two, so at every Free slot standing at its own speed --
+        // it leaves nothing at all. `span <= 0 -> no grain` then meant the slot fell silent for
+        // good instead of playing the one grain the clip can hold, starting at its beginning.
+        const double span = std::max(0.0, static_cast<double>(len) - static_cast<double>(glen) * rate - 2.0);
         const double centre = clampv(static_cast<double>(p.position) + wander, 0.0, 1.0) * span;
         // Spread scatters the start point around Position; at 1 a grain may come from anywhere.
         double start = centre + (rng_.bipolar() * clampv(p.spread, 0.0f, 1.0f)) * len;
@@ -1470,8 +1490,8 @@ void SourceSlot::renderBow(float* out, int n, double hz, const SlotParams& p, fl
 {
     (void)dt;
     const double f0 = hz > 20.0 ? hz : 20.0;
-    const int len = static_cast<int>(sr_ / f0);
-    if (len < 4 || len >= kBowMax) { std::memset(out, 0, sizeof(float) * static_cast<size_t>(n)); return; }
+    const double period = sr_ / f0;
+    if (period < 4.0 || period >= static_cast<double>(kBowMax - 4)) { std::memset(out, 0, sizeof(float) * static_cast<size_t>(n)); return; }
     if (!bowReady_) {
         std::fill(bowNut_.begin(), bowNut_.end(), 0.0f);
         std::fill(bowBridge_.begin(), bowBridge_.end(), 0.0f);
@@ -1499,18 +1519,36 @@ void SourceSlot::renderBow(float* out, int n, double hz, const SlotParams& p, fl
     const float contact = 1.0f - 0.02f * rest * clampv(p.bowForce, 0.0f, 1.0f);
     // Where the bow sits, as a fraction of the string, kept away from the ends.
     const float rel = 0.06f + 0.34f * clampv(p.position, 0.0f, 1.0f);
-    // The string is two waveguides that meet at the bow: from the bow to the nut and back is 2a
-    // samples, to the bridge and back 2b, and the two together are one period.
-    const int a = std::max(1, static_cast<int>(rel * len * 0.5f));
-    const int b = std::max(1, len / 2 - a);
     // The bridge's reflection loses the highs, which is what makes a string's upper partials die
     // first. Bright is the slot's own brightness knob, used here for the same thing.
     const float damp = 0.55f - 0.45f * clampv(p.bright, 0.0f, 1.0f);
+    const float lpCoef = 1.0f - damp;
+    // The string is two waveguides that meet at the bow: from the bow to the nut and back, and to
+    // the bridge and back, and the two together are one period. Both were whole numbers of
+    // samples, and the sum of them came to 2*floor(period/2) -- so the period was rounded down to
+    // an EVEN number of samples and the string played sharp: measured +10 cents at C4, +25 at C5,
+    // +55 at C6, and unevenly, so the intervals came out wrong rather than merely the pitch. They
+    // are fractions now, read with a linear interpolation between two taps, which has exactly the
+    // right delay at the fundamental and costs the top of the spectrum a little of what the bridge
+    // filter is taking from it anyway. Measured after: within half a cent up to C6.
+    // The bridge filter is part of the loop and a one-pole delays -- (1-g)/g samples at the
+    // fundamental -- so its share is subtracted from that side. Unsubtracted it made the string
+    // flat, and since g IS the Bright knob, the pitch moved with the tone: 17 cents from one end
+    // of Bright to the other, measured at A4.
+    const double lpDelay = (1.0 - static_cast<double>(lpCoef)) / std::max(static_cast<double>(lpCoef), 1.0e-3);
+    const double dNut    = std::max(1.0, static_cast<double>(rel) * period);
+    const double dBridge = std::max(1.0, period - dNut - lpDelay);
+    const int   nutI = static_cast<int>(dNut),    briI = static_cast<int>(dBridge);
+    const float nutF = static_cast<float>(dNut - nutI), briF = static_cast<float>(dBridge - briI);
     for (int i = 0; i < n; ++i) {
         // What arrives at the bow from each side, having been reflected at its end: the nut
         // inverts, the bridge inverts and damps.
-        const float vl = -bowNut_[(bowW_ - 2 * a + kBowMax) & (kBowMax - 1)];
-        bowLp_ += (1.0f - damp) * (bowBridge_[(bowW_ - 2 * b + kBowMax) & (kBowMax - 1)] - bowLp_);
+        const float n0 = bowNut_[(bowW_ - nutI + kBowMax) & (kBowMax - 1)];
+        const float n1 = bowNut_[(bowW_ - nutI - 1 + kBowMax) & (kBowMax - 1)];
+        const float vl = -(n0 + nutF * (n1 - n0));
+        const float b0 = bowBridge_[(bowW_ - briI + kBowMax) & (kBowMax - 1)];
+        const float b1 = bowBridge_[(bowW_ - briI - 1 + kBowMax) & (kBowMax - 1)];
+        bowLp_ += lpCoef * ((b0 + briF * (b1 - b0)) - bowLp_);
         const float vr = -0.995f * bowLp_;
         const float dv = vBow - (vl + vr);
         float rho = std::pow(std::fabs((dv - 0.001f) * slope) + 0.75f, -4.0f);

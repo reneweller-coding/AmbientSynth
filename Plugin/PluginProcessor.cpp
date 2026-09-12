@@ -629,7 +629,7 @@ void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
     }, scope);
     // The matrix rows and the envelope shapes are data, not parameters, so they do not travel
     // through the parameter tree: the engine takes them straight from the preset.
-    if (scope != PresetScope::Cosmos) target().applyPresetModulation(pr);
+    if (scope != PresetScope::Cosmos && scope != PresetScope::Near) target().applyPresetModulation(pr);
 }
 
 void AmbientSynthProcessor::setCurrentProgram(int index)
@@ -713,6 +713,39 @@ void AmbientSynthProcessor::applyStrikePreset(int index)
     if (index < 0 || index >= numStrikePresets()) return;
     strikeIndex_ = index;
     applyScoped(strikePreset(index), PresetScope::Strike);
+}
+
+void AmbientSynthProcessor::applyNearPreset(int index)
+{
+    if (index < 0 || index >= numNearPresets()) return;
+    nearIndex_ = index;
+    const Preset& pr = nearPreset(index);
+    applyScoped(pr, PresetScope::Near);
+    // The preset's clip, named relative to the library's root, or none: a preset that names no
+    // clip takes the one that was loaded away, so the flute preset after the radio preset does
+    // not find a voice in its slot.
+    if (pr.texture != nullptr && *pr.texture != 0) {
+        const std::string got = ambient::resolveLibraryFile(pr.texture);
+        if (!got.empty()) loadNearClipFile(juce::File(juce::String(juce::CharPointer_UTF8(got.c_str()))));
+        else clearNearClip();
+    } else clearNearClip();
+}
+
+bool AmbientSynthProcessor::loadNearClipFile(const juce::File& file)
+{
+    std::vector<float> l, r; double rate = 0.0;
+    if (!readStereo(file, l, r, rate)) return false;
+    const double base = baseHzFromName(file.getFileName().toRawUTF8());
+    target().setNearTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                           base > 0.0 ? base : 261.6256, ambient::loopFromName(file.getFileName().toRawUTF8()));
+    nearClipFile_ = file;
+    return true;
+}
+
+void AmbientSynthProcessor::clearNearClip()
+{
+    target().clearNearTexture();
+    nearClipFile_ = juce::File();
 }
 
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()
@@ -977,6 +1010,9 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
         if (const ambient::Texture* t = from.displayTexture(k))
             if (!t->empty())
                 e.setTexture(k, *t);
+    if (const ambient::Texture* t = from.displayNearTexture())   // the near layer's clip survives the change too
+        if (!t->empty())
+            e.setNearTexture(*t);
     // The impulse responses are the one thing the engine cannot hand over -- it keeps them as
     // spectra, not as samples -- so a room the player opened is read from its file again. A
     // generated room needs nothing: a new engine makes its own.
@@ -1062,6 +1098,10 @@ void AmbientSynthProcessor::beginTransition(int index)
             if (n > 0) in.adoptCluster(notes, vels, n, second);
             else if (!second) in.requestBrainFill();
         }
+        // The foreground carries on too: a sequence that was running keeps its ring and its
+        // place in it, a gap that was half over stays half over. What it does not carry is the
+        // note that was sounding -- that voice belongs to the engine that is leaving.
+        in.adoptNear(live().nearState());
     }
     // The chord that is being held is held on the new instrument too. Without this a player
     // holding a chord through a preset change heard it die with the old preset and nothing take

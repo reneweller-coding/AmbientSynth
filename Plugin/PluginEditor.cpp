@@ -57,7 +57,8 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         // Strike shares the Cosmos group as a tab: like the Cosmos it is a sound source that is
         // not one of the four oscillators, and beside them it read as a fifth. The Memory is the
         // second parallel world beside the Cosmos, and takes the third tab.
-        { "COSMOS",     kCosmos,    { { "Cosmos", "Strike", "Memory" } }, {}, 1 },
+        // The near layer takes the last two tabs: its source and its events, each a page.
+        { "COSMOS",     kCosmos,    { { "Cosmos", "Strike", "Memory", "Near Source", "Near Events" } }, {}, 1 },
         // Last in the right column and stretchy: every page of it has a display, and whatever
         // height the left column has over goes to that display, the page refitted taller.
         { "CONDUCTOR",  kConductor, { { "Cluster Brain", "Autoplay", "Brain 2", "Tuning", "Coherence", "Clock" } }, {}, 1, {}, 0, true },
@@ -75,7 +76,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { 0, 1, { "FILTER", "Z-PLANE", "ENVELOPE + EXPRESSION" }, { { "Air", "Filter" }, { "Z-Plane" }, { "Envelope", "Expression" } } },
         { 2, 0, { "ENSEMBLE + DELAY", "DELAY 2 + NEAR REVERB + BLUR" }, { { "Ensemble", "Delay" }, { "Delay 2", "Near Reverb", "Blur" } } },
         { 3, 0, { "CLOUD + FAR REVERB", "FEEDBACK + ROOM", "EARLY ROOM + BODY + PATINA" }, { { "Cloud", "Far Reverb" }, { "Feedback", "Room" }, { "Early Room", "Body", "Patina" } } },
-        { 4, 0, { "COSMOS", "STRIKE", "MEMORY" }, { { "Cosmos" }, { "Strike" }, { "Memory" } } },
+        { 4, 0, { "COSMOS", "STRIKE", "MEMORY", "NEAR SOURCE", "NEAR EVENTS" }, { { "Cosmos" }, { "Strike" }, { "Memory" }, { "Near Source" }, { "Near Events" } } },
         // The clock shares the coherence page: three cells alone were a page three quarters empty.
         { 5, 0, { "BRAIN", "AUTOPLAY", "BRAIN 2", "TUNING", "COHERENCE + CLOCK" }, { { "Cluster Brain" }, { "Autoplay" }, { "Brain 2" }, { "Tuning" }, { "Coherence", "Clock" } } },
     };
@@ -330,7 +331,7 @@ AmbientSynthEditor::AmbientSynthEditor(AmbientSynthProcessor& p)
         { "SHAPE",      kVoice,     { { "Air", "Filter" }, { "Envelope", "Expression" }, { "Z-Plane", "Vector" } }, {}, 1,
                                     { filterView_.get(), envView_.get(), vectorView_.get() } },
         { "FOREGROUND", kFore,      { { "Ensemble", "Delay", "Delay 2", "Near Reverb", "Blur" } }, {}, 1 },
-        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike", "Memory" } }, {}, 1 },
+        { "BACKGROUND", kBack,      { { "Cloud", "Far Reverb", "Feedback", "Room", "Early Room", "Body", "Patina", "Cosmos", "Strike", "Memory", "Near Source", "Near Events" } }, {}, 1 },
         { "ANALYSIS",   kVoice,     { {} }, {}, 1, { spectrumView_.get() }, 80, true },
         { "MORPH",      kMorph,     { { "Morph", "Macros", "Brain 2", "Clock" } }, {}, 2 },
         { "CONDUCTOR",  kConductor, { { "Cluster Brain" }, { "Autoplay" }, { "Tuning" }, { "Coherence" } }, {}, 2,
@@ -668,6 +669,30 @@ void AmbientSynthEditor::buildCells()
         };
         strikePresetBox_ = sb.get();
         addExtraCell("Strike", std::move(sb), "Preset", 3);
+    }
+    {
+        // The near layer's bank: a foreground for the night, kept while the backgrounds change.
+        auto nb = std::make_unique<juce::ComboBox>();
+        nb->setTextWhenNothingSelected("Near preset");
+        for (int fam = 0; fam < numNearPresetFamilies(); ++fam) {
+            nb->addSectionHeading(nearPresetFamily(fam));
+            for (int i = 0; i < numNearPresets(); ++i)
+                if (nearPresetCategory(i) == fam) nb->addItem(nearPreset(i).name, i + 1);
+        }
+        nb->addSectionHeading("Off");
+        nb->addItem(nearPreset(0).name, 1);
+        nb->setTooltip("The foreground on its own: what is played close to the ear, how it is shaped, and how often. A layer like the Cosmos -- it stays while sound presets change under it -- and it touches nothing outside the two Near sections.");
+        nb->onChange = [this] {
+            const int idx = nearPresetBox_->getSelectedId() - 1;
+            if (idx >= 0) { pushUndo("near preset"); proc_.applyNearPreset(idx); }
+        };
+        nearPresetBox_ = nb.get();
+        addExtraCell("Near Events", std::move(nb), "Preset", 3);
+        // The near source's own clip: what its Clip, Texture, Stretch and Spectral types read.
+        auto clip = std::make_unique<juce::TextButton>("Clip...");
+        clip->setTooltip("A recording for the near source -- a near preset brings its own from the library's archive; this opens any file. With none, the near source reads Source 4's clip.");
+        clip->onClick = [this] { chooseNearClipFile(); };
+        nearClipCell_ = addExtraCell("Near Source", std::move(clip), "Source 4's clip", 2);
     }
     auto impulse = std::make_unique<juce::TextButton>("Impulse A...");
     impulse->onClick = [this] { chooseImpulseFile(false); };
@@ -2342,6 +2367,50 @@ int AmbientSynthEditor::cellForParam(ParamId id) const
     return -1;
 }
 
+// The Near Source's cells by its type, the way updateSourceCells does it for the four slots: what
+// the chosen type ignores is gone from the strip, not greyed.
+bool AmbientSynthEditor::updateNearCells()
+{
+    enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9,
+           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15 };
+    const int type = static_cast<int>(std::lround(proc_.engine().getParam(ParamId::ForeType)));
+    const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops;
+    struct Rule { ParamId id; bool on; };
+    const Rule rules[] = {
+        { ParamId::ForeOctave,   true },
+        { ParamId::ForeRatio,    true },
+        { ParamId::ForePosition, type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip },
+        { ParamId::ForePosDrift, type != Clip },
+        { ParamId::ForeDensity,  type == Texture || type == Noise || type == Drops },
+        { ParamId::ForeFollow,   type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip },
+        { ParamId::ForeBright,   type == Additive || type == Bow || type == Spectral || near },
+        { ParamId::ForeForce,    type == Bow || type == Flute || type == Murmur || rubbed },
+        { ParamId::ForeSpeed,    type == Bow || type == Flute || type == Murmur || rubbed },
+        { ParamId::ForeNoise,    type == Noise },
+        { ParamId::ForeNoiseQ,   type == Noise },
+        { ParamId::ForeFmRatio,  type == Fm },
+        { ParamId::ForeFmIndex,  type == Fm },
+        { ParamId::ForePartials, type == Additive },
+        { ParamId::ForeTilt,     type == Additive },
+        { ParamId::ForeInharm,   type == Additive },
+        { ParamId::ForeDrift,    type != Off && type != Noise && type != Drops && type != Clip },
+        { ParamId::ForeTable,    type == Harmonic || type == Wavetable },
+    };
+    bool changed = false;
+    for (const Rule& r : rules) {
+        const int ci = cellForParam(r.id);
+        if (ci < 0) continue;
+        Cell& c = cells_[static_cast<size_t>(ci)];
+        if (c.unused != !r.on) { c.unused = !r.on; c.comp->setEnabled(r.on); changed = true; }
+    }
+    if (nearClipCell_ >= 0) {   // the clip button belongs to the types that read a recording
+        Cell& cc = cells_[static_cast<size_t>(nearClipCell_)];
+        const bool on = type == Clip || type == Texture || type == Stretch || type == Spectral;
+        if (cc.unused != !on) { cc.unused = !on; changed = true; }
+    }
+    return changed;
+}
+
 void AmbientSynthEditor::updateSourceCells()
 {
     // The 24 slot fields (see Params.h): 0 type 1 level 2 octave 3 ratio 4 pan 5 table 6 position
@@ -2349,38 +2418,40 @@ void AmbientSynthEditor::updateSourceCells()
     // 16 noise q 17 partials 18 tilt 19 bright 20 odd/even 21 inharmonic 22 shimmer 23 shimmer rate.
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
-    enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9 };
+    enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9,
+           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
     bool cellsChanged = false;
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
+        const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops;
         // Every field, not the first 33: the loop used to stop at Transport, and everything added after
         // it -- Interp, Unison and its detune and width, Root -- stood lit for every type, Root on a clip.
         for (int off = 1; off < ambient::kSlotFields; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Harmonic || type == Wavetable; break;         // table choice
-            case 6:  on = type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral; break;   // position, or where the bow sits
+            case 6:  on = type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip; break;   // position, or where the bow sits, the embouchure, the stick, the medium, the vessel, where the clip starts
             case 7:  on = type != Off;  break;                                   // pos drift moves all of them
             case 8:
             case 9:  on = type == Fm; break;
             case 10: on = type == Texture || type == Stretch; break;             // grain: the grain, or the spectral window
             case 13:
             case 14: on = type == Texture; break;                                // grains, spread
-            case 11: on = type == Texture || type == Noise; break;               // density: grains or crackle
-            case 12: on = type == Texture || type == Noise || type == Stretch || type == Spectral; break;   // pitch follow
+            case 11: on = type == Texture || type == Noise || type == Drops; break;   // density: grains, crackle or drops
+            case 12: on = type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip; break;   // pitch follow
             case 15:
             case 16: on = type == Noise; break;
-            case 19: on = type == Additive || type == Bow || type == Spectral; break;   // bright: the bank's window, the string's loop filter, or the model's tilt
+            case 19: on = type == Additive || type == Bow || type == Spectral || near; break;   // bright: the bank's window, the string's loop filter, the model's tilt, the pipe's end
             case 17: case 18: case 20: case 21: case 22: case 23: on = type == Additive; break;
-            case 24: on = type == Texture || type == Noise; break;                // density sync
-            case 25: on = type != Off && type != Noise; break;                    // pitch drift
+            case 24: on = type == Texture || type == Noise || type == Drops; break;   // density sync
+            case 25: on = type != Off && type != Noise && type != Drops && type != Clip; break;   // pitch drift
             case 26:
             case 27: on = type == Stretch; break;                                 // stretch, loop fade
             case 28:
-            case 29: on = type == Bow; break;                                     // bow force, bow speed
+            case 29: on = type == Bow || type == Flute || type == Murmur || rubbed; break;   // force and speed: the bow, the breath, the effort, the stick
             case 30:
             case 31: on = type == Spectral; break;                                // spectral rate, breath
             case 32: on = type == Harmonic; break;                                // transport: how the spectra morph
@@ -2389,6 +2460,7 @@ void AmbientSynthEditor::updateSourceCells()
             case 38:
             case 39: on = type == Harmonic || type == Wavetable; break;           // unison, its detune and width: the table types
             case 40: on = type == Harmonic; break;                                // root: a floor under a spectrum's fundamental
+            case 41: on = type != Off; break;                                     // the role: which notes the slot sounds in
             default: break;
             }
             const int ci = cellForParam(ids[off]);
@@ -2401,7 +2473,7 @@ void AmbientSynthEditor::updateSourceCells()
         // The slot's file button belongs to the types that read a clip; the wavetable button to the table.
         if (textureCell_[k] >= 0) {
             Cell& tc = cells_[static_cast<size_t>(textureCell_[k])];
-            const bool on = type == Texture || type == Stretch || type == Spectral;
+            const bool on = type == Texture || type == Stretch || type == Spectral || type == Clip;
             if (tc.unused != !on) { tc.unused = !on; cellsChanged = true; }
         }
         if (k == 1 && tableCell_ >= 0) {
@@ -2417,6 +2489,7 @@ void AmbientSynthEditor::updateSourceCells()
             if (c.unused != !on) { c.unused = !on; c.comp->setEnabled(on); cellsChanged = true; }
         }
     }
+    if (updateNearCells()) cellsChanged = true;
     if (refreshLayoutState()) cellsChanged = true;
     if (cellsChanged && getWidth() > 0) rebuildLayout();   // at construction the size is not set yet; the first layout follows
     auto nameCell = [&](int ci, const juce::String& base, const juce::String& file) {
@@ -2429,6 +2502,7 @@ void AmbientSynthEditor::updateSourceCells()
     for (int k = 0; k < ambient::kSlots; ++k) nameCell(textureCell_[k], "Texture file", proc_.textureName(k));
     nameCell(impulseCell_, "Dark Hall (built in)", proc_.impulseName());
     nameCell(impulseBCell_, "no second room", proc_.impulseBName());
+    nameCell(nearClipCell_, "Source 4's clip", proc_.nearClipName());
 }
 
 void AmbientSynthEditor::showMappingEditor()
@@ -2482,6 +2556,19 @@ void AmbientSynthEditor::chooseSourceFile(bool wavetable, int slot)
             if (!ok)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, wavetable ? "Wavetable" : "Texture",
                     wavetable ? "Could not read this file as a wavetable (no whole cycle in it, or nothing but silence)." : "Could not read this audio file.");
+            repaint();
+        });
+}
+
+void AmbientSynthEditor::chooseNearClipFile()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Load a recording for the near source", juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc) {
+            const auto file = fc.getResult();
+            if (!file.existsAsFile()) return;
+            if (!proc_.loadNearClipFile(file))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Near clip", "Could not read this audio file.");
             repaint();
         });
 }

@@ -7260,8 +7260,577 @@ void testCycleTable()
     }
 }
 
+// ---------------------------------------------------------------- the near layer (13.09.2026)
+//
+// The near sources, the slot roles, the near events' scheduler on its own and inside the engine,
+// and the layer's scope. Each source is held to what it claims: that it sounds, stays bounded,
+// comes out near the level every other type comes out at, and -- where it has a pitch -- is in
+// tune with the instrument's own tuning across the register.
+static void testNearLayer()
+{
+    std::setvbuf(stdout, nullptr, _IONBF, 0);   // a crash in here should leave its probes behind, not its buffer
+    std::printf("[near layer]\n");
+    const double sr = 48000.0;
+    auto rmsOf = [](const std::vector<float>& v) {
+        double s = 0.0;
+        for (float x : v) s += static_cast<double>(x) * x;
+        return std::sqrt(s / std::max<size_t>(1, v.size()));
+    };
+    // Pitch by autocorrelation with a parabolic peak, in cents against `wantHz` (as the bow test).
+    auto centsOff = [&](const std::vector<float>& v, double wantHz) {
+        double m = 0.0;
+        for (float x : v) m += x;
+        m /= std::max<size_t>(1, v.size());
+        const double want = sr / wantHz;
+        const int from = std::max(2, static_cast<int>(want * 0.6));
+        const int to = std::min(static_cast<int>(v.size()) / 2 - 1, static_cast<int>(want * 1.7) + 2);
+        auto ac = [&](int lag) {
+            double s = 0.0;
+            for (size_t i = static_cast<size_t>(lag); i < v.size(); ++i)
+                s += (static_cast<double>(v[i]) - m) * (static_cast<double>(v[i - static_cast<size_t>(lag)]) - m);
+            return s;
+        };
+        int at = from; double bestV = -1.0e300;
+        for (int lag = from; lag <= to; ++lag) { const double s = ac(lag); if (s > bestV) { bestV = s; at = lag; } }
+        // The peak between the samples by a parabola through the three autocorrelation values
+        // around it -- NOT by evaluating the autocorrelation at fractional lags on the linearly
+        // interpolated signal, which was tried: linear interpolation smooths, so a spiky wave
+        // correlates better with itself at whole lags than at any fraction, and every pitch it
+        // measured came out as a whole number of samples (the flute's C6 as 47.0 for 46.7, "-11
+        // cents", whatever the loop did). A measurement that can only answer in whole samples
+        // finds whole samples.
+        const double y0 = ac(std::max(from, at - 1)), y2 = ac(std::min(to, at + 1));
+        const double d = y0 - 2.0 * bestV + y2;
+        const double off = std::fabs(d) > 1e-30 ? 0.5 * (y0 - y2) / d : 0.0;
+        return 1200.0 * std::log2((sr / (static_cast<double>(at) + off)) / wantHz);
+    };
+    // One slot of one type, alone, dry: the last `keepBlocks` blocks of the left channel.
+    struct Knobs { float force = 0.5f, speed = 0.4f, pos = 0.1f, posDrift = 0.3f, bright = 0.6f, density = 4.0f; int noise = 1; bool follow = false; };
+    auto capture = [&](float type, const Knobs& k, std::vector<float>& cap, double& peak, int note = 57, int blocks = 800, int keepFrom = 400) {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 0.0f);
+        e.setParam(ParamId::Src1Type, type);
+        e.setParam(ParamId::Src1BowForce, k.force);
+        e.setParam(ParamId::Src1BowSpeed, k.speed);
+        e.setParam(ParamId::Src1Position, k.pos);
+        e.setParam(ParamId::Src1PosDrift, k.posDrift);
+        e.setParam(ParamId::Brightness, k.bright);
+        e.setParam(ParamId::Src1Density, k.density);
+        e.setParam(ParamId::Src1Noise, static_cast<float>(k.noise));
+        e.setParam(ParamId::Src1Follow, k.follow ? 1.0f : 0.0f);
+        e.setParam(ParamId::Air, 0.0f);
+        e.setParam(ParamId::FilterOn, 0.0f);
+        e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+        e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+        e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.5f);
+        e.reset();
+        e.noteOn(note, 0.9f);
+        std::vector<float> L(256), R(256);
+        peak = 0.0;
+        cap.clear();
+        for (int b = 0; b < blocks; ++b) {
+            e.process(L.data(), R.data(), 256);
+            for (int i = 0; i < 256; ++i) {
+                peak = std::max(peak, std::fabs(static_cast<double>(L[static_cast<size_t>(i)])));
+                if (b >= keepFrom) cap.push_back(L[static_cast<size_t>(i)]);
+            }
+        }
+    };
+    // The RMS envelope at 100 Hz, for what moves slowly: syllables, beats, drops.
+    auto envelope = [&](const std::vector<float>& v) {
+        std::vector<double> env;
+        const size_t hop = static_cast<size_t>(sr / 100.0);
+        for (size_t i = 0; i + hop <= v.size(); i += hop) {
+            double s = 0.0;
+            for (size_t j = i; j < i + hop; ++j) s += static_cast<double>(v[j]) * v[j];
+            env.push_back(std::sqrt(s / static_cast<double>(hop)));
+        }
+        return env;
+    };
+    // Peaks of an envelope that are the highest point for eighty milliseconds around them: a
+    // syllable or a drop, not a pulse of the glottis.
+    auto peaksOf = [](const std::vector<double>& env, double share) {
+        double mx = 0.0;
+        for (double e : env) mx = std::max(mx, e);
+        int n = 0;
+        for (size_t i = 1; i + 1 < env.size(); ++i) {
+            if (!(env[i] > share * mx)) continue;
+            bool top = true;
+            for (size_t j = (i >= 8 ? i - 8 : 0); j <= i + 8 && j < env.size(); ++j)
+                if (j != i && (env[j] > env[i] || (env[j] == env[i] && j < i))) { top = false; break; }
+            if (top) ++n;
+        }
+        return n;
+    };
+    // How much of the signal is high: the energy of the first difference against the energy,
+    // which for a band-limited voice is small and for an insect is not.
+    auto highShare = [](const std::vector<float>& v) {
+        double d = 0.0, e = 0.0;
+        for (size_t i = 1; i < v.size(); ++i) { const double x = v[i] - v[i - 1]; d += x * x; e += static_cast<double>(v[i]) * v[i]; }
+        return d / std::max(e, 1e-30);
+    };
+    Engine ask;
+    ask.prepare(sr, 256);
+    for (int i = 0; i < kNumParams; ++i) ask.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+
+    std::vector<float> ref; double refPeak = 0.0;
+    capture(1.0f, Knobs{}, ref, refPeak);   // the harmonic table, the level every type is set by
+    const double refRms = rmsOf(ref);
+
+    // ---- the flute: sounds, in tune across the register, overblows to its octave
+    {
+        std::vector<float> cap; double peak = 0.0;
+        Knobs k; k.force = 0.55f; k.speed = 0.35f; k.pos = 0.1f; k.posDrift = 0.0f; k.bright = 0.6f;
+        capture(10.0f, k, cap, peak);
+        const double rms = rmsOf(cap);
+        const double levelDb = 20.0 * std::log10((rms + 1e-12) / (refRms + 1e-12));
+        std::printf("  [probe] flute rms %.4f peak %.3f -> %+.1f dB against the table\n", rms, peak, levelDb);
+        CHECK(rms > 0.001, "the flute sounds");
+        CHECK(peak < 1.5 && std::isfinite(peak), "and stays bounded");
+        CHECK(std::fabs(levelDb) < 8.0, "and within a few decibels of a table at the same Level");
+        const struct { int note; const char* name; } notes[] = { { 57, "A3" }, { 72, "C5" }, { 84, "C6" } };
+        double worst = 0.0;
+        for (const auto& nt : notes) {
+            std::vector<float> v; double pk = 0.0;
+            capture(10.0f, k, v, pk, nt.note);
+            const double want = ask.frequencyOf(nt.note);
+            const double off = centsOff(v, want);
+            std::printf("  [probe] flute %s: asked %.2f Hz, sounded %.2f Hz, %+.1f cents\n", nt.name, want, want * std::pow(2.0, off / 1200.0), off);
+            worst = std::max(worst, std::fabs(off));
+        }
+        CHECK(worst < 12.0, "the flute is in tune across the register");
+        {   // The slot alone over a fine sweep of the period: the loop keeps the fraction. (For
+            // three rounds it seemed not to, and the loop was rebuilt twice before the measurement
+            // itself turned out to be the thing that could only answer in whole samples.)
+            double worstSweep = 0.0;
+            for (double period : { 60.0, 60.25, 60.5, 60.75, 61.0 }) {
+                auto slotBox = std::make_unique<SourceSlot>();
+                SourceSlot& slot = *slotBox;
+                slot.prepare(sr, 1);
+                slot.noteOn(true);
+                SlotParams sp;
+                sp.type = SourceType::Flute; sp.level = 1.0f; sp.bowForce = 0.55f; sp.bowSpeed = 0.35f;
+                sp.position = 0.1f; sp.positionDrift = 0.0f; sp.bright = 0.6f;
+                const double hz = sr / period;
+                std::vector<float> l(64), r(64), v;
+                for (int b = 0; b < 1200; ++b) {
+                    std::fill(l.begin(), l.end(), 0.0f); std::fill(r.begin(), r.end(), 0.0f);
+                    slot.render(l.data(), r.data(), 64, hz, sp, nullptr, nullptr, 0.05f);
+                    if (b >= 600) v.insert(v.end(), l.begin(), l.end());
+                }
+                worstSweep = std::max(worstSweep, std::fabs(centsOff(v, hz)));
+            }
+            std::printf("  [probe] flute over a sweep of 60.00 .. 61.00 samples of period: worst %.1f cents\n", worstSweep);
+            CHECK(worstSweep < 8.0, "the pipe's fractional delay is kept between the samples");
+        }
+        Knobs over = k; over.pos = 1.0f; over.force = 0.7f;
+        std::vector<float> v; double pk = 0.0;
+        capture(10.0f, over, v, pk, 57);
+        const double off = centsOff(v, ask.frequencyOf(57) * 2.0);
+        std::printf("  [probe] flute overblown at A3: %+.1f cents from the octave\n", off);
+        CHECK(std::fabs(off) < 30.0, "with the embouchure shortened the pipe speaks its octave");
+    }
+    // ---- the bowl: builds, rings at the note, beats
+    {
+        std::vector<float> cap; double peak = 0.0;
+        Knobs k; k.force = 0.5f; k.speed = 0.45f; k.pos = 0.1f; k.posDrift = 0.5f; k.bright = 0.6f;
+        capture(12.0f, k, cap, peak, 57, 1200, 600);
+        const double rms = rmsOf(cap);
+        const double levelDb = 20.0 * std::log10((rms + 1e-12) / (refRms + 1e-12));
+        const double off = centsOff(cap, ask.frequencyOf(57));
+        const std::vector<double> env = envelope(cap);
+        double lo = 1e9, hi = 0.0;
+        for (double e : env) { lo = std::min(lo, e); hi = std::max(hi, e); }
+        // The beating: rubbed for three seconds, then the stick lifted, and the ring-out's
+        // envelope -- where the two halves of every doublet are on their own.
+        double rlo = 1e9, rhi = 0.0;
+        {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Src1Type, 12.0f);
+            e.setParam(ParamId::Src1BowForce, k.force); e.setParam(ParamId::Src1BowSpeed, k.speed);
+            e.setParam(ParamId::Src1Position, k.pos); e.setParam(ParamId::Src1PosDrift, k.posDrift);
+            e.setParam(ParamId::Brightness, k.bright);
+            e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::FilterOn, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.5f);
+            e.reset();
+            e.noteOn(57, 0.9f);
+            std::vector<float> L(256), R(256), ring;
+            for (int b = 0; b < 1200; ++b) {
+                if (b == 560) e.setParam(ParamId::Src1BowSpeed, 0.0f);   // the stick lifted
+                e.process(L.data(), R.data(), 256);
+                if (b >= 620) ring.insert(ring.end(), L.begin(), L.end());
+            }
+            const std::vector<double> renv = envelope(ring);
+            // Against the decay: the envelope divided by its own trend (a straight line in dB),
+            // so a ring-out that only fades measures flat and one that warbles does not.
+            if (renv.size() > 20) {
+                const size_t n = renv.size();
+                double sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
+                for (size_t i = 0; i < n; ++i) { const double y = 20.0 * std::log10(renv[i] + 1e-9); sx += i; sy += y; sxx += static_cast<double>(i) * i; sxy += i * y; }
+                const double slope = (n * sxy - sx * sy) / std::max(n * sxx - sx * sx, 1e-9), icpt = (sy - slope * sx) / n;
+                for (size_t i = 0; i < n; ++i) {
+                    const double r = 20.0 * std::log10(renv[i] + 1e-9) - (icpt + slope * i);
+                    rlo = std::min(rlo, r); rhi = std::max(rhi, r);
+                }
+            }
+        }
+        std::printf("  [probe] bowl rms %.4f peak %.3f -> %+.1f dB, %+.1f cents, envelope rubbed %.3f..%.3f, ring-out warble %+.1f..%+.1f dB about its decay\n",
+                    rms, peak, levelDb, off, lo, hi, rlo, rhi);
+        CHECK(rms > 0.001, "the bowl sounds");
+        CHECK(peak < 1.5 && std::isfinite(peak), "and stays bounded");
+        CHECK(std::fabs(levelDb) < 9.0, "and near the table's level");
+        CHECK(std::fabs(off) < 20.0, "its lowest mode is the note");
+        CHECK(rhi - rlo > 1.5 || (hi > 0.0 && lo / hi < 0.85), "and its doublets beat, rubbed or ringing out");
+    }
+    // ---- the ice: sounds and stays bounded
+    {
+        std::vector<float> cap; double peak = 0.0;
+        Knobs k; k.force = 0.7f; k.speed = 0.25f; k.pos = 0.2f; k.posDrift = 0.3f; k.bright = 0.4f;
+        capture(13.0f, k, cap, peak, 45);
+        const double rms = rmsOf(cap);
+        std::printf("  [probe] ice rms %.4f peak %.3f\n", rms, peak);
+        CHECK(rms > 0.001, "the ice creaks");
+        CHECK(peak < 1.5 && std::isfinite(peak), "and stays bounded");
+    }
+    // ---- the murmur: syllables at a syllable's pace, and a radio that is a band
+    {
+        std::vector<float> dry, radio; double p1 = 0.0, p2 = 0.0;
+        Knobs k; k.force = 0.5f; k.speed = 0.5f; k.pos = 0.0f; k.posDrift = 0.4f; k.bright = 0.5f;
+        capture(11.0f, k, dry, p1, 45, 1200, 200);
+        k.pos = 1.0f;
+        capture(11.0f, k, radio, p2, 45, 1200, 200);
+        const double rms = rmsOf(dry);
+        const double levelDb = 20.0 * std::log10((rms + 1e-12) / (refRms + 1e-12));
+        const int syllables = peaksOf(envelope(dry), 0.35);
+        const double hsDry = highShare(dry), hsRadio = highShare(radio);
+        std::printf("  [probe] murmur rms %.4f peak %.3f -> %+.1f dB, %d syllable peaks in 5.3 s, high share dry %.3f radio %.3f\n",
+                    rms, p1, levelDb, syllables, hsDry, hsRadio);
+        CHECK(rms > 0.001 && rmsOf(radio) > 0.001, "the murmur speaks, in the room and on the radio");
+        CHECK(p1 < 1.5 && p2 < 1.5 && std::isfinite(p1) && std::isfinite(p2), "and stays bounded");
+        CHECK(std::fabs(levelDb) < 9.0, "and near the table's level");
+        CHECK(syllables >= 6 && syllables <= 60, "it comes in syllables, a few a second");
+        CHECK(hsRadio < hsDry, "and the radio takes its top away");
+    }
+    // ---- the drops: drops at Density, each a rising bubble
+    {
+        std::vector<float> cap; double peak = 0.0;
+        Knobs k; k.density = 4.0f; k.pos = 0.5f; k.bright = 0.5f; k.posDrift = 0.4f;
+        capture(14.0f, k, cap, peak, 60, 1200, 200);
+        const double rms = rmsOf(cap);
+        const int drops = peaksOf(envelope(cap), 0.2);
+        std::printf("  [probe] drops rms %.4f peak %.3f, %d drops in 5.3 s at Density 4\n", rms, peak, drops);
+        CHECK(rms > 0.0005, "the drops fall");
+        CHECK(peak < 1.5 && std::isfinite(peak), "and stay bounded");
+        CHECK(drops >= 8 && drops <= 50, "about as many of them as Density says");
+    }
+    // ---- the cicadas: a noise colour that lives in the top
+    {
+        std::vector<float> cap; double peak = 0.0;
+        Knobs k; k.noise = 10; k.pos = 0.5f; k.density = 12.0f;
+        capture(4.0f, k, cap, peak, 60, 1200, 200);
+        const double rms = rmsOf(cap);
+        std::printf("  [probe] cicada rms %.4f peak %.3f high share %.3f\n", rms, peak, highShare(cap));
+        CHECK(rms > 0.001, "the cicadas sing");
+        CHECK(peak < 1.5 && std::isfinite(peak), "and stay bounded");
+        CHECK(highShare(cap) > 0.3, "up where insects sing");
+    }
+
+    // ---- the slot roles: a slot marked Highest falls silent when a higher note arrives
+    {
+        auto run = [&](float role, double& before, double& after) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 0.0f);
+            e.setParam(ParamId::Src1Type, 2.0f);        // FM
+            e.setParam(ParamId::Src1FmIndex, 0.0f);     // ...at index 0: a sine
+            e.setParam(ParamId::Src1Role, role);
+            e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::FilterOn, 0.0f);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.setParam(ParamId::Attack, 0.05f); e.setParam(ParamId::Release, 0.5f);
+            e.reset();
+            const double fA = e.frequencyOf(57);
+            // Goertzel at the lower note's frequency over the last second of a window.
+            auto power = [&](const std::vector<float>& v) {
+                const double w = kTwoPi * fA / sr;
+                const double c = 2.0 * std::cos(w);
+                double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+                for (float x : v) { s0 = x + c * s1 - s2; s2 = s1; s1 = s0; }
+                return s1 * s1 + s2 * s2 - c * s1 * s2;
+            };
+            std::vector<float> L(256), R(256), win;
+            e.noteOn(57, 0.9f);
+            for (int b = 0; b < 400; ++b) { e.process(L.data(), R.data(), 256); if (b >= 200) win.insert(win.end(), L.begin(), L.end()); }
+            before = power(win);
+            e.noteOn(69, 0.9f);
+            win.clear();
+            for (int b = 0; b < 800; ++b) { e.process(L.data(), R.data(), 256); if (b >= 600) win.insert(win.end(), L.begin(), L.end()); }
+            after = power(win);
+        };
+        double b0 = 0.0, a0 = 0.0, b3 = 0.0, a3 = 0.0;
+        run(0.0f, b0, a0);   // All
+        run(3.0f, b3, a3);   // Highest
+        const double dropAll = 10.0 * std::log10((a0 + 1e-30) / (b0 + 1e-30));
+        const double dropHigh = 10.0 * std::log10((a3 + 1e-30) / (b3 + 1e-30));
+        std::printf("  [probe] slot roles: the lower note's power after a higher one arrives, All %+.1f dB, Highest %+.1f dB\n", dropAll, dropHigh);
+        CHECK(b3 > 0.0 && std::fabs(20.0 * std::log10((b3 + 1e-30) / (b0 + 1e-30))) < 1.0, "a lone note is the highest, and sounds as before");
+        CHECK(dropAll > -3.0, "with no role the lower note keeps sounding");
+        CHECK(dropHigh < -15.0, "with the role Highest it hands the slot to the higher note");
+    }
+
+    // ---- the scheduler on its own: rates, floors, the rules, the sequence
+    {
+        auto freqOf = [&](int n) { return ask.frequencyOf(n); };
+        BrainParams bp;
+        auto cons = [&](double fa, double fb) { return bp.consonanceOf(fa, fb); };
+        NearParams p;
+        p.level = 1.0f; p.kind = 0; p.rate = 60.0f; p.length = 5.0f; p.chance = 1.0f;
+        NearInputs in;
+        in.root = 50; in.cluster[0] = 50; in.cluster[1] = 57; in.cluster[2] = 62; in.count = 3;
+        NearEvents ne;
+        ne.reset(7);
+        std::vector<double> ons, offs;
+        int overlaps = 0, inSilence = 0, afterRoot = 0, sounding = 0;
+        const double dt = 0.005;
+        double t = 0.0;
+        for (long i = 0; i < static_cast<long>(3600.0 / dt); ++i) {
+            in.silence = t >= 1000.0 && t < 1300.0;
+            in.rootAge = (t >= 2000.0 && t < 2200.0) ? 3.0 : 1.0e9;
+            ne.update(dt, p, in, freqOf, cons, [&](const NearNote& e) {
+                if (e.type == NearNote::Type::On) {
+                    ons.push_back(t);
+                    if (sounding > 0) ++overlaps;
+                    if (in.silence) ++inSilence;
+                    if (in.rootAge < 6.0) ++afterRoot;
+                    ++sounding;
+                    CHECK(e.note >= 24 && e.note <= 108, "an event's note is in the playable range");
+                } else if (e.type == NearNote::Type::Off) { offs.push_back(t); --sounding; }
+            });
+            t += dt;
+        }
+        double minGap = 1e9, meanGap = 0.0;
+        for (size_t i = 1; i < ons.size(); ++i) { const double g = ons[i] - offs[i - 1]; minGap = std::min(minGap, g); meanGap += g; }
+        meanGap /= std::max<size_t>(1, ons.size() - 1);
+        std::printf("  [probe] near scheduler: %d events in an hour at Every 60 s / Length 5 s, mean gap %.1f s, shortest %.1f s; %d overlaps, %d in the silence, %d just after a root change\n",
+                    static_cast<int>(ons.size()), meanGap, minGap, overlaps, inSilence, afterRoot);
+        CHECK(ons.size() >= 30 && ons.size() <= 75, "about as many events as Every says");
+        CHECK(ons.size() == offs.size(), "every event ends");
+        CHECK(overlaps == 0, "never two at once");
+        CHECK(minGap >= 4.9, "never closer than the floor");
+        CHECK(std::fabs(meanGap - 60.0) < 20.0, "the gaps average the rate");
+        CHECK(inSilence == 0, "none in the conductor's silence");
+        CHECK(afterRoot == 0, "none just after a root change");
+        // The sequence: a ring, mutating; every step's note is answered, the notes stay near the cluster.
+        NearParams s = p;
+        s.kind = 2; s.steps = 7; s.stepSeconds = 0.4f; s.mutation = 0.5f; s.length = 60.0f; s.rate = 30.0f; s.scatter = 0.3f; s.approach = 0.25f;
+        NearEvents seq;
+        seq.reset(3);
+        int onCount = 0, offCount = 0, farAccents = 0, ghosts = 0;
+        double first = -1.0, last = 0.0, firstDist = -1.0;
+        t = 0.0;
+        in.silence = false; in.rootAge = 1.0e9;
+        for (long i = 0; i < static_cast<long>(200.0 / dt); ++i) {
+            seq.update(dt, s, in, freqOf, cons, [&](const NearNote& e) {
+                if (e.type == NearNote::Type::On) {
+                    ++onCount;
+                    if (first < 0.0) { first = t; firstDist = e.distance; }
+                    last = t;
+                    if (e.distance > 0.5f && e.velocity > 0.5f) ++farAccents;
+                    if (e.velocity <= 0.31f) ++ghosts;
+                    CHECK(e.note >= in.root - 12 && e.note <= in.root + 48, "a step stays within the soloist's register over the cluster");
+                } else if (e.type == NearNote::Type::Off) ++offCount;
+            });
+            t += dt;
+        }
+        std::printf("  [probe] near sequence: %d notes on, %d off, %d ghosts, %d far accents, %d mutations, first at %.1f s from distance %.2f, last at %.1f s\n",
+                    onCount, offCount, ghosts, farAccents, seq.mutations(), first, firstDist, last);
+        CHECK(onCount > 100, "a sequence plays many notes");
+        CHECK(offCount >= onCount - 1, "and every one of them is let go (but the one still sounding when the clock stops)");
+        CHECK(seq.mutations() >= 3, "the ring mutates over the run");
+        CHECK(ghosts > 0, "ghost notes fall between the steps");
+        CHECK(firstDist > 0.9f, "with Approach the line arrives out of the far plane");
+    }
+
+    // ---- inside the engine, without audio: the conductor begins no note while a near note speaks
+    {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 1.0f);
+        e.setParam(ParamId::BrainRate, 4.0f);
+        e.setParam(ParamId::BrainHoldMin, 6.0f);
+        e.setParam(ParamId::BrainHoldMax, 14.0f);
+        e.setParam(ParamId::ForeLevel, 0.8f);
+        e.setParam(ParamId::ForeType, 10.0f);
+        e.setParam(ParamId::ForeRate, 20.0f);
+        e.setParam(ParamId::ForeLength, 6.0f);
+        e.reset();
+        std::vector<std::pair<double, double>> nearSpans;   // on, off
+        std::vector<double> brainOns, brainOffs;
+        double openAt = -1.0;
+        e.auditConductor(900.0, 0.005, [&](double t, int which, const BrainEvent& ev) {
+            if (which == 3) {
+                if (ev.type == BrainEvent::Type::NoteOn) openAt = t;
+                else if (openAt >= 0.0) { nearSpans.emplace_back(openAt, t); openAt = -1.0; }
+            } else if (which == 1) {
+                (ev.type == BrainEvent::Type::NoteOn ? brainOns : brainOffs).push_back(t);
+            }
+        }, nullptr);
+        int onsInside = 0, offsInside = 0;
+        for (const auto& s : nearSpans) {
+            for (double t : brainOns) if (t > s.first && t < s.second + 9.5) ++onsInside;
+            for (double t : brainOffs) if (t > s.first && t < s.second) ++offsInside;
+        }
+        std::printf("  [probe] near hold: %d near notes in fifteen minutes, %d conductor onsets inside them (and their ten seconds after), %d releases inside them, %d conductor onsets in all\n",
+                    static_cast<int>(nearSpans.size()), onsInside, offsInside, static_cast<int>(brainOns.size()));
+        CHECK(nearSpans.size() >= 10, "the near notes come");
+        CHECK(onsInside == 0, "the conductor begins nothing while a near note speaks");
+        CHECK(brainOns.size() > 60, "and still plays between them");
+        CHECK(offsInside > 0, "while its releases go on happening under the soloist");
+    }
+    // ---- inside the engine: the events sound on the near source, near
+    {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 1.0f);
+        e.setParam(ParamId::BrainRate, 3.0f);
+        e.setParam(ParamId::OscLevel, 0.05f);   // the background quiet, so the near stem is the events' own
+        e.setParam(ParamId::ForeLevel, 0.8f);
+        e.setParam(ParamId::ForeType, 10.0f);   // the flute
+        e.setParam(ParamId::ForeRate, 10.0f);
+        e.setParam(ParamId::ForeLength, 3.0f);
+        e.setParam(ParamId::ForeAttack, 0.2f);
+        e.setParam(ParamId::ForeRelease, 1.0f);
+        e.reset();
+        std::vector<float> L(256), R(256);
+        std::vector<float> nl(256), nr(256), fl(256), fr(256), cl(256), cr(256), rl(256), rr(256);
+        float* stems[8] = { nl.data(), nr.data(), fl.data(), fr.data(), cl.data(), cr.data(), rl.data(), rr.data() };
+        e.setStemBuffers(stems);
+        double nearDuring = 0.0, nearBetween = 0.0; long during = 0, between = 0;
+        bool finite = true;
+        const int blocks = static_cast<int>(120.0 * sr / 256.0);
+        for (int b = 0; b < blocks; ++b) {
+            e.process(L.data(), R.data(), 256);
+            double s = 0.0;
+            for (int i = 0; i < 256; ++i) { s += static_cast<double>(nl[static_cast<size_t>(i)]) * nl[static_cast<size_t>(i)]; if (!std::isfinite(L[static_cast<size_t>(i)])) finite = false; }
+            if (e.nearActive()) { nearDuring += s; ++during; } else { nearBetween += s; ++between; }
+        }
+        const double dDb = 10.0 * std::log10((nearDuring / std::max(1L, during) + 1e-30) / (nearBetween / std::max(1L, between) + 1e-30));
+        std::printf("  [probe] near events in the engine: %d played in two minutes, near stem during an event %+.1f dB against between\n", e.nearEventsPlayed(), dDb);
+        CHECK(finite, "the output stays finite");
+        CHECK(e.nearEventsPlayed() >= 3, "the events come");
+        CHECK(dDb > 3.0, "and are heard on the near plane");
+    }
+
+    // ---- the near source's own clip, played straight, once: a sine of two seconds in the near
+    // source, a near event of six; the near stem carries the sine while the clip runs and
+    // nothing of it after, and the four slots' own clips are not touched.
+    {
+        Engine e;
+        e.prepare(sr, 256);
+        for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+        e.setParam(ParamId::BrainOn, 1.0f);
+        e.setParam(ParamId::BrainRate, 3.0f);
+        e.setParam(ParamId::Src1Type, 0.0f);       // the background as quiet as it gets: the conductor's
+        e.setParam(ParamId::OscLevel, 0.0f);       // notes are needed (the scheduler waits for a cluster), their sound is not
+        e.setParam(ParamId::Air, 0.0f);            // (the air sounds with the source off: a sixth of a voice by default)
+        e.setParam(ParamId::ForeLevel, 0.8f);
+        e.setParam(ParamId::ForeType, 15.0f);      // Clip
+        e.setParam(ParamId::ForeFollow, 0.0f);     // at its own speed
+        e.setParam(ParamId::ForePosition, 0.0f);   // from its start
+        e.setParam(ParamId::ForeRate, 10.0f);
+        e.setParam(ParamId::ForeLength, 6.0f);
+        e.setParam(ParamId::ForeAttack, 0.01f);
+        e.setParam(ParamId::ForeRelease, 0.1f);
+        e.setParam(ParamId::ForeApproach, 0.0f);
+        e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+        e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+        e.reset();
+        const double clipHz = 1000.0;
+        const int clipLen = static_cast<int>(2.0 * sr);
+        std::vector<float> clip(static_cast<size_t>(clipLen));
+        for (int i = 0; i < clipLen; ++i) clip[static_cast<size_t>(i)] = 0.5f * std::sin(static_cast<float>(kTwoPi * clipHz * i / sr));
+        e.setNearTexture(clip.data(), nullptr, clipLen, sr);
+        CHECK(e.hasNearTexture() && !e.hasTexture(3), "the near source has its clip, Source 4 has none");
+        std::vector<float> L(256), R(256);
+        std::vector<float> nl(256), nr(256), fl(256), fr(256), cl(256), cr(256), rl(256), rr(256);
+        float* stems[8] = { nl.data(), nr.data(), fl.data(), fr.data(), cl.data(), cr.data(), rl.data(), rr.data() };
+        e.setStemBuffers(stems);
+        // The near stem's power at the clip's own frequency, per block (Goertzel over 256), from
+        // the moment the first event begins: what the voice adds under it -- whatever the
+        // conductor's silent voices still leave on the plane -- is not at 1 kHz. Total energy
+        // was: the first version of this test heard the background come up under a 6-second
+        // attack and called it a looping clip.
+        auto powerAt = [&](const float* x, int n, double hz) {
+            const double w = kTwoPi * hz / sr, c = 2.0 * std::cos(w);
+            double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+            for (int i = 0; i < n; ++i) { s0 = x[i] + c * s1 - s2; s2 = s1; s1 = s0; }
+            return (s1 * s1 + s2 * s2 - c * s1 * s2) / (n * n);
+        };
+        double firstAt = -1.0, toneInside = 0.0, toneAfter = 0.0, allInside = 0.0;
+        int events = 0;
+        const int blocks = static_cast<int>(40.0 * sr / 256.0);
+        for (int b = 0; b < blocks; ++b) {
+            const bool was = e.nearActive();
+            e.process(L.data(), R.data(), 256);
+            const double t = b * 256.0 / sr;
+            if (!was && e.nearActive()) { ++events; if (firstAt < 0.0) firstAt = t; }
+            if (firstAt < 0.0) continue;
+            const double p = powerAt(nl.data(), 256, clipHz);
+            double s = 0.0;
+            for (int i = 0; i < 256; ++i) s += static_cast<double>(nl[static_cast<size_t>(i)]) * nl[static_cast<size_t>(i)];
+            if (t - firstAt >= 0.3 && t - firstAt < 1.6) { toneInside += p; allInside += s / 256.0; }   // inside the two seconds
+            if (t - firstAt >= 3.0 && t - firstAt < 5.5) toneAfter += p;                                // after them, the event still held
+        }
+        std::printf("  [probe] near clip: %d events in forty seconds, the first at %.1f s; 1 kHz power on the near plane inside the clip %.5f (of %.5f in all), after it %.7f\n",
+                    events, firstAt, toneInside, allInside, toneAfter);
+        CHECK(events >= 2, "the events come");
+        CHECK(toneInside > 1.0e-4, "and the clip is heard on the near plane while it runs");
+        CHECK(toneInside > 0.5 * allInside, "as the plane's main content");
+        CHECK(toneAfter < 0.01 * toneInside, "and once, not looped: nothing of it after its two seconds");
+        e.setStemBuffers(nullptr);
+    }
+
+    // ---- the layer's scope: a sound preset leaves the foreground alone; the bank touches nothing else
+    {
+        CHECK(!inScope(ParamId::ForeLevel, PresetScope::Sound) && !inScope(ParamId::ForeType, PresetScope::Sound), "the near layer is not part of a sound preset");
+        CHECK(inScope(ParamId::ForeLevel, PresetScope::Near) && inScope(ParamId::ForeType, PresetScope::Near) && !inScope(ParamId::Attack, PresetScope::Near), "and is exactly what a near preset sets");
+        Engine e;
+        e.prepare(sr, 256);
+        e.setParam(ParamId::ForeLevel, 0.5f);
+        e.applySoundPreset(0);
+        CHECK(std::fabs(e.getParam(ParamId::ForeLevel) - 0.5f) < 1e-6f, "a sound preset keeps the foreground that was chosen");
+        int bad = 0;
+        for (int p = 1; p < numNearPresets(); ++p) {
+            Engine f;
+            f.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) f.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            f.applyNearPreset(p);
+            for (int i = 0; i < kNumParams; ++i) {
+                const ParamId id = static_cast<ParamId>(i);
+                if (!isNearParam(id) && std::fabs(f.getParam(id) - paramTable()[static_cast<size_t>(i)].def) > 1e-6f) ++bad;
+            }
+            if (f.getParam(ParamId::ForeLevel) <= 0.0f) ++bad;
+        }
+        std::printf("  [probe] near bank: %d presets, %d stray settings\n", numNearPresets(), bad);
+        CHECK(numNearPresets() >= 20, "the near bank has presets");
+        CHECK(bad == 0, "and each of them sets the foreground and nothing else");
+    }
+}
+
 int main()
 {
+    testNearLayer();
     testCalibrationMenuRecorder();
     testFeaturesRound7();
     testOscAndGestures();

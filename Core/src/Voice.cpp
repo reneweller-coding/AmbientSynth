@@ -105,15 +105,32 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
     velocity_ = 0.3f + 0.7f * clampv(velocity, 0.0f, 1.0f);
     owner_ = owner;
     distance_ = clampv(distance, 0.0f, 1.0f);
+    distTarget_ = distance_; distSeconds_ = 0.0f;
     distEff_  = perceivedDistance(distance_, p.depthLaw);
     gNear_  = std::cos(distEff_ * 0.5f * kPi);
     gFar_   = std::sin(distEff_ * 0.5f * kPi);
     gLevel_ = 1.0f - 0.5f * distEff_;
     // Which of the five roles this note belongs to, for the matrix and for the plane it stands in.
     // The second conductor is the shadow whatever it plays; everything else is read off the
-    // register, because in this music the register IS the role (Rene's table).
+    // register, because in this music the register IS the role (Rene's table). A near event
+    // (owner 3) is the colour, wherever it sits.
     layer_ = (owner == 2) ? 1.0f                        // 2 = the second conductor (Engine::OwnerBrain2)
+           : (owner == 3) ? 0.5f
            : (note < 43 ? 0.0f : note < 60 ? 0.25f : note < 84 ? 0.5f : 0.75f);
+    // A near event's shape was set just before this; any other note starts with none of it, or a
+    // voice that played an event a minute ago would keep its gate and its lift.
+    if (owner != 3) { releaseMul_ = 1.0f; cutoffMul_ = 1.0f; proxDb_ = 0.0f; panOffset_ = 0.0f; }
+    // The near field's lift is a band, 120 to 300 Hz, and not a shelf: below it stand the
+    // Foundation and Bass Mono, and a shelf there muddied the sub, which is where the depth lives.
+    proxAmt_ = proxDb_ > 0.0f ? dbToGain(proxDb_) - 1.0f : 0.0f;
+    proxLoCoef_ = 1.0f - std::exp(-kTwoPi * 120.0f / static_cast<float>(sr_));
+    proxHiCoef_ = 1.0f - std::exp(-kTwoPi * 300.0f / static_cast<float>(sr_));
+    {
+        const float angle = (panOffset_ + 1.0f) * 0.25f * kPi;
+        panL_ = 1.41421356f * std::cos(angle); panR_ = 1.41421356f * std::sin(angle);
+    }
+    // The slot roles start where the note stands; control() fades them as the cluster changes.
+    for (int k = 0; k < kSlots; ++k) roleGain_[k] = roleTarget(p.slot[k].role, placeLowest_, placeHighest_);
     // Velocity as an attack time rather than as a level (R7.1): the air floats in, the foundation
     // simply stands. Positive lets a quiet note enter slower and a loud one faster; at the extreme
     // the slowest is four times the written attack and the fastest a quarter of it. The factor is
@@ -135,6 +152,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         airL_.reset();  airR_.reset();
         std::memset(itdBufL_, 0, sizeof(itdBufL_));
         std::memset(itdBufR_, 0, sizeof(itdBufR_));
+        proxLoL_ = proxLoR_ = proxHiL_ = proxHiR_ = 0.0f;
         // An inherited note has been sounding: its Bloom is open and its sources have entered.
         bloomT_ = ageSeconds;
         for (float& s : slotShift_) s = 0.0f;
@@ -203,13 +221,27 @@ void Voice::glideFrom(double fromHz, float seconds, float gravity)
     portaSeconds_ = seconds; portaLeft_ = seconds; portaGravity_ = clampv(gravity, 0.0f, 1.0f);
 }
 
+void Voice::glideTo(int note, double hz, float seconds, float gravity)
+{
+    if (hz <= 0.0 || !env_.isActive()) return;
+    note_ = note;
+    portaFrom_ = freq_; freqTarget_ = hz;
+    portaSeconds_ = std::max(seconds, 0.05f); portaLeft_ = portaSeconds_; portaGravity_ = clampv(gravity, 0.0f, 1.0f);
+}
+
 void Voice::control(int blockLen, const VoiceParams& p)
 {
     const float dtReal = static_cast<float>(blockLen / sr_);
     // Freeze: the movement clock stops (spectrum, pitch drift, breath, bloom hold still); the
     // envelope, filter and effects keep their own time.
     const float dt = p.freeze ? 0.0f : dtReal;
-    env_.setTimes(p.attack * attackMul_, p.decay, p.sustain, p.release);
+    env_.setTimes(p.attack * attackMul_, p.decay, p.sustain, p.release * releaseMul_);
+    // A plane on its way somewhere (moveTo): an exponential approach that arrives, near enough,
+    // in the seconds it was given.
+    if (distSeconds_ > 0.0f && dtReal > 0.0f) {
+        distance_ += (distTarget_ - distance_) * (1.0f - std::exp(-3.0f * dtReal / distSeconds_));
+        if (std::fabs(distance_ - distTarget_) < 1.0e-3f) { distance_ = distTarget_; distSeconds_ = 0.0f; }
+    }
 
     // Portamento: slide in the log domain from portaFrom_ to the target; the speed drops near
     // consonant ratios to the root (gravity), so the slide dwells on the harmonic nodes and
@@ -368,6 +400,15 @@ void Voice::control(int blockLen, const VoiceParams& p)
         }
         slotHeld_ = held;
     }
+    {   // The slot roles: each slot's gain from where the note stands, faded over a second and a
+        // half so a note that stops being the top hands its chime on instead of dropping it.
+        const float c = 1.0f - std::exp(-dtReal / 1.5f);
+        for (int k = 0; k < kSlots; ++k) {
+            const float t = roleTarget(p.slot[k].role, placeLowest_, placeHighest_);
+            roleGain_[k] += (t - roleGain_[k]) * c;
+            if (std::fabs(roleGain_[k] - t) < 1.0e-4f) roleGain_[k] = t;
+        }
+    }
     const float brightness = clampv(p.brightness * (1.0f - p.bloom * (1.0f - bloomOpen)) + p.cohBrightness
                                     + p.pressBright * press_, 0.0f, 1.0f);
 
@@ -406,7 +447,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // The voice's centre wanders slowly; strands fan out around it. Source 1's Pan shifts the
     // centre, its Octave and Ratio move the whole bank, so the three slots read alike.
     const SlotParams& s1 = p.slot[0];
-    const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan + s1.pan, -1.0f, 1.0f);
+    const float centre = clampv(panCenter_.update(dt, driftRate * 0.3f, rng_) * p.panDrift + p.cohPan + s1.pan + panOffset_, -1.0f, 1.0f);
     centre_ = centre;
     const double bankMul = kSlotRatios[clampv(s1.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(s1.octave, -2, 2))
                          * (static_cast<double>(p.pitchMul) * dopplerMul_)   // the tide and the doppler, 1.0 exactly when off
@@ -626,7 +667,7 @@ void Voice::control(int blockLen, const VoiceParams& p)
                         + p.filterDrift * 2.0f * fd
                         + p.slideCutoff * slide_
                         - 2.5f * distEff_;
-    const float cut = p.cutoff * std::pow(2.0f, octaves);
+    const float cut = p.cutoff * cutoffMul_ * std::pow(2.0f, octaves);
     filt_.set(static_cast<FilterModel>(clampv(p.filterModel, 0, kNumFilterModels - 1)), cut, p.resonance, p.filterDrive);
     // Binaural phase field: the two ears' all-pass corners drift apart and back on one slow curve;
     // the phase relation changes, not the level, so the room seems to breathe in size.
@@ -745,7 +786,8 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
         bool anySlot = false;
         for (int k = 0; k < kSlots; ++k) {
             const SlotParams& sp = p.slot[k];
-            if (sp.type == SourceType::Off || (k == 0 && bank)) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
+            // A slot whose role has faded out is left idle like an Off one, not rendered at nothing.
+            if (sp.type == SourceType::Off || (k == 0 && bank) || roleGain_[k] < 1.0e-3f) { slots_[k].render(nullptr, nullptr, 0, freq_, sp, nullptr, nullptr, 0.0f); continue; }
             if (!anySlot) { std::memset(slotL, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(slotR, 0, sizeof(float) * static_cast<size_t>(len)); anySlot = true; }
             const Wavetable* table = sp.table >= kNumTables - 1 ? p.userTable : &builtinTable(sp.table);
             const CycleTable* cycles = sp.type != SourceType::Wavetable ? nullptr
@@ -756,7 +798,7 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             // already sounding finish and starts the new ones quieter, which is how an entrance
             // is heard. Costs one struct copy per slot per control block.
             SlotParams entered = sp;
-            entered.level *= slotGain_[k];
+            entered.level *= slotGain_[k] * roleGain_[k];
             slots_[k].render(slotL, slotR, len, freq_ * (static_cast<double>(p.pitchMul) * dopplerMul_), entered, table, p.texture[k], p.driftRate * rateMul_, cycles);
         }
         for (int i = 0; i < len; ++i) {
@@ -831,8 +873,8 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                 outL += ghostGain_ * gl; outR += ghostGain_ * gr;
             }
             const float g = e * velocity_ * gLevel_;
-            outL *= g;
-            outR *= g;
+            outL *= g * panL_;   // a near event's place in the field; one and one for every other note
+            outR *= g * panR_;
             if (doFm) {   // self-modulation of a partial by its own output carries a DC term (J1 of the index): block it
                 const float yl = outL - fmHpXL_ + fmHpCoef_ * fmHpYL_; fmHpXL_ = outL; fmHpYL_ = yl; outL = yl;
                 const float yr = outR - fmHpXR_ + fmHpCoef_ * fmHpYR_; fmHpXR_ = outR; fmHpYR_ = yr; outR = yr;
@@ -865,6 +907,13 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
             if (ildAmt_ > 0.0f) {   // the near field's low shelf, per ear
                 ildLpL_ += ildCoef_ * (outL - ildLpL_); outL -= ildL_ * ildLpL_;
                 ildLpR_ += ildCoef_ * (outR - ildLpR_); outR -= ildR_ * ildLpR_;
+            }
+            if (proxAmt_ != 0.0f) {   // a near event's lift between 120 and 300 Hz, a function of its plane: gone on the far one
+                proxLoL_ += proxLoCoef_ * (outL - proxLoL_); proxHiL_ += proxHiCoef_ * (outL - proxHiL_);
+                proxLoR_ += proxLoCoef_ * (outR - proxLoR_); proxHiR_ += proxHiCoef_ * (outR - proxHiR_);
+                const float near = proxAmt_ * (1.0f - distEff_);
+                outL += near * (proxHiL_ - proxLoL_);
+                outR += near * (proxHiR_ - proxLoR_);
             }
             if (pinnaAmt_ > 0.0f) {
                 // The shoulder's copy comes out of the same ring the interaural delay reads, one

@@ -68,6 +68,12 @@ const char* sourceWord(const std::string& type)
     if (type == "Stretch") return "a stretched recording";
     if (type == "Bow") return "a bowed string";
     if (type == "Spectral") return "a spectral model";
+    if (type == "Flute") return "a blown flute";
+    if (type == "Murmur") return "a murmuring voice";
+    if (type == "Bowl") return "a singing bowl";
+    if (type == "Ice") return "creaking ice";
+    if (type == "Drops") return "water drops";
+    if (type == "Clip") return "a recording, played straight";
     return nullptr;
 }
 

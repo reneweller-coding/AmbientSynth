@@ -337,24 +337,32 @@ void Engine::renderChunk(float* L, float* R, int n)
             // so the conductor lands on the grid instead of wherever the dice fell. All of the
             // waiting time is handed over at the tick, so the mean rate is unchanged.
             const double dt = len / sr_;
+            // The foreground's asks are set inside stepNear: while a near Note or a Phrase speaks
+            // the conductor begins no new note (its holds and releases run on), and under a
+            // sequence it keeps its root and takes twice as long between events.
+            const BrainParams* bpNow = &bp_;
+            BrainParams bpSlow;
+            if (near_.sequenceRunning()) { bpSlow = bp_; bpSlow.rateSeconds *= 2.0f; bpNow = &bpSlow; }
             if (syncOn(brainQuant_) && running_) {
                 quantAcc_ += dt;
                 const double b = syncBeats(brainQuant_);
                 const double now = std::floor(beat_ / b), before = std::floor(lastBeat_ / b);
                 lastBeat_ = beat_;
-                if (now != before) { brain_.update(quantAcc_, bp_, anchor, freqOf, emit); quantAcc_ = 0.0; }
+                if (now != before) { brain_.update(quantAcc_, *bpNow, anchor, freqOf, emit); quantAcc_ = 0.0; }
             } else {
                 quantAcc_ = 0.0; lastBeat_ = beat_;
-                brain_.update(dt, bp_, anchor, freqOf, emit);
+                brain_.update(dt, *bpNow, anchor, freqOf, emit);
             }
             if (brain2On_) {
                 brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
                 brain2_.update(dt, bp2_, -1, freqOf, emit2);
             }
+            stepNear(dt, [this](const NearNote& e) { nearEmit(e); });
         }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
         const float* couple = sympathy_ > 0.0f ? coupleBuf_.data() + p : nullptr;
-        for (auto& v : voices_) if (v.isActive() || v.isStriking()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm, couple); }
+        for (auto& v : voices_)
+            if (v.isActive() || v.isStriking()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, v.owner() == OwnerNear ? vpNear_ : vp_, fm, couple); }
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
@@ -763,8 +771,8 @@ void Engine::renderChunk(float* L, float* R, int n)
             // seconds in most of the library, so the bass slides to the new chord over a breath
             // instead of stepping to it.
             double lowest = 0.0;
-            for (const auto& v : voices_)
-                if (v.isActive() && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
+            for (const auto& v : voices_)   // the near events are the foreground, not the chord the sub stands under
+                if (v.isActive() && v.owner() != OwnerNear && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
             if (lowest > 0.0) {
                 // Folded back into the register the root mode would have used, which is what keeps
                 // it a foundation. An octave under the lowest voice and nothing else, a chord up
@@ -914,11 +922,22 @@ void Engine::auditConductor(double seconds, double dt,
     if (rootSink) rootSink(0.0, lastRoot);
     const long steps = static_cast<long>(seconds / dt);
     for (long i = 0; i < steps; ++i) {
-        brain_.update(dt, bp_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 1, e); });
-        if (brain2On_) {
-            brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
-            brain2_.update(dt, bp2_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 2, e); });
+        {
+            const BrainParams* bpNow = &bp_;
+            BrainParams bpSlow;
+            if (near_.sequenceRunning()) { bpSlow = bp_; bpSlow.rateSeconds *= 2.0f; bpNow = &bpSlow; }
+            brain_.update(dt, *bpNow, -1, freqOf, [&](const BrainEvent& e) { sink(t, 1, e); });
+            if (brain2On_) {
+                brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
+                brain2_.update(dt, bp2_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 2, e); });
+            }
         }
+        // The near events as a third conductor: its notes on and off, as the render would play
+        // them (a glide is reported as the new note beginning, a move not at all).
+        stepNear(dt, [&](const NearNote& e) {
+            if (e.type == NearNote::Type::Move) return;
+            sink(t, 3, BrainEvent{ e.type == NearNote::Type::Off ? BrainEvent::Type::NoteOff : BrainEvent::Type::NoteOn, e.note, e.velocity });
+        });
         if (brain_.root() != lastRoot) { lastRoot = brain_.root(); if (rootSink) rootSink(t, lastRoot); }
         t += dt;
     }

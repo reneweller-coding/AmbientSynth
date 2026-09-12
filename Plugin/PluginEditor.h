@@ -39,9 +39,11 @@ private:
     void chooseScalaFile();
     void chooseSourceFile(bool wavetable, int slot = -1);   // slot < 0: the clip goes into every slot
     void chooseImpulseFile(bool second = false);
+    void chooseNearClipFile();   // the near source's own recording (the near layer's Clip type)
     void updateSourceCells();   // greys the cells a slot's type does not use, names the loaded files
+    bool updateNearCells();     // the same for the Near Source's type; true if a cell changed
     int  cellForParam(ambient::ParamId id) const;
-    int  tableCell_ = -1, impulseCell_ = -1, impulseBCell_ = -1;
+    int  tableCell_ = -1, impulseCell_ = -1, impulseBCell_ = -1, nearClipCell_ = -1;
     int  textureCell_[ambient::kSlots] = { -1, -1, -1, -1 };   // a Texture... button in every source section
     void buildCells();
     void colourCellsByGroup();
@@ -149,6 +151,7 @@ private:
     // Not owned: the cell owns the component, the editor only needs to read the selection back.
     juce::ComboBox* zPresetBox_ = nullptr;
     juce::ComboBox* strikePresetBox_ = nullptr;
+    juce::ComboBox* nearPresetBox_ = nullptr;
     // Compact: the same page in columns kCompactFactor as wide, every page refitted into them --
     // narrower and taller, nothing left out. Kept in the plugin state.
     bool compact_ = false;
@@ -640,7 +643,7 @@ private:
         {
             if (!isShowing()) return;
             const int type = static_cast<int>(std::lround(proc.engine().getParam(ambient::slotParamIds(slot - 1)[0])));
-            const bool alive = type == 3 || type == 5 || type == 6 || type == 7 || type == 8;
+            const bool alive = type == 3 || type == 5 || type == 6 || type == 7 || type == 8 || type >= 10;   // ...and the near sources
             const bool moved = (type == 1 || type == 9) && std::fabs(livePosition() - shownPos) > 0.002f;
             const uint32_t g = proc.paramGeneration();
             if (alive || moved || ownEntrance() || g != seen) { seen = g; repaint(); }

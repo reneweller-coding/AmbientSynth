@@ -20,6 +20,7 @@
 #include "Clock.h"
 #include <functional>
 #include "ClusterBrain.h"
+#include "Near.h"
 #include "Presets.h"
 #include "Loudness.h"
 #include <atomic>
@@ -55,6 +56,16 @@ public:
     bool  applyCosmosPreset(int index); // Cosmos layer only, from the Cosmos preset bank
     bool  applyZPreset(int index);      // Z-plane layer only: the filter and where its point sits
     bool  applyStrikePreset(int index); // Strike layer only: the Karplus-Strong pluck
+    bool  applyNearPreset(int index);   // the near layer only: the Near Source and the Near Events
+    // The near events (Near.h): whether one is sounding, how far it has come, how many there
+    // have been; and the whole scheduler, so an engine taking over at a preset change can carry
+    // on the sequence that was running rather than start the foreground again.
+    bool  nearActive() const { return near_.active(); }
+    float nearProgress() const { return near_.progress(); }
+    int   nearEventsPlayed() const { return near_.events(); }
+    int   nearMutations() const { return near_.mutations(); }
+    const NearEvents& nearState() const { return near_; }
+    void  adoptNear(const NearEvents& n) { near_ = n; }
 
     // MIDI, audio thread only.
     void noteOn(int note, float velocity);
@@ -117,6 +128,19 @@ public:
     // model with it rather than measuring the same clip a second time.
     void setTexture(int slot, const Texture& src);
     void clearTexture(int slot);
+    // The near source's own clip (13.09.2026): what a near event plays when its type reads a
+    // recording -- a voice off a radio loop, a launch, the wind on Mars. Its own buffer, so the
+    // near layer's presets carry their clips and the sound preset's four slots keep theirs; a
+    // near source with no clip of its own reads Source 4's. Double-buffered like the slots'.
+    void setNearTexture(const float* L, const float* R, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false);
+    void setNearTexture(const Texture& src);
+    void clearNearTexture() { nearTextureActive_.store(-1, std::memory_order_release); }
+    bool hasNearTexture() const { return nearTextureActive_.load(std::memory_order_relaxed) >= 0; }
+    const Texture* displayNearTexture() const
+    {
+        const int a = nearTextureActive_.load(std::memory_order_relaxed);
+        return a >= 0 ? &nearTextures_[a] : nullptr;
+    }
     bool hasTexture(int slot = 0) const
     { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }
     // Convolution room: a stereo (R may be null) impulse response, message thread.
@@ -343,8 +367,35 @@ public:
     float noteLevel(int note) const { return (note >= 0 && note < 128) ? noteLevel_[note].load(std::memory_order_relaxed) : 0.0f; }
 
 private:
-    enum Owner { OwnerMidi = 0, OwnerBrain = 1, OwnerBrain2 = 2 };
+    enum Owner { OwnerMidi = 0, OwnerBrain = 1, OwnerBrain2 = 2, OwnerNear = 3 };
     Voice* allocate(int note, int owner);
+    // The near layer: an event's note started on the near source, what the scheduler asks for,
+    // the places of the notes for the slot roles, and the scheduler stepped with what it needs
+    // to know -- from the render and from the audit alike.
+    void   startNearNote(const NearNote& e);
+    void   nearEmit(const NearNote& e);
+    void   updatePlaces();
+    template <class EmitFn>
+    void stepNear(double dt, EmitFn&& emit)
+    {
+        NearInputs in;
+        in.root = brain_.root();
+        float vels[ClusterBrain::kSlots];
+        in.count = brain_.soundingNotes(in.cluster, vels);
+        in.excitation = brain_.excitation();
+        in.silence = brain_.inSilence();
+        in.rootAge = brain_.rootAgeSeconds();
+        in.bpm = bpm_;
+        in.sinceOnset = brain_.sinceOnset();
+        for (const auto& v : voices_) if (v.isActive() && v.isReleasing() && v.owner() != OwnerNear && v.owner() != OwnerMidi) { in.releasing = true; break; }
+        near_.update(dt, np_, in, [this](int n) { return frequencyOf(n); },
+                     [this](double fa, double fb) { return bp_.consonanceOf(fa, fb); }, emit);
+        // What the foreground asks of the background: no new onset while a Note or a Phrase
+        // speaks (and for a moment after), the root held and the pace halved under a sequence.
+        const bool onsets = near_.holding(), seq = near_.sequenceRunning();
+        brain_.holdOnsets(onsets);  brain2_.holdOnsets(onsets);
+        brain_.holdRoot(seq);       brain2_.holdRoot(seq);
+    }
     // `ageSeconds` is how long this note is to be treated as having been sounding already. It is
     // zero for a note that is played and only set where a cluster is handed from one engine to
     // another at a preset change: the note is not new there, it is the same note on another
@@ -501,6 +552,13 @@ private:
     // chance at all. (A draw taken from a shared stream would move every preset that follows.)
     Rng           strikeRng_;
     float         strikeChance_ = 1.0f, strikeCluster_ = 0.0f;
+    // The near layer (13.09.2026): the scheduler, its parameters, and the voice parameters a near
+    // event's voice renders with -- the sound preset's, with the four slots put out and the Near
+    // Source in the last of them, and the section's own envelope, filter and strike.
+    NearEvents    near_;
+    NearParams    np_;
+    VoiceParams   vpNear_;
+    bool          rolesUsed_ = false;   // any slot with a role other than All: the places are then kept
     // The excitation the cascade has been running at lately, so Cluster can weigh a note against
     // the piece's own average rather than an absolute number: above it the strike grows likelier,
     // below it rarer, and the count over an hour still follows Chance. Without this the lift
@@ -588,6 +646,8 @@ private:
     // Texture: two buffers per slot, the audio thread reads the active one and publishes which.
     Texture           textures_[kSlots][2];
     std::atomic<int>  textureActive_[kSlots] = { -1, -1, -1, -1 };
+    Texture           nearTextures_[2];         // the near source's own clip, the same way
+    std::atomic<int>  nearTextureActive_{ -1 };
     // Blocks begun and blocks finished. Two counters rather than one, because the question a
     // loader has to answer is not "how many have gone by" but "is anything still holding what it
     // picked up before I looked" -- and those differ exactly while a block is in flight. Reading

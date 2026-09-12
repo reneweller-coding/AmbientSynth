@@ -3,6 +3,7 @@
 // routes-by-name all pick packs up without knowing they exist.
 #include "ambient/Presets.h"
 #include "ambient/PresetMeta.h"
+#include "ambient/WavFile.h"   // resolveAudioFile, for the library-relative files of the banks
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -224,6 +225,35 @@ int loadPresetPacksIn(const char* dir)
     int n = 0;
     for (const std::string& f : files) if (loadPresetPack(f.c_str())) ++n;
     return n;
+}
+
+std::string resolveLibraryFile(const char* relative)
+{
+    if (relative == nullptr || *relative == 0) return {};
+    std::vector<std::string> roots;
+    if (const char* env = std::getenv("AMBIENT_LIBRARY")) roots.push_back(env);
+    for (const std::string& packFile : loadedPaths()) {
+        const std::string root = std::filesystem::path(packFile).parent_path().parent_path().string();
+        if (!root.empty() && std::find(roots.begin(), roots.end(), root) == roots.end()) roots.push_back(root);
+    }
+    const char* home = std::getenv("USERPROFILE");
+    if (home == nullptr) home = std::getenv("HOME");
+    if (home != nullptr) roots.push_back((std::filesystem::path(home) / "Documents" / "AmbientSynth").string());
+#if defined(_WIN32)
+    if (const char* shared = std::getenv("ProgramData")) roots.push_back((std::filesystem::path(shared) / "AmbientSynth").string());
+    if (const char* local = std::getenv("LOCALAPPDATA")) roots.push_back((std::filesystem::path(local) / "AmbientSynth").string());
+#else
+    roots.push_back("/usr/local/share/AmbientSynth");
+    roots.push_back("/usr/share/AmbientSynth");
+#endif
+    roots.push_back("Library");
+    roots.push_back(".");
+    for (const std::string& root : roots) {
+        const std::string candidate = (std::filesystem::path(root) / relative).string();
+        const std::string got = resolveAudioFile(candidate.c_str());
+        if (!got.empty()) return got;
+    }
+    return {};
 }
 
 int loadDefaultPresetPacks()

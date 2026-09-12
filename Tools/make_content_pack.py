@@ -38,15 +38,27 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 LIBRARY = os.path.join(ROOT, "Library")
 PACKS = os.path.join(ROOT, "Library", "Packs")
 OUT = os.path.join(ROOT, "Deploy", "content")
-# Four now: the field recordings sit apart from the tonal material, because a swamp and a
-# bowed cymbal are not the same kind of clip and only one of them may be transposed.
-KINDS = ("Textures", "FieldRecordings", "Wavetables", "Impulses")
+# Five now: the field recordings sit apart from the tonal material, because a swamp and a
+# bowed cymbal are not the same kind of clip and only one of them may be transposed; and the
+# archive holds the recordings the near layer plays straight (NASA's loops and sonifications,
+# public domain, see Library/Archive/SOURCES.md), named by the near bank rather than by a pack.
+KINDS = ("Textures", "FieldRecordings", "Wavetables", "Impulses", "Archive")
 LEGACY = os.path.join(HERE, "library", "legacy_impulses.json")
+NEAR_BANK = os.path.join(ROOT, "Core", "src", "NearPresets.inc")
 
 
 def referenced():
     """Every media file the packs name, as (kind, path inside that folder) -> absolute source path."""
     want = {}
+    # The near bank is compiled in, not a pack: its third field is a clip relative to the library's
+    # root (Archive/NASA/.../x.flac), which is where resolveLibraryFile looks for it.
+    if os.path.exists(NEAR_BANK):
+        import re
+        with open(NEAR_BANK, encoding="utf-8") as f:
+            for field in re.findall(r'"((?:%s)/[^"]+\.(?:wav|flac))"' % "|".join(KINDS), f.read()):
+                src = os.path.normpath(os.path.join(LIBRARY, field))
+                kind, _, rest = field.partition("/")
+                want[(kind, rest)] = src
     for name in sorted(os.listdir(PACKS)):
         if not name.endswith(".ambientpack"):
             continue

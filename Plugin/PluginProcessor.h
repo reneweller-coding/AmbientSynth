@@ -79,8 +79,15 @@ public:
     // The two newer layers. Like Cosmos: each resets its own section and touches nothing else.
     void applyZPreset(int index);
     void applyStrikePreset(int index);
+    // The near layer (13.09.2026): like the Cosmos, kept across sound presets. A near preset may
+    // name a clip of the library's archive for its source; the player may open one by hand.
+    void applyNearPreset(int index);
+    bool loadNearClipFile(const juce::File& file);
+    void clearNearClip();
+    juce::String nearClipName() const { return nearClipFile_.existsAsFile() ? nearClipFile_.getFileNameWithoutExtension() : juce::String(); }
     int  zPresetIndex() const { return zIndex_; }
     int  strikePresetIndex() const { return strikeIndex_; }
+    int  nearPresetIndex() const { return nearIndex_; }
     // Session recall (standalone). JUCE writes the whole state into its settings file when the
     // window is closed and reads it back on the next start -- but only then, so a crash, a kill
     // or a power cut loses the evening. The timer here writes it whenever it has actually
@@ -295,7 +302,8 @@ private:
     // A program change reads files off the disk; these two hold a sweep back until it stops.
     std::atomic<int> pendingFiles_ { -1 };
     double lastProgramAt_ = -1.0e9;
-    int soundIndex_ = 0, cosmosIndex_ = 0, zIndex_ = 0, strikeIndex_ = 0;
+    int soundIndex_ = 0, cosmosIndex_ = 0, zIndex_ = 0, strikeIndex_ = 0, nearIndex_ = 0;
+    juce::File nearClipFile_;
     // The names, not the indices: a pack added or removed between two sessions renumbers every
     // preset behind it, and an index would then name a different sound.
     juce::String soundName_, cosmosName_;

@@ -11047,7 +11047,19 @@ namespace {
 #include "CosmosPresets.inc"
 #include "ZPlanePresets.inc"
 #include "StrikePresets.inc"
+#include "NearPresets.inc"
 }
+
+int numNearPresets() { return static_cast<int>(sizeof(kNearPresets) / sizeof(kNearPresets[0])); }
+const Preset& nearPreset(int index)
+{
+    const int n = numNearPresets();
+    if (index < 0 || index >= n) index = 0;
+    return kNearPresets[index];
+}
+int nearPresetCategory(int i) { return (i >= 0 && i < numNearPresets()) ? kNearPresetCategory[i] : 255; }
+int numNearPresetFamilies() { return static_cast<int>(sizeof(kNearPresetsFamilyNames) / sizeof(kNearPresetsFamilyNames[0])); }
+const char* nearPresetFamily(int f) { return (f >= 0 && f < numNearPresetFamilies()) ? kNearPresetsFamilyNames[f] : ""; }
 
 
 

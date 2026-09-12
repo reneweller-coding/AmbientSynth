@@ -32,13 +32,13 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 RENDER = os.path.join(ROOT, "build", "Tools", "render", "Release", "ambient_render.exe")
-CARRIER = "Consonant Hollow"
+CARRIER = "Consonant Field"   # a 2.0 built-in; "Consonant Hollow" went with the old built-ins
 SECONDS = 20
 
 FIELDS = ("rms", "centroid", "flatness", "flux", "bass", "width", "peak")
 
 
-def measure(settings, notes=None):
+def measure(settings, notes=None, near_preset=None):
     """One render with the carrier plus these key=value settings; the descriptor line as a dict.
 
     `notes` plays a held chord, and `extra` can silence the drone. The Strike bank needs both.
@@ -48,16 +48,26 @@ def measure(settings, notes=None):
     descriptors: thirty-four of them then measured identically to each other, which was the
     measurement failing rather than the presets. So the Strike bank is measured on its own, with
     every source turned off, where the pluck is the whole signal.
+
+    `near_preset` loads a near bank preset by name through the render tool, which is the only
+    way its clip comes along: the Archive family names a recording of the library, and a preset
+    applied as key=value settings would play Source 4's clip instead (or nothing). The settings
+    given here are applied after it, so they override what the preset set.
     """
     cmd = [RENDER, "--preset", CARRIER, "--seconds", str(SECONDS), "--measure"]
     if notes:
         cmd += ["--notes", notes]
+    if near_preset:
+        cmd += ["--near-preset", near_preset]
     for kv in settings:
         cmd += ["--set", kv]
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-    line = (r.stdout + r.stderr).strip().splitlines()
-    if not line:
+    # The descriptor line begins with "measure:"; it used to be the last line, until the render
+    # tool learned to print the timbre vector after it, and then every carrier "did not render".
+    lines = [l for l in (r.stdout + r.stderr).splitlines() if l.startswith("measure:")]
+    if not lines:
         return None
+    line = lines
     out = {}
     for k, v in re.findall(r"(\w+)=(-?[\d.]+)", line[-1]):
         out[k] = float(v)
@@ -67,24 +77,31 @@ def measure(settings, notes=None):
     return out if "rms" in out else None
 
 
+BANK_FILES = {"cosmos": "CosmosPresets.inc", "z": "ZPlanePresets.inc", "strike": "StrikePresets.inc", "near": "NearPresets.inc"}
+
+
+# A row is name and settings, and in the near bank possibly a third field: the clip the preset
+# plays, relative to the library's root. A regex for two fields alone quietly skipped every
+# preset that had one, and "41 presets, 0 flagged" was said of a bank of 69.
+ROW = r'^\s*\{ "([^"]*)", "([^"]*)"(?:, "([^"]*)")? \},'
+
+
 def settings_of(bank, index):
     """The preset's settings string, straight out of the generated .inc so nothing is retyped."""
-    path = {"cosmos": "CosmosPresets.inc", "z": "ZPlanePresets.inc", "strike": "StrikePresets.inc"}[bank]
-    with open(os.path.join(ROOT, "Core", "src", path), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "Core", "src", BANK_FILES[bank]), encoding="utf-8") as f:
         text = f.read()
-    rows = re.findall(r'^\s*\{ "([^"]*)", "([^"]*)" \},', text, re.M)
-    return rows[index] if index < len(rows) else None
+    rows = re.findall(ROW, text, re.M)
+    return rows[index][:2] if index < len(rows) else None
 
 
 def bank_rows(bank):
-    path = {"cosmos": "CosmosPresets.inc", "z": "ZPlanePresets.inc", "strike": "StrikePresets.inc"}[bank]
-    with open(os.path.join(ROOT, "Core", "src", path), encoding="utf-8") as f:
-        return re.findall(r'^\s*\{ "([^"]*)", "([^"]*)" \},', f.read(), re.M)
+    with open(os.path.join(ROOT, "Core", "src", BANK_FILES[bank]), encoding="utf-8") as f:
+        return re.findall(ROW, f.read(), re.M)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bank", choices=["cosmos", "z", "strike", "all"], default="all")
+    ap.add_argument("--bank", choices=["cosmos", "z", "strike", "near", "all"], default="all")
     ap.add_argument("--limit", type=int, default=0, help="only the first N of each bank (a quick look)")
     a = ap.parse_args()
     if not os.path.isfile(RENDER):
@@ -111,6 +128,12 @@ def main():
     BRIGHT = ["osc_level=0", "src2_level=0", "sub_level=0", "body_level=0", "cosmos_send=0",
               "dly_mix=0", "dly2_mix=0", "far_level=0", "room_level=0", "cloud_send=0",
               "src3_type=Noise", "src3_noise=White", "src3_level=0.8", "src3_pos=0.5"]
+    # The near bank (13.09.2026) is measured with the events hurried: a foreground that comes
+    # every few minutes is not in a twenty-second render, so the rate is set to eight seconds --
+    # the scheduler never waits longer than its rate for the first event -- and what is measured
+    # is the carrier with one event sounding in its second half. A preset whose event does not
+    # sound then measures as the carrier, which is the DEAD line below.
+    NEAR = ["fore_rate=8"]
     base = measure([])
     base_notes = measure(BARE + FIRE, NOTES)
     base_bright = measure(BRIGHT)
@@ -118,7 +141,7 @@ def main():
         sys.exit("the carrier itself did not render")
     print("carrier %s: rms %.2f dB, peak %.3f" % (CARRIER, base["rms"], base["peak"]))
 
-    banks = ["cosmos", "z", "strike"] if a.bank == "all" else [a.bank]
+    banks = ["cosmos", "z", "strike", "near"] if a.bank == "all" else [a.bank]
     bad = 0
     for bank in banks:
         rows = bank_rows(bank)
@@ -126,12 +149,17 @@ def main():
             rows = rows[:a.limit]
         print("%s: %d presets" % (bank, len(rows)))
         seen, dead, twins = {}, 0, 0
-        for i, (name, settings) in enumerate(rows):
+        for i, (name, settings, clip) in enumerate(rows):
             kvs = [kv for kv in settings.split(";") if kv]
             notes = NOTES if bank == "strike" else None
             pre = BARE + FIRE if notes else (BRIGHT if bank == "z" else [])
             ref = base_notes if notes else (base_bright if bank == "z" else base)
-            m = measure(pre + kvs, notes)
+            if bank == "near":
+                # By name, through the render tool: that loads the preset's clip as well, and the
+                # settings that hurry the events are applied on top of it.
+                m = measure(NEAR, None, near_preset=name)
+            else:
+                m = measure(pre + kvs, notes)
             if m is None:
                 print("  FAILED TO RENDER  %s" % name)
                 bad += 1

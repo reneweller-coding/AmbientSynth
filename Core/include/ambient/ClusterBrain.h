@@ -547,6 +547,18 @@ public:
 
     // Minutes since the last root change, for the matrix source Root Age.
     double rootAgeSeconds() const { return rootAge_; }
+    // A planned silence (R5.6) is running: the foreground keeps out of it too.
+    bool inSilence() const { return silenceLeft_ > 0.0; }
+    // Seconds since the conductor last began a note.
+    double sinceOnset() const { return sinceOn_; }
+    // The foreground's two asks of the background (13.09.2026). Hold Onsets: no new note begins,
+    // but the holds run on, the releases happen, the last voice waits for its replacement as it
+    // always does -- a soloist asks the room to stop moving, not to stop breathing. (Stopping the
+    // clock outright was tried first: a conductor that stands still for six seconds is heard as a
+    // pause button, and it broke the overlap rule.) Hold Root: the root does not move, so a line
+    // that transposes with it is not thrown across a changeover.
+    void holdOnsets(bool h) { onsetHold_ = h; }
+    void holdRoot(bool h)   { rootHold_ = h; }
 
     // What key the conductor finds itself in, and how sure it is. Measured, never set: the
     // histogram below is what has actually been sounding, weighted by how long.
@@ -823,6 +835,7 @@ public:
         if (timerMean_ > 0.0 && mean != timerMean_) timer_ *= mean / timerMean_;
         timerMean_ = mean;
         advanceTimer(dt, p, mean);
+        if (onsetHold_) { timer_ = std::max(timer_, 0.2); return; }   // the foreground is speaking: no new onset
         if (timer_ > 0.0) return;
         // A memoryless draw, with a floor: no change faster than every twenty seconds (Anti 2),
         // which an exponential alone would give a quarter of the time at a mean of a minute. At
@@ -1019,7 +1032,7 @@ public:
             const float u = rng_.uniform();
             if (anchorNote < 0 && chance > 0.0f && (u < chance || rootAge_ > 720.0)) {
                 const int was = root_;
-                wanderRoot(low, high, freqOf, p);
+                if (!rootHold_) wanderRoot(low, high, freqOf, p);
                 if (root_ != was) goto weigh;
             }
         }
@@ -1142,6 +1155,7 @@ private:
         if (filling_ && sounding >= density) filling_ = false;
         advanceTimer(dt, p, tickSeconds(p));
         const bool asked = stepRequested_;
+        if (onsetHold_ && !asked) { timer_ = std::max(timer_, 0.2); return; }   // the foreground is speaking
         if (sounding < density) {
             if (timer_ > 0.0 && !asked && sounding > 0) return;
             stepRequested_ = false;
@@ -1224,7 +1238,7 @@ private:
         {   // as in Free mode: the dice, or twelve minutes (R6.1), and the draw made either way
             const float chance = moveChanceOf(p);
             const float u = rng_.uniform();
-            if (settled_ && chance > 0.0f && (u < chance || rootAge_ > 720.0)) wanderRoot(low, high, freqOf, p);
+            if (settled_ && !rootHold_ && chance > 0.0f && (u < chance || rootAge_ > 720.0)) wanderRoot(low, high, freqOf, p);
         }
 
         int moving = oldest, arriving = -1;
@@ -1927,6 +1941,7 @@ private:
     double densityTarget_ = -1.0;
     double densityStep_ = 0.0;    // voices per second while a change is being carried out
     double silenceLeft_ = 0.0;    // seconds of planned pause still to run
+    bool   onsetHold_ = false, rootHold_ = false;   // the foreground's asks (holdOnsets, holdRoot)
     // ---- root and long form
     int    homeRoot_ = 48;        // the root the night began on
     double age_ = 0.0;            // seconds since the conductor was reset

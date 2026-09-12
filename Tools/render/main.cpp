@@ -610,6 +610,37 @@ static int runOnce(int argc, char** argv)
             for (int p = 0; p < numCosmosPresets(); ++p) std::printf("%s\n", cosmosPreset(p).name);
             return 0;
         }
+        else if (a == "--near-preset") {   // the near layer's bank, on top of whatever sound is loaded
+            const std::string name = next();
+            int found = -1;
+            for (int p = 0; p < numNearPresets(); ++p) if (name == nearPreset(p).name) found = p;
+            if (found < 0) { std::fprintf(stderr, "unknown near preset '%s'\n", name.c_str()); return 2; }
+            engine.applyNearPreset(found);
+            std::printf("near preset: %s\n", name.c_str());
+            // Its clip, if it names one, from the library's archive.
+            const Preset& np = nearPreset(found);
+            if (np.texture != nullptr && *np.texture != 0) {
+                const std::string got = resolveLibraryFile(np.texture);
+                std::vector<std::vector<float>> ch; int rate = 0;
+                if (!got.empty() && readWavChannels(got.c_str(), ch, rate) && !ch.empty()) {
+                    engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                                          261.6256, loopFromName(got.c_str()));
+                    std::printf("near clip: %s\n", got.c_str());
+                } else std::fprintf(stderr, "near preset's clip not found: %s\n", np.texture);
+            }
+        }
+        else if (a == "--near-clip") {   // a clip for the near source, by file
+            const std::string file = next();
+            std::vector<std::vector<float>> ch; int rate = 0;
+            if (!readWavChannels(file.c_str(), ch, rate) || ch.empty()) { std::fprintf(stderr, "cannot read %s\n", file.c_str()); return 2; }
+            engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                                  261.6256, loopFromName(file.c_str()));
+            std::printf("near clip: %s\n", file.c_str());
+        }
+        else if (a == "--list-near-presets") {
+            for (int p = 0; p < numNearPresets(); ++p) std::printf("%-28s %s\n", nearPreset(p).name, nearPresetFamily(nearPresetCategory(p)));
+            return 0;
+        }
         else if (a == "--bench") {
             // Realtime factor per preset (rendered seconds per wall second). Run on the device via adb
             // to see what the core costs there; below ~3 the headset would be at its limit.

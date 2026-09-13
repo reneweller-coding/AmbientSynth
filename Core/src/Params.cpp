@@ -821,6 +821,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ForeDry,          "fore_dry",           "Dry",          "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
     B(ParamId::ForeAuto,         "fore_auto",          "Auto",         "Near Events", true),
     F(ParamId::FarUnmaskReturn,  "far_unmask_return",  "Return",       "Far Reverb", 0.2f,  10.f,  1.2f,  0.5f, "s"),
+    F(ParamId::ForeDelay2,       "fore_delay2",        "To Delay 2",   "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeCosmos,       "fore_cosmos",        "To Cosmos",    "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
 }};
 } // namespace
 

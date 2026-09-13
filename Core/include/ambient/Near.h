@@ -45,6 +45,8 @@ struct NearParams {
     float approach = 0.0f;       // fraction of the event spent arriving from the far plane (and leaving into it); negative: leaving from the start
     float distance = 0.0f;       // where the event sits, 0 at the ear .. 1 on the horizon (what Approach arrives at)
     float dry = 0.0f;            // the share of the event's voice that goes past every reverb and delay
+    float toDelay2 = 0.0f;       // an extra share into the second delay's input (a send, added, not taken away)
+    float toCosmos = 0.0f;       // ... and into the Cosmos send, likewise
     float proximity = 0.6f;      // the near field's low lift on the event's voice
     bool  hold = true;           // the conductor waits while a Note or a Phrase sounds
     float glide = 0.0f;          // Phrase: seconds of the slide (0: two fifths of the length)

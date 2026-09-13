@@ -308,6 +308,11 @@ enum class ParamId : int {
     // speaks and then lets the horizon return over five to ten seconds makes the return itself a
     // gesture, which is what the near events want.
     FarUnmaskReturn,
+    // The foreground's own sends, per event: a share of the event's voice into the second delay
+    // and into the Cosmos, on top of what the near bus gives them. A send on a desk, not a
+    // routing switch -- the event still sounds where Distance and Dry put it, and this is what is
+    // thrown into the long chain or into the deep space beside it.
+    ForeDelay2, ForeCosmos,
     Count
 };
 

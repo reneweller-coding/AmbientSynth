@@ -3338,6 +3338,30 @@ builds the second engine, so every measurement of the library is the single
 engine it always was (checked: four presets re-measured against the night run's
 cache, identical to three decimals).
 
+**The foreground's own sends** were the last item of Rene's routing list
+(distance, dry, sends) that had not been built. *To Delay 2* and *To Cosmos*
+take a share of every near event into the second delay's input and into the
+Cosmos send, ADDED to what those already hear from the near bus rather than
+diverted from it -- an aux send on a desk, not a routing switch, so the event
+still sounds where Distance and Dry put it. Into the delay's INPUT and not onto
+the plane: on the plane the event would pass through everything else a second
+time. With the Cosmos' own Send at zero this puts the foreground alone into the
+deep space -- the events shifted, resonated and smeared while the bed is left
+dry, which is the thing the section could not do before.
+
+That a send raises the level proves nothing by itself, so the self test asks
+for the pair: open the send and shut the effect's own way back (the second
+delay's Mix, the Cosmos' Return), and the level has to fall back exactly onto
+the render that had no send. Measured, with every source off so the foreground
+is the only thing sounding: +31.8 dB with no send, +36.5 with To Delay 2 and
++30.4 with that delay's Mix shut -- the same as +30.4 with no send and the Mix
+shut; +35.9 with To Cosmos and +31.8 with the Return shut -- the base, to a
+tenth of a decibel. Both default to zero, so all 108 near presets sound exactly
+as they did; six of them now use one, where it was always what they wanted: the
+Sonar Ping and the Echo Sounder answer themselves down the long chain, the
+Krell's circuits and the Deep Space Beacon go into the Cosmos, the Number
+Station and the Lost Transmission carry down the delay.
+
 ## Roadmap
 
 1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow

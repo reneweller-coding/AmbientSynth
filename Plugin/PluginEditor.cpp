@@ -2277,6 +2277,19 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
     auto keys  = node(185, 14, 120, 36, "MIDI keys", K);
     auto hands = node(320, 14, 130, 36, "OSC / hands / macros", K, 11.0f);
     label(20, 54, "every note gets a DISTANCE: 0 at the ear, 1 the infinite background", ui::dim);
+    // The types, once, where there is room for them: every slot of the voice and the near source
+    // alike may be set to any of these, so naming them in five boxes would be the same list five
+    // times. The boxes below say "any type" and mean this.
+    g.setColour(V.withAlpha(0.30f)); g.drawRoundedRectangle(470.0f, 12.0f, 510.0f, 62.0f, 8.0f, 1.0f);
+    g.setColour(V); g.setFont(ui::title(9.5f));
+    g.drawText("SOURCE TYPES  --  any slot, any of them", 478, 15, 400, 12, juce::Justification::centredLeft, false);
+    g.setColour(ui::dim); g.setFont(ui::body(8.0f));
+    g.drawText("additive bank  -  harmonic table (spectra)  -  wavetable (cycles)  -  FM  -  texture grains  -  spectral model  -  stretch  -  bow  -  noise",
+               478, 29, 496, 11, juce::Justification::centredLeft, false);
+    g.setColour(F); g.setFont(ui::body(8.0f));
+    g.drawText("near:  flute  -  murmur  -  bowl  -  ice  -  drops  -  clip", 478, 43, 496, 11, juce::Justification::centredLeft, false);
+    g.drawText("signals:  whistler  -  shaker  -  chime  -  geiger  -  tube  -  Krell  -  beacon  -  morse  -  dial",
+               478, 57, 496, 11, juce::Justification::centredLeft, false);
     // the voice
     g.setColour(V.withAlpha(0.35f)); g.drawRoundedRectangle(14.0f, 74.0f, 442.0f, 250.0f, 8.0f, 1.0f);
     g.setColour(V); g.setFont(ui::title(10.5f)); g.drawText("VOICE  x16", 24, 78, 200, 14, juce::Justification::centredLeft, false);
@@ -2302,6 +2315,23 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
     label(150, 332, "splits by distance:  near = cos(d),  far = sin(d)", ui::dim);
     arrow({ 434, 292 }, { 500, 130 }, F);
     arrow({ 434, 300 }, { 500, 356 }, B);
+    // The near layer (2.0): a second, small conductor and a source of its own, playing one thing
+    // close to the ear while the voice above carries the piece. It is drawn here, under the voice,
+    // because it reaches the planes at the same split -- with a distance of its own, a share that
+    // goes past every reverb, and two sends. Its own bank of presets, beside the sound presets.
+    // The left margin is left clear: the feedback's return runs down it.
+    g.setColour(F.withAlpha(0.35f)); g.drawRoundedRectangle(148.0f, 344.0f, 308.0f, 118.0f, 8.0f, 1.0f);
+    g.setColour(F); g.setFont(ui::title(10.0f));
+    g.drawText("NEAR LAYER  --  its own bank of 108", 156, 347, 300, 13, juce::Justification::centredLeft, false);
+    auto ne = node(156, 362, 144, 30, "Near Events\na second conductor, waiting", F, 8.5f);
+    auto ns = node(308, 362, 142, 30, "Near Source\nany slot may hold one", F, 8.5f);
+    // What it may be set to is the legend at the top right; what is its own is the kind of event.
+    auto nty = node(156, 396, 294, 32, "Note  -  Phrase (a line that glides)  -  Sequence\n(a Berlin-school shift register that mutates)", F, 8.0f);
+    auto nrt = node(156, 432, 294, 24, "Distance / Approach  -  Dry  -  To Delay 2  -  To Cosmos", F, 8.0f);
+    arrow({ 300, 377 }, { 308, 377 }, F);
+    arrow({ 303, 392 }, { 303, 396 }, F);
+    arrow({ 303, 428 }, { 303, 432 }, F);
+    arrow({ 452, 420 }, { 494, 312 }, F);   // to the same split the voice's two planes come from
     // near chain
     label(500, 92, "NEAR  --  the dry, bright foreground", F);
     auto ens = node(500, 110, 108, 38, "Ensemble\nchorus / microshift", F, 9.5f);
@@ -2333,10 +2363,10 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
     arrow({ 733, 440 }, { 733, 446 }, M);
     label(500, 478, "no compressor anywhere: what you hear is the dynamics of the drone", ui::dim);
     // feedback, modulation
-    arrow({ 500, 461 }, { 120, 461 }, A, true); arrow({ 120, 461 }, { 120, 312 }, A, true);
-    label(130, 466, "Feedback: to bus / to pitch (phase-modulates every partial), tape", A);
+    arrow({ 500, 470 }, { 120, 470 }, A, true); arrow({ 120, 470 }, { 120, 312 }, A, true);
+    label(130, 474, "Feedback: to bus / to pitch (phase-modulates every partial), tape", A);
     node(20, 500, 946, 34, "Modulation: 8 LFOs  -  6 envelopes  -  aftertouch, wheel, slide  -  the note, its velocity, its distance  -  matrix -> any knob", A, 10.0f);
-    juce::ignoreUnused(ens, d1, d2, nr, cos, cloud, fr, rm, sh, out1, out2, env, filt, zp, s4, vec, air, blur);
+    juce::ignoreUnused(ens, d1, d2, nr, cos, cloud, fr, rm, sh, out1, out2, env, filt, zp, s4, vec, air, blur, ne, ns, nty, nrt);
 }
 
 void AmbientSynthEditor::timerCallback()

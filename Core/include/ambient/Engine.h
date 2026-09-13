@@ -749,6 +749,9 @@ private:
 
     std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
     std::vector<float> dryL_, dryR_;   // the near layer's Dry share: past every reverb and delay, straight to the output
+    // The foreground's two sends, gathered per event and added where the effect takes its input:
+    // into the second delay's, and into the Cosmos'. Empty buffers cost nothing when both are 0.
+    std::vector<float> foreD2L_, foreD2R_, foreCoL_, foreCoR_;
     float* const* stems_ = nullptr;   // eight pointers or null; valid for one process() call
     int    stemPos_ = 0;              // where in them this chunk starts
     double   sr_ = 48000.0;

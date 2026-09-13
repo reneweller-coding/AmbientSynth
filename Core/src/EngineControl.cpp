@@ -1226,6 +1226,8 @@ void Engine::readParams()
     np_.approach  = g(ParamId::ForeApproach);
     np_.distance  = g(ParamId::ForeDistance);
     np_.dry       = g(ParamId::ForeDry);
+    np_.toDelay2  = g(ParamId::ForeDelay2);
+    np_.toCosmos  = g(ParamId::ForeCosmos);
     np_.proximity = g(ParamId::ForeProximity);
     np_.hold      = g(ParamId::ForeHold) >= 0.5f;
     np_.glide     = g(ParamId::ForeGlide);

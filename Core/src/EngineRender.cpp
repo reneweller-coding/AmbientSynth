@@ -264,6 +264,17 @@ void Engine::renderChunk(float* L, float* R, int n)
     std::memset(fl, 0, bytes); std::memset(fr, 0, bytes);
     float* dl = dryL_.data(); float* dr = dryR_.data();
     std::memset(dl, 0, bytes); std::memset(dr, 0, bytes);
+    // The foreground's sends, gathered per event below and handed to the two effects where they
+    // take their input. Cleared only while one of them is open, so a preset without them pays
+    // nothing at all.
+    const float foreD2 = clampv(np_.toDelay2, 0.0f, 1.0f), foreCo = clampv(np_.toCosmos, 0.0f, 1.0f);
+    const bool foreSends = foreD2 > 0.0f || foreCo > 0.0f;
+    float* s2l = foreD2L_.data(); float* s2r = foreD2R_.data();
+    float* scl = foreCoL_.data(); float* scr = foreCoR_.data();
+    if (foreSends) {
+        std::memset(s2l, 0, bytes); std::memset(s2r, 0, bytes);
+        std::memset(scl, 0, bytes); std::memset(scr, 0, bytes);
+    }
 
     int anchor = -1;
     for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { anchor = i; break; }
@@ -367,10 +378,13 @@ void Engine::renderChunk(float* L, float* R, int n)
         for (auto& v : voices_) {
             if (!(v.isActive() || v.isStriking())) continue;
             anyVoice = true;
-            if (v.owner() == OwnerNear && dry > 0.0f) {
+            if (v.owner() == OwnerNear && (dry > 0.0f || foreSends)) {
                 // The near layer's Dry share: the voice is rendered apart, and that share of both
                 // its planes goes to the dry bus -- added to the output after every reverb and
-                // delay -- while the rest takes the usual way through the planes.
+                // delay -- while the rest takes the usual way through the planes. The two sends
+                // are taken from the same rendering: a share of the event, ADDED to what the
+                // second delay and the Cosmos already hear on the near bus, the way an aux send
+                // on a desk adds rather than diverts. The event stays where Distance put it.
                 float tnl[kControlBlock], tnr[kControlBlock], tfl[kControlBlock], tfr[kControlBlock];
                 std::memset(tnl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tnr, 0, sizeof(float) * static_cast<size_t>(len));
                 std::memset(tfl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tfr, 0, sizeof(float) * static_cast<size_t>(len));
@@ -381,6 +395,12 @@ void Engine::renderChunk(float* L, float* R, int n)
                     fl[p + i] += tfl[i] * wet; fr[p + i] += tfr[i] * wet;
                     dl[p + i] += (tnl[i] + tfl[i]) * dry; dr[p + i] += (tnr[i] + tfr[i]) * dry;
                 }
+                if (foreSends)
+                    for (int i = 0; i < len; ++i) {
+                        const float sL = tnl[i] + tfl[i], sR = tnr[i] + tfr[i];
+                        s2l[p + i] += sL * foreD2; s2r[p + i] += sR * foreD2;
+                        scl[p + i] += sL * foreCo; scr[p + i] += sR * foreCo;
+                    }
             } else {
                 v.render(nl + p, nr + p, fl + p, fr + p, len, v.owner() == OwnerNear ? vpNear_ : vp_, fm, couple);
             }
@@ -414,8 +434,14 @@ void Engine::renderChunk(float* L, float* R, int n)
         nl[i] += wl[i] * m;  nr[i] += wr[i] * m;
         fl[i] += wl[i] * tf; fr[i] += wr[i] * tf;
     }
-    // Second delay in series: it hears the first delay's echoes and spins longer chains.
-    delay2_.process(nl, nr, wl, wr, n);
+    // Second delay in series: it hears the first delay's echoes and spins longer chains -- and,
+    // with To Delay 2 open, an extra share of every foreground event straight into its input. Into
+    // the INPUT and not onto the plane: on the plane the event would go through everything else a
+    // second time; here it is the delay that gets more of it, which is what a send is.
+    if (foreD2 > 0.0f) {
+        for (int i = 0; i < n; ++i) { s2l[i] += nl[i]; s2r[i] += nr[i]; }   // the send buffer is the delay's input from here
+        delay2_.process(s2l, s2r, wl, wr, n);
+    } else delay2_.process(nl, nr, wl, wr, n);
     for (int i = 0; i < n; ++i) {
         const float m = smDelay2Mix_.next(delay2Mix_), tf = smDelay2ToFar_.next(delay2ToFar_);
         nl[i] += wl[i] * m;  nr[i] += wr[i] * m;
@@ -458,9 +484,11 @@ void Engine::renderChunk(float* L, float* R, int n)
     // cascade at all (both zero) is left exactly alone. The floor of 0.15 keeps the division sane.
     const float cosmosSendNow = cosmosSend_
         * std::clamp(1.0f + 3.0f * cosmosSwell_ * (cascadeNow_ - cascadeAvg_) / std::max(cascadeAvg_, 0.15f), 0.0f, 2.0f);
-    if (cosmosSendNow > 0.0f || smCosmosSend_.value > 1e-4f) {
+    if (cosmosSendNow > 0.0f || smCosmosSend_.value > 1e-4f || foreCo > 0.0f) {
         float* cl = cosL_.data(); float* cr = cosR_.data();
-        for (int i = 0; i < n; ++i) { const float s = smCosmosSend_.next(cosmosSendNow); cl[i] = nl[i] * s; cr[i] = nr[i] * s; }
+        // The plane's own send, and the foreground's on top of it (To Cosmos): a preset may send
+        // nothing but its events into the deep space and leave the bed out of it entirely.
+        for (int i = 0; i < n; ++i) { const float s = smCosmosSend_.next(cosmosSendNow); cl[i] = nl[i] * s + scl[i]; cr[i] = nr[i] * s + scr[i]; }
         shifter_.process(cl, cr, n);
         resonator_.process(cl, cr, n);
         vowel_.process(cl, cr, n);

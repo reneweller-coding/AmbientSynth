@@ -8126,6 +8126,51 @@ static void testNearLayer()
         CHECK(n1 < 0.1 * n0, "an event on the horizon is not");
         CHECK(m2 > 10.0 * std::max(m1, 1.0e-6), "and Dry brings it to the output past the muted far reverb");
     }
+    {   // The foreground's two sends (13.09.2026, Rene's routing list): a share of every event into
+        // the second delay's input and into the Cosmos, ADDED to what those already hear, so an
+        // event can answer itself across a minute or be shifted into deep space while the bed is
+        // left alone. The conductor runs (the near scheduler needs it) but every sound source is
+        // off, so the only thing sounding is the foreground itself.
+        //
+        // That a send raises the level says little on its own. What says the energy went through
+        // THAT effect is the pair: open the send and shut the effect's own way back to the output
+        // -- the second delay's Mix, the Cosmos' Return -- and the level has to fall back exactly
+        // onto the render that had no send at all.
+        auto sends = [&](float toDelay2, float toCosmos, float delay2Mix, float cosmosReturn) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainRate, 3.0f);
+            e.setParam(ParamId::Src1Type, 0.0f); e.setParam(ParamId::OscLevel, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::ForeLevel, 0.8f); e.setParam(ParamId::ForeType, 5.0f); e.setParam(ParamId::ForePartials, 1.0f);
+            e.setParam(ParamId::ForeRate, 10.0f); e.setParam(ParamId::ForeLength, 3.0f);
+            e.setParam(ParamId::ForeAttack, 0.01f); e.setParam(ParamId::ForeRelease, 0.1f);
+            e.setParam(ParamId::ForeDelay2, toDelay2); e.setParam(ParamId::ForeCosmos, toCosmos);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f);
+            e.setParam(ParamId::Delay2Mix, delay2Mix); e.setParam(ParamId::Delay2TimeL, 0.5f); e.setParam(ParamId::Delay2TimeR, 0.5f);
+            e.setParam(ParamId::Delay2Feedback, 0.0f);
+            e.setParam(ParamId::CosmosSend, 0.0f); e.setParam(ParamId::CosmosReturn, cosmosReturn);
+            e.reset();
+            e.noteOn(45, 0.8f);
+            std::vector<float> L(256), R(256);
+            double energy = 0.0;
+            for (int b = 0; b < static_cast<int>(30.0 * sr / 256.0); ++b) {
+                e.process(L.data(), R.data(), 256);
+                for (int i = 0; i < 256; ++i) energy += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)];
+            }
+            return 10.0 * std::log10(energy + 1.0e-20);
+        };
+        const double base = sends(0.0f, 0.0f, 1.0f, 1.0f);
+        const double d2 = sends(1.0f, 0.0f, 1.0f, 1.0f), d2Shut = sends(1.0f, 0.0f, 0.0f, 1.0f), baseShut = sends(0.0f, 0.0f, 0.0f, 1.0f);
+        const double co = sends(0.0f, 1.0f, 1.0f, 1.0f), coShut = sends(0.0f, 1.0f, 1.0f, 0.0f);
+        std::printf("  [probe] the foreground's sends: none %+.1f dB | to Delay 2 %+.1f, its Mix shut %+.1f (no send, Mix shut %+.1f) | to Cosmos %+.1f, its Return shut %+.1f\n",
+                    base, d2, d2Shut, baseShut, co, coShut);
+        CHECK(d2 > base + 2.0, "To Delay 2 puts the event into the second delay");
+        CHECK(std::fabs(d2Shut - baseShut) < 0.2, "...and nowhere else: with that delay's Mix shut the send changes nothing");
+        CHECK(co > base + 2.0, "To Cosmos puts the event into the Cosmos");
+        CHECK(std::fabs(coShut - base) < 0.2, "...and nowhere else: with the Cosmos' Return shut the send changes nothing");
+    }
 
     // ---- the layer's scope: a sound preset leaves the foreground alone; the bank touches nothing else
     {

@@ -282,14 +282,19 @@ NEAR_OUT = os.path.join(ROOT, "Core", "src", "NearPresets.inc")
 
 def near(kind="Note", rate=180.0, length=8.0, attack=0.3, decay=1.0, sustain=1.0, release=3.0,
          cutoff=8000.0, resonance=0.1, filt="LP 12", fenv=0.0, pitch="Consonant", spread=0.5,
-         approach=0.0, distance=0.0, dry=0.0, proximity=0.6, hold="on", level=0.7, clip=None, **src):
+         approach=0.0, distance=0.0, dry=0.0, to_delay2=0.0, to_cosmos=0.0,
+         proximity=0.6, hold="on", level=0.7, clip=None, **src):
     """One near preset's settings: the events, the envelope and the filter, then the source.
     `clip` names a file of the library's archive, relative to the library's root; it travels
     beside the settings as the preset's texture. `distance` is where the event sits between the
     planes (Approach arrives there; negative Approach leaves from there), `dry` the share of it
-    that goes past every reverb and delay."""
+    that goes past every reverb and delay, and `to_delay2` / `to_cosmos` the two sends: a share of
+    the event ADDED to what the second delay and the Cosmos already hear, so an event can answer
+    itself across a minute, or be shifted and smeared into deep space, while the bed stays where
+    it is (13.09.2026)."""
     d = dict(fore_level=level, fore_kind=kind, fore_rate=rate, fore_length=length, fore_pitch=pitch,
              fore_spread=spread, fore_approach=approach, fore_distance=distance, fore_dry=dry,
+             fore_delay2=to_delay2, fore_cosmos=to_cosmos,
              fore_proximity=proximity, fore_hold=hold,
              fore_attack=attack, fore_decay=decay, fore_sustain=sustain, fore_release=release,
              fore_cutoff=cutoff, fore_resonance=resonance, fore_filter=filt, fore_filter_env=fenv)
@@ -379,10 +384,10 @@ NEAR = [
         # conductor could get in its way.
         ("Sonar Ping", near(type="Additive", partials=1, pitch="Highest", octave=2, rate=75, length=0.5,
                             attack=0.003, decay=0.15, sustain=0.12, release=10, cutoff=18000, resonance=0.0,
-                            spread=0.15, proximity=0.3, hold="off", level=0.5)),
+                            spread=0.15, proximity=0.3, hold="off", level=0.5, to_delay2=0.45)),
         ("Echo Sounder", near(type="Additive", partials=1, pitch="Highest", octave=2, rate=40, length=0.5,
                               attack=0.002, decay=0.08, sustain=0.05, release=5, cutoff=18000, resonance=0.0,
-                              spread=0.1, proximity=0.2, hold="off", level=0.42)),
+                              spread=0.1, proximity=0.2, hold="off", level=0.42, to_delay2=0.6)),
         ("Deep Sonar", near(type="Additive", partials=1, pitch="Highest", octave=1, rate=140, length=0.5,
                             attack=0.004, decay=0.3, sustain=0.2, release=14, cutoff=18000, resonance=0.0,
                             spread=0.25, proximity=0.5, hold="off", level=0.55)),
@@ -410,13 +415,13 @@ NEAR = [
                              spread=0.3, distance=0.35, dry=0.3, proximity=0.6, hold="off", level=0.45)),
         ("Krell Circuit", near(type="Krell", speed=0.35, pos=0.7, fm_ratio=1.5, fm_index=1.0, octave=0, kind="Note", rate=240, length=14,
                                attack=0.05, decay=0.5, sustain=1.0, release=0.8, cutoff=9000, resonance=0.1,
-                               spread=0.8, distance=0.25, approach=0.0, proximity=0.4, hold="off", level=0.45)),
+                               spread=0.8, distance=0.25, approach=0.0, proximity=0.4, hold="off", level=0.45, to_cosmos=0.5)),
         ("Deep Space Beacon", near(type="Beacon", density=0.5, octave=2, pitch="Root", kind="Note", rate=240, length=12,
                                    attack=0.005, decay=0.2, sustain=1.0, release=0.3, cutoff=16000, resonance=0.0,
-                                   spread=0.2, distance=0.2, approach=0.35, proximity=0.5, hold="off", level=0.45)),
+                                   spread=0.2, distance=0.2, approach=0.35, proximity=0.5, hold="off", level=0.45, to_cosmos=0.55, to_delay2=0.3)),
         ("Number Station", near(type="Morse", speed=0.35, pos=0.2, bright=0.5, octave=2, pitch="Root", kind="Note", rate=360, length=30,
                                 attack=0.01, decay=0.5, sustain=1.0, release=0.5, cutoff=6000, resonance=0.0,
-                                spread=0.3, distance=0.3, dry=0.2, proximity=0.5, hold="on", level=0.4)),
+                                spread=0.3, distance=0.3, dry=0.2, proximity=0.5, hold="on", level=0.4, to_delay2=0.35)),
         ("Shortwave Dial", near(type="Dial", pos=0.7, bright=0.5, pitch="Root", octave=1, kind="Note", rate=300, length=16,
                                 attack=0.5, decay=1.0, sustain=1.0, release=2.0, cutoff=5000, resonance=0.0,
                                 spread=0.4, distance=0.3, approach=0.2, proximity=0.4, hold="off", level=0.4)),
@@ -452,7 +457,7 @@ NEAR = [
                                     level=0.35, clip="Archive/Radio/Quiet-Please/")),
         ("Lost Transmission", near(kind="Note", rate=420, length=10, pitch="Root", type="Clip", follow="Free", pos=0.0,
                                    attack=0.3, release=3.0, cutoff=7000, proximity=0.2, spread=0.6, approach=0.6,
-                                   level=0.4, clip="Archive/Radio/Quiet-Please/")),
+                                   level=0.4, to_delay2=0.5, to_cosmos=0.3, clip="Archive/Radio/Quiet-Please/")),
         # The shift register on the phrases: every step begins another one and the gate cuts it
         # off -- a cut-up of the broadcast, for a minute and a half out of every ten.
         ("Radio Cut-Up", seq(type="Clip", follow="Free", pos=0.0, cutoff=9000, resonance=0.1, filt="LP 12",

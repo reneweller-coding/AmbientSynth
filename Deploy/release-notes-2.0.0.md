@@ -14,7 +14,9 @@ magnetosphere, a seed pod, struck bronze, a Geiger tube, a fluorescent tube, the
 a beacon's data packet, a number station's Morse, a shortwave dial. A Berlin-school sequence kind
 with a shift register that mutates, a breathing tempo and a filter that blooms over the run. Events
 can arrive out of the horizon or leave into it (Distance and Approach), the near field lifts 120 to
-300 Hz as a thing comes close, and Dry lets a click past every reverb.
+300 Hz as a thing comes close, Dry lets a click past every reverb, and two sends of its own throw a
+share of every event into the second delay or into the Cosmos while the bed is left where it is --
+a beacon that answers itself across a minute, circuits shifted and smeared into deep space.
 
 **Recordings, played straight.** A Clip source type plays a recording once, unbroken, because a
 sentence in grains is not a sentence. The library's archive holds NASA's mission loops and

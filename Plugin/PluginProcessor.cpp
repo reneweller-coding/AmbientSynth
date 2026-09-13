@@ -749,11 +749,15 @@ bool AmbientSynthProcessor::loadNearClipFolder(const juce::File& dir)
     // A folder of recordings: up to kNearPoolMax of them, sorted by name so the same folder gives
     // the same pool, each kept to twenty seconds -- these are phrases, not beds. Which of them an
     // event plays is the engine's draw.
-    juce::Array<juce::File> files = dir.findChildFiles(juce::File::findFiles, false, "*.flac;*.wav;*.aif;*.aiff;*.ogg;*.mp3");
-    files.sort();
+    juce::Array<juce::File> all = dir.findChildFiles(juce::File::findFiles, false, "*.flac;*.wav;*.aif;*.aiff;*.ogg;*.mp3");
+    all.sort();
+    // More than the pool holds: every k-th of them rather than the first forty-eight, so a folder
+    // of twelve episodes' phrases is heard from all twelve and not from the first five.
+    juce::Array<juce::File> files;
+    if (all.size() <= kNearPoolMax) files = all;
+    else for (int i = 0; i < kNearPoolMax; ++i) files.add(all[static_cast<int>(std::lround(i * (all.size() - 1.0) / (kNearPoolMax - 1.0)))]);
     std::vector<ambient::Texture> pool;
     for (const juce::File& f : files) {
-        if (static_cast<int>(pool.size()) >= kNearPoolMax) break;
         std::vector<float> l, r; double rate = 0.0;
         if (!readStereo(f, l, r, rate)) continue;
         const double base = baseHzFromName(f.getFileName().toRawUTF8());

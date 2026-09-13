@@ -376,6 +376,29 @@ NEAR = [
                             attack=0.004, decay=0.3, sustain=0.2, release=14, cutoff=18000, resonance=0.0,
                             spread=0.25, proximity=0.5, hold="off", level=0.55)),
     ]),
+    # The radio (13.09.): phrases cut out of "Quiet, Please" (1947-49, Wyllis Cooper; the archive's
+    # Radio folder, see Library/Archive/SOURCES.md), a folder rather than a file: every event plays
+    # one of them, drawn at random, never the same twice running. Free, straight, from the start;
+    # the conductor holds its onsets while the voice speaks and for ten seconds after.
+    ("Radio", [
+        ("Quiet, Please", near(kind="Note", rate=150, length=8, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                               attack=0.05, release=1.5, cutoff=12000, proximity=0.7, spread=0.3, approach=0.0,
+                               level=0.5, clip="Archive/Radio/Quiet-Please/")),
+        ("Night Announcer", near(kind="Note", rate=300, length=9, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                 attack=0.1, release=2.0, cutoff=9000, proximity=0.4, spread=0.5, approach=0.25,
+                                 level=0.45, clip="Archive/Radio/Quiet-Please/")),
+        ("Whisper At The Ear", near(kind="Note", rate=90, length=8, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                    attack=0.05, release=1.0, cutoff=6000, proximity=0.9, spread=0.1, approach=0.0,
+                                    level=0.35, clip="Archive/Radio/Quiet-Please/")),
+        ("Lost Transmission", near(kind="Note", rate=420, length=10, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                   attack=0.3, release=3.0, cutoff=7000, proximity=0.2, spread=0.6, approach=0.6,
+                                   level=0.4, clip="Archive/Radio/Quiet-Please/")),
+        # The shift register on the phrases: every step begins another one and the gate cuts it
+        # off -- a cut-up of the broadcast, for a minute and a half out of every ten.
+        ("Radio Cut-Up", seq(type="Clip", follow="Free", pos=0.0, cutoff=9000, resonance=0.1, filt="LP 12",
+                             steps=5, step=0.6, mutation=0.1, scatter=0.4, bloom=0.2, attack=0.01, decay=0.3, sustain=0.3,
+                             release=0.1, length=90, rate=600, approach=0.0, level=0.4, clip="Archive/Radio/Quiet-Please/")),
+    ]),
     ("Voices", [
         ("Radio Murmur", near(type="Murmur", force=0.5, speed=0.5, pos=0.85, bright=0.5, pos_drift=0.4, octave=-1,
                               rate=240, length=14, attack=0.2, release=1.2, spread=0.7, level=0.5)),
@@ -446,6 +469,36 @@ NEAR = [
                               strike=0.35, strike_type="Wood", strike_decay=0.08, strike_damp=0.8,
                               steps=5, step=0.9, mutation=0.04, scatter=0.05, bloom=0.15, decay=0.35, release=0.5,
                               pitch="Root", length=300, rate=640, level=0.6)),
+        # More of them, on the other sources (Rene, 13.09.: "gerne mit unterschiedlichen Sounds"):
+        # the same shift register driving a flute, a bowl, the ice, a bow, a harmonic bank under
+        # a ladder, a wavetable, pitched drops, a tuned noise, and a slow one for a cathedral.
+        ("Flute Line", seq(type="Flute", pos=0.45, bright=0.6, octave=0, cutoff=9000, resonance=0.1, filt="LP 12",
+                           steps=7, step=0.5, mutation=0.1, scatter=0.25, bloom=0.4, attack=0.03, decay=0.3, sustain=0.5,
+                           release=0.3, length=200, rate=480, level=0.45)),
+        ("Bowl Line", seq(type="Bowl", force=0.5, speed=0.4, pos=0.3, octave=1, cutoff=12000, resonance=0.05, filt="LP 12",
+                          steps=9, step=0.6, mutation=0.08, scatter=0.3, bloom=0.3, decay=0.8, sustain=0.2, release=0.8,
+                          length=220, rate=520, level=0.45)),
+        ("Ice Steps", seq(type="Ice", force=0.6, speed=0.3, pos=0.4, octave=-1, cutoff=3000, resonance=0.3, filt="Ladder",
+                          steps=5, step=0.8, mutation=0.06, scatter=0.15, bloom=0.4, decay=0.5, release=0.6,
+                          pitch="Root", length=240, rate=600, level=0.5)),
+        ("Bowed Line", seq(type="Bow", force=0.6, speed=0.5, pos=0.2, octave=0, cutoff=5000, resonance=0.2, filt="LP 24",
+                           steps=7, step=0.42, mutation=0.12, scatter=0.25, bloom=0.6, attack=0.02, decay=0.3, sustain=0.4,
+                           release=0.3, length=210, rate=500, level=0.45)),
+        ("Harmonic Pulse", seq(type="Harmonic", bright=0.4, octave=-1, cutoff=1500, resonance=0.5, filt="Ladder",
+                               steps=11, step=0.3, mutation=0.15, scatter=0.35, bloom=0.8, decay=0.25, release=0.3,
+                               length=260, rate=560, level=0.5)),
+        ("Wavetable Run", seq(type="Wavetable", pos=0.5, pos_drift=0.5, octave=0, cutoff=2500, resonance=0.45, filt="Ladder",
+                              steps=7, step=0.36, mutation=0.14, scatter=0.3, bloom=0.7, decay=0.3, release=0.3,
+                              length=230, rate=540, level=0.5)),
+        ("Drop Sequence", seq(type="Drops", density=3.0, pos=0.5, bright=0.55, follow="Note", octave=1, cutoff=14000,
+                              resonance=0.05, filt="LP 12", steps=9, step=0.5, mutation=0.1, scatter=0.3, bloom=0.3,
+                              decay=0.4, release=0.5, length=200, rate=480, level=0.45)),
+        ("Tuned Noise", seq(type="Noise", noise="White", noise_q=0.85, pos=0.5, octave=0, cutoff=12000, resonance=0.1,
+                            filt="LP 12", steps=7, step=0.45, mutation=0.1, scatter=0.35, bloom=0.4, decay=0.2,
+                            release=0.3, length=180, rate=460, level=0.45)),
+        ("Slow Cathedral", seq(type="FM", fm_ratio=2.0, fm_index=0.5, octave=-1, cutoff=3000, resonance=0.15, filt="LP 24",
+                               steps=5, step=1.2, mutation=0.06, scatter=0.15, bloom=0.5, decay=1.5, release=1.5,
+                               length=300, rate=700, level=0.45)),
     ]),
     # The archive (Library/Archive, fetched by Tools/library/fetch_archive.py): NASA's own
     # recordings, works of the United States government. Each preset plays one of them straight,

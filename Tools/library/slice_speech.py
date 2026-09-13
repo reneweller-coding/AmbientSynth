@@ -274,7 +274,9 @@ def note_sources(out_rel, item, meta, used, note):
     lines.append("")
     for src, count in used:
         lines.append("- %s -- %d phrases" % (src, count))
-    with open(path, "a", encoding="utf-8") as f:
+    # LF, explicitly: text mode on Windows would append CRLF lines to a file written with LF, and
+    # a later normalisation then shows every line of the file as changed.
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
 
 

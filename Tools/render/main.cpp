@@ -53,9 +53,15 @@ bool loadNearClips(Engine& engine, const std::string& path)
             if (ext == ".flac" || ext == ".wav" || ext == ".aif" || ext == ".aiff") files.push_back(entry.path().string());
         }
         std::sort(files.begin(), files.end());
+        // More than the pool holds: every k-th of them, the whole folder represented (as the plugin does).
+        const size_t kMax = 48;
+        if (files.size() > kMax) {
+            std::vector<std::string> some;
+            for (size_t i = 0; i < kMax; ++i) some.push_back(files[static_cast<size_t>(std::lround(i * (files.size() - 1.0) / (kMax - 1.0)))]);
+            files.swap(some);
+        }
         std::vector<Texture> pool;
         for (const std::string& f : files) {
-            if (pool.size() >= 48) break;
             std::vector<std::vector<float>> ch; int rate = 0;
             if (!readWavChannels(f.c_str(), ch, rate) || ch.empty()) continue;
             Texture t = Engine::makeTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,

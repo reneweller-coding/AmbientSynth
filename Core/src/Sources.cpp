@@ -11,7 +11,8 @@
 namespace ambient {
 
 const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Harmonic", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow", "Spectral", "Wavetable",
-                                                        "Flute", "Murmur", "Bowl", "Ice", "Drops", "Clip" };
+                                                        "Flute", "Murmur", "Bowl", "Ice", "Drops", "Clip",
+                                                        "Whistler", "Shaker", "Chime", "Geiger", "Tube", "Krell", "Beacon", "Morse", "Dial" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
     "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital", "Cicada",
 };
@@ -333,6 +334,7 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         fluteReady_ = false; rubReady_ = false; murReady_ = false;
         for (auto& d : drops_) d.on = false;
         clipPos_ = -1.0; clipDone_ = false;
+        sigReady_ = false;   // the signals start their clocks again
         lastType_ = p.type;
     }
     double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
@@ -387,6 +389,15 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     else if (p.type == SourceType::Bowl) renderRub(scratch_, n, hz, p, dt, false);
     else if (p.type == SourceType::Ice) renderRub(scratch_, n, hz, p, dt, true);
     else if (p.type == SourceType::Drops) renderDrops(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Whistler) renderWhistler(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Shaker) renderShaker(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Chime) renderChime(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Geiger) renderGeiger(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Tube) renderTube(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Krell) renderKrell(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Beacon) renderBeacon(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Morse) renderMorse(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Dial) renderDial(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Spectral)
         renderSpectral(scratch_, n, p.follow ? hz / std::max(1.0, texture != nullptr ? texture->baseHz : 1.0)
                                              : hz / std::max(noteHz, 1.0), p, texture, dt);

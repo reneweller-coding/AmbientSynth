@@ -67,7 +67,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     smFarLevel_.snap(getParam(ParamId::FarLevel)); smFarWidth_.snap(getParam(ParamId::FarWidth));
     for (int i = 0; i < kNumParams; ++i) blendCur_[i].store(getParam(static_cast<ParamId>(i)), std::memory_order_relaxed);
     blendActive_.store(false, std::memory_order_relaxed);
-    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_, &memL_, &memR_,
+    for (auto* b : { &nearL_, &nearR_, &farL_, &farR_, &wetL_, &wetR_, &dryL_, &dryR_, &cosL_, &cosR_, &nebL_, &nebR_, &shimL_, &shimR_, &fbInL_, &fbInR_, &fbMono_, &memL_, &memR_,
                      &cloudL_, &cloudR_,
                      &roomInL_, &roomInR_, &roomOutL_, &roomOutR_ })
         b->assign(static_cast<size_t>(maxBlock_), 0.0f);

@@ -296,6 +296,11 @@ enum class ParamId : int {
     ForeLevel, ForeKind, ForeRate, ForeChance, ForeCluster, ForeLength,
     ForePitch, ForeSpread, ForeApproach, ForeProximity, ForeHold, ForeGlide,
     ForeSteps, ForeStep, ForeStepSync, ForeMutation, ForeScatter, ForeBloom,
+    // Where an event sits between the planes (0 at the ear, 1 on the horizon; Approach arrives
+    // from the horizon to it, or, negative, leaves from it), and how much of it goes straight to
+    // the output past every reverb and delay: a rattle twenty centimetres from the nose, a click
+    // that no room may soften.
+    ForeDistance, ForeDry,
     // How long the far reverb takes to come back after the foreground has ducked it. It came back
     // in 1.2 seconds since the unmask was built, and that stays the default; a foreground that
     // speaks and then lets the horizon return over five to ten seconds makes the return itself a

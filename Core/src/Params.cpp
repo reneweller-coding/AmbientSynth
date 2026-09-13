@@ -807,7 +807,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ForeLength,       "fore_length",        "Length",       "Near Events", 0.5f,  600.f, 6.f,   0.35f, "s"),
     C(ParamId::ForePitch,        "fore_pitch",         "Pitch",        "Near Events", kNearPitchNames, 5, 0),
     F(ParamId::ForeSpread,       "fore_spread",        "Spread",       "Near Events", 0.f,   1.f,   0.5f,  1.f,  ""),
-    F(ParamId::ForeApproach,     "fore_approach",      "Approach",     "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeApproach,     "fore_approach",      "Approach",     "Near Events", -1.f,  1.f,   0.f,   1.f,  ""),   // negative: the event leaves instead of arriving
     F(ParamId::ForeProximity,    "fore_proximity",     "Proximity",    "Near Events", 0.f,   1.f,   0.6f,  1.f,  ""),
     B(ParamId::ForeHold,         "fore_hold",          "Hold Brain",   "Near Events", true),
     F(ParamId::ForeGlide,        "fore_glide",         "Glide",        "Near Events", 0.f,   30.f,  0.f,   0.5f, "s"),
@@ -817,6 +817,8 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ForeMutation,     "fore_mutation",      "Mutation",     "Near Events", 0.f,   1.f,   0.12f, 1.f,  ""),
     F(ParamId::ForeScatter,      "fore_scatter",       "Scatter",      "Near Events", 0.f,   1.f,   0.3f,  1.f,  ""),
     F(ParamId::ForeBloom,        "fore_bloom",         "Bloom",        "Near Events", 0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::ForeDistance,     "fore_distance",      "Distance",     "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeDry,          "fore_dry",           "Dry",          "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
     F(ParamId::FarUnmaskReturn,  "far_unmask_return",  "Return",       "Far Reverb", 0.2f,  10.f,  1.2f,  0.5f, "s"),
 }};
 } // namespace

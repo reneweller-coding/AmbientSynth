@@ -7846,6 +7846,141 @@ static void testNearLayer()
         e.setStemBuffers(nullptr);
     }
 
+    // ---- the signals (13.09.2026, the second foreground round): each of the nine, alone in a slot
+    // for four seconds, is heard at a level in the same league as the others, stays finite, and
+    // shows the one thing it is for.
+    {
+        struct Sig { SourceType type; const char* name; };
+        const Sig sigs[] = {
+            { SourceType::Whistler, "whistler" }, { SourceType::Shaker, "shaker" }, { SourceType::Chime, "chime" },
+            { SourceType::Geiger, "geiger" }, { SourceType::Tube, "tube" }, { SourceType::Krell, "krell" },
+            { SourceType::Beacon, "beacon" }, { SourceType::Morse, "morse" }, { SourceType::Dial, "dial" },
+        };
+        auto renderSig = [&](SourceType type, double hz, std::vector<float>& v, float density, float force, float speed) {
+            auto slotBox = std::make_unique<SourceSlot>();
+            SourceSlot& slot = *slotBox;
+            slot.prepare(sr, 7);
+            slot.noteOn(true);
+            SlotParams sp;
+            sp.type = type; sp.level = 1.0f; sp.density = density; sp.bowForce = force; sp.bowSpeed = speed;
+            sp.position = 0.5f; sp.positionDrift = 0.3f; sp.bright = 0.5f; sp.noiseQ = 0.3f; sp.fmRatio = 1.5f; sp.fmIndex = 1.0f; sp.tilt = 0.5f;
+            std::vector<float> l(64), r(64);
+            const int blocks = static_cast<int>(4.0 * sr / 64.0);
+            v.clear(); v.reserve(static_cast<size_t>(blocks) * 64);
+            for (int b = 0; b < blocks; ++b) {
+                std::fill(l.begin(), l.end(), 0.0f); std::fill(r.begin(), r.end(), 0.0f);
+                slot.render(l.data(), r.data(), 64, hz, sp, nullptr, nullptr, 0.05f);
+                v.insert(v.end(), l.begin(), l.end());
+            }
+        };
+        auto rmsOf = [](const std::vector<float>& v, size_t a, size_t b) {
+            double s = 0.0; b = std::min(b, v.size());
+            for (size_t i = a; i < b; ++i) s += static_cast<double>(v[i]) * v[i];
+            return b > a ? std::sqrt(s / static_cast<double>(b - a)) : 0.0;
+        };
+        auto zcPerSec = [&](const std::vector<float>& v, size_t a, size_t b) {
+            int zc = 0; b = std::min(b, v.size());
+            for (size_t i = a + 1; i < b; ++i) if ((v[i] >= 0.0f) != (v[i - 1] >= 0.0f)) ++zc;
+            return 0.5 * zc / (static_cast<double>(b - a) / sr);
+        };
+        const size_t s1 = static_cast<size_t>(sr);
+        for (const Sig& g : sigs) {
+            std::vector<float> v;
+            renderSig(g.type, g.type == SourceType::Chime ? 2400.0 : 800.0, v, g.type == SourceType::Geiger ? 8.0f : 2.0f, 0.5f, 0.4f);
+            bool finite = true; float peak = 0.0f;
+            for (float x : v) { if (!std::isfinite(x)) finite = false; peak = std::max(peak, std::fabs(x)); }
+            const double rms = rmsOf(v, 0, v.size());
+            std::printf("  [probe] %-9s rms %.4f peak %.3f (%+.1f dB against the table's 0.10)\n", g.name, rms, peak, 20.0 * std::log10(rms / 0.10 + 1e-12));
+            CHECK(finite, "the signal stays finite");
+            CHECK(peak < 1.0f, "and under full scale");
+            CHECK(rms > 0.01 && rms < 0.4, "and in the league of the other sources");
+        }
+        {   // The whistler falls: its zero-crossing rate in the first tenth of a second is far above that in the last second.
+            std::vector<float> v; renderSig(SourceType::Whistler, 400.0, v, 2.0f, 0.5f, 0.3f);
+            const double early = zcPerSec(v, 0, s1 / 10), late = zcPerSec(v, 3 * s1, 4 * s1);
+            std::printf("  [probe] whistler: %.0f Hz in its first tenth, %.0f Hz in its last second\n", early, late);
+            CHECK(early > 4.0 * late, "the whistle falls with time");
+            CHECK(late > 300.0 && late < 600.0, "and ends near the note");
+        }
+        {   // The shaker's energy decays between shakes: a shake every two seconds at Density 0.5, the second half of each gap quieter than the first.
+            std::vector<float> v; renderSig(SourceType::Shaker, 800.0, v, 0.5f, 0.3f, 0.4f);
+            const double a = rmsOf(v, 0, s1 / 4), b = rmsOf(v, s1, s1 + s1 / 2);
+            std::printf("  [probe] shaker: first quarter second %.4f, a second later %.5f\n", a, b);
+            CHECK(a > 4.0 * b, "the beans settle between the shakes");
+        }
+        {   // The chime rings and beats: level after three seconds is still there (T60 long), and the envelope of the prime pair rises and falls.
+            std::vector<float> v; renderSig(SourceType::Chime, 2400.0, v, 2.0f, 0.85f, 0.4f);
+            const double a = rmsOf(v, s1 / 10, s1 / 2), b = rmsOf(v, 3 * s1, 4 * s1);
+            std::printf("  [probe] chime: %.4f in its first half second, %.4f in its fourth second\n", a, b);
+            CHECK(b > 0.15 * a, "the bronze still rings after three seconds");
+        }
+        {   // The Geiger clicks are countable: at Density 8 with the clusters, dozens of them in four seconds.
+            std::vector<float> v; renderSig(SourceType::Geiger, 800.0, v, 8.0f, 0.4f, 0.4f);
+            int clicks = 0; int quiet = 0;
+            for (size_t i = 0; i < v.size(); ++i) { if (std::fabs(v[i]) > 0.15f && quiet > static_cast<int>(sr * 0.004)) { ++clicks; quiet = 0; } else ++quiet; }
+            std::printf("  [probe] geiger: %d clicks in four seconds at Density 8\n", clicks);
+            CHECK(clicks >= 16 && clicks <= 120, "a Poisson shower, not a tone and not silence");
+        }
+        {   // The Morse is keyed: a fair share of silence, and tone at the note.
+            std::vector<float> v; renderSig(SourceType::Morse, 700.0, v, 2.0f, 0.5f, 0.35f);
+            int silent = 0; const int win = static_cast<int>(sr * 0.02);
+            int wins = 0;
+            for (size_t i = s1; i + static_cast<size_t>(win) <= v.size(); i += static_cast<size_t>(win)) { ++wins; if (rmsOf(v, i, i + static_cast<size_t>(win)) < 0.005) ++silent; }
+            const double share = wins > 0 ? static_cast<double>(silent) / wins : 0.0;
+            std::printf("  [probe] morse: %.0f %% of the windows silent, tone %.0f Hz\n", 100.0 * share, zcPerSec(v, s1, 4 * s1) / std::max(0.01, 1.0 - share));
+            CHECK(share > 0.25 && share < 0.85, "dits, dahs and the gaps between them");
+        }
+        {   // The beacon repeats its packet: energy in bursts of about a quarter second every two seconds at Density 0.5.
+            std::vector<float> v; renderSig(SourceType::Beacon, 1200.0, v, 0.5f, 0.5f, 0.4f);
+            const double p1 = rmsOf(v, 0, s1 / 4), gap = rmsOf(v, s1 / 2, s1 + s1 / 2), p2 = rmsOf(v, 2 * s1, 2 * s1 + s1 / 4);
+            std::printf("  [probe] beacon: packet %.4f, gap %.5f, next packet %.4f\n", p1, gap, p2);
+            CHECK(p1 > 0.05 && p2 > 0.05 && gap < 0.01 * p1, "a packet, silence, a packet");
+        }
+    }
+    // ---- Distance and Dry (13.09.2026): where an event sits, and what goes past the room
+    {
+        auto planes = [&](float distance, float dry, double& nearE, double& farE, double& mixE) {
+            Engine e;
+            e.prepare(sr, 256);
+            for (int i = 0; i < kNumParams; ++i) e.setParam(static_cast<ParamId>(i), paramTable()[static_cast<size_t>(i)].def);
+            e.setParam(ParamId::BrainOn, 1.0f); e.setParam(ParamId::BrainRate, 3.0f);
+            e.setParam(ParamId::Src1Type, 0.0f); e.setParam(ParamId::OscLevel, 0.0f); e.setParam(ParamId::Air, 0.0f);
+            e.setParam(ParamId::ForeLevel, 0.8f); e.setParam(ParamId::ForeType, 5.0f); e.setParam(ParamId::ForePartials, 1.0f);   // a sine
+            e.setParam(ParamId::ForeRate, 10.0f); e.setParam(ParamId::ForeLength, 4.0f);
+            e.setParam(ParamId::ForeAttack, 0.01f); e.setParam(ParamId::ForeRelease, 0.1f);
+            e.setParam(ParamId::ForeApproach, 0.0f); e.setParam(ParamId::ForeDistance, distance); e.setParam(ParamId::ForeDry, dry);
+            e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::FarLevel, 0.0f);   // the far plane muted: what reaches the mix from there is nothing
+            e.setParam(ParamId::EnsembleMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::Delay2Mix, 0.0f);
+            e.reset();
+            std::vector<float> L(256), R(256);
+            std::vector<float> st[8]; float* stems[8];
+            for (int c = 0; c < 8; ++c) { st[c].assign(256, 0.0f); stems[c] = st[c].data(); }
+            e.setStemBuffers(stems);
+            nearE = farE = mixE = 0.0;
+            const int blocks = static_cast<int>(40.0 * sr / 256.0);
+            for (int b = 0; b < blocks; ++b) {
+                e.process(L.data(), R.data(), 256);
+                if (!e.nearActive()) continue;
+                for (int i = 0; i < 256; ++i) {
+                    nearE += static_cast<double>(st[0][static_cast<size_t>(i)]) * st[0][static_cast<size_t>(i)];
+                    mixE  += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)];
+                }
+            }
+            // The far plane is muted in the mix; what the voice put there is read off the far bus before the level: not available
+            // as a stem here, so the far share is inferred from what is missing on the near stem.
+            e.setStemBuffers(nullptr);
+            farE = 0.0;
+        };
+        double n0, f0, m0, n1, f1, m1, n2, f2, m2;
+        planes(0.0f, 0.0f, n0, f0, m0);   // at the ear
+        planes(1.0f, 0.0f, n1, f1, m1);   // on the horizon, the far plane muted: little reaches the mix
+        planes(1.0f, 1.0f, n2, f2, m2);   // on the horizon but dry: it reaches the mix past the muted far plane
+        std::printf("  [probe] distance: near stem energy at the ear %.3f, on the horizon %.4f; the mix on the horizon %.4f, dry %.3f\n", n0, n1, m1, m2);
+        CHECK(n0 > 0.05, "an event at the ear is on the near plane");
+        CHECK(n1 < 0.1 * n0, "an event on the horizon is not");
+        CHECK(m2 > 10.0 * std::max(m1, 1.0e-6), "and Dry brings it to the output past the muted far reverb");
+    }
+
     // ---- the layer's scope: a sound preset leaves the foreground alone; the bank touches nothing else
     {
         CHECK(!inScope(ParamId::ForeLevel, PresetScope::Sound) && !inScope(ParamId::ForeType, PresetScope::Sound), "the near layer is not part of a sound preset");

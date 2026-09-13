@@ -42,7 +42,9 @@ struct NearParams {
     float length = 6.0f;         // seconds an event lasts; a sequence's whole run
     int   pitch = 0;             // 0 Consonant, 1 Highest, 2 Lowest, 3 Root, 4 Cluster
     float spread = 0.5f;         // how far from the centre an event may sit
-    float approach = 0.0f;       // fraction of the event spent arriving from the far plane, and leaving into it
+    float approach = 0.0f;       // fraction of the event spent arriving from the far plane (and leaving into it); negative: leaving from the start
+    float distance = 0.0f;       // where the event sits, 0 at the ear .. 1 on the horizon (what Approach arrives at)
+    float dry = 0.0f;            // the share of the event's voice that goes past every reverb and delay
     float proximity = 0.6f;      // the near field's low lift on the event's voice
     bool  hold = true;           // the conductor waits while a Note or a Phrase sounds
     float glide = 0.0f;          // Phrase: seconds of the slide (0: two fifths of the length)
@@ -231,7 +233,8 @@ private:
     void begin(const NearParams& p, const NearInputs& in, FreqFn&& freqOf, ConsFn&& consonance, EmitFn&& emit)
     {
         active_ = true; kind_ = clampv(p.kind, 0, 2); elapsed_ = 0.0; length_ = std::max(0.5, static_cast<double>(p.length));
-        approach_ = clampv(p.approach, 0.0f, 0.45f);
+        approach_ = clampv(p.approach, -0.45f, 0.45f);
+        home_ = clampv(p.distance, 0.0f, 1.0f);
         glided_ = false; moved_ = false; ++events_;
         if (kind_ == 2) {
             // The ring: every step a degree chosen against the harmony, some an octave up, a
@@ -261,13 +264,18 @@ private:
         NearNote e;
         e.type = NearNote::Type::On; e.note = note_;
         e.velocity = 0.55f + 0.35f * rng_.uniform();
-        e.distance = approach_ > 0.0f ? 1.0f : 0.0f;
+        // Where it begins: on the horizon when it is to arrive, else where the preset puts it.
+        e.distance = approach_ > 0.0f ? 1.0f : home_;
         e.pan = p.spread * rng_.bipolar();
         e.releaseMul = 1.0f; e.cutoffMul = 1.0f;
         emit(e);
-        if (approach_ > 0.0f) {
-            NearNote m; m.type = NearNote::Type::Move; m.note = note_; m.distance = 0.0f;
+        if (approach_ > 0.0f) {          // arriving: from the horizon to its place
+            NearNote m; m.type = NearNote::Type::Move; m.note = note_; m.distance = home_;
             m.seconds = static_cast<float>(approach_ * length_);
+            emit(m);
+        } else if (approach_ < 0.0f) {   // leaving: from its place out to the horizon, from the first moment
+            NearNote m; m.type = NearNote::Type::Move; m.note = note_; m.distance = 1.0f;
+            m.seconds = static_cast<float>(-approach_ * length_);
             emit(m);
         }
     }
@@ -313,14 +321,18 @@ private:
         if (elapsed_ >= length_) end(emit);
     }
 
-    // Where the sequence stands between the planes at progress q: out of the far, near for the
-    // middle, back into the far.
+    // Where the sequence stands between the planes at progress q: out of the far, at its place
+    // for the middle, back into the far. Its place is Distance; the run's approach is symmetric
+    // whichever sign it carries.
     float trajectory(double q) const
     {
-        if (approach_ <= 0.0f) return 0.0f;
-        if (q < approach_) return static_cast<float>(1.0 - q / approach_);
-        if (q > 1.0 - approach_) return static_cast<float>((q - (1.0 - approach_)) / approach_);
-        return 0.0f;
+        const double a = std::fabs(static_cast<double>(approach_));
+        float far = 0.0f;
+        if (a > 0.0) {
+            if (q < a) far = static_cast<float>(1.0 - q / a);
+            else if (q > 1.0 - a) far = static_cast<float>((q - (1.0 - a)) / a);
+        }
+        return home_ + (1.0f - home_) * far;
     }
 
     template <class FreqFn, class ConsFn, class EmitFn>
@@ -384,7 +396,7 @@ private:
         e.type = NearNote::Type::On;
         e.note = clampv(root + st.offset + st.octave, 0, 127);
         e.velocity = velocity;
-        e.distance = st.accent ? 0.8f : trajectory(q);
+        e.distance = st.accent ? std::max(0.8f, home_) : trajectory(q);
         e.pan = p.spread * rng_.bipolar();
         e.releaseMul = st.open ? 1.0f : 0.25f;
         // The bloom: two octaves under the cutoff as the run begins, an octave over it at its
@@ -412,6 +424,7 @@ private:
     int    kind_ = 0;
     double elapsed_ = 0.0, length_ = 0.0, timer_ = 30.0, rate_ = 120.0, stepSec_ = 0.4, waited_ = 0.0, holdTail_ = 0.0;
     float  approach_ = 0.0f;
+    float  home_ = 0.0f;         // the event's place between the planes (NearParams::distance)
     int    note_ = -1, lastNote_ = -1, firstNote_ = -1;
     int    phraseNotes_ = 0, phraseDone_ = 0, bent_ = 0;
     int    events_ = 0, refused_ = 0, mutations_ = 0;

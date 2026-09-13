@@ -59,10 +59,14 @@ constexpr int kSlotGrains    = 128;  // ceiling; Grains sets how many a slot may
 // The near sources (13.09.2026) are appended for the same reason: Flute (a blown pipe), Murmur (a
 // voice that never says anything), Bowl and Ice (friction on a set of modes: a singing bowl, and
 // ice or old wood creaking), Drops (water falling into a vessel).
+// The signals (13.09.2026, the second foreground round) after them: a whistler falling through the
+// magnetosphere, a seed pod shaken, bronze struck, a Geiger tube, a fluorescent tube, the Krell's
+// circuits, a beacon's packet, a number station's Morse, a shortwave dial turned.
 enum class SourceType : int { Off = 0, Harmonic, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral, Wavetable,
-                              Flute, Murmur, Bowl, Ice, Drops, Clip };
+                              Flute, Murmur, Bowl, Ice, Drops, Clip,
+                              Whistler, Shaker, Chime, Geiger, Tube, Krell, Beacon, Morse, Dial };
 
-constexpr int kNumSourceTypes = 16;
+constexpr int kNumSourceTypes = 25;
 // Which of a voice's notes a slot sounds in (SlotParams::role). All is every note, as it always
 // was. Lowest, Inner and Highest are the note's place in what its owner is sounding right now --
 // the register IS the role in this music (Rene's table), and a slot that is the cello under the
@@ -276,6 +280,15 @@ private:
     void renderRub(float* out, int n, double hz, const SlotParams& p, float dt, bool ice);
     void renderMurmur(float* out, int n, double hz, const SlotParams& p, float dt);
     void renderDrops(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderWhistler(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderShaker(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderChime(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderGeiger(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderTube(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderKrell(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderBeacon(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderMorse(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderDial(float* out, int n, double hz, const SlotParams& p, float dt);
     // Clip: the slot's recording played straight through, once, from Position -- a voice on a
     // radio, a launch, a recording of Mars -- at its own speed (Pitch = Free) or pitched to the
     // note. Writes left into outL and right into scratch_, as the granular Texture does.
@@ -390,6 +403,18 @@ private:
     // and whether it has reached the end.
     double clipPos_ = -1.0;
     bool   clipDone_ = false;
+    // The signals: one set of clocks and memories that each of the nine reads its own way (a slot
+    // is one type at a time). sigT_ is the time since the note began; the phases, the two
+    // resonators' memories, an energy, a Poisson clock, a burst, counters and a bit pattern.
+    double   sigT_ = 0.0, sigPhase_ = 0.0, sigPhase2_ = 0.0, sigPhase3_ = 0.0;
+    float    sigY1_ = 0.0f, sigY2_ = 0.0f, sigZ1_ = 0.0f, sigZ2_ = 0.0f, sigLp_ = 0.0f, sigEnergy_ = 0.0f;
+    double   sigNext_ = 0.0, sigBurst_ = 0.0, sigFlutter_ = 0.0, sigFlutterHz_ = 1.0;
+    int      sigCount_ = 0, sigState_ = 0, sigPos_ = 0;
+    unsigned sigBits_ = 0u;
+    double   krX_ = 0.1, krY_ = 0.0, krZ_ = 0.0;           // the Rossler system's state
+    float    chY1_[6] = {}, chY2_[6] = {};                  // the chime's modes
+    double   dlF_[3] = {}, dlTo_[3] = {}, dlPh_[3] = {};    // the dial's three whistles
+    bool     sigReady_ = false;
 
     // Spectral: the two amplitude ramps per band (the partial and its noise), the state of the
     // band's noise filter, and how far the read head has travelled from Position, in frames.

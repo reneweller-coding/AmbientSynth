@@ -262,6 +262,8 @@ void Engine::renderChunk(float* L, float* R, int n)
     const size_t bytes = sizeof(float) * static_cast<size_t>(n);
     std::memset(nl, 0, bytes); std::memset(nr, 0, bytes);
     std::memset(fl, 0, bytes); std::memset(fr, 0, bytes);
+    float* dl = dryL_.data(); float* dr = dryR_.data();
+    std::memset(dl, 0, bytes); std::memset(dr, 0, bytes);
 
     int anchor = -1;
     for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { anchor = i; break; }
@@ -361,8 +363,28 @@ void Engine::renderChunk(float* L, float* R, int n)
         }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
         const float* couple = sympathy_ > 0.0f ? coupleBuf_.data() + p : nullptr;
-        for (auto& v : voices_)
-            if (v.isActive() || v.isStriking()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, v.owner() == OwnerNear ? vpNear_ : vp_, fm, couple); }
+        const float dry = clampv(np_.dry, 0.0f, 1.0f);
+        for (auto& v : voices_) {
+            if (!(v.isActive() || v.isStriking())) continue;
+            anyVoice = true;
+            if (v.owner() == OwnerNear && dry > 0.0f) {
+                // The near layer's Dry share: the voice is rendered apart, and that share of both
+                // its planes goes to the dry bus -- added to the output after every reverb and
+                // delay -- while the rest takes the usual way through the planes.
+                float tnl[kControlBlock], tnr[kControlBlock], tfl[kControlBlock], tfr[kControlBlock];
+                std::memset(tnl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tnr, 0, sizeof(float) * static_cast<size_t>(len));
+                std::memset(tfl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tfr, 0, sizeof(float) * static_cast<size_t>(len));
+                v.render(tnl, tnr, tfl, tfr, len, vpNear_, fm, couple);
+                const float wet = 1.0f - dry;
+                for (int i = 0; i < len; ++i) {
+                    nl[p + i] += tnl[i] * wet; nr[p + i] += tnr[i] * wet;
+                    fl[p + i] += tfl[i] * wet; fr[p + i] += tfr[i] * wet;
+                    dl[p + i] += (tnl[i] + tfl[i]) * dry; dr[p + i] += (tnr[i] + tfr[i]) * dry;
+                }
+            } else {
+                v.render(nl + p, nr + p, fl + p, fr + p, len, v.owner() == OwnerNear ? vpNear_ : vp_, fm, couple);
+            }
+        }
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
@@ -632,16 +654,18 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float mid = 0.5f * (bgL + bgR), side = 0.5f * (bgL - bgR) * fw;
             bgL = mid + side; bgR = mid - side;
         }
-        L[i] = nl[i] + bgL * far;
-        R[i] = nr[i] + bgR * far;
+        // The near layer's dry share joins here, past everything: it is the foreground's, so it
+        // counts on the near stem.
+        L[i] = nl[i] + bgL * far + dl[i];
+        R[i] = nr[i] + bgR * far + dr[i];
         if (stems_ != nullptr) {
             // The Cosmos return was added into the near bus above, so it has to come out of the
             // near stem or it would be counted twice and the four would no longer sum to the mix.
             // What the Cosmos sent into the far plane cannot be separated here at all -- the
             // reverb has already mixed it with everything else -- and belongs to the far stem,
             // which is where it is heard.
-            stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i];
-            stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i];
+            stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i] + dl[i];
+            stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i] + dr[i];
             stems_[2][stemPos_ + i] = bgL * far;   // the far stem as it is heard: width included
             stems_[3][stemPos_ + i] = bgR * far;
         }

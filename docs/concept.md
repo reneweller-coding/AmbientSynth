@@ -3171,6 +3171,33 @@ writer and composer, and the German-American copyright treaty of 1892 (the
 Federal Court of Justice's *Tarzan* ruling of 2014) keeps the shorter American
 term from applying -- so those films stay out.
 
+**The signals (the second foreground round, the same night).** Rene's list
+of eight and a few more, built as nine small source types beside the
+instruments, each the sound of a thing rather than an instrument: a
+*Whistler* (a lightning stroke's pulse dispersed through the magnetosphere,
+Eckersley's law, the whistle falling as one over the square of time), a
+*Shaker* (Cook's PhISEM, an energy that shakes top up and beans that hit the
+shell on its probability), a *Chime* (struck bronze in five modes, the prime a
+doublet a hair apart, which is where a pair of cymbals' beating comes from; a
+hum under it for a church bell), a *Geiger* tube (discharges on a Poisson
+clock with clusters that leap to forty-five a second and fall back), a
+fluorescent *Tube* (the starter's clicks, the choke's hum at twice the mains,
+the plasma's hiss chopped by the same half-waves), the *Krell*'s circuits (FM
+whose carrier and index a Rössler attractor steers), a *Beacon* (a chirp and
+eight bits of frequency-shift keying, Tukey-edged), a number station's
+*Morse* (five-figure groups at a chosen speed under the ionosphere's flutter),
+and a shortwave *Dial* (heterodyne whistles wandering over the band's noise).
+Two parameters of the events came with them, because the list asked for
+places the layer could not name: *Distance* is where an event sits between
+the planes (a foghorn at 0.85 deep in the far field, a rattle at 0.05 in front
+of the nose; Approach arrives there from the horizon, and negative Approach
+leaves from there, the whistler falling away), and *Dry* is the share of an
+event that goes past every reverb and delay straight to the output, the
+Geiger's needle that no room may soften. What the near layer still cannot do
+per event is choose its sends into Delay 2 or the Cosmos: it takes the mix of
+whatever sound is playing, and Distance and Dry were the two that covered
+most of the list without giving each event a mixer of its own.
+
 **Slot roles** came with it, for the sound presets: each slot may sound in
 every note, or only in the lowest, an inner or the highest note of what its
 owner is sounding -- the cello under the chord, the chime on top -- re-read

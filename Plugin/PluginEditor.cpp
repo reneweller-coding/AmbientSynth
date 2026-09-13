@@ -2372,28 +2372,30 @@ int AmbientSynthEditor::cellForParam(ParamId id) const
 bool AmbientSynthEditor::updateNearCells()
 {
     enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9,
-           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15 };
+           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15,
+           Whistler = 16, Shaker = 17, Chime = 18, Geiger = 19, Tube = 20, Krell = 21, Beacon = 22, Morse = 23, Dial = 24 };
     const int type = static_cast<int>(std::lround(proc_.engine().getParam(ParamId::ForeType)));
-    const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops;
+    const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops, signal = type >= Whistler;
     struct Rule { ParamId id; bool on; };
     const Rule rules[] = {
         { ParamId::ForeOctave,   true },
         { ParamId::ForeRatio,    true },
-        { ParamId::ForePosition, type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip },
-        { ParamId::ForePosDrift, type != Clip },
-        { ParamId::ForeDensity,  type == Texture || type == Noise || type == Drops },
-        { ParamId::ForeFollow,   type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip },
-        { ParamId::ForeBright,   type == Additive || type == Bow || type == Spectral || near },
-        { ParamId::ForeForce,    type == Bow || type == Flute || type == Murmur || rubbed },
-        { ParamId::ForeSpeed,    type == Bow || type == Flute || type == Murmur || rubbed },
+        { ParamId::ForePosition, type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip
+                                 || type == Shaker || type == Geiger || type == Tube || type == Krell || type == Morse || type == Dial },
+        { ParamId::ForePosDrift, type != Clip && (!signal || type == Chime) },
+        { ParamId::ForeDensity,  type == Texture || type == Noise || type == Drops || type == Shaker || type == Geiger || type == Beacon },
+        { ParamId::ForeFollow,   type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip || type == Shaker },
+        { ParamId::ForeBright,   type == Additive || type == Bow || type == Spectral || near || type == Whistler || type == Chime || type == Tube || type == Morse || type == Dial },
+        { ParamId::ForeForce,    type == Bow || type == Flute || type == Murmur || rubbed || type == Shaker || type == Chime || type == Geiger },
+        { ParamId::ForeSpeed,    type == Bow || type == Flute || type == Murmur || rubbed || type == Whistler || type == Krell || type == Morse },
         { ParamId::ForeNoise,    type == Noise },
-        { ParamId::ForeNoiseQ,   type == Noise },
-        { ParamId::ForeFmRatio,  type == Fm },
-        { ParamId::ForeFmIndex,  type == Fm },
+        { ParamId::ForeNoiseQ,   type == Noise || type == Shaker || type == Geiger },
+        { ParamId::ForeFmRatio,  type == Fm || type == Krell },
+        { ParamId::ForeFmIndex,  type == Fm || type == Krell },
         { ParamId::ForePartials, type == Additive },
-        { ParamId::ForeTilt,     type == Additive },
+        { ParamId::ForeTilt,     type == Additive || type == Chime },
         { ParamId::ForeInharm,   type == Additive },
-        { ParamId::ForeDrift,    type != Off && type != Noise && type != Drops && type != Clip },
+        { ParamId::ForeDrift,    type != Off && type != Noise && type != Drops && type != Clip && !signal },
         { ParamId::ForeTable,    type == Harmonic || type == Wavetable },
     };
     bool changed = false;
@@ -2419,39 +2421,42 @@ void AmbientSynthEditor::updateSourceCells()
     // Source 1 has the same fields under other ids. Grey out what the chosen type ignores; the
     // Strands section (unison, detune, stack...) belongs to Source 1's additive bank alone.
     enum { Off = 0, Harmonic = 1, Fm = 2, Texture = 3, Noise = 4, Additive = 5, Stretch = 6, Bow = 7, Spectral = 8, Wavetable = 9,
-           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15 };
+           Flute = 10, Murmur = 11, Bowl = 12, Ice = 13, Drops = 14, Clip = 15,
+           Whistler = 16, Shaker = 17, Chime = 18, Geiger = 19, Tube = 20, Krell = 21, Beacon = 22, Morse = 23, Dial = 24 };
     // The ids come from Params.h (slotParamIds), so this list and the engine's cannot drift apart.
     // kSlots, not a number: a literal 3 here quietly left Source 4's cells lit whatever its type.
     bool cellsChanged = false;
     for (int k = 0; k < ambient::kSlots; ++k) {
         const ParamId* ids = slotParamIds(k);
         const int type = static_cast<int>(std::lround(proc_.engine().getParam(ids[0])));
-        const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops;
+        const bool rubbed = type == Bowl || type == Ice, near = type >= Flute && type <= Drops, signal = type >= Whistler;
         // Every field, not the first 33: the loop used to stop at Transport, and everything added after
         // it -- Interp, Unison and its detune and width, Root -- stood lit for every type, Root on a clip.
         for (int off = 1; off < ambient::kSlotFields; ++off) {
             bool on = type != Off;
             switch (off) {
             case 5:  on = type == Harmonic || type == Wavetable; break;         // table choice
-            case 6:  on = type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip; break;   // position, or where the bow sits, the embouchure, the stick, the medium, the vessel, where the clip starts
-            case 7:  on = type != Off;  break;                                   // pos drift moves all of them
+            case 6:  on = type == Harmonic || type == Wavetable || type == Texture || type == Noise || type == Stretch || type == Bow || type == Spectral || near || type == Clip
+                          || type == Shaker || type == Geiger || type == Tube || type == Krell || type == Morse || type == Dial; break;   // position, or where the bow sits, the embouchure, the stick, the medium, the vessel, where the clip starts, the shell, the tube, the mains, the quantiser, the letters, the whistles
+            case 7:  on = type != Off && (!signal || type == Chime); break;      // pos drift moves all of them; of the signals only the chime's split
             case 8:
-            case 9:  on = type == Fm; break;
+            case 9:  on = type == Fm || type == Krell; break;
             case 10: on = type == Texture || type == Stretch; break;             // grain: the grain, or the spectral window
             case 13:
             case 14: on = type == Texture; break;                                // grains, spread
-            case 11: on = type == Texture || type == Noise || type == Drops; break;   // density: grains, crackle or drops
-            case 12: on = type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip; break;   // pitch follow
-            case 15:
-            case 16: on = type == Noise; break;
-            case 19: on = type == Additive || type == Bow || type == Spectral || near; break;   // bright: the bank's window, the string's loop filter, the model's tilt, the pipe's end
-            case 17: case 18: case 20: case 21: case 22: case 23: on = type == Additive; break;
-            case 24: on = type == Texture || type == Noise || type == Drops; break;   // density sync
-            case 25: on = type != Off && type != Noise && type != Drops && type != Clip; break;   // pitch drift
+            case 11: on = type == Texture || type == Noise || type == Drops || type == Shaker || type == Geiger || type == Beacon; break;   // density: grains, crackle, drops, shakes, clicks, packets
+            case 12: on = type == Texture || type == Noise || type == Stretch || type == Spectral || type == Drops || type == Clip || type == Shaker; break;   // pitch follow
+            case 15: on = type == Noise; break;
+            case 16: on = type == Noise || type == Shaker || type == Geiger; break;   // noise q: the band, the shell's ring, the tube's damping
+            case 19: on = type == Additive || type == Bow || type == Spectral || near || type == Whistler || type == Chime || type == Tube || type == Morse || type == Dial; break;   // bright
+            case 17: case 20: case 21: case 22: case 23: on = type == Additive; break;
+            case 18: on = type == Additive || type == Chime; break;               // tilt: the bank's, or the bell's hum
+            case 24: on = type == Texture || type == Noise || type == Drops || type == Shaker || type == Geiger || type == Beacon; break;   // density sync
+            case 25: on = type != Off && type != Noise && type != Drops && type != Clip && !signal; break;   // pitch drift
             case 26:
             case 27: on = type == Stretch; break;                                 // stretch, loop fade
-            case 28:
-            case 29: on = type == Bow || type == Flute || type == Murmur || rubbed; break;   // force and speed: the bow, the breath, the effort, the stick
+            case 28: on = type == Bow || type == Flute || type == Murmur || rubbed || type == Shaker || type == Chime || type == Geiger; break;   // force: the bow, the breath, the effort, the stick, the beans, the ring, the cluster
+            case 29: on = type == Bow || type == Flute || type == Murmur || rubbed || type == Whistler || type == Krell || type == Morse; break;   // speed: the bow, the breath, the effort, the stick, the fall, the pace, the words a minute
             case 30:
             case 31: on = type == Spectral; break;                                // spectral rate, breath
             case 32: on = type == Harmonic; break;                                // transport: how the spectra morph

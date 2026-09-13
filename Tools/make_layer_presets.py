@@ -282,12 +282,15 @@ NEAR_OUT = os.path.join(ROOT, "Core", "src", "NearPresets.inc")
 
 def near(kind="Note", rate=180.0, length=8.0, attack=0.3, decay=1.0, sustain=1.0, release=3.0,
          cutoff=8000.0, resonance=0.1, filt="LP 12", fenv=0.0, pitch="Consonant", spread=0.5,
-         approach=0.0, proximity=0.6, hold="on", level=0.7, clip=None, **src):
+         approach=0.0, distance=0.0, dry=0.0, proximity=0.6, hold="on", level=0.7, clip=None, **src):
     """One near preset's settings: the events, the envelope and the filter, then the source.
     `clip` names a file of the library's archive, relative to the library's root; it travels
-    beside the settings as the preset's texture."""
+    beside the settings as the preset's texture. `distance` is where the event sits between the
+    planes (Approach arrives there; negative Approach leaves from there), `dry` the share of it
+    that goes past every reverb and delay."""
     d = dict(fore_level=level, fore_kind=kind, fore_rate=rate, fore_length=length, fore_pitch=pitch,
-             fore_spread=spread, fore_approach=approach, fore_proximity=proximity, fore_hold=hold,
+             fore_spread=spread, fore_approach=approach, fore_distance=distance, fore_dry=dry,
+             fore_proximity=proximity, fore_hold=hold,
              fore_attack=attack, fore_decay=decay, fore_sustain=sustain, fore_release=release,
              fore_cutoff=cutoff, fore_resonance=resonance, fore_filter=filt, fore_filter_env=fenv)
     for k, v in src.items():
@@ -338,6 +341,14 @@ NEAR = [
                              rate=330, length=12, attack=0.8, release=6, approach=0.35, pitch="Highest", level=0.5)),
         ("Shakuhachi", near(type="Flute", force=0.65, speed=0.7, pos=0.2, bright=0.7, pos_drift=0.5,
                             kind="Phrase", glide=3, rate=180, length=11, attack=0.15, release=2.5, level=0.6)),
+        # Two animals on the same pipe (13.09.): the owl's two hooted notes, low and breathy, and a
+        # howl that glides up, holds and falls -- both far, both rare.
+        ("Night Owl", near(type="Flute", force=0.4, speed=0.3, pos=0.3, bright=0.25, pos_drift=0.2, octave=-1,
+                           kind="Phrase", glide=1.2, rate=240, length=4, attack=0.12, release=1.2, approach=0.3,
+                           cutoff=3000, pitch="Lowest", spread=0.6, level=0.45)),
+        ("Distant Howl", near(type="Flute", force=0.5, speed=0.45, pos=0.25, bright=0.35, pos_drift=0.3, octave=0,
+                              kind="Phrase", glide=6, rate=420, length=9, attack=1.5, release=4, approach=0.7,
+                              cutoff=4000, spread=0.8, level=0.4)),
     ]),
     ("Bowls", [
         ("Singing Bowl", near(type="Bowl", force=0.5, speed=0.4, pos=0.1, bright=0.6, pos_drift=0.4,
@@ -375,6 +386,55 @@ NEAR = [
         ("Deep Sonar", near(type="Additive", partials=1, pitch="Highest", octave=1, rate=140, length=0.5,
                             attack=0.004, decay=0.3, sustain=0.2, release=14, cutoff=18000, resonance=0.0,
                             spread=0.25, proximity=0.5, hold="off", level=0.55)),
+        # The foghorn (Rene, 13.09.): two horns a beat apart -- FM at a ratio of 1.045 puts the
+        # sidebands three hertz off the carrier, which is the same beating -- under a ladder that
+        # opens from 160 to 550 Hz as the horn fills and closes as it empties, deep in the far
+        # field, a point on the horizon. Nothing held; the horn is not a soloist.
+        ("Foghorn", near(type="FM", fm_ratio=1.045, fm_index=0.6, octave=-1, pitch="Root", rate=240, length=5,
+                         attack=1.2, decay=1.0, sustain=0.8, release=1.8, cutoff=160, resonance=0.3, filt="Ladder", fenv=0.55,
+                         spread=0.1, distance=0.7, approach=0.0, proximity=0.2, hold="off", level=0.8)),
+    ]),
+    # The signals (13.09., the second foreground round): the sounds of things, close and far.
+    ("Signals", [
+        ("Whistler", near(type="Whistler", bright=0.6, speed=0.3, pitch="Consonant", octave=1, kind="Note", rate=200, length=3,
+                          attack=0.01, decay=0.5, sustain=0.6, release=1.5, cutoff=16000, resonance=0.0,
+                          spread=0.3, distance=0.15, approach=-0.7, proximity=0.5, hold="off", level=0.45)),
+        ("Seed Pod", near(type="Shaker", density=2.0, force=0.35, pos=0.55, noise_q=0.3, follow="Free", kind="Note", rate=150, length=3,
+                          attack=0.005, decay=0.3, sustain=1.0, release=0.4, cutoff=16000, resonance=0.0,
+                          spread=0.45, distance=0.05, dry=0.85, proximity=0.9, hold="off", level=0.5)),
+        ("Geiger Counter", near(type="Geiger", density=0.6, force=0.4, pos=0.52, noise_q=0.27, kind="Note", rate=120, length=20,
+                                attack=0.005, decay=0.1, sustain=1.0, release=0.1, cutoff=16000, resonance=0.0,
+                                spread=0.7, distance=0.0, dry=1.0, proximity=0.3, hold="off", level=0.5)),
+        ("Bunker Tube", near(type="Tube", pos=0.2, bright=0.5, pitch="Root", kind="Note", rate=300, length=25,
+                             attack=0.01, decay=0.5, sustain=1.0, release=1.5, cutoff=12000, resonance=0.0,
+                             spread=0.3, distance=0.35, dry=0.3, proximity=0.6, hold="off", level=0.45)),
+        ("Krell Circuit", near(type="Krell", speed=0.35, pos=0.7, fm_ratio=1.5, fm_index=1.0, octave=0, kind="Note", rate=240, length=14,
+                               attack=0.05, decay=0.5, sustain=1.0, release=0.8, cutoff=9000, resonance=0.1,
+                               spread=0.8, distance=0.25, approach=0.0, proximity=0.4, hold="off", level=0.45)),
+        ("Deep Space Beacon", near(type="Beacon", density=0.5, octave=2, pitch="Root", kind="Note", rate=240, length=12,
+                                   attack=0.005, decay=0.2, sustain=1.0, release=0.3, cutoff=16000, resonance=0.0,
+                                   spread=0.2, distance=0.2, approach=0.35, proximity=0.5, hold="off", level=0.45)),
+        ("Number Station", near(type="Morse", speed=0.35, pos=0.2, bright=0.5, octave=2, pitch="Root", kind="Note", rate=360, length=30,
+                                attack=0.01, decay=0.5, sustain=1.0, release=0.5, cutoff=6000, resonance=0.0,
+                                spread=0.3, distance=0.3, dry=0.2, proximity=0.5, hold="on", level=0.4)),
+        ("Shortwave Dial", near(type="Dial", pos=0.7, bright=0.5, pitch="Root", octave=1, kind="Note", rate=300, length=16,
+                                attack=0.5, decay=1.0, sustain=1.0, release=2.0, cutoff=5000, resonance=0.0,
+                                spread=0.4, distance=0.3, approach=0.2, proximity=0.4, hold="off", level=0.4)),
+    ]),
+    # Bronze and wood (13.09.): struck, and left to ring.
+    ("Bells", [
+        ("Ting-Sha", near(type="Chime", force=0.85, pos_drift=0.3, tilt=0.0, bright=0.35, pitch="Highest", octave=2, kind="Note",
+                          rate=150, length=2, attack=0.001, decay=0.5, sustain=1.0, release=12, cutoff=18000, resonance=0.0,
+                          spread=0.2, distance=0.1, dry=0.4, proximity=0.5, hold="off", level=0.5)),
+        ("Ship's Bell", near(type="Chime", force=0.6, pos_drift=0.15, tilt=0.5, bright=0.2, pitch="Root", octave=1, kind="Note",
+                             rate=240, length=2, attack=0.001, decay=0.5, sustain=1.0, release=8, cutoff=14000, resonance=0.0,
+                             spread=0.3, distance=0.5, proximity=0.3, hold="off", level=0.5)),
+        ("Church Bell Far", near(type="Chime", force=0.9, pos_drift=0.1, tilt=1.0, bright=0.15, pitch="Root", octave=0, kind="Note",
+                                 rate=400, length=3, attack=0.002, decay=1.0, sustain=1.0, release=16, cutoff=6000, resonance=0.0,
+                                 spread=0.1, distance=0.7, proximity=0.0, hold="off", level=0.7)),
+        ("Wind Chimes", seq(type="Chime", force=0.5, pos_drift=0.25, tilt=0.0, bright=0.4, octave=2, cutoff=18000, resonance=0.0,
+                            filt="LP 12", steps=9, step=0.5, mutation=0.2, scatter=0.7, bloom=0.0, attack=0.001, decay=0.3,
+                            sustain=1.0, release=4, length=90, rate=400, approach=0.2, distance=0.2, level=0.4)),
     ]),
     # The radio (13.09.): phrases cut out of "Quiet, Please" (1947-49, Wyllis Cooper; the archive's
     # Radio folder, see Library/Archive/SOURCES.md), a folder rather than a file: every event plays
@@ -524,6 +584,12 @@ NEAR = [
         ("Slow Cathedral", seq(type="FM", fm_ratio=2.0, fm_index=0.5, octave=-1, cutoff=3000, resonance=0.15, filt="LP 24",
                                steps=5, step=1.2, mutation=0.06, scatter=0.15, bloom=0.5, decay=1.5, release=1.5,
                                length=300, rate=700, level=0.45)),
+        # A heartbeat (13.09.): two steps, the second the softer one, on a sub of two partials
+        # under a closed ladder, at a walking pulse that the tempo drifter lets breathe; nothing
+        # mutates, nothing scatters, the room stays away.
+        ("Heartbeat", seq(type="Additive", partials=2, tilt=2.0, octave=-2, cutoff=140, resonance=0.25, filt="LP 24",
+                          steps=2, step=0.42, mutation=0.0, scatter=0.0, bloom=0.0, attack=0.004, decay=0.14, release=0.2,
+                          pitch="Root", length=45, rate=360, approach=0.0, proximity=0.8, level=0.55)),
     ]),
     # The archive (Library/Archive, fetched by Tools/library/fetch_archive.py): NASA's own
     # recordings, works of the United States government. Each preset plays one of them straight,

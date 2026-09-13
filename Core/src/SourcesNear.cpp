@@ -592,4 +592,414 @@ void SourceSlot::renderClip(float* outL, int n, double hz, double speed, const S
     }
 }
 
+// ================================================================ the signals (13.09.2026)
+//
+// The second foreground round, Rene's list and a few more: not instruments but the sounds of
+// things -- a whistler, a rattle, a bell, a Geiger tube, a fluorescent tube, a chaotic circuit, a
+// beacon, a number station, a shortwave set. Each is a caricature small enough to run in a
+// voice, each calibrated to the same level as the others (about 0.1 RMS at Level 1), and each
+// starts its clocks again at every note. One set of memories serves all nine (sigT_ and the
+// rest in Sources.h): a slot is one type at a time.
+namespace {
+
+// A two-pole resonance at f with a bandwidth of f/q, as the drops' vessel: the input is scaled by
+// (1 - r) so the gain at resonance is what is written and not 1/(1 - r).
+struct Reso2 { float a1, a2, drive; };
+inline Reso2 reso2(double hz, double q, double sr, float gain)
+{
+    const double f = std::min(std::max(hz, 20.0), 0.45 * sr);
+    const float r = std::exp(static_cast<float>(-3.14159265358979 * f / (std::max(q, 0.05) * sr)));
+    Reso2 c;
+    c.a1 = 2.0f * r * std::cos(static_cast<float>(kTwoPi * f / sr));
+    c.a2 = -r * r;
+    c.drive = (1.0f - r) * gain;
+    return c;
+}
+inline float resoStep(const Reso2& c, float in, float& y1, float& y2)
+{
+    const float v = in * c.drive + c.a1 * y1 + c.a2 * y2;
+    y2 = y1; y1 = v;
+    return v;
+}
+// Every note is two seconds at most of state; a resonator that has run away is put back.
+inline bool sane(float v) { return v > -50.0f && v < 50.0f; }
+
+// The Morse alphabet, figures first (a number station reads figures), then the letters.
+constexpr const char* kMorse[36] = {
+    "-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...", "---..", "----.",
+    ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---", "-.-", ".-..", "--",
+    "-.", "---", ".--.", "--.-", ".-.", "...", "-", "..-", "...-", ".--", "-..-", "-.--", "--..",
+};
+
+} // namespace
+
+// ---------------------------------------------------------------- Whistler
+//
+// A lightning stroke's pulse travelling along a field line through the magnetosphere's plasma
+// arrives dispersed: the higher frequencies first, the lower ones later, and what a VLF receiver
+// hears is a whistle falling. Eckersley's law gives the delay as D / sqrt(f), so the frequency
+// falls as one over the square of time: f(t) = fEnd + (fStart - fEnd) / (1 + t / tau)^2. The note
+// is where the whistle ends, Bright how far above it begins (two to six octaves), Speed the tau
+// (0.2 to 1.7 s, the slow ones the long field lines), and under the tone a thread of noise in a
+// narrow band that follows it, the carrier's own fluctuation, at -32 dB.
+void SourceSlot::renderWhistler(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) { sigT_ = 0.0; sigPhase_ = 0.0; sigY1_ = sigY2_ = 0.0f; sigReady_ = true; }
+    const double fEnd = std::min(std::max(hz, 40.0), 0.2 * sr_);
+    const double fStart = std::min(fEnd * std::pow(2.0, 2.0 + 4.0 * static_cast<double>(clampv(p.bright, 0.0f, 1.0f))), 0.4 * sr_);
+    const double tau = 0.2 + 1.5 * static_cast<double>(clampv(p.bowSpeed, 0.0f, 1.0f));
+    for (int i = 0; i < n; ++i) {
+        sigT_ += 1.0 / sr_;
+        const double u = 1.0 + sigT_ / tau;
+        const double f = fEnd + (fStart - fEnd) / (u * u);
+        sigPhase_ += f / sr_; if (sigPhase_ >= 1.0) sigPhase_ -= 1.0;
+        const Reso2 c = reso2(f, 40.0, sr_, 6.0f);   // recomputed per sample: the tone moves every sample
+        const float noise = resoStep(c, rng_.bipolar(), sigY1_, sigY2_);
+        if (!sane(sigY1_)) { sigY1_ = sigY2_ = 0.0f; }
+        out[i] += 0.28f * sin01(sigPhase_) + 0.28f * 0.025f * noise;
+    }
+}
+
+// ---------------------------------------------------------------- Shaker
+//
+// Cook's PhISEM (Physically Informed Stochastic Event Modeling, 1997): a shaker is a system
+// energy that a shake tops up and that decays, and while it lasts, beans that hit the shell at
+// random, each hit a grain of noise at the energy's level, the shell a resonance. Density is the
+// shakes a second while the note is held (the first at the note), Force how long the energy
+// lasts (a bean pod at 0 to a big gourd at 1), Position the shell's pitch (1.5 to 5 kHz, or the
+// note with Pitch = Note), Noise Q how much it rings.
+void SourceSlot::renderShaker(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) { sigEnergy_ = 0.0f; sigNext_ = 0.0; sigY1_ = sigY2_ = 0.0f; sigReady_ = true; }
+    const double shakes = clampv(static_cast<double>(p.density), 0.05, 20.0);
+    const float tc = 0.03f + 0.25f * clampv(p.bowForce, 0.0f, 1.0f);
+    const float decay = std::exp(-1.0f / (tc * static_cast<float>(sr_)));
+    const double fc = p.follow ? std::min(std::max(hz, 200.0), 0.4 * sr_)
+                               : 1500.0 * std::pow(10.0, 0.52 * static_cast<double>(clampv(p.position, 0.0f, 1.0f)));
+    const Reso2 c = reso2(fc, 1.5 + 8.0 * static_cast<double>(clampv(p.noiseQ, 0.0f, 1.0f)), sr_, 1.0f);
+    const float hitsPerSample = 900.0f / static_cast<float>(sr_);   // at an energy of 1
+    for (int i = 0; i < n; ++i) {
+        sigNext_ -= 1.0;
+        if (sigNext_ <= 0.0) {
+            sigEnergy_ = std::min(sigEnergy_ + 1.0f, 2.0f);
+            sigNext_ = sr_ / shakes * (0.7 + 0.6 * static_cast<double>(rng_.uniform()));
+        }
+        sigEnergy_ *= decay;
+        float in = 0.0f;
+        if (sigEnergy_ > 1.0e-3f && rng_.uniform() < sigEnergy_ * hitsPerSample) in = rng_.bipolar() * sigEnergy_ * 8.0f;
+        const float v = resoStep(c, in, sigY1_, sigY2_);
+        if (!sane(sigY1_)) { sigY1_ = sigY2_ = 0.0f; }
+        out[i] += 0.8f * v;
+    }
+}
+
+// ---------------------------------------------------------------- Chime
+//
+// Struck bronze: a ting-sha, a ship's bell, a church bell far off. A modal bank of five, and the
+// thing that makes cast bronze beat is that its modes come in doublets a hair apart (an
+// asymmetry of the casting): the prime's twin sits at 1 + split, and the two of them make the
+// beating a pair of cymbals has (3.5 Hz at 2.4 kHz). The hum an octave under the prime (Tilt is
+// how much of it: a church bell has it, a cymbal none), the tierce a minor third over, a high
+// partial at 2.5 to 3.5 times (Bright). Force is how long it rings (2 to 18 s for the prime, the
+// high one a fifth of that), Pos Drift the split. One hit of 0.8 ms at the note, all modes at once.
+void SourceSlot::renderChime(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) { for (int m = 0; m < 6; ++m) chY1_[m] = chY2_[m] = 0.0f; sigCount_ = 1; sigState_ = static_cast<int>(0.0008 * sr_); sigReady_ = true; }
+    const double split = 0.0004 + 0.004 * static_cast<double>(clampv(p.positionDrift, 0.0f, 1.0f));
+    const double ratios[5] = { 0.5, 1.0, 1.0 + split, 1.2, 2.5 + 1.0 * static_cast<double>(clampv(p.bright, 0.0f, 1.0f)) };
+    const float  amps[5]   = { 0.5f * clampv(p.tilt, 0.0f, 1.0f), 1.0f, 1.0f, 0.35f * clampv(p.bright, 0.0f, 1.0f), 0.25f };
+    const float  T = 2.0f + 16.0f * clampv(p.bowForce, 0.0f, 1.0f);
+    const float  t60[5] = { T * 1.2f, T, T * 0.95f, T * 0.5f, T * 0.2f };
+    // One Dirac into every mode. A two-pole's answer to a unit impulse rings at 1 / sin(theta),
+    // so a drive of amp * sin(theta) leaves every mode ringing at its written amplitude whatever
+    // its decay -- the earlier (1 - r) scaling, right for a driven vessel, left an 18-second
+    // bronze thirty decibels under the others. The 0.8 ms of noise beside it is the click of
+    // the striker, heard dry.
+    float a1[5], a2[5], drive[5];
+    for (int m = 0; m < 5; ++m) {
+        const double f = std::min(hz * ratios[m], 0.45 * sr_);
+        const float r = std::exp(-6.908f / (t60[m] * static_cast<float>(sr_)));
+        const float th = static_cast<float>(kTwoPi * f / sr_);
+        a1[m] = 2.0f * r * std::cos(th);
+        a2[m] = -r * r;
+        drive[m] = 0.24f * amps[m] * std::sin(th);
+    }
+    for (int i = 0; i < n; ++i) {
+        float hit = 0.0f, click = 0.0f;
+        if (sigCount_ > 0) { --sigCount_; hit = 1.0f; }
+        if (sigState_ > 0) { --sigState_; click = 0.1f * rng_.bipolar(); }
+        float y = 0.0f;
+        for (int m = 0; m < 5; ++m) {
+            const float v = hit * drive[m] + a1[m] * chY1_[m] + a2[m] * chY2_[m];
+            chY2_[m] = chY1_[m]; chY1_[m] = v;
+            y += v;
+        }
+        if (!sane(y)) { for (int m = 0; m < 5; ++m) chY1_[m] = chY2_[m] = 0.0f; y = 0.0f; }
+        out[i] += y + click;
+    }
+}
+
+// ---------------------------------------------------------------- Geiger
+//
+// A Geiger-Mueller tube: discharges on a Poisson clock at Density a second, and now and then a
+// cluster, the rate leaping to 45 a second for 120 ms and falling back over 60 -- the burst a
+// particle shower makes. Force is the chance of a cluster (per second, up to two thirds). Every
+// discharge is a Dirac step into the counter's piezo, a heavily damped resonance (Position: 800
+// to 4000 Hz, the classic 1850 near the middle; Noise Q: 0.7 to 2.2) that makes the click last
+// about two milliseconds and no longer.
+void SourceSlot::renderGeiger(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)hz; (void)dt;
+    if (!sigReady_) { sigNext_ = 0.0; sigBurst_ = 0.0; sigState_ = 0; sigY1_ = sigY2_ = 0.0f; sigReady_ = true; }
+    const double base = clampv(static_cast<double>(p.density), 0.05, 20.0);
+    const double clusterPerSec = 0.05 + 0.6 * static_cast<double>(clampv(p.bowForce, 0.0f, 1.0f));
+    const double fc = 800.0 * std::pow(5.0, static_cast<double>(clampv(p.position, 0.0f, 1.0f)));
+    const Reso2 c = reso2(fc, 0.7 + 1.5 * static_cast<double>(clampv(p.noiseQ, 0.0f, 1.0f)), sr_, 1.0f);
+    const float burstDecay = std::exp(-1.0f / (0.06f * static_cast<float>(sr_)));
+    for (int i = 0; i < n; ++i) {
+        if (sigState_ > 0) --sigState_; else sigBurst_ *= burstDecay;
+        if (rng_.uniform() < clusterPerSec / sr_) { sigBurst_ = 45.0; sigState_ = static_cast<int>(0.12 * sr_); }
+        const double lambda = base + sigBurst_;
+        sigNext_ -= 1.0;
+        float in = 0.0f;
+        if (sigNext_ <= 0.0) {
+            in = (0.5f + 0.5f * rng_.uniform()) * (rng_.uniform() < 0.5f ? 1.0f : -1.0f) * 7.0f;
+            sigNext_ = -std::log(1.0 - static_cast<double>(rng_.uniform()) + 1e-9) * sr_ / lambda;
+        }
+        const float v = resoStep(c, in, sigY1_, sigY2_);
+        if (!sane(sigY1_)) { sigY1_ = sigY2_ = 0.0f; }
+        out[i] += 0.7f * v;
+    }
+}
+
+// ---------------------------------------------------------------- Tube
+//
+// A fluorescent tube in a bunker corridor, in three stages: the bimetal starter's two or three
+// clicks 150 to 350 ms apart (a Dirac through a low-pass at 380 Hz, the thunk of the switch); the
+// choke's hum, the mains rectified to twice its frequency -- 100 Hz on 50, 120 on 60, Position
+// chooses -- with harmonics falling as k^-1.6, coloured by the coil's resonance at 850 Hz; and
+// the plasma's hiss, noise between 3.5 and 6.5 kHz chopped by the same half-waves (Bright is
+// how much). The hum and the hiss come up over 400 ms after the last click, as the tube strikes.
+void SourceSlot::renderTube(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)hz; (void)dt;
+    if (!sigReady_) {
+        sigT_ = 0.0; sigCount_ = 2 + (rng_.uniform() < 0.5f ? 1 : 0); sigNext_ = 0.02 * sr_;
+        sigLp_ = 0.0f; sigEnergy_ = 0.0f; sigPhase_ = 0.0; sigY1_ = sigY2_ = sigZ1_ = sigZ2_ = 0.0f; sigReady_ = true;
+    }
+    const double mains = clampv(p.position, 0.0f, 1.0f) < 0.5f ? 100.0 : 120.0;
+    const Reso2 coil = reso2(850.0, 1.2, sr_, 1.0f);
+    const Reso2 plasma = reso2(5000.0, 1.7, sr_, 1.0f);
+    const float hiss = 0.04f * (0.2f + 0.8f * clampv(p.bright, 0.0f, 1.0f));
+    const float lpc = 1.0f - std::exp(static_cast<float>(-kTwoPi * 380.0 / sr_));
+    const float rise = 1.0f - std::exp(-1.0f / (0.4f * static_cast<float>(sr_)));
+    for (int i = 0; i < n; ++i) {
+        // The starter.
+        float click = 0.0f;
+        if (sigCount_ > 0) {
+            sigNext_ -= 1.0;
+            if (sigNext_ <= 0.0) {
+                click = 6.0f * (rng_.uniform() < 0.5f ? 1.0f : -1.0f);
+                --sigCount_;
+                sigNext_ = (0.15 + 0.2 * static_cast<double>(rng_.uniform())) * sr_;
+            }
+        } else {
+            sigEnergy_ += (1.0f - sigEnergy_) * rise;   // the tube has struck: hum and hiss come up
+        }
+        sigLp_ += lpc * (click - sigLp_);
+        // The choke.
+        sigPhase_ += mains / sr_; if (sigPhase_ >= 1.0) sigPhase_ -= 1.0;
+        float hum = 0.0f;
+        for (int k = 1; k <= 5; ++k) {
+            double ph = sigPhase_ * k; ph -= std::floor(ph);
+            hum += std::pow(static_cast<float>(k), -1.6f) * sin01(ph);
+        }
+        const float coloured = resoStep(coil, hum, sigY1_, sigY2_);
+        // The plasma.
+        const float half = std::fabs(sin01(0.5 * sigPhase_));
+        const float pl = resoStep(plasma, rng_.bipolar(), sigZ1_, sigZ2_) * half;
+        if (!sane(sigY1_) || !sane(sigZ1_)) { sigY1_ = sigY2_ = sigZ1_ = sigZ2_ = 0.0f; }
+        out[i] += 0.5f * sigLp_ + sigEnergy_ * (0.09f * hum + 0.06f * coloured + hiss * pl);
+    }
+}
+
+// ---------------------------------------------------------------- Krell
+//
+// The Krell's machines (Forbidden Planet, 1956; Louis and Bebe Barron's circuits): FM whose
+// carrier and index are steered by a Roessler attractor, the one strange attractor with a single
+// fold, so the pitch wanders through its band and never repeats and never quite loses the thread.
+// dx = -y - z, dy = x + a y, dz = b + z (x - c) with a = b = 0.2, c = 5.7; x steers the carrier
+// over 2.6 octaves about the note (Position past the middle snaps it to semitones), y the index
+// (FM Index is its ceiling), Speed the attractor's pace. FM Ratio is the modulator's.
+void SourceSlot::renderKrell(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) {
+        krX_ = 0.1 + 4.0 * static_cast<double>(rng_.bipolar()); krY_ = 3.0 * static_cast<double>(rng_.bipolar()); krZ_ = 0.05;
+        sigPhase_ = sigPhase2_ = 0.0; sigReady_ = true;
+    }
+    const double pace = (0.5 + 6.0 * static_cast<double>(clampv(p.bowSpeed, 0.0f, 1.0f))) / sr_;
+    const bool quantise = clampv(p.position, 0.0f, 1.0f) > 0.5f;
+    const double ratio = std::max(static_cast<double>(p.fmRatio), 0.1);
+    const double indexMax = 6.0 * std::max(static_cast<double>(p.fmIndex), 0.0);
+    for (int i = 0; i < n; ++i) {
+        // Euler at a small step: the Roessler system is tame enough for it at this pace.
+        const double dx = -krY_ - krZ_, dy = krX_ + 0.2 * krY_, dz = 0.2 + krZ_ * (krX_ - 5.7);
+        krX_ += pace * dx; krY_ += pace * dy; krZ_ += pace * dz;
+        if (!(krX_ > -50.0 && krX_ < 50.0 && krZ_ > -50.0 && krZ_ < 200.0)) { krX_ = 0.1; krY_ = 0.0; krZ_ = 0.05; }
+        double oct = clampv(krX_ / 6.0, -1.3, 1.3) * 1.4;
+        if (quantise) oct = std::round(oct * 12.0) / 12.0;
+        const double fc = std::min(hz * std::pow(2.0, oct), 0.4 * sr_);
+        const double index = clampv((krY_ + 6.0) / 12.0, 0.0, 1.0) * indexMax;
+        sigPhase_ += fc / sr_; if (sigPhase_ >= 1.0) sigPhase_ -= 1.0;
+        sigPhase2_ += fc * ratio / sr_; if (sigPhase2_ >= 1.0) sigPhase2_ -= 1.0;
+        double ph = sigPhase_ + index * static_cast<double>(sin01(sigPhase2_)) / kTwoPi;
+        ph -= std::floor(ph);
+        out[i] += 0.28f * sin01(ph);
+    }
+}
+
+// ---------------------------------------------------------------- Beacon
+//
+// A deep-space beacon's packet: a preamble chirp falling from 2.17 to 1.5 times the note over
+// 35 ms, then eight bits of frequency-shift keying, 25 ms each, space at the note and mark a
+// major third over it (1200 and 1500 Hz on a note of 1200), every bit windowed with 5 ms Tukey
+// edges so the keying does not click. The bits are drawn anew for every packet; a packet every
+// 1/Density seconds while the note lasts, the first at once.
+void SourceSlot::renderBeacon(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) { sigT_ = 0.0; sigNext_ = 0.0; sigPhase_ = 0.0; sigBits_ = 0u; sigState_ = 0; sigReady_ = true; }
+    const double every = 1.0 / clampv(static_cast<double>(p.density), 0.05, 20.0);
+    const double f0 = std::min(std::max(hz, 60.0), 0.2 * sr_);
+    const double chirpLen = 0.035, bitLen = 0.025, edge = 0.005;
+    const double packetLen = chirpLen + 8.0 * bitLen;
+    for (int i = 0; i < n; ++i) {
+        if (sigState_ == 0) {   // waiting for the next packet
+            sigNext_ -= 1.0 / sr_;
+            if (sigNext_ <= 0.0) { sigState_ = 1; sigT_ = 0.0; sigBits_ = static_cast<unsigned>(rng_.uniform() * 256.0f) & 255u; }
+            else continue;
+        }
+        double f, env;
+        if (sigT_ < chirpLen) {
+            const double q = sigT_ / chirpLen;
+            f = f0 * (2.17 - 0.67 * q);
+            env = std::min(1.0, std::min(sigT_, chirpLen - sigT_) / edge);
+        } else {
+            const double tb = sigT_ - chirpLen;
+            const int bit = std::min(7, static_cast<int>(tb / bitLen));
+            const double inBit = tb - bit * bitLen;
+            f = ((sigBits_ >> bit) & 1u) ? f0 * 1.25 : f0;
+            const double e = std::min(inBit, bitLen - inBit) / edge;
+            env = e >= 1.0 ? 1.0 : 0.5 - 0.5 * std::cos(3.14159265358979 * std::max(e, 0.0));
+        }
+        sigPhase_ += f / sr_; if (sigPhase_ >= 1.0) sigPhase_ -= 1.0;
+        out[i] += 0.28f * static_cast<float>(env) * sin01(sigPhase_);
+        sigT_ += 1.0 / sr_;
+        if (sigT_ >= packetLen) { sigState_ = 0; sigNext_ = std::max(every - packetLen, 0.05); }
+    }
+}
+
+// ---------------------------------------------------------------- Morse
+//
+// A number station: five-figure groups (Position past the middle: letters) in Morse at Speed
+// words a minute (8 to 30; a dit is 1.2 / wpm seconds, a dah three, the gaps one, three and seven
+// dits), the tone at the note, keyed with 5 ms edges, and over it the ionosphere's flutter, a
+// slow random tremolo (Bright is its depth) as the signal comes and goes over the horizon.
+void SourceSlot::renderMorse(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    if (!sigReady_) {
+        sigPhase_ = 0.0; sigState_ = 1; sigNext_ = 0.0; sigPos_ = 0; sigCount_ = 0; sigBits_ = 0u;
+        sigLp_ = 0.0f; sigFlutter_ = 0.5; sigFlutterHz_ = 0.3 + 2.5 * static_cast<double>(rng_.uniform()); sigPhase2_ = 0.0;
+        sigReady_ = true;
+    }
+    const double wpm = 8.0 + 22.0 * static_cast<double>(clampv(p.bowSpeed, 0.0f, 1.0f));
+    const double dit = 1.2 / wpm;
+    const bool letters = clampv(p.position, 0.0f, 1.0f) > 0.5f;
+    const float depth = clampv(p.bright, 0.0f, 1.0f);
+    const float keyC = 1.0f - std::exp(-1.0f / (0.0025f * static_cast<float>(sr_)));
+    const double f = std::min(std::max(hz, 60.0), 0.2 * sr_);
+    // sigBits_ holds the current character's index into kMorse, sigPos_ the element within it,
+    // sigCount_ the figure within the group; sigState_: 1 = a gap runs, 2 = an element sounds.
+    for (int i = 0; i < n; ++i) {
+        sigNext_ -= 1.0 / sr_;
+        if (sigNext_ <= 0.0) {
+            if (sigState_ == 2) {                 // an element ended: the gap after it
+                sigState_ = 1;
+                ++sigPos_;
+                const char* code = kMorse[sigBits_ % 36u];
+                if (code[sigPos_] == 0) {           // the character ended
+                    sigPos_ = -1;
+                    ++sigCount_;
+                    sigNext_ = (sigCount_ % 5 == 0 ? 7.0 : 3.0) * dit;
+                } else sigNext_ = dit;
+            } else {                              // a gap ended: the next element
+                if (sigPos_ < 0 || sigPos_ == 0) {  // a new character
+                    if (sigPos_ < 0 || sigCount_ == 0) sigBits_ = letters ? 10u + static_cast<unsigned>(rng_.uniform() * 26.0f) % 26u
+                                                                          : static_cast<unsigned>(rng_.uniform() * 10.0f) % 10u;
+                    sigPos_ = 0;
+                }
+                const char* code = kMorse[sigBits_ % 36u];
+                sigState_ = 2;
+                sigNext_ = (code[sigPos_] == '-' ? 3.0 : 1.0) * dit;
+            }
+        }
+        const float key = sigState_ == 2 ? 1.0f : 0.0f;
+        sigLp_ += keyC * (key - sigLp_);
+        sigPhase_ += f / sr_; if (sigPhase_ >= 1.0) sigPhase_ -= 1.0;
+        // The flutter: a slow sine whose rate wanders, the depth Bright.
+        sigPhase2_ += sigFlutterHz_ / sr_;
+        if (sigPhase2_ >= 1.0) { sigPhase2_ -= 1.0; sigFlutterHz_ = 0.3 + 2.5 * static_cast<double>(rng_.uniform()); }
+        const float flutter = 1.0f - depth * 0.5f * (1.0f + sin01(sigPhase2_));
+        out[i] += 0.28f * sigLp_ * flutter * sin01(sigPhase_);
+    }
+}
+
+// ---------------------------------------------------------------- Dial
+//
+// A shortwave set with its dial turned: heterodyne whistles -- a carrier beating against the
+// local oscillator -- that slide as the tuning moves, one to three of them (Position), each
+// drifting to a new pitch every second or two between 300 Hz and 3 kHz with the note as the
+// centre, and under them the band's own noise (Bright), through the same 350-3200 Hz window the
+// Murmur's radio has, with a squelch burst now and then when a carrier drops.
+void SourceSlot::renderDial(float* out, int n, double hz, const SlotParams& p, float dt)
+{
+    (void)dt;
+    const int count = 1 + static_cast<int>(clampv(p.position, 0.0f, 1.0f) * 2.999f);
+    const double centre = std::min(std::max(hz, 200.0), 3000.0);
+    if (!sigReady_) {
+        for (int k = 0; k < 3; ++k) { dlF_[k] = centre * std::pow(2.0, 1.5 * static_cast<double>(rng_.bipolar())); dlTo_[k] = dlF_[k]; dlPh_[k] = 0.0; }
+        sigNext_ = 0.3 * sr_; sigBurst_ = 0.0; sigY1_ = sigY2_ = sigZ1_ = sigZ2_ = 0.0f; sigReady_ = true;
+    }
+    const Reso2 band = reso2(1200.0, 0.6, sr_, 1.0f);
+    const Reso2 squelch = reso2(2500.0, 0.8, sr_, 1.0f);
+    const float noise = 0.02f + 0.06f * clampv(p.bright, 0.0f, 1.0f);
+    const double glide = 1.0 - std::exp(-1.0 / (0.25 * sr_));
+    const float burstDecay = std::exp(-1.0f / (0.08f * static_cast<float>(sr_)));
+    for (int i = 0; i < n; ++i) {
+        sigNext_ -= 1.0;
+        if (sigNext_ <= 0.0) {   // the dial moves: one whistle gets a new target, now and then a carrier drops
+            const int k = static_cast<int>(rng_.uniform() * 2.999f);
+            dlTo_[k] = clampv(centre * std::pow(2.0, 1.8 * static_cast<double>(rng_.bipolar())), 300.0, 3000.0);
+            if (rng_.uniform() < 0.3f) sigBurst_ = 1.0;
+            sigNext_ = (0.4 + 1.4 * static_cast<double>(rng_.uniform())) * sr_;
+        }
+        float tones = 0.0f;
+        for (int k = 0; k < count; ++k) {
+            dlF_[k] += (dlTo_[k] - dlF_[k]) * glide;
+            dlPh_[k] += dlF_[k] / sr_; if (dlPh_[k] >= 1.0) dlPh_[k] -= 1.0;
+            tones += sin01(dlPh_[k]) * (k == 0 ? 1.0f : 0.5f);
+        }
+        const float bed = resoStep(band, rng_.bipolar(), sigY1_, sigY2_);
+        const float sq = resoStep(squelch, rng_.bipolar(), sigZ1_, sigZ2_) * static_cast<float>(sigBurst_);
+        sigBurst_ *= burstDecay;
+        if (!sane(sigY1_) || !sane(sigZ1_)) { sigY1_ = sigY2_ = sigZ1_ = sigZ2_ = 0.0f; }
+        out[i] += 0.2f * tones + 2.0f * noise * bed + 0.24f * sq;
+    }
+}
+
 } // namespace ambient

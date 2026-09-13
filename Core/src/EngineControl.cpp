@@ -1224,6 +1224,8 @@ void Engine::readParams()
     np_.pitch     = clampv(static_cast<int>(std::lround(g(ParamId::ForePitch))), 0, 4);
     np_.spread    = g(ParamId::ForeSpread);
     np_.approach  = g(ParamId::ForeApproach);
+    np_.distance  = g(ParamId::ForeDistance);
+    np_.dry       = g(ParamId::ForeDry);
     np_.proximity = g(ParamId::ForeProximity);
     np_.hold      = g(ParamId::ForeHold) >= 0.5f;
     np_.glide     = g(ParamId::ForeGlide);

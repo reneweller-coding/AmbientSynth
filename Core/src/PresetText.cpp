@@ -74,6 +74,15 @@ const char* sourceWord(const std::string& type)
     if (type == "Ice") return "creaking ice";
     if (type == "Drops") return "water drops";
     if (type == "Clip") return "a recording, played straight";
+    if (type == "Whistler") return "a whistler falling out of the sky";
+    if (type == "Shaker") return "a seed pod shaken";
+    if (type == "Chime") return "struck bronze";
+    if (type == "Geiger") return "a Geiger counter";
+    if (type == "Tube") return "a fluorescent tube";
+    if (type == "Krell") return "the Krell's circuits";
+    if (type == "Beacon") return "a beacon's packet";
+    if (type == "Morse") return "a number station";
+    if (type == "Dial") return "a shortwave dial turned";
     return nullptr;
 }
 

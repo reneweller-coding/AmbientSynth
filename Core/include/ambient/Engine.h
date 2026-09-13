@@ -748,6 +748,7 @@ private:
     bool              matchHave_ = false;
 
     std::vector<float> nearL_, nearR_, farL_, farR_, wetL_, wetR_;
+    std::vector<float> dryL_, dryR_;   // the near layer's Dry share: past every reverb and delay, straight to the output
     float* const* stems_ = nullptr;   // eight pointers or null; valid for one process() call
     int    stemPos_ = 0;              // where in them this chunk starts
     double   sr_ = 48000.0;

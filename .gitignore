@@ -25,6 +25,12 @@ Library/WavetablesNew/
 Library/*.log
 Tools/library/texture_jobs.json
 Library/Impulses/
+# The archive of recordings the near layer plays (NASA, public domain): fetched by
+# Tools/library/fetch_archive.py, listed in Library/Archive/SOURCES.md, which stays in git; the
+# audio travels in the content package like the rest of the library.
+Library/Archive/**/*.flac
+Library/Archive/**/*.mp3
+Library/Archive/**/*.m4a
 
 # Stray working folders from earlier tool runs; the real library lives under Library/.
 /ambient.wav

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Sleep: Crossing
+cyclic on
+Kingfisher Interval | 5:00-10:00 | 0:45-1:30
+Ochre Expanse | 5:00-10:00 | 0:45-1:30
+Mist Vigil | 5:00-10:00 | 0:45-1:30
+Silo Chorus | 5:00-10:00 | 0:45-1:30
+Silk Wind | 5:00-10:00 | 0:45-1:30
+Gloaming Span | 5:00-10:00 | 0:45-1:30
+Rawhide Basin | 5:00-10:00 | 0:45-1:30
+Groundswell Drone | 5:00-10:00 | 0:45-1:30
+Rose Veil | 5:00-10:00 | 0:45-1:30
+Bodhi Passage | 5:00-10:00 | 0:45-1:30
+Stone Bloom | 5:00-10:00 | 0:45-1:30
+Tanpura Signal | 5:00-10:00 | 0:45-1:30

@@ -3,8 +3,11 @@
 // routes-by-name all pick packs up without knowing they exist.
 #include "ambient/Presets.h"
 #include "ambient/PresetMeta.h"
+#include "ambient/WavFile.h"   // resolveAudioFile, for the library-relative files of the banks
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -39,6 +42,12 @@ std::vector<std::string>& loadedPaths() { static std::vector<std::string> p; ret
 // every preset's position on every audio block, so with 42 packs that was a hundred and eighty
 // thousand iterations per block to answer eight thousand questions.
 std::vector<const PresetMeta*>& metaViews() { static std::vector<const PresetMeta*> v; return v; }
+// The pack each view came from, in the order the views are in (the near layer's Auto asks).
+std::vector<int>& viewPacks() { static std::vector<int> v; return v; }
+
+struct NearAutoEntry { const char* preset; float weight; float rateLo, rateHi; };
+struct NearAutoPack  { const char* pack; float share; int first, count; };
+#include "NearAuto.inc"
 
 // One pack's presets appended to the views. Called once per pack as it is loaded: the whole list
 // used to be rebuilt every time, so loading 42 packs of 200 presets did 176 000 entries' worth of
@@ -47,8 +56,11 @@ std::vector<const PresetMeta*>& metaViews() { static std::vector<const PresetMet
 void appendViews(const Pack& pk)
 {
     {
+        int packIndex = -1;
+        for (size_t i = 0; i < packs().size(); ++i) if (packs()[i].get() == &pk) packIndex = static_cast<int>(i);
         for (const PackEntry& e : pk.entries) {
             metaViews().push_back(&e.meta);
+            viewPacks().push_back(packIndex);
             views().push_back(Preset{ e.name.c_str(), e.settings.c_str(),
                                       e.texture.empty() ? nullptr : e.texture.c_str(),
                                       e.wavetable.empty() ? nullptr : e.wavetable.c_str(),
@@ -92,6 +104,7 @@ void rebuildViews()
     views().clear();
     paths().clear();
     metaViews().clear();
+    viewPacks().clear();
     for (const auto& pk : packs()) appendViews(*pk);
 }
 
@@ -226,6 +239,61 @@ int loadPresetPacksIn(const char* dir)
     return n;
 }
 
+namespace {
+std::vector<std::string> rootsOfTheLibrary()
+{
+    std::vector<std::string> roots;
+    if (const char* env = std::getenv("AMBIENT_LIBRARY")) roots.push_back(env);
+    for (const std::string& packFile : loadedPaths()) {
+        const std::string root = std::filesystem::path(packFile).parent_path().parent_path().string();
+        if (!root.empty() && std::find(roots.begin(), roots.end(), root) == roots.end()) roots.push_back(root);
+    }
+    const char* home = std::getenv("USERPROFILE");
+    if (home == nullptr) home = std::getenv("HOME");
+    if (home != nullptr) roots.push_back((std::filesystem::path(home) / "Documents" / "AmbientSynth").string());
+#if defined(_WIN32)
+    if (const char* shared = std::getenv("ProgramData")) roots.push_back((std::filesystem::path(shared) / "AmbientSynth").string());
+    if (const char* local = std::getenv("LOCALAPPDATA")) roots.push_back((std::filesystem::path(local) / "AmbientSynth").string());
+#else
+    roots.push_back("/usr/local/share/AmbientSynth");
+    roots.push_back("/usr/share/AmbientSynth");
+#endif
+    roots.push_back("Library");
+    roots.push_back(".");
+    return roots;
+}
+} // namespace
+
+int libraryRoots(char* buf, int cap)
+{
+    const std::vector<std::string> roots = rootsOfTheLibrary();
+    std::string joined;
+    for (const std::string& r : roots) { if (!joined.empty()) joined += ';'; joined += r; }
+    if (buf != nullptr && cap > 0) { std::strncpy(buf, joined.c_str(), static_cast<size_t>(cap - 1)); buf[cap - 1] = 0; }
+    return static_cast<int>(roots.size());
+}
+
+std::string resolveLibraryFile(const char* relative)
+{
+    if (relative == nullptr || *relative == 0) return {};
+    const std::vector<std::string> roots = rootsOfTheLibrary();
+    // A name ending in a slash is a folder of recordings (the near layer plays one of them at
+    // random per event), and is resolved to the folder itself rather than to a file in it.
+    const std::string rel(relative);
+    const bool folder = rel.back() == '/' || rel.back() == '\\';
+    for (const std::string& root : roots) {
+        const std::string candidate = (std::filesystem::path(root) / rel).string();
+        if (folder) {
+            std::error_code ec;
+            if (std::filesystem::is_directory(candidate, ec)) return candidate;
+            continue;
+        }
+        const std::string got = resolveAudioFile(candidate.c_str());
+        if (!got.empty()) return got;
+    }
+    return {};
+}
+
 int loadDefaultPresetPacks()
 {
     // AMBIENT_PACKS wins (a folder, or several separated by ';'). Otherwise two places are read,
@@ -266,6 +334,47 @@ int  numPresetPacks() { return static_cast<int>(packs().size()); }
 const char* presetPackName(int pack) { return (pack >= 0 && pack < numPresetPacks()) ? packs()[static_cast<size_t>(pack)]->name.c_str() : ""; }
 
 int numPresets() { return builtinPresetCount() + static_cast<int>(views().size()); }
+
+int presetPack(int presetIndex)
+{
+    const int i = presetIndex - builtinPresetCount();
+    return i >= 0 && i < static_cast<int>(viewPacks().size()) ? viewPacks()[static_cast<size_t>(i)] : -1;
+}
+
+// The draw is a hash, not a random number: FNV-1a over the preset's name (and a salt per
+// question), folded to [0, 1). A preset asks three questions -- whether it gets a foreground at
+// all, which one, and how often it speaks -- and gets the same three answers every time.
+namespace {
+double hashUnit(const char* text, unsigned salt)
+{
+    uint64_t h = 1469598103934665603ull ^ (static_cast<uint64_t>(salt) * 0x9E3779B97F4A7C15ull);
+    for (const unsigned char* c = reinterpret_cast<const unsigned char*>(text); *c; ++c) { h ^= *c; h *= 1099511628211ull; }
+    h ^= h >> 29; h *= 0xBF58476D1CE4E5B9ull; h ^= h >> 32;
+    return static_cast<double>(h >> 11) * (1.0 / 9007199254740992.0);
+}
+} // namespace
+
+int nearAutoPick(const char* packName, const char* presetName, float& rateFactor)
+{
+    rateFactor = 1.0f;
+    if (packName == nullptr || presetName == nullptr) return -1;
+    const NearAutoPack* pk = nullptr;
+    for (int i = 0; i < kNumNearAutoPacks; ++i) if (std::strcmp(kNearAutoPacks[i].pack, packName) == 0) { pk = &kNearAutoPacks[i]; break; }
+    if (pk == nullptr || pk->count <= 0) return -1;
+    if (hashUnit(presetName, 1u) >= static_cast<double>(pk->share)) return 0;   // no foreground for this one: Near Off
+    double total = 0.0;
+    for (int i = 0; i < pk->count; ++i) total += kNearAutoEntries[pk->first + i].weight;
+    double u = hashUnit(presetName, 2u) * total;
+    const NearAutoEntry* pick = &kNearAutoEntries[pk->first + pk->count - 1];
+    for (int i = 0; i < pk->count; ++i) {
+        const NearAutoEntry& e = kNearAutoEntries[pk->first + i];
+        if (u < e.weight) { pick = &e; break; }
+        u -= e.weight;
+    }
+    rateFactor = pick->rateLo + (pick->rateHi - pick->rateLo) * static_cast<float>(hashUnit(presetName, 3u));
+    for (int i = 0; i < numNearPresets(); ++i) if (std::strcmp(nearPreset(i).name, pick->preset) == 0) return i;
+    return -1;
+}
 
 const Preset& preset(int index)
 {

@@ -159,6 +159,19 @@ public:
     // consonant ratios to the root by `gravity` (0 = an even log-domain glide).
     void glideFrom(double fromHz, float seconds, float gravity);
     bool gliding() const { return portaLeft_ > 0.0f; }
+    // A sounding note slides to another (a near Phrase's second degree): the note and its
+    // frequency change, and the slide runs on the portamento with its gravity.
+    void glideTo(int note, double hz, float seconds, float gravity);
+    // The plane moves: to `distance` over `seconds` -- a near event arriving out of the far plane
+    // or leaving into it. Everything that hangs on the distance follows, as it does for Breath.
+    void moveTo(float distance, float seconds) { distTarget_ = clampv(distance, 0.0f, 1.0f); distSeconds_ = std::max(seconds, 0.01f); }
+    // Where this note stands in what its owner is sounding, for the slot roles (SlotRole): set by
+    // the engine before noteOn, and again whenever the cluster changes.
+    void setPlace(bool lowest, bool highest) { placeLowest_ = lowest; placeHighest_ = highest; }
+    // A near event's shape, set before its noteOn: the gate as a share of the release, the bloom
+    // as a factor on the cutoff, the near field's low lift in decibels, and its place in the field.
+    void setNearShape(float releaseMul, float cutoffMul, float proximityDb, float pan)
+    { releaseMul_ = std::max(releaseMul, 0.05f); cutoffMul_ = clampv(cutoffMul, 0.05f, 8.0f); proxDb_ = proximityDb; panOffset_ = clampv(pan, -1.0f, 1.0f); }
     uint64_t order = 0;      // allocation order for voice stealing
 
     // For pictures only: the current amplitude of each partial of the first strand, exactly the
@@ -276,6 +289,26 @@ private:
     float    slotShift_[kSlots] = {};
     float    slotEnvT_[kSlots] = { -1.0f, -1.0f, -1.0f, -1.0f };
     bool     slotHeld_ = false;
+    // The slot roles: where the note stands, and each slot's gain from its role, faded at control
+    // rate. All ones for a preset whose slots have no role, which is every preset before 13.09.2026.
+    bool     placeLowest_ = true, placeHighest_ = true;
+    float    roleGain_[kSlots] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static float roleTarget(SlotRole r, bool lowest, bool highest)
+    {
+        switch (r) {
+        case SlotRole::Lowest:  return lowest ? 1.0f : 0.0f;
+        case SlotRole::Highest: return highest ? 1.0f : 0.0f;
+        case SlotRole::Inner:   return (!lowest && !highest) ? 1.0f : 0.0f;
+        default: return 1.0f;
+        }
+    }
+    // A near event's shape (see setNearShape), the low lift's one-pole per ear, its place in the
+    // field as an equal-power pair, and the plane it is travelling to.
+    float    releaseMul_ = 1.0f, cutoffMul_ = 1.0f, proxDb_ = 0.0f, panOffset_ = 0.0f;
+    float    proxAmt_ = 0.0f, proxLoCoef_ = 0.0f, proxHiCoef_ = 0.0f;
+    float    proxLoL_ = 0.0f, proxLoR_ = 0.0f, proxHiL_ = 0.0f, proxHiR_ = 0.0f;
+    float    panL_ = 1.0f, panR_ = 1.0f;
+    float    distTarget_ = 0.0f, distSeconds_ = 0.0f;
     // Control-rate caches: the spectral shape only changes when its parameters do.
     float    tiltCache_[kMaxPartials + 1] = {};
     float    cachedTilt_ = -1.0f, cachedOddEven_ = -9.0f;

@@ -404,6 +404,35 @@ def analyse(events, roots, hours, dt):
         # mean, so a golden pair of clocks measures as 3:2 one hour in four. The clocks themselves
         # are set in the golden ratio (brain2_golden), which is what Anti 15 asks.
         m["Anti 15 the two clocks' ratio"] = (round(ratio, 3), None, "mean gap of conductor 2 over 1" + (" (near a p/q, within sampling error)" if simple else ""))
+
+    # ---- the near layer (13.09.2026): the foreground's own rules, when it is on ------------
+    # Conductor 3 in the tool's output is the near events: one note at a time for a Note or a
+    # Phrase, a run of short ones for a Sequence. What is checked here is what the engine promises
+    # whatever the settings: never two events at once, never one within six seconds of a root
+    # change, and -- with Hold Brain on, the default -- no decision of the conductor while a Note
+    # or a Phrase sounds. The gaps are reported against their own floor (the smaller of five
+    # seconds and a fifth of the rate) rather than judged, since the rate is a parameter the audit
+    # does not see.
+    n3 = intervals_of(events, 3, end)
+    if n3:
+        m["Near events"] = (len(n3), None, "notes the foreground played")
+        overlaps = sum(1 for (a0, a1, _, _), (b0, b1, _, _) in zip(n3, n3[1:]) if b0 < a1 - dt)
+        m["Near never two at once"] = (overlaps, overlaps == 0, "notes beginning while one still sounds")
+        soon = 0
+        for t0, _, _, _ in n3:
+            last = max((tr for tr, _ in roots if tr <= t0 and tr > 0.0), default=-1.0e9)
+            if t0 - last < 6.0 - dt:
+                soon += 1
+        m["Near not just after a root change"] = (soon, soon == 0, "notes within six seconds of a root change")
+        gaps = [b0 - a1 for (a0, a1, _, _), (b0, b1, _, _) in zip(n3, n3[1:]) if b0 >= a1]
+        long_gaps = [g for g in gaps if g > 2.0]      # a sequence's steps are not gaps between events
+        if long_gaps:
+            m["Near gaps min/mean s"] = ((round(min(long_gaps), 1), round(statistics.mean(long_gaps), 1)), None, "between events")
+        inside = 0
+        for t, w, on, _, _ in events:
+            if w == 1 and on and any(t0 < t < t1 for t0, t1, _, _ in n3 if t1 - t0 > 2.0):
+                inside += 1
+        m["Near the conductor holds"] = (inside, None, "conductor notes begun while a long near note sounded (0 with Hold Brain on)")
     return m
 
 

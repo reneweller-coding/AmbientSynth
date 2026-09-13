@@ -10,10 +10,13 @@
 
 namespace ambient {
 
-const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Harmonic", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow", "Spectral", "Wavetable" };
+const char* const kSourceTypeNames[kNumSourceTypes] = { "Off", "Harmonic", "FM", "Texture", "Noise", "Additive", "Stretch", "Bow", "Spectral", "Wavetable",
+                                                        "Flute", "Murmur", "Bowl", "Ice", "Drops", "Clip",
+                                                        "Whistler", "Shaker", "Chime", "Geiger", "Tube", "Krell", "Beacon", "Morse", "Dial" };
 const char* const kNoiseKindNames[kNumNoiseKinds] = {
-    "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital",
+    "White", "Pink", "Brown", "Blue", "Violet", "Grey", "Band", "Wind", "Crackle", "Digital", "Cicada",
 };
+const char* const kSlotRoleNames[kNumSlotRoles] = { "All", "Lowest", "Inner", "Highest" };
 const char* const kTableNames[kNumTables] = { "Classic", "Organ", "Vocal", "Glass", "Metal", "User" };
 const char* const kSlotRatioNames[kNumSlotRatios] = { "1/1", "9/8", "6/5", "5/4", "4/3", "3/2", "8/5", "5/3", "7/4", "2/1" };
 const double      kSlotRatios[kNumSlotRatios] = { 1.0, 9.0 / 8.0, 6.0 / 5.0, 5.0 / 4.0, 4.0 / 3.0, 3.0 / 2.0, 8.0 / 5.0, 5.0 / 3.0, 7.0 / 4.0, 2.0 };
@@ -264,6 +267,9 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     bowNut_.assign(static_cast<size_t>(kBowMax), 0.0f);
     bowBridge_.assign(static_cast<size_t>(kBowMax), 0.0f);
     bowW_ = 0; bowLp_ = 0.0f; bowReady_ = false;
+    fluteReady_ = false; rubReady_ = false; murReady_ = false;
+    for (auto& d : drops_) d.on = false;
+    dropNext_ = 0.0;
     specAdvance_ = 0.0;
     // Wavetable: the start phases come from a stream of their own, and the built-in tables are
     // made here, on this thread, rather than by the first block that asks for one.
@@ -295,6 +301,11 @@ void SourceSlot::noteOn(bool fresh)
     for (auto& g : grains_) g.on = false;
     spawnIn_ = 0.0;
     st_.advance = 0.0;   // a fresh note reads from Position again
+    // A fresh note blows the pipe from rest, puts the stick to a still bowl, starts a new phrase,
+    // and plays the clip again from its Position.
+    fluteReady_ = false; rubReady_ = false; murReady_ = false;
+    for (auto& d : drops_) d.on = false;
+    clipPos_ = -1.0; clipDone_ = false;
     for (double& ph : cyPhase_) ph = cyRng_.uniform();
     cyPrimed_ = false;
     specAdvance_ = 0.0;
@@ -318,6 +329,12 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         if (!st_.out.empty()) std::fill(st_.out.begin(), st_.out.end(), 0.0f);
         st_.n = 0; st_.hopLeft = 0;
         cyPrimed_ = false;
+        // The near sources start clean too: the string's lines are the pipe's, and a bowl that
+        // was ringing as a bow is not a bowl.
+        fluteReady_ = false; rubReady_ = false; murReady_ = false;
+        for (auto& d : drops_) d.on = false;
+        clipPos_ = -1.0; clipDone_ = false;
+        sigReady_ = false;   // the signals start their clocks again
         lastType_ = p.type;
     }
     double hz = noteHz * kSlotRatios[clampv(p.ratio, 0, kNumSlotRatios - 1)] * std::pow(2.0, clampv(p.octave, -2, 2));
@@ -348,11 +365,13 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
         gL_ = tL; gR_ = tR;
         return;
     }
-    if (p.type == SourceType::Texture) {
-        // Grains carry their own level/pan (fixed at spawn), written straight to L/R.
+    if (p.type == SourceType::Texture || p.type == SourceType::Clip) {
+        // Grains carry their own level/pan (fixed at spawn), written straight to L/R; the clip
+        // is written the same way, with its level and pan applied inside.
         float bufL[kControlBlock];
         std::memset(bufL, 0, sizeof(float) * static_cast<size_t>(n));
-        renderTexture(bufL, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);   // left into bufL, right into scratch_
+        if (p.type == SourceType::Texture) renderTexture(bufL, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);   // left into bufL, right into scratch_
+        else renderClip(bufL, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
         for (int i = 0; i < n; ++i) { outL[i] += bufL[i]; outR[i] += scratch_[i]; }
         gL_ = tL; gR_ = tR;
         return;
@@ -365,6 +384,20 @@ void SourceSlot::render(float* outL, float* outR, int n, double noteHz, const Sl
     else if (p.type == SourceType::Additive) renderAdditive(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Stretch) renderStretch(scratch_, n, hz, hz / std::max(noteHz, 1.0), p, texture, dt);
     else if (p.type == SourceType::Bow) renderBow(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Flute) renderFlute(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Murmur) renderMurmur(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Bowl) renderRub(scratch_, n, hz, p, dt, false);
+    else if (p.type == SourceType::Ice) renderRub(scratch_, n, hz, p, dt, true);
+    else if (p.type == SourceType::Drops) renderDrops(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Whistler) renderWhistler(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Shaker) renderShaker(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Chime) renderChime(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Geiger) renderGeiger(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Tube) renderTube(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Krell) renderKrell(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Beacon) renderBeacon(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Morse) renderMorse(scratch_, n, hz, p, dt);
+    else if (p.type == SourceType::Dial) renderDial(scratch_, n, hz, p, dt);
     else if (p.type == SourceType::Spectral)
         renderSpectral(scratch_, n, p.follow ? hz / std::max(1.0, texture != nullptr ? texture->baseHz : 1.0)
                                              : hz / std::max(noteHz, 1.0), p, texture, dt);
@@ -1280,8 +1313,15 @@ void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p,
         3.07f,   // Wind
         1.80f,   // Crackle
         0.64f,   // Digital
+        4.0f,    // Cicada: clicks ringing in a narrow band have a crest the others do not; at 12 the peaks hit the clipper
     };
     const float gain = kGain[static_cast<int>(kind)] * p.level;
+    // Cicada: the band sits where the insects sing, 4 to 8 kHz from Position, however the other
+    // colours read the knob; Density scales how fast each insect's pulses come.
+    const float fCic = kind == NoiseKind::Cicada
+        ? 2.0f * std::sin(static_cast<float>(kPi * clampv(4000.0 * std::pow(2.0, static_cast<double>(posN)), 20.0, std::min(0.45 * sr_, sr_ / 6.0)) / sr_))
+        : f;
+    const float dampCic = 0.25f - 0.22f * qAmount;
 
     for (int c = 0; c < 2; ++c) {
         NoiseState& st = noise_[c];
@@ -1344,6 +1384,39 @@ void SourceSlot::renderNoise(float* outL, int n, double hz, const SlotParams& p,
                 st.holdLeft -= rate;
                 if (st.holdLeft <= 0.0) { st.holdLeft += sr_; st.hold = w; }
                 v = st.hold;
+                break;
+            }
+            case NoiseKind::Cicada: {
+                // Stridulation: an insect rubs a file across a scraper, one click per tooth,
+                // sixty to a hundred and twenty a second, in bursts of half a second to two, and
+                // rests between the bursts. Two insects per ear, their clocks their own, so the
+                // pair never falls into step; each breathes in level over a few seconds, which is
+                // the swell of a real chorus. Every click rings in the band pass below, and the
+                // band's Q is the insect's resonator.
+                float pulses = 0.0f;
+                for (int k = 0; k < 2; ++k) {
+                    if (st.burstLeft[k] > 0.0) {
+                        st.burstLeft[k] -= 1.0;
+                        st.pulseLeft[k] -= 1.0;
+                        if (st.pulseLeft[k] <= 0.0) {
+                            st.pulseLeft[k] += sr_ / static_cast<double>(st.pulseRate[k] * std::max(0.25f, p.density / 12.0f));
+                            pulses += 0.3f * st.breathe[k] * (0.8f + 0.2f * rng_.uniform());
+                        }
+                        if (st.burstLeft[k] <= 0.0) st.pauseLeft[k] = (0.4 + 3.6 * static_cast<double>(rng_.uniform())) * sr_;
+                    } else {
+                        st.pauseLeft[k] -= 1.0;
+                        if (st.pauseLeft[k] <= 0.0) {
+                            st.burstLeft[k] = (0.4 + 1.6 * static_cast<double>(rng_.uniform())) * sr_;
+                            st.pulseRate[k] = 60.0f + 60.0f * rng_.uniform();
+                            st.breatheTo[k] = 0.4f + 0.6f * rng_.uniform();
+                        }
+                    }
+                    st.breathe[k] += (st.breatheTo[k] - st.breathe[k]) * 2.0e-5f;
+                }
+                st.bp2 += fCic * st.bp1;
+                const float hp = pulses - st.bp2 - dampCic * st.bp1;
+                st.bp1 += fCic * hp;
+                v = st.bp1;
                 break;
             }
             default: break;

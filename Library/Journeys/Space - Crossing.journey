@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Space: Crossing
+cyclic on
+Foghorn Bed | 5:00-10:00 | 0:45-1:30
+Offset Veil | 5:00-10:00 | 0:45-1:30
+Firmament Field | 5:00-10:00 | 0:45-1:30
+Tramline District | 5:00-10:00 | 0:45-1:30
+Pulsar Bloom | 5:00-10:00 | 0:45-1:30
+Protein Span | 5:00-10:00 | 0:45-1:30
+Titan Drums | 5:00-10:00 | 0:45-1:30
+Sextant Vigil | 5:00-10:00 | 0:45-1:30
+Relay Stars | 5:00-10:00 | 0:45-1:30
+Neuron Expanse | 5:00-10:00 | 0:45-1:30
+Carina Bed | 5:00-10:00 | 0:45-1:30
+Firmament Beam | 5:00-10:00 | 0:45-1:30

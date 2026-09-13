@@ -684,6 +684,7 @@ void Engine::readParams()
             s.root          = at(40);
             s.delaySec      = at(33);
             s.riseSec       = at(34);
+            s.role          = static_cast<SlotRole>(clampv(static_cast<int>(std::lround(at(41))), 0, kNumSlotRoles - 1));
             {   // The choice is "Off" first, then the six shapes -- one off the shape's index --
                 // and "Own" last, the slot's own shape.
                 const int env = static_cast<int>(std::lround(at(35)));
@@ -1050,7 +1051,7 @@ void Engine::readParams()
     cloudToNear_ = g(ParamId::CloudToNear);
     nearReverb_.setSpace(0.3f, 20000.0f, g(ParamId::NearLowcut));
     nearReverb_.set(0.6f, g(ParamId::NearDecay), g(ParamId::NearDamp), 5.0f, false, g(ParamId::NearMix));
-    unmask_.set(g(ParamId::FarUnmask), g(ParamId::FarUnmaskSpread));
+    unmask_.set(g(ParamId::FarUnmask), g(ParamId::FarUnmaskSpread), g(ParamId::FarUnmaskReturn));
     bodyLevel_ = g(ParamId::BodyLevel);
     bodyPitch_ = g(ParamId::BodyPitch);
     body_.set(static_cast<BodyMaterial>(clampv(static_cast<int>(std::lround(g(ParamId::BodyMaterial))), 0, kNumBodyMaterials - 1)),
@@ -1210,6 +1211,95 @@ void Engine::readParams()
     if (rootPc != lastRootPc_) {
         lastRootPc_ = rootPc;
         brain_.setRoot(48 + rootPc);
+    }
+    // ---- the near layer (13.09.2026)
+    rolesUsed_ = false;
+    for (int k = 0; k < kSlots; ++k) if (vp_.slot[k].role != SlotRole::All) rolesUsed_ = true;
+    np_.level     = g(ParamId::ForeLevel);
+    np_.kind      = clampv(static_cast<int>(std::lround(g(ParamId::ForeKind))), 0, 2);
+    np_.rate      = g(ParamId::ForeRate);
+    np_.chance    = g(ParamId::ForeChance);
+    np_.cluster   = g(ParamId::ForeCluster);
+    np_.length    = g(ParamId::ForeLength);
+    np_.pitch     = clampv(static_cast<int>(std::lround(g(ParamId::ForePitch))), 0, 4);
+    np_.spread    = g(ParamId::ForeSpread);
+    np_.approach  = g(ParamId::ForeApproach);
+    np_.distance  = g(ParamId::ForeDistance);
+    np_.dry       = g(ParamId::ForeDry);
+    np_.proximity = g(ParamId::ForeProximity);
+    np_.hold      = g(ParamId::ForeHold) >= 0.5f;
+    np_.glide     = g(ParamId::ForeGlide);
+    np_.steps     = static_cast<int>(std::lround(g(ParamId::ForeSteps)));
+    np_.stepSeconds = g(ParamId::ForeStep);
+    np_.stepSync  = clampv(static_cast<int>(std::lround(g(ParamId::ForeStepSync))), 0, kNumSyncDivs - 1);
+    np_.mutation  = g(ParamId::ForeMutation);
+    np_.scatter   = g(ParamId::ForeScatter);
+    np_.bloom     = g(ParamId::ForeBloom);
+    np_.attack    = g(ParamId::ForeAttack);
+    np_.release   = g(ParamId::ForeRelease);
+    {
+        // What a near event's voice renders with: the sound preset's voice with its four slots
+        // put out and the Near Source in the last one, its own envelope, its own filter, its own
+        // strike; no z-plane, no air, no bloom, no breath -- the event is placed by the scheduler
+        // and shaped by the section, and owes the background nothing but the room around it.
+        vpNear_ = vp_;
+        for (int k = 0; k < kSlots; ++k) { vpNear_.slot[k].type = SourceType::Off; vpNear_.slot[k].role = SlotRole::All; }
+        SlotParams& s = vpNear_.slot[kSlots - 1];
+        s = SlotParams{};
+        s.type          = static_cast<SourceType>(clampv(static_cast<int>(std::lround(g(ParamId::ForeType))), 0, kNumSourceTypes - 1));
+        s.level         = np_.level;
+        s.octave        = static_cast<int>(std::lround(g(ParamId::ForeOctave)));
+        s.ratio         = static_cast<int>(std::lround(g(ParamId::ForeRatio)));
+        s.position      = g(ParamId::ForePosition);
+        s.positionDrift = g(ParamId::ForePosDrift);
+        s.density       = g(ParamId::ForeDensity);
+        s.follow        = g(ParamId::ForeFollow) >= 0.5f;
+        s.bright        = g(ParamId::ForeBright);
+        s.bowForce      = g(ParamId::ForeForce);
+        s.bowSpeed      = g(ParamId::ForeSpeed);
+        s.noise         = static_cast<NoiseKind>(clampv(static_cast<int>(std::lround(g(ParamId::ForeNoise))), 0, kNumNoiseKinds - 1));
+        s.noiseQ        = g(ParamId::ForeNoiseQ);
+        s.fmRatio       = g(ParamId::ForeFmRatio);
+        s.fmIndex       = g(ParamId::ForeFmIndex);
+        s.partials      = static_cast<int>(std::lround(g(ParamId::ForePartials)));
+        s.tilt          = g(ParamId::ForeTilt);
+        s.inharm        = g(ParamId::ForeInharm);
+        s.drift         = g(ParamId::ForeDrift);
+        s.table         = static_cast<int>(std::lround(g(ParamId::ForeTable)));
+        vpNear_.attack      = np_.attack;
+        vpNear_.decay       = g(ParamId::ForeDecay);
+        vpNear_.sustain     = g(ParamId::ForeSustain);
+        vpNear_.release     = np_.release;
+        vpNear_.cutoff      = g(ParamId::ForeCutoff);
+        vpNear_.resonance   = g(ParamId::ForeResonance);
+        vpNear_.filterModel = clampv(static_cast<int>(std::lround(g(ParamId::ForeFilterModel))), 0, kNumFilterModels - 1);
+        vpNear_.filterEnv   = g(ParamId::ForeFilterEnv);
+        vpNear_.filterOn    = true;
+        vpNear_.filterParallel = false;
+        vpNear_.filterDrive = 0.0f;
+        vpNear_.fold        = 0.0f;
+        vpNear_.zMode       = 0;
+        vpNear_.air         = 0.0f;
+        vpNear_.strikeLevel = g(ParamId::ForeStrike);
+        vpNear_.strikeType  = static_cast<int>(std::lround(g(ParamId::ForeStrikeType)));
+        vpNear_.strikeDecay = g(ParamId::ForeStrikeDecay);
+        vpNear_.strikeDamp  = g(ParamId::ForeStrikeDamp);
+        vpNear_.strikeBrain = true;
+        vpNear_.velAttack   = 0.0f;
+        vpNear_.bloom       = 0.0f;
+        vpNear_.breath      = 0.0f;
+        vpNear_.freeze      = false;
+        vpNear_.sympathy    = 0.0f;
+        vpNear_.fmAmount    = 0.0f;
+        vpNear_.partialSpread = 0.0f;
+        vpNear_.lowCut      = 0.0f;
+        {   // The near source's own clip in its slot -- the event's pick of the pool -- or Source 4's where it has none.
+            const int a = nearPoolActive_.load(std::memory_order_acquire);
+            if (a >= 0 && !nearPools_[a].empty()) {
+                const std::vector<Texture>& pool = nearPools_[a];
+                vpNear_.texture[kSlots - 1] = &pool[std::min(static_cast<size_t>(std::max(0, nearPick_)), pool.size() - 1)];
+            }
+        }
     }
     const int seed = static_cast<int>(std::lround(g(ParamId::Seed)));
     if (seed != seed_) {

@@ -20,6 +20,7 @@
 #include "ambient/PresetMap.h"
 #include "ambient/Timeline.h"
 #include "ambient/Score.h"
+#include "ambient/Journey.h"
 #include "ambient/Cosmos.h"          // Fft, for the tonal probe
 #include "ambient/ClusterBrain.h"   // peakRoughness: one Plomp-Levelt curve for the conductor and the map
 #include <cstdio>
@@ -32,10 +33,54 @@
 #include <cctype>
 #include <sstream>
 #include <chrono>
+#include <algorithm>
+#include <filesystem>
 
 using namespace ambient;
 
 namespace {
+
+// The near source's clip from a file, or a pool of them from a folder (sorted by name, up to 48,
+// each kept to twenty seconds -- phrases, not beds): the render's twin of the plugin's loader.
+bool loadNearClips(Engine& engine, const std::string& path)
+{
+    std::error_code ec;
+    if (std::filesystem::is_directory(path, ec)) {
+        std::vector<std::string> files;
+        for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
+            if (!entry.is_regular_file()) continue;
+            std::string ext = entry.path().extension().string();
+            for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext == ".flac" || ext == ".wav" || ext == ".aif" || ext == ".aiff") files.push_back(entry.path().string());
+        }
+        std::sort(files.begin(), files.end());
+        // More than the pool holds: every k-th of them, the whole folder represented (as the plugin does).
+        const size_t kMax = 48;
+        if (files.size() > kMax) {
+            std::vector<std::string> some;
+            for (size_t i = 0; i < kMax; ++i) some.push_back(files[static_cast<size_t>(std::lround(i * (files.size() - 1.0) / (kMax - 1.0)))]);
+            files.swap(some);
+        }
+        std::vector<Texture> pool;
+        for (const std::string& f : files) {
+            std::vector<std::vector<float>> ch; int rate = 0;
+            if (!readWavChannels(f.c_str(), ch, rate) || ch.empty()) continue;
+            Texture t = Engine::makeTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                                            261.6256, loopFromName(f.c_str()), 20.0);
+            if (!t.empty()) pool.push_back(std::move(t));
+        }
+        if (pool.empty()) return false;
+        std::printf("near clips: %d of %s\n", static_cast<int>(pool.size()), path.c_str());
+        engine.setNearTextures(std::move(pool));
+        return true;
+    }
+    std::vector<std::vector<float>> ch; int rate = 0;
+    if (!readWavChannels(path.c_str(), ch, rate) || ch.empty()) return false;
+    engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                          261.6256, loopFromName(path.c_str()));
+    std::printf("near clip: %s\n", path.c_str());
+    return true;
+}
 
 bool writeWav(const std::string& path, const std::vector<float>& interleaved, int channels, int sampleRate)
 {
@@ -421,6 +466,8 @@ static int runOnce(int argc, char** argv)
     Score score; bool haveScore = false;
     std::string stemPrefix;
     int presetIndex = -1;
+    bool nearAuto = false;
+    Journey journey; bool haveJourney = false; uint64_t journeySeed = 1;
     loadDefaultPresetPacks();   // $AMBIENT_PACKS or ~/Documents/AmbientSynth/Packs; --packs adds more
     std::vector<int> notes;
     std::string sclPath;
@@ -610,6 +657,37 @@ static int runOnce(int argc, char** argv)
             for (int p = 0; p < numCosmosPresets(); ++p) std::printf("%s\n", cosmosPreset(p).name);
             return 0;
         }
+        else if (a == "--near-preset") {   // the near layer's bank, on top of whatever sound is loaded
+            const std::string name = next();
+            int found = -1;
+            for (int p = 0; p < numNearPresets(); ++p) if (name == nearPreset(p).name) found = p;
+            if (found < 0) { std::fprintf(stderr, "unknown near preset '%s'\n", name.c_str()); return 2; }
+            engine.applyNearPreset(found);
+            std::printf("near preset: %s\n", name.c_str());
+            // Its clip, if it names one, from the library's archive -- a file, or a folder of them.
+            const Preset& np = nearPreset(found);
+            if (np.texture != nullptr && *np.texture != 0) {
+                const std::string got = resolveLibraryFile(np.texture);
+                if (got.empty() || !loadNearClips(engine, got)) std::fprintf(stderr, "near preset's clip not found: %s\n", np.texture);
+            }
+        }
+        else if (a == "--near-clip") {   // a clip for the near source: a file, or a folder of them (one per event, at random)
+            const std::string file = next();
+            if (!loadNearClips(engine, file)) { std::fprintf(stderr, "cannot read %s\n", file.c_str()); return 2; }
+        }
+        else if (a == "--list-near-presets") {
+            for (int p = 0; p < numNearPresets(); ++p) std::printf("%-28s %s\n", nearPreset(p).name, nearPresetFamily(nearPresetCategory(p)));
+            return 0;
+        }
+        else if (a == "--near-auto") nearAuto = true;   // the foreground the pack preset brings (off by default: the library is measured without one)
+        else if (a == "--journey") {   // presets in a row with dwell and fade ranges (Journey.h); the tool cuts where the plugin crossfades
+            const std::string path = next();
+            if (!journey.load(path.c_str()) || journey.steps.empty()) { std::fprintf(stderr, "cannot read the journey %s\n", path.c_str()); return 2; }
+            haveJourney = true;
+            std::printf("journey: %s (%d steps, %s a pass, %s)\n", journey.name.c_str(), static_cast<int>(journey.steps.size()),
+                        Journey::timeText(journey.meanLength()).c_str(), journey.cyclic ? "cyclic" : "once");
+        }
+        else if (a == "--journey-seed") journeySeed = static_cast<uint64_t>(std::strtoull(next().c_str(), nullptr, 10)) | 1ull;
         else if (a == "--bench") {
             // Realtime factor per preset (rendered seconds per wall second). Run on the device via adb
             // to see what the core costs there; below ~3 the headset would be at its limit.
@@ -671,10 +749,13 @@ static int runOnce(int argc, char** argv)
         }
     }
 
-    // A pack preset may name a sample, a wavetable and an impulse of its own.
-    if (presetIndex >= 0) {
-        const char* tex = presetFilePath(presetIndex, 0);
-        const char* tab = presetFilePath(presetIndex, 1);
+    // A pack preset may name a sample, a wavetable and an impulse of its own. As a function of the
+    // index, because a journey brings up one preset after another while the render runs; the rooms
+    // go straight into the engine then (it has been prepared), where the first preset's are
+    // collected here and set after prepare like an --ir.
+    auto loadPresetMedia = [&](int index, bool roomsNow) {
+        const char* tex = presetFilePath(index, 0);
+        const char* tab = presetFilePath(index, 1);
         std::vector<float> mono; int rate = 0;
         if (tex && *tex) {
             // One path goes into every slot; up to four separated by ';' go one per slot, an empty
@@ -711,18 +792,38 @@ static int runOnce(int argc, char** argv)
         // ...and its rooms. The render tool read the sample and the wavetable and never the impulse,
         // so every measurement of the library -- loudness, the map, what a preset sounds like --
         // heard the built-in hall instead of the preset's own room. An --ir on the command line wins.
-        const char* imp = presetFilePath(presetIndex, 2);
-        const char* impB = presetFilePath(presetIndex, 3);
-        if (imp && *imp && irChannels.empty()) {
+        const char* imp = presetFilePath(index, 2);
+        const char* impB = presetFilePath(index, 3);
+        if (imp && *imp && (roomsNow || irChannels.empty())) {
             std::vector<std::vector<float>> ch; int rate2 = 0;
-            if (readWavChannels(imp, ch, rate2) && !ch.empty()) { irChannels = ch; irRate = rate2; irPath = imp; }
-            else std::fprintf(stderr, "preset impulse missing: %s\n", imp);
+            if (readWavChannels(imp, ch, rate2) && !ch.empty()) {
+                if (roomsNow) engine.setImpulse(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate2);
+                else { irChannels = ch; irRate = rate2; irPath = imp; }
+            } else std::fprintf(stderr, "preset impulse missing: %s\n", imp);
         }
-        if (impB && *impB && irBChannels.empty()) {
+        if (impB && *impB && (roomsNow || irBChannels.empty())) {
             std::vector<std::vector<float>> ch; int rate2 = 0;
-            if (readWavChannels(impB, ch, rate2) && !ch.empty()) { irBChannels = ch; irBRate = rate2; irBPath = impB; }
-            else std::fprintf(stderr, "preset impulse B missing: %s\n", impB);
+            if (readWavChannels(impB, ch, rate2) && !ch.empty()) {
+                if (roomsNow) engine.setImpulseB(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate2);
+                else { irBChannels = ch; irBRate = rate2; irBPath = impB; }
+            } else std::fprintf(stderr, "preset impulse B missing: %s\n", impB);
         }
+    };
+    if (presetIndex >= 0) loadPresetMedia(presetIndex, false);
+    // A journey begins on its first step's preset: applied here like --preset, so its media is
+    // read before the render starts; the steps after it are brought up in the loop.
+    JourneyPlayer journeyPlayer;
+    if (haveJourney) {
+        journeyPlayer.start(journey, journeySeed, 0);
+        JourneyStep st; double fade = 0.0;
+        if (journeyPlayer.advance(0.0, st, fade)) {
+            int idx = -1;
+            for (int p = 0; p < numPresets(); ++p) if (st.preset == preset(p).name) { idx = p; break; }
+            if (idx < 0) { std::fprintf(stderr, "the journey's first preset is not in the library: %s\n", st.preset.c_str()); return 2; }
+            engine.applyPreset(idx); presetIndex = idx; loadPresetMedia(idx, false);
+            std::printf("journey step 1: %s (%s)\n", st.preset.c_str(), Journey::timeText(journeyPlayer.remaining()).c_str());
+        }
+        if (!secondsGiven) seconds = std::min(journey.meanLength(), 4.0 * 3600.0);
     }
 
     if (tapPath.empty() && !tapDir.empty() && presetIndex >= 0) {
@@ -738,6 +839,20 @@ static int runOnce(int argc, char** argv)
         tapPath = tapDir + "/" + slug + ".wav";
     }
     engine.setClockHourOverride(clockHour);
+    if (nearAuto && presetIndex >= 0) {
+        // As the plugin does when a pack preset is chosen with Auto on: the artist's table, by the
+        // preset's name, and the near preset's Every scaled by the class's factor.
+        const int pack = presetPack(presetIndex);
+        float factor = 1.0f;
+        const int pick = pack >= 0 ? nearAutoPick(presetPackName(pack), preset(presetIndex).name, factor) : -1;
+        if (pick > 0) {
+            engine.applyNearPreset(pick);
+            const Preset& np = nearPreset(pick);
+            if (np.texture != nullptr && *np.texture != 0) { const std::string got = resolveLibraryFile(np.texture); if (!got.empty()) loadNearClips(engine, got); }
+            engine.setParam(ParamId::ForeRate, clampv(engine.getParam(ParamId::ForeRate) * factor, 10.0f, 900.0f));
+            std::printf("near auto: %s (Every x%.2f)\n", np.name, factor);
+        } else std::printf("near auto: none for this preset\n");
+    }
     engine.prepare(sr, block);
     if (!irChannels.empty()) {   // after prepare: the convolver's buffers exist now
         engine.setImpulse(irChannels[0].data(), irChannels.size() > 1 ? irChannels[1].data() : nullptr, static_cast<int>(irChannels[0].size()), irRate);
@@ -826,6 +941,19 @@ static int runOnce(int argc, char** argv)
             score.step(static_cast<double>(n) / sr,
                        [&](ParamId id) { return engine.getParam(id); },
                        [&](ParamId id, float v) { engine.setParam(id, v); });
+        if (haveJourney) {   // the next step, when its time has come: a cut here, a crossfade in the plugin
+            JourneyStep st; double fade = 0.0;
+            if (journeyPlayer.advance(static_cast<double>(n) / sr, st, fade)) {
+                int idx = -1;
+                for (int p = 0; p < numPresets(); ++p) if (st.preset == preset(p).name) { idx = p; break; }
+                if (idx >= 0) {
+                    engine.applyPreset(idx);
+                    loadPresetMedia(idx, true);
+                    std::printf("journey step %d at %s: %s (fade %s, %s)\n", journeyPlayer.step() + 1, Journey::timeText(static_cast<double>(done) / sr).c_str(),
+                                st.preset.c_str(), Journey::timeText(fade).c_str(), Journey::timeText(journeyPlayer.remaining()).c_str());
+                } else std::fprintf(stderr, "journey: preset not in the library, kept the last: %s\n", st.preset.c_str());
+            }
+        }
         engine.process(L.data(), R.data(), n);
         if (done >= total / 2) { voiceSum += engine.activeVoices(); ++voiceBlocks; }
         if (!stemPrefix.empty())

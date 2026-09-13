@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Tape Saturation: Night
+cyclic on
+Fuse Organ | 8:00-15:00 | 1:00-2:00
+Rupture Hymn | 8:00-15:00 | 1:00-2:00
+Fracture Expanse | 8:00-15:00 | 1:00-2:00
+Rupture Decay | 8:00-15:00 | 1:00-2:00
+Rupture Vigil | 8:00-15:00 | 1:00-2:00
+Pixel Signal | 8:00-15:00 | 1:00-2:00
+Burnt Field | 8:00-15:00 | 1:00-2:00
+Shatter Threshold | 8:00-15:00 | 1:00-2:00
+Smear Reach | 8:00-15:00 | 1:00-2:00
+Bleach Expanse | 8:00-15:00 | 1:00-2:00
+Pixel Wash | 8:00-15:00 | 1:00-2:00
+Smear Threshold | 8:00-15:00 | 1:00-2:00

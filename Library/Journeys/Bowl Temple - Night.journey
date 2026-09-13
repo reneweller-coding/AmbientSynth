@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Bowl Temple: Night
+cyclic on
+Rose Interval | 8:00-15:00 | 1:00-2:00
+Turquoise Passage | 8:00-15:00 | 1:00-2:00
+Rosewater Descent | 8:00-15:00 | 1:00-2:00
+Rose Descent | 8:00-15:00 | 1:00-2:00
+Rosewater Expanse | 8:00-15:00 | 1:00-2:00
+Saffron Field | 8:00-15:00 | 1:00-2:00
+Mandala Vigil | 8:00-15:00 | 1:00-2:00
+Pomegranate Bed | 8:00-15:00 | 1:00-2:00
+Caravan Basin | 8:00-15:00 | 1:00-2:00
+Cypress Interval | 8:00-15:00 | 1:00-2:00
+Rosewater Threshold | 8:00-15:00 | 1:00-2:00
+Dervish Circle | 8:00-15:00 | 1:00-2:00

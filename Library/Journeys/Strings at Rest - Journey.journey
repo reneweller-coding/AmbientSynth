@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Strings at Rest: Journey
+cyclic on
+Curtain Bloom | 5:00-10:00 | 0:30-1:30
+Rosin Movement | 5:00-10:00 | 0:30-1:30
+Bassoon Afternoon | 5:00-10:00 | 0:30-1:30
+Bassoon Passage | 5:00-10:00 | 0:30-1:30
+Largo Decrescendo | 5:00-10:00 | 0:30-1:30
+Dimmer Horns | 5:00-10:00 | 0:30-1:30
+Lament Movement | 5:00-10:00 | 0:30-1:30
+Evening Veil | 5:00-10:00 | 0:30-1:30
+Bassoon Hall | 5:00-10:00 | 0:30-1:30
+Cello Descent | 5:00-10:00 | 0:30-1:30
+Horn Passage | 5:00-10:00 | 0:30-1:30
+Horn Movement | 5:00-10:00 | 0:30-1:30

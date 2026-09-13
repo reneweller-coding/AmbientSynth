@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Gentle Systems: Journey
+cyclic on
+Lucid Expanse | 5:00-10:00 | 0:30-1:30
+Gentle System | 5:00-10:00 | 0:30-1:30
+Tidal Drift | 5:00-10:00 | 0:30-1:30
+Quiet Loop | 5:00-10:00 | 0:30-1:30
+Quiet Hour | 5:00-10:00 | 0:30-1:30
+Paper Expanse | 5:00-10:00 | 0:30-1:30
+Porcelain Bed | 5:00-10:00 | 0:30-1:30
+Evening Passage | 5:00-10:00 | 0:30-1:30
+Pale Bloom | 5:00-10:00 | 0:30-1:30
+Soft Hollow | 5:00-10:00 | 0:30-1:30
+Tidal Veil | 5:00-10:00 | 0:30-1:30
+Chalkline Veil | 5:00-10:00 | 0:30-1:30

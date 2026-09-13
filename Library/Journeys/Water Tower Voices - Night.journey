@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Water Tower Voices: Night
+cyclic on
+Throat Echo | 8:00-15:00 | 1:00-2:00
+Throat Span | 8:00-15:00 | 1:00-2:00
+Echoing Span | 8:00-15:00 | 1:00-2:00
+Reservoir Field | 8:00-15:00 | 1:00-2:00
+Undertone Tones | 8:00-15:00 | 1:00-2:00
+Reservoir Chorus | 8:00-15:00 | 1:00-2:00
+Standpipe Voices | 8:00-15:00 | 1:00-2:00
+Echoing Threshold | 8:00-15:00 | 1:00-2:00
+Standpipe Passage | 8:00-15:00 | 1:00-2:00
+Tower Tones | 8:00-15:00 | 1:00-2:00
+Choral Drift | 8:00-15:00 | 1:00-2:00
+Monk Descent | 8:00-15:00 | 1:00-2:00

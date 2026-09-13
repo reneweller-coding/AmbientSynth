@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Hybrid Melancholy: Night
+cyclic on
+Polyhedron Abstraction | 8:00-15:00 | 1:00-2:00
+Polyhedron Field | 8:00-15:00 | 1:00-2:00
+Tessera Signal | 8:00-15:00 | 1:00-2:00
+Chamfer Vigil | 8:00-15:00 | 1:00-2:00
+Wire Passage | 8:00-15:00 | 1:00-2:00
+Rhombus Abstraction | 8:00-15:00 | 1:00-2:00
+Contour Drift | 8:00-15:00 | 1:00-2:00
+Rhombus Expanse | 8:00-15:00 | 1:00-2:00
+Edge Hollow | 8:00-15:00 | 1:00-2:00
+Polyhedron Expanse | 8:00-15:00 | 1:00-2:00
+Facet Drift | 8:00-15:00 | 1:00-2:00
+Rhombus Form | 8:00-15:00 | 1:00-2:00

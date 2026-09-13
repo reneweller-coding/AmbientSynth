@@ -62,6 +62,8 @@ const char* const kBinauralNames[2] = { "Off", "Headphones" };
 const char* const kBrainModeNames[kNumBrainModes] = { "Free", "Chords" };
 const char* const kStrikeTypeNames[3] = { "String", "Wood", "Metal" };
 const char* const kStrikeWhoNames[2] = { "Keys", "Keys + Brain" };
+const char* const kNearKindNames[3] = { "Note", "Phrase", "Sequence" };
+const char* const kNearPitchNames[5] = { "Consonant", "Highest", "Lowest", "Root", "Cluster" };
 const char* const kStackNames[kNumStacks] = { "Detune", "Octaves", "Fifths", "Major", "Minor", "Seventh", "Harmonics", "Subharmonics" };
 // Strand ratios, ordered so that fewer strands still make sense (2 = root + fifth, 3 = a triad...).
 const double kStackRatios[kNumStacks][6] = {
@@ -582,14 +584,14 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::EarlyAbsorb,     "early_absorb",      "Absorb",   "Early Room", 0.f,  1.f,  0.35f, 1.f, ""),
     F(ParamId::EarlyWidth,      "early_width",       "Width",    "Early Room", 0.f,  1.5f, 1.f,  1.f, ""),
     // ---- Bow: the pair per slot
-    F(ParamId::Src1BowForce, "src1_bow_force", "Bow Force", "Source 1", 0.f, 1.f, 0.4f, 1.f, ""),
-    F(ParamId::Src1BowSpeed, "src1_bow_speed", "Bow Speed", "Source 1", 0.f, 1.f, 0.3f, 1.f, ""),
-    F(ParamId::Src2BowForce, "src2_bow_force", "Bow Force", "Source 2", 0.f, 1.f, 0.4f, 1.f, ""),
-    F(ParamId::Src2BowSpeed, "src2_bow_speed", "Bow Speed", "Source 2", 0.f, 1.f, 0.3f, 1.f, ""),
-    F(ParamId::Src3BowForce, "src3_bow_force", "Bow Force", "Source 3", 0.f, 1.f, 0.4f, 1.f, ""),
-    F(ParamId::Src3BowSpeed, "src3_bow_speed", "Bow Speed", "Source 3", 0.f, 1.f, 0.3f, 1.f, ""),
-    F(ParamId::Src4BowForce, "src4_bow_force", "Bow Force", "Source 4", 0.f, 1.f, 0.4f, 1.f, ""),
-    F(ParamId::Src4BowSpeed, "src4_bow_speed", "Bow Speed", "Source 4", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src1BowForce, "src1_bow_force", "Force", "Source 1", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src1BowSpeed, "src1_bow_speed", "Speed", "Source 1", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src2BowForce, "src2_bow_force", "Force", "Source 2", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src2BowSpeed, "src2_bow_speed", "Speed", "Source 2", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src3BowForce, "src3_bow_force", "Force", "Source 3", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src3BowSpeed, "src3_bow_speed", "Speed", "Source 3", 0.f, 1.f, 0.3f, 1.f, ""),
+    F(ParamId::Src4BowForce, "src4_bow_force", "Force", "Source 4", 0.f, 1.f, 0.4f, 1.f, ""),
+    F(ParamId::Src4BowSpeed, "src4_bow_speed", "Speed", "Source 4", 0.f, 1.f, 0.3f, 1.f, ""),
     F(ParamId::Src1SpecRate,   "src1_spec_rate",   "Rate",   "Source 1", 0.f, 4.f, 1.f, 0.6f, "x"),
     F(ParamId::Src1SpecBreath, "src1_spec_breath", "Breath", "Source 1", -1.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::Src2SpecRate,   "src2_spec_rate",   "Rate",   "Source 2", 0.f, 4.f, 1.f, 0.6f, "x"),
@@ -758,6 +760,67 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::LayerDepth,       "layer_depth",        "Layer Depth",  "Space", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::StrandLowDetune,  "strand_low_detune",  "Low Detune",   "Source 1", 0.f, 1.f, 0.f, 1.f, ""),
     F(ParamId::CloudToNear,      "cloud_to_near",      "To Near",      "Cloud", 0.f, 1.f, 0.f, 1.f, ""),
+    // The near plane (13.09.2026): a role per slot, and the Near Events section.
+    C(ParamId::Src1Role,         "src1_role",          "Role",         "Source 1", kSlotRoleNames, kNumSlotRoles, 0),
+    C(ParamId::Src2Role,         "src2_role",          "Role",         "Source 2", kSlotRoleNames, kNumSlotRoles, 0),
+    C(ParamId::Src3Role,         "src3_role",          "Role",         "Source 3", kSlotRoleNames, kNumSlotRoles, 0),
+    C(ParamId::Src4Role,         "src4_role",          "Role",         "Source 4", kSlotRoleNames, kNumSlotRoles, 0),
+    // The near source: a fifth slot, the same fields a source slot has where the near types read
+    // them, and its own envelope, filter and strike, so the layer owes the sound preset nothing.
+    C(ParamId::ForeType,         "fore_type",          "Type",         "Near Source", kSourceTypeNames, kNumSourceTypes, 10),
+    I(ParamId::ForeOctave,       "fore_octave",        "Octave",       "Near Source", -2.f,  2.f,   0.f),
+    C(ParamId::ForeRatio,        "fore_ratio",         "Ratio",        "Near Source", kSlotRatioNames, kNumSlotRatios, 0),
+    F(ParamId::ForePosition,     "fore_pos",           "Position",     "Near Source", 0.f,   1.f,   0.3f,  1.f,  ""),
+    F(ParamId::ForePosDrift,     "fore_pos_drift",     "Pos Drift",    "Near Source", 0.f,   1.f,   0.3f,  1.f,  ""),
+    F(ParamId::ForeDensity,      "fore_density",       "Density",      "Near Source", 0.05f, 200.f, 4.f,   0.4f, "/s"),
+    C(ParamId::ForeFollow,       "fore_follow",        "Pitch",        "Near Source", kFollowNames, 2, 1),
+    F(ParamId::ForeBright,       "fore_bright",        "Bright",       "Near Source", 0.f,   1.f,   0.6f,  1.f,  ""),
+    F(ParamId::ForeForce,        "fore_force",         "Force",        "Near Source", 0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::ForeSpeed,        "fore_speed",         "Speed",        "Near Source", 0.f,   1.f,   0.4f,  1.f,  ""),
+    C(ParamId::ForeNoise,        "fore_noise",         "Noise",        "Near Source", kNoiseKindNames, kNumNoiseKinds, 1),
+    F(ParamId::ForeNoiseQ,       "fore_noise_q",       "Noise Q",      "Near Source", 0.f,   1.f,   0.4f,  1.f,  ""),
+    F(ParamId::ForeFmRatio,      "fore_fm_ratio",      "FM Ratio",     "Near Source", 0.25f, 8.f,   2.f,   0.5f, ""),
+    F(ParamId::ForeFmIndex,      "fore_fm_index",      "FM Index",     "Near Source", 0.f,   8.f,   1.f,   0.6f, ""),
+    I(ParamId::ForePartials,     "fore_partials",      "Partials",     "Near Source", 1.f,   32.f,  12.f),
+    F(ParamId::ForeTilt,         "fore_tilt",          "Tilt",         "Near Source", 0.3f,  3.f,   1.2f,  1.f,  ""),
+    F(ParamId::ForeInharm,       "fore_inharmonic",    "Inharmonic",   "Near Source", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeDrift,        "fore_drift",         "Drift",        "Near Source", 0.f,   30.f,  0.f,   0.6f, "ct"),
+    C(ParamId::ForeTable,        "fore_table",         "Table",        "Near Source", kTableNames, kNumTables, 0),
+    F(ParamId::ForeAttack,       "fore_attack",        "Attack",       "Near Source", 0.001f, 10.f, 0.3f,  0.4f, "s"),   // down to a millisecond: a sonar ping is struck, not breathed
+    F(ParamId::ForeDecay,        "fore_decay",         "Decay",        "Near Source", 0.01f, 30.f,  1.f,   0.4f, "s"),
+    F(ParamId::ForeSustain,      "fore_sustain",       "Sustain",      "Near Source", 0.f,   1.f,   1.f,   1.f,  ""),
+    F(ParamId::ForeRelease,      "fore_release",       "Release",      "Near Source", 0.03f, 30.f,  2.f,   0.4f, "s"),
+    F(ParamId::ForeCutoff,       "fore_cutoff",        "Cutoff",       "Near Source", 40.f,  18000.f, 6000.f, 0.3f, "Hz"),
+    F(ParamId::ForeResonance,    "fore_resonance",     "Resonance",    "Near Source", 0.f,   1.f,   0.15f, 1.f,  ""),
+    C(ParamId::ForeFilterModel,  "fore_filter",        "Filter",       "Near Source", kFilterModelNames, kNumFilterModels, 1),
+    F(ParamId::ForeFilterEnv,    "fore_filter_env",    "Filter Env",   "Near Source", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeStrike,       "fore_strike",        "Strike",       "Near Source", 0.f,   1.f,   0.f,   1.f,  ""),
+    C(ParamId::ForeStrikeType,   "fore_strike_type",   "Strike Type",  "Near Source", kStrikeTypeNames, 3, 0),
+    F(ParamId::ForeStrikeDecay,  "fore_strike_decay",  "Strike Decay", "Near Source", 0.02f, 3.f,   0.4f,  0.5f, "s"),
+    F(ParamId::ForeStrikeDamp,   "fore_strike_damp",   "Strike Damp",  "Near Source", 0.f,   1.f,   0.5f,  1.f,  ""),
+    // The events: their clock, their pitch, their place, and the sequence.
+    F(ParamId::ForeLevel,        "fore_level",         "Level",        "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    C(ParamId::ForeKind,         "fore_kind",          "Kind",         "Near Events", kNearKindNames, 3, 0),
+    F(ParamId::ForeRate,         "fore_rate",          "Every",        "Near Events", 10.f,  900.f, 120.f, 0.4f, "s"),
+    F(ParamId::ForeChance,       "fore_chance",        "Chance",       "Near Events", 0.f,   1.f,   1.f,   1.f,  ""),
+    F(ParamId::ForeCluster,      "fore_cluster",       "Cluster",      "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeLength,       "fore_length",        "Length",       "Near Events", 0.5f,  600.f, 6.f,   0.35f, "s"),
+    C(ParamId::ForePitch,        "fore_pitch",         "Pitch",        "Near Events", kNearPitchNames, 5, 0),
+    F(ParamId::ForeSpread,       "fore_spread",        "Spread",       "Near Events", 0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::ForeApproach,     "fore_approach",      "Approach",     "Near Events", -1.f,  1.f,   0.f,   1.f,  ""),   // negative: the event leaves instead of arriving
+    F(ParamId::ForeProximity,    "fore_proximity",     "Proximity",    "Near Events", 0.f,   1.f,   0.6f,  1.f,  ""),
+    B(ParamId::ForeHold,         "fore_hold",          "Hold Brain",   "Near Events", true),
+    F(ParamId::ForeGlide,        "fore_glide",         "Glide",        "Near Events", 0.f,   30.f,  0.f,   0.5f, "s"),
+    I(ParamId::ForeSteps,        "fore_steps",         "Steps",        "Near Events", 3.f,   16.f,  7.f),
+    F(ParamId::ForeStep,         "fore_step",          "Step",         "Near Events", 0.1f,  4.f,   0.4f,  0.5f, "s"),
+    C(ParamId::ForeStepSync,     "fore_step_sync",     "Step Sync",    "Near Events", kSyncDivNames, kNumSyncDivs, 0),
+    F(ParamId::ForeMutation,     "fore_mutation",      "Mutation",     "Near Events", 0.f,   1.f,   0.12f, 1.f,  ""),
+    F(ParamId::ForeScatter,      "fore_scatter",       "Scatter",      "Near Events", 0.f,   1.f,   0.3f,  1.f,  ""),
+    F(ParamId::ForeBloom,        "fore_bloom",         "Bloom",        "Near Events", 0.f,   1.f,   0.5f,  1.f,  ""),
+    F(ParamId::ForeDistance,     "fore_distance",      "Distance",     "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    F(ParamId::ForeDry,          "fore_dry",           "Dry",          "Near Events", 0.f,   1.f,   0.f,   1.f,  ""),
+    B(ParamId::ForeAuto,         "fore_auto",          "Auto",         "Near Events", true),
+    F(ParamId::FarUnmaskReturn,  "far_unmask_return",  "Return",       "Far Reverb", 0.2f,  10.f,  1.2f,  0.5f, "s"),
 }};
 } // namespace
 
@@ -775,7 +838,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src1BowForce, ParamId::Src1BowSpeed,
       ParamId::Src1SpecRate, ParamId::Src1SpecBreath, ParamId::Src1Transport,
       ParamId::Src1Delay, ParamId::Src1Rise, ParamId::Src1Env, ParamId::Src1Interp,
-      ParamId::Src1Unison, ParamId::Src1UniDetune, ParamId::Src1UniWidth, ParamId::Src1Root },
+      ParamId::Src1Unison, ParamId::Src1UniDetune, ParamId::Src1UniWidth, ParamId::Src1Root, ParamId::Src1Role },
     { ParamId::Src2Type, ParamId::Src2Level, ParamId::Src2Octave, ParamId::Src2Ratio, ParamId::Src2Pan, ParamId::Src2Table,
       ParamId::Src2Position, ParamId::Src2PosDrift, ParamId::Src2FmRatio, ParamId::Src2FmIndex, ParamId::Src2Grain, ParamId::Src2Density,
       ParamId::Src2Follow, ParamId::Src2Grains, ParamId::Src2Spread, ParamId::Src2Noise, ParamId::Src2NoiseQ,
@@ -784,7 +847,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src2BowForce, ParamId::Src2BowSpeed,
       ParamId::Src2SpecRate, ParamId::Src2SpecBreath, ParamId::Src2Transport,
       ParamId::Src2Delay, ParamId::Src2Rise, ParamId::Src2Env, ParamId::Src2Interp,
-      ParamId::Src2Unison, ParamId::Src2UniDetune, ParamId::Src2UniWidth, ParamId::Src2Root },
+      ParamId::Src2Unison, ParamId::Src2UniDetune, ParamId::Src2UniWidth, ParamId::Src2Root, ParamId::Src2Role },
     { ParamId::Src3Type, ParamId::Src3Level, ParamId::Src3Octave, ParamId::Src3Ratio, ParamId::Src3Pan, ParamId::Src3Table,
       ParamId::Src3Position, ParamId::Src3PosDrift, ParamId::Src3FmRatio, ParamId::Src3FmIndex, ParamId::Src3Grain, ParamId::Src3Density,
       ParamId::Src3Follow, ParamId::Src3Grains, ParamId::Src3Spread, ParamId::Src3Noise, ParamId::Src3NoiseQ,
@@ -793,7 +856,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src3BowForce, ParamId::Src3BowSpeed,
       ParamId::Src3SpecRate, ParamId::Src3SpecBreath, ParamId::Src3Transport,
       ParamId::Src3Delay, ParamId::Src3Rise, ParamId::Src3Env, ParamId::Src3Interp,
-      ParamId::Src3Unison, ParamId::Src3UniDetune, ParamId::Src3UniWidth, ParamId::Src3Root },
+      ParamId::Src3Unison, ParamId::Src3UniDetune, ParamId::Src3UniWidth, ParamId::Src3Root, ParamId::Src3Role },
     { ParamId::Src4Type, ParamId::Src4Level, ParamId::Src4Octave, ParamId::Src4Ratio, ParamId::Src4Pan, ParamId::Src4Table,
       ParamId::Src4Position, ParamId::Src4PosDrift, ParamId::Src4FmRatio, ParamId::Src4FmIndex, ParamId::Src4Grain, ParamId::Src4Density,
       ParamId::Src4Follow, ParamId::Src4Grains, ParamId::Src4Spread, ParamId::Src4Noise, ParamId::Src4NoiseQ,
@@ -802,7 +865,7 @@ const ParamId kSlotIds[kSourceSlots][kSlotFields] = {
       ParamId::Src4BowForce, ParamId::Src4BowSpeed,
       ParamId::Src4SpecRate, ParamId::Src4SpecBreath, ParamId::Src4Transport,
       ParamId::Src4Delay, ParamId::Src4Rise, ParamId::Src4Env, ParamId::Src4Interp,
-      ParamId::Src4Unison, ParamId::Src4UniDetune, ParamId::Src4UniWidth, ParamId::Src4Root },
+      ParamId::Src4Unison, ParamId::Src4UniDetune, ParamId::Src4UniWidth, ParamId::Src4Root, ParamId::Src4Role },
 };
 
 struct SectionName { const char* name; ParamSection section; };
@@ -822,6 +885,7 @@ const SectionName kSections[] = {
     { "Tuning", ParamSection::Tuning }, { "Coherence", ParamSection::Coherence }, { "Clock", ParamSection::Clock },
     { "Morph", ParamSection::Morph }, { "Macros", ParamSection::Macros }, { "Map", ParamSection::Map },
     { "Route", ParamSection::Route }, { "Memory", ParamSection::Memory },
+    { "Near Source", ParamSection::NearSource }, { "Near Events", ParamSection::NearEvents },
 };
 } // namespace
 

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Hybrid Melancholy: Journey
+cyclic on
+Octahedron Veil | 5:00-10:00 | 0:30-1:30
+Silhouette Hollow | 5:00-10:00 | 0:30-1:30
+Hybrid Shade | 5:00-10:00 | 0:30-1:30
+Polyhedron Threshold | 5:00-10:00 | 0:30-1:30
+Shard Abstraction | 5:00-10:00 | 0:30-1:30
+Chamfer Signal | 5:00-10:00 | 0:30-1:30
+Rhombus Form | 5:00-10:00 | 0:30-1:30
+Hybrid Threshold | 5:00-10:00 | 0:30-1:30
+Shard Bloom | 5:00-10:00 | 0:30-1:30
+Prism Veil | 5:00-10:00 | 0:30-1:30
+Angle Threshold | 5:00-10:00 | 0:30-1:30
+Wire Span | 5:00-10:00 | 0:30-1:30

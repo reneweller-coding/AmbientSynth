@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Still Meadow: Night
+cyclic on
+Rookery Descent | 8:00-15:00 | 1:00-2:00
+Moss Weather | 8:00-15:00 | 1:00-2:00
+Bramble Descent | 8:00-15:00 | 1:00-2:00
+Dew Air | 8:00-15:00 | 1:00-2:00
+Nettle Passage | 8:00-15:00 | 1:00-2:00
+Wold Bed | 8:00-15:00 | 1:00-2:00
+Thistle Passage | 8:00-15:00 | 1:00-2:00
+Nettle Drift | 8:00-15:00 | 1:00-2:00
+Wold Threshold | 8:00-15:00 | 1:00-2:00
+Rookery Reach | 8:00-15:00 | 1:00-2:00
+Dusk Air | 8:00-15:00 | 1:00-2:00
+Hazel Signal | 8:00-15:00 | 1:00-2:00

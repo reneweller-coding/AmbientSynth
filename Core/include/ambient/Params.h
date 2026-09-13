@@ -281,8 +281,38 @@ enum class ParamId : int {
     // still happens, so no preset changes; above it the cloud can be brought forward, which is what
     // a listener expects of a send they have turned all the way up.
     CloudToNear,
+    // The near plane (13.09.2026). A role per slot -- which of the voice's notes it sounds in:
+    // all, the lowest, an inner one, the highest -- which belongs to the sound preset. And the
+    // near layer, which does not: a source of its own (Near Source: a fifth slot with its own
+    // type, envelope, filter and strike, rendered only by the events) and the Near Events section
+    // (what the instrument plays close to the ear, on a clock of its own). The layer is a bank
+    // like the Cosmos, kept across sound presets, so a night's foreground can be chosen once and
+    // the backgrounds changed under it. Level 0 is off, and every preset ever written has it there.
+    Src1Role, Src2Role, Src3Role, Src4Role,
+    ForeType, ForeOctave, ForeRatio, ForePosition, ForePosDrift, ForeDensity, ForeFollow, ForeBright,
+    ForeForce, ForeSpeed, ForeNoise, ForeNoiseQ, ForeFmRatio, ForeFmIndex, ForePartials, ForeTilt,
+    ForeInharm, ForeDrift, ForeTable, ForeAttack, ForeDecay, ForeSustain, ForeRelease,
+    ForeCutoff, ForeResonance, ForeFilterModel, ForeFilterEnv, ForeStrike, ForeStrikeType, ForeStrikeDecay, ForeStrikeDamp,
+    ForeLevel, ForeKind, ForeRate, ForeChance, ForeCluster, ForeLength,
+    ForePitch, ForeSpread, ForeApproach, ForeProximity, ForeHold, ForeGlide,
+    ForeSteps, ForeStep, ForeStepSync, ForeMutation, ForeScatter, ForeBloom,
+    // Where an event sits between the planes (0 at the ear, 1 on the horizon; Approach arrives
+    // from the horizon to it, or, negative, leaves from it), and how much of it goes straight to
+    // the output past every reverb and delay: a rattle twenty centimetres from the nose, a click
+    // that no room may soften.
+    ForeDistance, ForeDry,
+    // Whether a sound preset of a pack brings its own foreground (the artist's table, NearAuto.inc).
+    ForeAuto,
+    // How long the far reverb takes to come back after the foreground has ducked it. It came back
+    // in 1.2 seconds since the unmask was built, and that stays the default; a foreground that
+    // speaks and then lets the horizon return over five to ten seconds makes the return itself a
+    // gesture, which is what the near events want.
+    FarUnmaskReturn,
     Count
 };
+
+extern const char* const kNearKindNames[3];     // "Note", "Phrase", "Sequence"
+extern const char* const kNearPitchNames[5];    // "Consonant", "Highest", "Lowest", "Root", "Cluster"
 
 extern const char* const kRootStepNames[4];     // "Any", "Fifths", "Diatonic", "Falling"
 extern const char* const kShimmerModeNames[2];  // "Spectral" (phase-locked peak shifting), "Grain" (the two-head shifter)
@@ -320,7 +350,7 @@ const ParamDesc* findParam(const char* key);   // nullptr if unknown
 // that maps slot and field to an id used to be written out twice -- once in the engine, once in
 // the editor -- and every field added since had to be added to both. It lives here now.
 constexpr int kSourceSlots = 4;    // the self test checks this against kSlots in Sources.h
-constexpr int kSlotFields  = 41;
+constexpr int kSlotFields  = 42;   // ... the last of them the slot's role (13.09.2026)
 const ParamId* slotParamIds(int slot);   // kSlotFields entries, or nullptr for a slot that is not one
 
 // What section a parameter belongs to, as something the compiler can check. The section string in
@@ -332,7 +362,7 @@ enum class ParamSection : int {
     Master, Source1, Strands, Source2, Source3, Source4, Strike, Foundation, Air, Envelope, Filter, ZPlane,
     Expression, Space, Ensemble, Delay, Delay2, NearReverb, FarReverb, Blur, Feedback, Room, Body,
     Patina, Cosmos, Cloud, ClusterBrain, Brain2, Autoplay, Tuning, Coherence, Clock, Lfo, ModEnvelope, Morph,
-    Macros, Map, Route, Vector, Memory, Unknown
+    Macros, Map, Route, Vector, Memory, NearSource, NearEvents, Unknown
 };
 extern const char* const kMemLineNames[3];      // "2", "4", "8": how many lines the Memory's pool is divided into
 ParamSection sectionOf(const char* sectionName);

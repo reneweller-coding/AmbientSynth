@@ -351,7 +351,12 @@ void Unmask::reset()
     for (float& g : gain_) g = 1.0f;
 }
 
-void Unmask::set(float amount, float spread) { amount_ = clampv(amount, 0.0f, 1.0f); spread_ = clampv(spread, 0.0f, 1.0f); }
+void Unmask::set(float amount, float spread, float returnSeconds)
+{
+    amount_ = clampv(amount, 0.0f, 1.0f); spread_ = clampv(spread, 0.0f, 1.0f);
+    const float r = clampv(returnSeconds, 0.05f, 30.0f);
+    if (r != returnSec_) { returnSec_ = r; rCoef_ = 1.0f - std::exp(-1.0f / (r * static_cast<float>(sr_))); }
+}
 
 void Unmask::process(const float* nearL, const float* nearR, float* farL, float* farR, int n)
 {

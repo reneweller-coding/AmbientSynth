@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Gentle Systems: Night
+cyclic on
+Linen System | 8:00-15:00 | 1:00-2:00
+Lucid Bloom | 8:00-15:00 | 1:00-2:00
+Linen Room | 8:00-15:00 | 1:00-2:00
+Lantern Hollow | 8:00-15:00 | 1:00-2:00
+Porcelain Room | 8:00-15:00 | 1:00-2:00
+Paper Vigil | 8:00-15:00 | 1:00-2:00
+Paper Drift | 8:00-15:00 | 1:00-2:00
+Weather Hollow | 8:00-15:00 | 1:00-2:00
+Weather Tape | 8:00-15:00 | 1:00-2:00
+Warm Hollow | 8:00-15:00 | 1:00-2:00
+Paper Expanse | 8:00-15:00 | 1:00-2:00
+Weather Descent | 8:00-15:00 | 1:00-2:00

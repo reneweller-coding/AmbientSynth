@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Void Station: Night
+cyclic on
+Skyline Stars | 8:00-15:00 | 1:00-2:00
+Conduit Stars | 8:00-15:00 | 1:00-2:00
+Filament Basin | 8:00-15:00 | 1:00-2:00
+Megastructure Stars | 8:00-15:00 | 1:00-2:00
+Tower Basin | 8:00-15:00 | 1:00-2:00
+Arcology Basin | 8:00-15:00 | 1:00-2:00
+Neon Passage | 8:00-15:00 | 1:00-2:00
+Substation Veil | 8:00-15:00 | 1:00-2:00
+Pneumatic Level | 8:00-15:00 | 1:00-2:00
+Sodium Station | 8:00-15:00 | 1:00-2:00
+Plasma Span | 8:00-15:00 | 1:00-2:00
+Plasma Stars | 8:00-15:00 | 1:00-2:00

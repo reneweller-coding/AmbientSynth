@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Modular Nocturne: Journey
+cyclic on
+Attenuator Interval | 5:00-10:00 | 0:30-1:30
+Ramp Drift | 5:00-10:00 | 0:30-1:30
+Jack Nocturne | 5:00-10:00 | 0:30-1:30
+Phase Veil | 5:00-10:00 | 0:30-1:30
+Filter Pattern | 5:00-10:00 | 0:30-1:30
+Knob Span | 5:00-10:00 | 0:30-1:30
+Envelope Signal | 5:00-10:00 | 0:30-1:30
+Gate Night | 5:00-10:00 | 0:30-1:30
+Filter Circuit | 5:00-10:00 | 0:30-1:30
+Jack Passage | 5:00-10:00 | 0:30-1:30
+Slew Basin | 5:00-10:00 | 0:30-1:30
+Patch Vigil | 5:00-10:00 | 0:30-1:30

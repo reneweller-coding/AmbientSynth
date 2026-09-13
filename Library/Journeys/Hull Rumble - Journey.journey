@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Hull Rumble: Journey
+cyclic on
+Turbine Descent | 5:00-10:00 | 0:30-1:30
+Hatch Hollow | 5:00-10:00 | 0:30-1:30
+Beacon Bay | 5:00-10:00 | 0:30-1:30
+Keel Hollow | 5:00-10:00 | 0:30-1:30
+Ballast Reach | 5:00-10:00 | 0:30-1:30
+Stowage Rumble | 5:00-10:00 | 0:30-1:30
+Vent Rumble | 5:00-10:00 | 0:30-1:30
+Freighter Field | 5:00-10:00 | 0:30-1:30
+Hangar Passage | 5:00-10:00 | 0:30-1:30
+Airlock Crew | 5:00-10:00 | 0:30-1:30
+Stowage Hold | 5:00-10:00 | 0:30-1:30
+Deck Bay | 5:00-10:00 | 0:30-1:30

@@ -248,6 +248,13 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage "Packs") | Out-Null
 Copy-Item (Join-Path $root "Library\Packs\*.ambientpack") (Join-Path $stage "Packs")
 $packCount = (Get-ChildItem (Join-Path $stage "Packs") -Filter *.ambientpack).Count
 if ($packCount -lt 1) { throw "no preset packs staged" }
+# The journey templates (Library\Journeys\*.journey): presets in a row for an evening, beside the packs.
+$journeys = Join-Path $root "Library\Journeys"
+if (Test-Path $journeys) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $stage "Journeys") | Out-Null
+    Copy-Item (Join-Path $journeys "*.journey") (Join-Path $stage "Journeys")
+}
+$journeyCount = (Get-ChildItem (Join-Path $stage "Journeys") -Filter *.journey -ErrorAction SilentlyContinue).Count
 
 @"
 AmbientSynth $Version
@@ -265,6 +272,10 @@ WHAT IS HERE
   Packs\                  $packCount preset packs. Copy them to
                           C:\ProgramData\AmbientSynth\Packs (for everyone on the machine) or
                           Documents\AmbientSynth\Packs (just for you). The instrument reads both.
+  Journeys\               $journeyCount journeys: presets in a row, each held for a while and
+                          crossfaded into the next, for an evening that plays itself. Copy them
+                          beside the packs (..\AmbientSynth\Journeys); your own go to
+                          Documents\AmbientSynth\Journeys.
 
 The setup does all of that for you; this archive is for anyone who would rather it did not.
 

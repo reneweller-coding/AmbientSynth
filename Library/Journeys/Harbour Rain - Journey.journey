@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Harbour Rain: Journey
+cyclic on
+Pier Veil | 5:00-10:00 | 0:30-1:30
+Squall Hollow | 5:00-10:00 | 0:30-1:30
+Dockside Hollow | 5:00-10:00 | 0:30-1:30
+Ferry Field | 5:00-10:00 | 0:30-1:30
+Harbour Veil | 5:00-10:00 | 0:30-1:30
+Estuary Reach | 5:00-10:00 | 0:30-1:30
+Ferry Swell | 5:00-10:00 | 0:30-1:30
+Squall Signal | 5:00-10:00 | 0:30-1:30
+Downpour Rain | 5:00-10:00 | 0:30-1:30
+Breakwater Pulse | 5:00-10:00 | 0:30-1:30
+Tide Drift | 5:00-10:00 | 0:30-1:30
+Rainline Vigil | 5:00-10:00 | 0:30-1:30

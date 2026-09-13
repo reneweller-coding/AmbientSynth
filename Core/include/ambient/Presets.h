@@ -31,7 +31,7 @@ struct Preset {
 
 // A preset can be the whole instrument or one section of it. The section scopes are layers: a
 // bank that lands on top of whatever sound is loaded, resetting only its own section first.
-enum class PresetScope { Full, Sound, Cosmos, ZPlane, Strike };
+enum class PresetScope { Full, Sound, Cosmos, ZPlane, Strike, Near };
 
 // The preset list is the 168 built-in presets followed by every loaded pack, so everything that
 // walks presets by index (DAW programs, the map, routes, the browser) sees packs automatically.
@@ -65,9 +65,21 @@ int strikePresetCategory(int index);
 int numStrikePresetFamilies();
 const char* strikePresetFamily(int family);
 
+// The near layer (13.09.2026): the Near Source and Near Events sections together. Like the
+// Cosmos it is kept across sound presets -- a foreground chosen for the night stays while the
+// backgrounds change under it -- so a sound preset neither carries it nor clears it.
+int numNearPresets();
+const Preset& nearPreset(int index);
+int nearPresetCategory(int index);        // 255 for the Off entry
+int numNearPresetFamilies();
+const char* nearPresetFamily(int family);
+
 inline bool isCosmosParam(ParamId id) { return sectionOf(id) == ParamSection::Cosmos; }
 inline bool isZPlaneParam(ParamId id) { return sectionOf(id) == ParamSection::ZPlane; }
 inline bool isStrikeParam(ParamId id) { return sectionOf(id) == ParamSection::Strike; }
+// Auto is the one Near Events control that is not part of a near preset: it decides whether a
+// sound preset brings its own foreground, and a near preset chosen by hand must not switch it on.
+inline bool isNearParam(ParamId id)   { const ParamSection s = sectionOf(id); return (s == ParamSection::NearSource || s == ParamSection::NearEvents) && id != ParamId::ForeAuto; }
 inline bool isMorphParam(ParamId id)  { return sectionOf(id) == ParamSection::Morph; }
 inline bool isMacroParam(ParamId id)  { return sectionOf(id) == ParamSection::Macros; }
 inline bool isMapParam(ParamId id)    { return sectionOf(id) == ParamSection::Map; }
@@ -82,7 +94,8 @@ inline bool inScope(ParamId id, PresetScope scope)
         case PresetScope::Cosmos: return isCosmosParam(id);
         case PresetScope::ZPlane: return isZPlaneParam(id);
         case PresetScope::Strike: return isStrikeParam(id);
-        case PresetScope::Sound:  return !isCosmosParam(id);   // everything a sound preset owns
+        case PresetScope::Near:   return isNearParam(id);
+        case PresetScope::Sound:  return !isCosmosParam(id) && !isNearParam(id);   // everything a sound preset owns
         case PresetScope::Full:   break;
     }
     return true;
@@ -110,10 +123,29 @@ int  loadDefaultPresetPacks();
 void clearPresetPacks();
 int  numPresetPacks();
 const char* presetPackName(int pack);
+// The pack a preset came from, or -1 for a built-in.
+int  presetPack(int presetIndex);
+// The near layer's Auto (13.09.2026): the foreground a sound preset of a pack brings with it.
+// Rene's table per artist (Tools/library/near_by_artist.json, compiled to NearAuto.inc): a share
+// of the pack's presets get one at all, drawn by weight from the artist's list, and the near
+// preset's Every scaled by a factor of its class (often, now and then, seldom). Deterministic:
+// the draw is a hash of the preset's name, so a preset brings the same foreground every time.
+// Returns the near preset's index (0 = Near Off for the presets that get none), or -1 when the
+// pack has no table; `rateFactor` is what to multiply the near preset's Every by.
+int  nearAutoPick(const char* packName, const char* presetName, float& rateFactor);
+// The folders the library may lie in, in the order resolveLibraryFile searches them: for anything
+// that lists a library folder (the journeys under <root>/Journeys, say) rather than one file.
+int  libraryRoots(char* buf, int cap);   // ';'-separated into buf; returns how many
 // Absolute path of the file a pack preset names, or an empty string.
 // `which`: 0 texture, 1 wavetable, 2 impulse, 3 impulse B.
 constexpr int kPresetFiles = 4;
 const char* presetFilePath(int presetIndex, int which);
+// A file named relative to the library's root ("Archive/NASA/Historical/...flac"), as the
+// compiled-in banks name theirs: looked for under $AMBIENT_LIBRARY, beside every loaded pack
+// folder (the library is the folder the Packs folder is in), in the user's and the installer's
+// AmbientSynth folders, and last relative to the working directory (the source tree's Library).
+// Empty if nowhere. The .flac beside a named .wav counts, as everywhere else.
+std::string resolveLibraryFile(const char* relative);
 
 // Parse a value for `d` from text: numbers, "on"/"off", or a choice name.
 float paramValueFromText(const ParamDesc& d, const char* text);

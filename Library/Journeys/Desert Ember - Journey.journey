@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Desert Ember: Journey
+cyclic on
+Sunstone Circle | 5:00-10:00 | 0:30-1:30
+Redrock Bed | 5:00-10:00 | 0:30-1:30
+Spirit Plain | 5:00-10:00 | 0:30-1:30
+Spirit Walk | 5:00-10:00 | 0:30-1:30
+Redrock Drift | 5:00-10:00 | 0:30-1:30
+Desert Sky | 5:00-10:00 | 0:30-1:30
+Sunstone Veil | 5:00-10:00 | 0:30-1:30
+Desert Fire | 5:00-10:00 | 0:30-1:30
+Desert Vigil | 5:00-10:00 | 0:30-1:30
+Sage Fire | 5:00-10:00 | 0:30-1:30
+Saguaro Span | 5:00-10:00 | 0:30-1:30
+Coyote Field | 5:00-10:00 | 0:30-1:30

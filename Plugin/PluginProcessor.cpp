@@ -629,7 +629,7 @@ void AmbientSynthProcessor::applyScoped(const Preset& pr, PresetScope scope)
     }, scope);
     // The matrix rows and the envelope shapes are data, not parameters, so they do not travel
     // through the parameter tree: the engine takes them straight from the preset.
-    if (scope != PresetScope::Cosmos) target().applyPresetModulation(pr);
+    if (scope != PresetScope::Cosmos && scope != PresetScope::Near) target().applyPresetModulation(pr);
 }
 
 void AmbientSynthProcessor::setCurrentProgram(int index)
@@ -675,6 +675,26 @@ void AmbientSynthProcessor::applySoundPreset(int index)
     applyScoped(preset(index), PresetScope::Sound);
     loadPresetFiles(index);
     applyLevelMatch(index);
+    applyNearAuto(index);
+}
+
+// The foreground a pack preset brings, while Auto is on: the artist's table by the preset's
+// name (nearAutoPick), the near preset applied like one chosen by hand, and its Every scaled by
+// the class's factor. A built-in, or a pack without a table, leaves the foreground as it is.
+void AmbientSynthProcessor::applyNearAuto(int soundIndex)
+{
+    if (soundIndex < 0 || soundIndex >= numPresets()) return;
+    if (live().getParam(ParamId::ForeAuto) < 0.5f) return;
+    const int pack = presetPack(soundIndex);
+    if (pack < 0) return;
+    float factor = 1.0f;
+    const int pick = nearAutoPick(presetPackName(pack), preset(soundIndex).name, factor);
+    if (pick < 0) return;
+    applyNearPreset(pick);
+    if (pick > 0) {
+        const float rate = juce::jlimit(10.0f, 900.0f, target().getParam(ParamId::ForeRate) * factor);
+        setParam(ParamId::ForeRate, rate);
+    }
 }
 
 // The loudness of every preset was measured from a twelve-second render (Tools/preset_map.py
@@ -713,6 +733,72 @@ void AmbientSynthProcessor::applyStrikePreset(int index)
     if (index < 0 || index >= numStrikePresets()) return;
     strikeIndex_ = index;
     applyScoped(strikePreset(index), PresetScope::Strike);
+}
+
+void AmbientSynthProcessor::applyNearPreset(int index)
+{
+    if (index < 0 || index >= numNearPresets()) return;
+    nearIndex_ = index;
+    const Preset& pr = nearPreset(index);
+    nearName_ = pr.name;
+    applyScoped(pr, PresetScope::Near);
+    // The preset's clip, named relative to the library's root, or none: a preset that names no
+    // clip takes the one that was loaded away, so the flute preset after the radio preset does
+    // not find a voice in its slot.
+    if (pr.texture != nullptr && *pr.texture != 0) {
+        const std::string got = ambient::resolveLibraryFile(pr.texture);
+        const juce::File f(juce::String(juce::CharPointer_UTF8(got.c_str())));
+        // A folder is a pool of recordings, a file one clip; nothing found leaves no clip.
+        if (got.empty() || !(f.isDirectory() ? loadNearClipFolder(f) : loadNearClipFile(f))) clearNearClip();
+    } else clearNearClip();
+}
+
+bool AmbientSynthProcessor::loadNearClipFile(const juce::File& file)
+{
+    std::vector<float> l, r; double rate = 0.0;
+    if (!readStereo(file, l, r, rate)) return false;
+    const double base = baseHzFromName(file.getFileName().toRawUTF8());
+    target().setNearTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                           base > 0.0 ? base : 261.6256, ambient::loopFromName(file.getFileName().toRawUTF8()));
+    nearClipFile_ = file;
+    nearClipCount_ = 1;
+    return true;
+}
+
+bool AmbientSynthProcessor::loadNearClipFolder(const juce::File& dir)
+{
+    // A folder of recordings: up to kNearPoolMax of them, sorted by name so the same folder gives
+    // the same pool, each kept to twenty seconds -- these are phrases, not beds. Which of them an
+    // event plays is the engine's draw.
+    juce::Array<juce::File> all = dir.findChildFiles(juce::File::findFiles, false, "*.flac;*.wav;*.aif;*.aiff;*.ogg;*.mp3");
+    all.sort();
+    // More than the pool holds: every k-th of them rather than the first forty-eight, so a folder
+    // of twelve episodes' phrases is heard from all twelve and not from the first five.
+    juce::Array<juce::File> files;
+    if (all.size() <= kNearPoolMax) files = all;
+    else for (int i = 0; i < kNearPoolMax; ++i) files.add(all[static_cast<int>(std::lround(i * (all.size() - 1.0) / (kNearPoolMax - 1.0)))]);
+    std::vector<ambient::Texture> pool;
+    for (const juce::File& f : files) {
+        std::vector<float> l, r; double rate = 0.0;
+        if (!readStereo(f, l, r, rate)) continue;
+        const double base = baseHzFromName(f.getFileName().toRawUTF8());
+        ambient::Texture t = ambient::Engine::makeTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                                                          base > 0.0 ? base : 261.6256, ambient::loopFromName(f.getFileName().toRawUTF8()), 20.0);
+        if (!t.empty()) pool.push_back(std::move(t));
+    }
+    if (pool.empty()) return false;
+    const int n = static_cast<int>(pool.size());
+    target().setNearTextures(std::move(pool));
+    nearClipFile_ = dir;
+    nearClipCount_ = n;
+    return true;
+}
+
+void AmbientSynthProcessor::clearNearClip()
+{
+    target().clearNearTexture();
+    nearClipFile_ = juce::File();
+    nearClipCount_ = 0;
 }
 
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()
@@ -943,6 +1029,108 @@ void AmbientSynthProcessor::selectPreset(int index, bool viaMorph)
     servePendingPreset();
 }
 
+// ---------------------------------------------------------------- journeys
+
+bool AmbientSynthProcessor::startJourney(const juce::File& file)
+{
+    ambient::Journey j;
+    if (!j.load(file.getFullPathName().toRawUTF8()) || j.steps.empty()) return false;
+    if (j.name.empty()) j.name = file.getFileNameWithoutExtension().toStdString();
+    return startJourney(j);
+}
+
+bool AmbientSynthProcessor::startJourney(const ambient::Journey& j)
+{
+    if (j.steps.empty()) return false;
+    journey_ = j;
+    // Seeded from the clock: the same journey runs differently every evening. A render that
+    // wants it repeatable seeds the player itself (ambient_render --journey-seed).
+    journeyPlayer_.start(journey_, static_cast<uint64_t>(juce::Time::currentTimeMillis()) | 1ull, 0);
+    journeyLastTick_ = 0.0;
+    journeyTick();   // the first step begins now
+    return true;
+}
+
+void AmbientSynthProcessor::stopJourney() { journeyPlayer_.stop(); }
+
+juce::String AmbientSynthProcessor::journeyStatus() const
+{
+    if (!journeyPlayer_.running()) return {};
+    const int n = static_cast<int>(journey_.steps.size());
+    return juce::String(journey_.name) + "  " + juce::String(journeyPlayer_.step() + 1) + "/" + juce::String(n)
+         + "  " + juce::String(ambient::Journey::timeText(std::max(0.0, journeyPlayer_.remaining())));
+}
+
+void AmbientSynthProcessor::journeyAddCurrent(double dwellLo, double dwellHi, double fadeLo, double fadeHi)
+{
+    if (soundIndex_ < 0 || soundIndex_ >= numPresets()) return;
+    ambient::JourneyStep st;
+    st.preset = preset(soundIndex_).name;
+    st.dwellLo = dwellLo; st.dwellHi = dwellHi; st.fadeLo = fadeLo; st.fadeHi = fadeHi;
+    journey_.steps.push_back(st);
+}
+
+bool AmbientSynthProcessor::saveJourney(const juce::File& file)
+{
+    if (journey_.steps.empty()) return false;
+    if (journey_.name.empty()) journey_.name = file.getFileNameWithoutExtension().toStdString();
+    file.getParentDirectory().createDirectory();
+    return journey_.save(file.getFullPathName().toRawUTF8());
+}
+
+juce::File AmbientSynthProcessor::userJourneyFolder()
+{
+    const juce::File dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("AmbientSynth").getChildFile("Journeys");
+    dir.createDirectory();
+    return dir;
+}
+
+// The user's own first, then the templates wherever the library lies (the installer's folders,
+// the source tree's Library): every *.journey, each folder once, sorted by name.
+juce::Array<juce::File> AmbientSynthProcessor::journeyFiles()
+{
+    juce::Array<juce::File> out;
+    juce::StringArray seen;
+    auto add = [&](const juce::File& dir) {
+        if (!dir.isDirectory() || seen.contains(dir.getFullPathName())) return;
+        seen.add(dir.getFullPathName());
+        juce::Array<juce::File> files = dir.findChildFiles(juce::File::findFiles, false, "*.journey");
+        files.sort();
+        out.addArray(files);
+    };
+    add(userJourneyFolder());
+    char roots[4096] = {};
+    libraryRoots(roots, static_cast<int>(sizeof(roots)));
+    for (const juce::String& r : juce::StringArray::fromTokens(juce::String(juce::CharPointer_UTF8(roots)), ";", ""))
+        if (r.isNotEmpty()) add(juce::File::isAbsolutePath(r) ? juce::File(r).getChildFile("Journeys") : juce::File::getCurrentWorkingDirectory().getChildFile(r).getChildFile("Journeys"));
+    return out;
+}
+
+// The pump's tick: the seconds since the last, and the step the player hands over when one
+// begins -- the preset by name, brought up over the drawn fade, and the foreground it asks for.
+void AmbientSynthProcessor::journeyTick()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    if (journeyLastTick_ <= 0.0) journeyLastTick_ = now;
+    const double dt = juce::jlimit(0.0, 5.0, now - journeyLastTick_);
+    journeyLastTick_ = now;
+    if (!journeyPlayer_.running()) return;
+    ambient::JourneyStep st;
+    double fade = 30.0;
+    if (!journeyPlayer_.advance(dt, st, fade)) return;
+    int index = -1;
+    for (int i = 0; i < numPresets(); ++i) if (st.preset == preset(i).name) { index = i; break; }
+    if (index < 0) return;   // a name the library no longer has: nothing changes until the next step
+    // near=keep pins what is playing (Auto off) before the sound preset could bring its own;
+    // a name pins that one; nothing, or auto, leaves it to the sound preset's Auto.
+    if (st.nearPreset == "keep") setNearAuto(false);
+    setMorphSelectSeconds(static_cast<float>(fade));
+    selectPreset(index, true);
+    if (!st.nearPreset.empty() && st.nearPreset != "auto" && st.nearPreset != "keep")
+        for (int i = 0; i < numNearPresets(); ++i)
+            if (st.nearPreset == nearPreset(i).name) { setNearAuto(false); applyNearPreset(i); break; }
+}
+
 // Message thread: the engine at `i`, built and prepared if it is not there. Allocating a hundred
 // megabytes and generating a room impulse is fine here and nowhere near the audio thread.
 ambient::Engine& AmbientSynthProcessor::ensureEngine(int i)
@@ -977,6 +1165,8 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
         if (const ambient::Texture* t = from.displayTexture(k))
             if (!t->empty())
                 e.setTexture(k, *t);
+    if (const std::vector<ambient::Texture>* pool = from.displayNearPool())   // the near layer's clips survive the change too
+        e.setNearTextures(*pool);
     // The impulse responses are the one thing the engine cannot hand over -- it keeps them as
     // spectra, not as samples -- so a room the player opened is read from its file again. A
     // generated room needs nothing: a new engine makes its own.
@@ -1062,6 +1252,10 @@ void AmbientSynthProcessor::beginTransition(int index)
             if (n > 0) in.adoptCluster(notes, vels, n, second);
             else if (!second) in.requestBrainFill();
         }
+        // The foreground carries on too: a sequence that was running keeps its ring and its
+        // place in it, a gap that was half over stays half over. What it does not carry is the
+        // note that was sounding -- that voice belongs to the engine that is leaving.
+        in.adoptNear(live().nearState());
     }
     // The chord that is being held is held on the new instrument too. Without this a player
     // holding a chord through a preset change heard it die with the old preset and nothing take
@@ -1158,6 +1352,7 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
     // The names of the two loaded presets, so the boxes still say what is loaded after a restart.
     if (soundName_.isNotEmpty())  state.setProperty("soundPreset", soundName_, nullptr);
     if (cosmosName_.isNotEmpty()) state.setProperty("cosmosPreset", cosmosName_, nullptr);
+    if (nearName_.isNotEmpty())   state.setProperty("nearPreset", nearName_, nullptr);
     if (compact_) state.setProperty("compact", 1, nullptr);          // how the editor is laid out
     if (layoutMode_ != 0) state.setProperty("layout", layoutMode_, nullptr);
     if (levelMatch_) state.setProperty("levelMatch", 1, nullptr);
@@ -1234,6 +1429,10 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
                 cosmosIndex_ = -1;
                 for (int i = 0; i < numCosmosPresets(); ++i) if (cosmosName_ == cosmosPreset(i).name) { cosmosIndex_ = i; break; }
             }
+            nearName_ = tree.getProperty("nearPreset").toString();
+            nearIndex_ = -1;
+            if (nearName_.isNotEmpty())
+                for (int i = 0; i < numNearPresets(); ++i) if (nearName_ == nearPreset(i).name) { nearIndex_ = i; break; }
             compact_ = static_cast<int>(tree.getProperty("compact", 0)) != 0;
             layoutMode_ = static_cast<int>(tree.getProperty("layout", compact_ ? 1 : 0));
             compact_ = layoutMode_ == 1;

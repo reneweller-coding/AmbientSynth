@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Millstone: Night
+cyclic on
+Sparkler Ring | 8:00-15:00 | 1:00-2:00
+Brass Hollow | 8:00-15:00 | 1:00-2:00
+Sheepbell Descent | 8:00-15:00 | 1:00-2:00
+Glasspane Drop | 8:00-15:00 | 1:00-2:00
+Bellwether Descent | 8:00-15:00 | 1:00-2:00
+Pebble Vigil | 8:00-15:00 | 1:00-2:00
+Copper Drift | 8:00-15:00 | 1:00-2:00
+Tin Threshold | 8:00-15:00 | 1:00-2:00
+Millstone Grain | 8:00-15:00 | 1:00-2:00
+Copper Descent | 8:00-15:00 | 1:00-2:00
+Thimble Reach | 8:00-15:00 | 1:00-2:00
+Icecube Bloom | 8:00-15:00 | 1:00-2:00

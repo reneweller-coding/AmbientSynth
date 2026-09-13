@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Water Tower Voices: Journey
+cyclic on
+Overtone Expanse | 5:00-10:00 | 0:30-1:30
+Dome Span | 5:00-10:00 | 0:30-1:30
+Reservoir Threshold | 5:00-10:00 | 0:30-1:30
+Undertone Descent | 5:00-10:00 | 0:30-1:30
+Choral Passage | 5:00-10:00 | 0:30-1:30
+Sutra Well | 5:00-10:00 | 0:30-1:30
+Choral Well | 5:00-10:00 | 0:30-1:30
+Reservoir Sound | 5:00-10:00 | 0:30-1:30
+Choral Drift | 5:00-10:00 | 0:30-1:30
+Monk Descent | 5:00-10:00 | 0:30-1:30
+Throat Threshold | 5:00-10:00 | 0:30-1:30
+Tower Chant | 5:00-10:00 | 0:30-1:30

@@ -262,6 +262,8 @@ void Engine::renderChunk(float* L, float* R, int n)
     const size_t bytes = sizeof(float) * static_cast<size_t>(n);
     std::memset(nl, 0, bytes); std::memset(nr, 0, bytes);
     std::memset(fl, 0, bytes); std::memset(fr, 0, bytes);
+    float* dl = dryL_.data(); float* dr = dryR_.data();
+    std::memset(dl, 0, bytes); std::memset(dr, 0, bytes);
 
     int anchor = -1;
     for (int i = 0; i < 128; ++i) if (midiHeld_[i]) { anchor = i; break; }
@@ -337,24 +339,52 @@ void Engine::renderChunk(float* L, float* R, int n)
             // so the conductor lands on the grid instead of wherever the dice fell. All of the
             // waiting time is handed over at the tick, so the mean rate is unchanged.
             const double dt = len / sr_;
+            // The foreground's asks are set inside stepNear: while a near Note or a Phrase speaks
+            // the conductor begins no new note (its holds and releases run on), and under a
+            // sequence it keeps its root and takes twice as long between events.
+            const BrainParams* bpNow = &bp_;
+            BrainParams bpSlow;
+            if (near_.sequenceRunning()) { bpSlow = bp_; bpSlow.rateSeconds *= 2.0f; bpNow = &bpSlow; }
             if (syncOn(brainQuant_) && running_) {
                 quantAcc_ += dt;
                 const double b = syncBeats(brainQuant_);
                 const double now = std::floor(beat_ / b), before = std::floor(lastBeat_ / b);
                 lastBeat_ = beat_;
-                if (now != before) { brain_.update(quantAcc_, bp_, anchor, freqOf, emit); quantAcc_ = 0.0; }
+                if (now != before) { brain_.update(quantAcc_, *bpNow, anchor, freqOf, emit); quantAcc_ = 0.0; }
             } else {
                 quantAcc_ = 0.0; lastBeat_ = beat_;
-                brain_.update(dt, bp_, anchor, freqOf, emit);
+                brain_.update(dt, *bpNow, anchor, freqOf, emit);
             }
             if (brain2On_) {
                 brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
                 brain2_.update(dt, bp2_, -1, freqOf, emit2);
             }
+            stepNear(dt, [this](const NearNote& e) { nearEmit(e); });
         }
         const float* fm = (fbOn && fbFm_ > 0.0f) ? fbm + p : nullptr;
         const float* couple = sympathy_ > 0.0f ? coupleBuf_.data() + p : nullptr;
-        for (auto& v : voices_) if (v.isActive() || v.isStriking()) { anyVoice = true; v.render(nl + p, nr + p, fl + p, fr + p, len, vp_, fm, couple); }
+        const float dry = clampv(np_.dry, 0.0f, 1.0f);
+        for (auto& v : voices_) {
+            if (!(v.isActive() || v.isStriking())) continue;
+            anyVoice = true;
+            if (v.owner() == OwnerNear && dry > 0.0f) {
+                // The near layer's Dry share: the voice is rendered apart, and that share of both
+                // its planes goes to the dry bus -- added to the output after every reverb and
+                // delay -- while the rest takes the usual way through the planes.
+                float tnl[kControlBlock], tnr[kControlBlock], tfl[kControlBlock], tfr[kControlBlock];
+                std::memset(tnl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tnr, 0, sizeof(float) * static_cast<size_t>(len));
+                std::memset(tfl, 0, sizeof(float) * static_cast<size_t>(len)); std::memset(tfr, 0, sizeof(float) * static_cast<size_t>(len));
+                v.render(tnl, tnr, tfl, tfr, len, vpNear_, fm, couple);
+                const float wet = 1.0f - dry;
+                for (int i = 0; i < len; ++i) {
+                    nl[p + i] += tnl[i] * wet; nr[p + i] += tnr[i] * wet;
+                    fl[p + i] += tfl[i] * wet; fr[p + i] += tfr[i] * wet;
+                    dl[p + i] += (tnl[i] + tfl[i]) * dry; dr[p + i] += (tnr[i] + tfr[i]) * dry;
+                }
+            } else {
+                v.render(nl + p, nr + p, fl + p, fr + p, len, v.owner() == OwnerNear ? vpNear_ : vp_, fm, couple);
+            }
+        }
     }
     if (asleep_ && !anyVoice) {   // sleeping: the whole effect chain is skipped, output stays silent
         std::memset(L, 0, bytes); std::memset(R, 0, bytes);
@@ -624,16 +654,18 @@ void Engine::renderChunk(float* L, float* R, int n)
             const float mid = 0.5f * (bgL + bgR), side = 0.5f * (bgL - bgR) * fw;
             bgL = mid + side; bgR = mid - side;
         }
-        L[i] = nl[i] + bgL * far;
-        R[i] = nr[i] + bgR * far;
+        // The near layer's dry share joins here, past everything: it is the foreground's, so it
+        // counts on the near stem.
+        L[i] = nl[i] + bgL * far + dl[i];
+        R[i] = nr[i] + bgR * far + dr[i];
         if (stems_ != nullptr) {
             // The Cosmos return was added into the near bus above, so it has to come out of the
             // near stem or it would be counted twice and the four would no longer sum to the mix.
             // What the Cosmos sent into the far plane cannot be separated here at all -- the
             // reverb has already mixed it with everything else -- and belongs to the far stem,
             // which is where it is heard.
-            stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i];
-            stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i];
+            stems_[0][stemPos_ + i] = nl[i] - stems_[4][stemPos_ + i] + dl[i];
+            stems_[1][stemPos_ + i] = nr[i] - stems_[5][stemPos_ + i] + dr[i];
             stems_[2][stemPos_ + i] = bgL * far;   // the far stem as it is heard: width included
             stems_[3][stemPos_ + i] = bgR * far;
         }
@@ -763,8 +795,8 @@ void Engine::renderChunk(float* L, float* R, int n)
             // seconds in most of the library, so the bass slides to the new chord over a breath
             // instead of stepping to it.
             double lowest = 0.0;
-            for (const auto& v : voices_)
-                if (v.isActive() && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
+            for (const auto& v : voices_)   // the near events are the foreground, not the chord the sub stands under
+                if (v.isActive() && v.owner() != OwnerNear && (lowest <= 0.0 || v.frequency() < lowest)) lowest = v.frequency();
             if (lowest > 0.0) {
                 // Folded back into the register the root mode would have used, which is what keeps
                 // it a foundation. An octave under the lowest voice and nothing else, a chord up
@@ -914,11 +946,22 @@ void Engine::auditConductor(double seconds, double dt,
     if (rootSink) rootSink(0.0, lastRoot);
     const long steps = static_cast<long>(seconds / dt);
     for (long i = 0; i < steps; ++i) {
-        brain_.update(dt, bp_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 1, e); });
-        if (brain2On_) {
-            brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
-            brain2_.update(dt, bp2_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 2, e); });
+        {
+            const BrainParams* bpNow = &bp_;
+            BrainParams bpSlow;
+            if (near_.sequenceRunning()) { bpSlow = bp_; bpSlow.rateSeconds *= 2.0f; bpNow = &bpSlow; }
+            brain_.update(dt, *bpNow, -1, freqOf, [&](const BrainEvent& e) { sink(t, 1, e); });
+            if (brain2On_) {
+                brain2_.setRoot(clampv(brain_.root() + brain2Interval_, 0, 127));
+                brain2_.update(dt, bp2_, -1, freqOf, [&](const BrainEvent& e) { sink(t, 2, e); });
+            }
         }
+        // The near events as a third conductor: its notes on and off, as the render would play
+        // them (a glide is reported as the new note beginning, a move not at all).
+        stepNear(dt, [&](const NearNote& e) {
+            if (e.type == NearNote::Type::Move) return;
+            sink(t, 3, BrainEvent{ e.type == NearNote::Type::Off ? BrainEvent::Type::NoteOff : BrainEvent::Type::NoteOn, e.note, e.velocity });
+        });
         if (brain_.root() != lastRoot) { lastRoot = brain_.root(); if (rootSink) rootSink(t, lastRoot); }
         t += dt;
     }

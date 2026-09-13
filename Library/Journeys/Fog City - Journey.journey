@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Fog City: Journey
+cyclic on
+Container Descent | 5:00-10:00 | 0:30-1:30
+Refinery Signal | 5:00-10:00 | 0:30-1:30
+Container Waterfront | 5:00-10:00 | 0:30-1:30
+Tugboat City | 5:00-10:00 | 0:30-1:30
+Wharfside Bloom | 5:00-10:00 | 0:30-1:30
+Overcast Veil | 5:00-10:00 | 0:30-1:30
+Grey Haze | 5:00-10:00 | 0:30-1:30
+Overcast Signal | 5:00-10:00 | 0:30-1:30
+Breakwater City | 5:00-10:00 | 0:30-1:30
+Drainage Horn | 5:00-10:00 | 0:30-1:30
+Seawall Channel | 5:00-10:00 | 0:30-1:30
+Smokestack Span | 5:00-10:00 | 0:30-1:30

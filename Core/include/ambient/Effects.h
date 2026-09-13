@@ -153,7 +153,9 @@ public:
     // asymmetric -- a low tone masks the frequencies above it far more than those below
     // (Zwicker and Fastl 1999, the upward spread of masking) -- and at 0 the three bands
     // are independent, as they always were.
-    void set(float amount, float spread = 0.0f);   // 0 = off (and then not computed at all)
+    // returnSeconds: how long the far bus takes to come back after a duck (the duck itself is
+    // 50 ms). 1.2 s is what it always was; longer, and the horizon's return is a gesture.
+    void set(float amount, float spread = 0.0f, float returnSeconds = 1.2f);   // 0 = off (and then not computed at all)
     // Ducks far[] where near[] has energy, in place.
     void process(const float* nearL, const float* nearR, float* farL, float* farR, int n);
     void reset();
@@ -164,7 +166,7 @@ private:
     float  gain_[3] = { 1.0f, 1.0f, 1.0f };           // what the far bus is multiplied by, smoothed
     float  aCoef_ = 0.01f, rCoef_ = 0.0005f;
     float  c1_ = 0.02f, c2_ = 0.2f;                   // crossover coefficients (300 Hz, 2.5 kHz)
-    float  amount_ = 0.0f, spread_ = 0.0f;
+    float  amount_ = 0.0f, spread_ = 0.0f, returnSec_ = 1.2f;
     double sr_ = 48000.0;
 };
 

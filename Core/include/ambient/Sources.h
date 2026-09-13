@@ -56,9 +56,26 @@ constexpr int kSlotGrains    = 128;  // ceiling; Grains sets how many a slot may
 // is still the spectral table, which a saved session stores by number, and it is called Harmonic
 // now. Packs name the types in words, and a pack written before this reads "Wavetable" as
 // Harmonic (PresetPacks.cpp).
-enum class SourceType : int { Off = 0, Harmonic, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral, Wavetable };
+// The near sources (13.09.2026) are appended for the same reason: Flute (a blown pipe), Murmur (a
+// voice that never says anything), Bowl and Ice (friction on a set of modes: a singing bowl, and
+// ice or old wood creaking), Drops (water falling into a vessel).
+// The signals (13.09.2026, the second foreground round) after them: a whistler falling through the
+// magnetosphere, a seed pod shaken, bronze struck, a Geiger tube, a fluorescent tube, the Krell's
+// circuits, a beacon's packet, a number station's Morse, a shortwave dial turned.
+enum class SourceType : int { Off = 0, Harmonic, Fm, Texture, Noise, Additive, Stretch, Bow, Spectral, Wavetable,
+                              Flute, Murmur, Bowl, Ice, Drops, Clip,
+                              Whistler, Shaker, Chime, Geiger, Tube, Krell, Beacon, Morse, Dial };
 
-constexpr int kNumSourceTypes = 10;
+constexpr int kNumSourceTypes = 25;
+// Which of a voice's notes a slot sounds in (SlotParams::role). All is every note, as it always
+// was. Lowest, Inner and Highest are the note's place in what its owner is sounding right now --
+// the register IS the role in this music (Rene's table), and a slot that is the cello under the
+// chord should not also be the chime on top of it. The place is re-read as the cluster changes
+// and the slot fades over a second or two, so a note that was the top and is no longer hands
+// the chime on rather than keeping it.
+enum class SlotRole : int { All = 0, Lowest, Inner, Highest, Count };
+constexpr int kNumSlotRoles = static_cast<int>(SlotRole::Count);
+extern const char* const kSlotRoleNames[kNumSlotRoles];
 // The longest spectral window the Stretch type analyses: 16384 samples, a third of a second at
 // 48 kHz. Paulstretch's own default is a quarter of a second, which is where the smooth results
 // start; longer windows are smoother still but cost memory in every slot of every voice.
@@ -75,7 +92,7 @@ extern const char* const kFollowNames[2];
 // Noise is a source in its own right, not just the Air band: an ambient instrument spends half
 // its life in it. Ten colours, from the textbook slopes to the ones that are really textures.
 enum class NoiseKind : int {
-    White = 0, Pink, Brown, Blue, Violet, Grey, Band, Wind, Crackle, Digital, Count
+    White = 0, Pink, Brown, Blue, Violet, Grey, Band, Wind, Crackle, Digital, Cicada, Count
 };
 constexpr int kNumNoiseKinds = static_cast<int>(NoiseKind::Count);
 extern const char* const kNoiseKindNames[kNumNoiseKinds];
@@ -212,6 +229,7 @@ struct SlotParams {
     float riseSec = 1.0f;
     int   envIndex = -1;         // -1 = none, else 0..kNumModEnvs-1
     bool  ownEnv = false;        // the slot's own shape (VoiceParams::srcEnvShape), read as a level 0..1
+    SlotRole role = SlotRole::All;   // which notes this slot sounds in (see SlotRole)
 };
 
 class SourceSlot {
@@ -238,6 +256,8 @@ public:
     // slow wander, which is what the ear hears moving and what no display could show as long as
     // it only knew the knob. -1 until this slot has rendered a table.
     float displayPosition() const { return dispPos_; }
+    // The rubbed bodies' modes (SourcesNear.cpp): six, as ratios to the lowest.
+    static constexpr int kRubModes = 6;
 
 private:
     void renderWavetable(float* out, int n, double hz, const SlotParams& p, const Wavetable* table, float dt, float* outR = nullptr);
@@ -254,6 +274,25 @@ private:
     void renderNoise(float* outL, int n, double hz, const SlotParams& p, float dt);
     void renderStretch(float* out, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderBow(float* out, int n, double hz, const SlotParams& p, float dt);
+    // The near sources (SourcesNear.cpp), all mono into `out`; their place in the field is the
+    // slot's Pan like every other mono type.
+    void renderFlute(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderRub(float* out, int n, double hz, const SlotParams& p, float dt, bool ice);
+    void renderMurmur(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderDrops(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderWhistler(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderShaker(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderChime(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderGeiger(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderTube(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderKrell(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderBeacon(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderMorse(float* out, int n, double hz, const SlotParams& p, float dt);
+    void renderDial(float* out, int n, double hz, const SlotParams& p, float dt);
+    // Clip: the slot's recording played straight through, once, from Position -- a voice on a
+    // radio, a launch, a recording of Mars -- at its own speed (Pitch = Free) or pitched to the
+    // note. Writes left into outL and right into scratch_, as the granular Texture does.
+    void renderClip(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderSpectral(float* out, int n, double transpose, const SlotParams& p, const Texture* tex, float dt);
     void stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N);
     static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
@@ -311,6 +350,11 @@ public:
         double holdLeft = 0.0;
         double nextGrain = 0.0;      // crackle
         float crackle = 0.0f, crackleDecay = 0.0f;
+        // Cicada: two insects per ear, each either in a burst of pulses or in the pause between
+        // bursts, with a slow breathing of its own; the pulses ring in the band pass above.
+        double burstLeft[2] = {}, pauseLeft[2] = {}, pulseLeft[2] = {};
+        float  breathe[2] = { 1.0f, 1.0f }, breatheTo[2] = { 1.0f, 1.0f };
+        float  pulseRate[2] = { 80.0f, 95.0f };
     };
 private:
     NoiseState noise_[2];
@@ -324,6 +368,53 @@ private:
     int   bowW_ = 0;
     float bowLp_ = 0.0f;
     bool  bowReady_ = false;
+    // Flute: the same two lines read as the pipe's bore and the air jet's travel (a slot is one
+    // type at a time, so the string's memory is the pipe's), the reflection filter's state, the
+    // breath rising at the start, the jet's noise, a DC blocker and the vibrato clock.
+    bool   fluteReady_ = false;
+    float  fluteRefl_ = 0.0f, fluteBreath_ = 0.0f, fluteHpX_ = 0.0f, fluteHpY_ = 0.0f, fluteJetLp_ = 0.0f;
+    float  fluteNoiseBp1_ = 0.0f, fluteNoiseBp2_ = 0.0f;
+    double flutePhase_ = 0.0, fluteVibHz_ = 5.0;
+    // Bowl and Ice: six modes, each a pair of resonators a hair apart (the doublet every real
+    // bowl has, which is where its beating comes from), and the ice's slip clock.
+    float  rubY1_[kRubModes][2] = {}, rubY2_[kRubModes][2] = {};
+    float  rubF1_ = 0.0f, rubF2_ = 0.0f;   // the friction force's last two values (the modes' zero at DC)
+    double rubSlipLeft_ = 0.0, rubSlipOn_ = 0.0, rubContact_ = 0.0;
+    bool   rubReady_ = false;
+    // Murmur: the glottal pulse clock, the three formants, the syllable and phrase machine, the
+    // radio chain's filters and the squelch and beep clocks.
+    double murPhase_ = 0.0, murSylLeft_ = 0.0, murPauseLeft_ = 0.0;
+    double murBeepLeft_ = 0.0, murSquelchLeft_ = 0.0, murBeepPhase_ = 0.0;
+    float  murF_[3] = { 500.0f, 1500.0f, 2500.0f }, murTo_[3] = { 500.0f, 1500.0f, 2500.0f };
+    float  murGlot1_ = 0.0f, murGlot2_ = 0.0f, murPitchSt_ = 0.0f, murPitchTo_ = 0.0f, murDecl_ = 0.0f;
+    float  murVoice_ = 1.0f, murVoiceTo_ = 1.0f, murGap_ = 1.0f, murGapTo_ = 1.0f, murJitter_ = 1.0f;
+    float  murBeepHz_ = 2525.0f, murHpX_ = 0.0f, murHpY_ = 0.0f, murHiss_ = 0.0f;
+    int    murSyllables_ = 0;
+    bool   murInPhrase_ = false, murReady_ = false;
+    Svf    murForm_[3], murRadioHp_, murRadioLp_, murFric_;
+    // Drops: up to eight falling at once, and the vessel they fall into (two resonators).
+    static constexpr int kDrops = 8;
+    struct Drop { double phase = 0.0, hz = 0.0, rise = 0.0; float amp = 0.0f, decay = 0.0f; int left = 0; bool on = false; };
+    Drop   drops_[kDrops];
+    double dropNext_ = 0.0;
+    float  dropVesselY1_[2] = {}, dropVesselY2_[2] = {}, dropClick_ = 0.0f;
+    int    dropClickLeft_ = 0;
+    // Clip: where the read head stands in the recording (-1 until the note starts it at Position),
+    // and whether it has reached the end.
+    double clipPos_ = -1.0;
+    bool   clipDone_ = false;
+    // The signals: one set of clocks and memories that each of the nine reads its own way (a slot
+    // is one type at a time). sigT_ is the time since the note began; the phases, the two
+    // resonators' memories, an energy, a Poisson clock, a burst, counters and a bit pattern.
+    double   sigT_ = 0.0, sigPhase_ = 0.0, sigPhase2_ = 0.0, sigPhase3_ = 0.0;
+    float    sigY1_ = 0.0f, sigY2_ = 0.0f, sigZ1_ = 0.0f, sigZ2_ = 0.0f, sigLp_ = 0.0f, sigEnergy_ = 0.0f;
+    double   sigNext_ = 0.0, sigBurst_ = 0.0, sigFlutter_ = 0.0, sigFlutterHz_ = 1.0;
+    int      sigCount_ = 0, sigState_ = 0, sigPos_ = 0;
+    unsigned sigBits_ = 0u;
+    double   krX_ = 0.1, krY_ = 0.0, krZ_ = 0.0;           // the Rossler system's state
+    float    chY1_[6] = {}, chY2_[6] = {};                  // the chime's modes
+    double   dlF_[3] = {}, dlTo_[3] = {}, dlPh_[3] = {};    // the dial's three whistles
+    bool     sigReady_ = false;
 
     // Spectral: the two amplitude ramps per band (the partial and its noise), the state of the
     // band's noise filter, and how far the read head has travelled from Position, in frames.

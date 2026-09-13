@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Ghost Signal: Journey
+cyclic on
+Ghost Hollow | 5:00-10:00 | 0:30-1:30
+Wireless Span | 5:00-10:00 | 0:30-1:30
+Phonograph Passage | 5:00-10:00 | 0:30-1:30
+Groove Expanse | 5:00-10:00 | 0:30-1:30
+Apparition Signal | 5:00-10:00 | 0:30-1:30
+Spectre Expanse | 5:00-10:00 | 0:30-1:30
+Parlour Voice | 5:00-10:00 | 0:30-1:30
+Needle Veil | 5:00-10:00 | 0:30-1:30
+Relic Memory | 5:00-10:00 | 0:30-1:30
+Seance Expanse | 5:00-10:00 | 0:30-1:30
+Groove Transmission | 5:00-10:00 | 0:30-1:30
+Etching Bed | 5:00-10:00 | 0:30-1:30

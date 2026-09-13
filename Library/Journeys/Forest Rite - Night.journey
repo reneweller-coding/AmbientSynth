@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Forest Rite: Night
+cyclic on
+Spruce Descent | 8:00-15:00 | 1:00-2:00
+Marrow Vigil | 8:00-15:00 | 1:00-2:00
+Wolfden Bed | 8:00-15:00 | 1:00-2:00
+Marrow Dusk | 8:00-15:00 | 1:00-2:00
+Forest Field | 8:00-15:00 | 1:00-2:00
+Hearth Interval | 8:00-15:00 | 1:00-2:00
+Resin Bloom | 8:00-15:00 | 1:00-2:00
+Birch Veil | 8:00-15:00 | 1:00-2:00
+Spruce Reach | 8:00-15:00 | 1:00-2:00
+Deadfall Bloom | 8:00-15:00 | 1:00-2:00
+Marrow Basin | 8:00-15:00 | 1:00-2:00
+Spruce Dusk | 8:00-15:00 | 1:00-2:00

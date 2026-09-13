@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Deep: Crossing
+cyclic on
+Crevice Drift | 5:00-10:00 | 0:45-1:30
+Pleiades Reach | 5:00-10:00 | 0:45-1:30
+Oort Hollow | 5:00-10:00 | 0:45-1:30
+Abyssal Field | 5:00-10:00 | 0:45-1:30
+Mourner Bloom | 5:00-10:00 | 0:45-1:30
+Crater Bed | 5:00-10:00 | 0:45-1:30
+Ionospheric Descent | 5:00-10:00 | 0:45-1:30
+Edge Bloom | 5:00-10:00 | 0:45-1:30
+Resin Clearing | 5:00-10:00 | 0:45-1:30
+Drain Descent | 5:00-10:00 | 0:45-1:30
+Occultation Basin | 5:00-10:00 | 0:45-1:30
+Sediment Drift | 5:00-10:00 | 0:45-1:30

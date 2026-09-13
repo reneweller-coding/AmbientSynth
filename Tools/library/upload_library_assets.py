@@ -36,6 +36,12 @@ FOLDERS = ("Textures", "FieldRecordings")
 # whose licence permits distribution with the notice that Impulses/CREDITS.txt carries. Nothing
 # from EchoThief is in the library -- that material was for developing the convolver and stays here.
 EXTRA_FOLDERS = ("Wavetables", "Impulses")
+# And the archive (13.09.2026): the recordings the near layer plays straight -- NASA's mission
+# loops, the sounds from beyond and the sonifications, works of the United States government and
+# free of copyright, fetched by Tools/library/fetch_archive.py with every source written into
+# Archive/SOURCES.md, which travels with them. A third group of its own, for the same reason as
+# the second: the fifty-four archives already on the release stay exactly what they are.
+ARCHIVE_FOLDERS = ("Archive",)
 KEEP = (".flac", ".wav", ".json", ".txt", ".md")
 REPO = "reneweller-coding/AmbientSynth"
 DEFAULT_STAGE = os.path.normpath(os.path.join(ROOT, "..", "AmbientSynth-Upload"))
@@ -71,6 +77,35 @@ def _pack(files, max_bytes):
     return parts
 
 
+# The archive's subfolders in the order their groups went up. A new subfolder is appended after
+# these (in name order); a name sorted before NASA/ -- LoC/ was -- must not move into the first
+# group, whose part is on the release.
+ARCHIVE_ORDER = ("NASA", "Radio", "LoC")
+
+
+def archive_groups():
+    """The archive's files in groups that keep an uploaded part what it was: the root files and
+    the first subfolder together (that is part 55 as it went up: SOURCES.md and NASA/), and every
+    later subfolder (Radio/, LoC/, ...) as a group of its own, appended in ARCHIVE_ORDER. One
+    group for the whole folder would have packed a new subfolder into the part that already
+    exists, and name order would have put LoC/ in front of NASA/."""
+    roots, subs = [], {}
+    for kind in ARCHIVE_FOLDERS:
+        for e in _walk(kind, audio_only=False):
+            top = e[1].split("/")[0] if "/" in e[1] else None
+            if top is None:
+                roots.append(e)
+            else:
+                subs.setdefault(top, []).append(e)
+    order = [s for s in ARCHIVE_ORDER if s in subs] + sorted(s for s in subs if s not in ARCHIVE_ORDER)
+    groups = []
+    for i, s in enumerate(order):
+        groups.append((roots if i == 0 else []) + subs[s])
+    if not groups and roots:
+        groups.append(roots)
+    return groups
+
+
 def plan(version, max_bytes, extras=True):
     # The recordings keep their own packing, unchanged, or every archive after the first added file
     # would have different contents and a different hash.
@@ -78,10 +113,13 @@ def plan(version, max_bytes, extras=True):
     for kind in FOLDERS:
         first += _walk(kind, audio_only=True)
     second = []
+    parts = _pack(first, max_bytes)
     if extras:
         for kind in EXTRA_FOLDERS:
             second += _walk(kind, audio_only=False)
-    parts = _pack(first, max_bytes) + _pack(second, max_bytes)
+        parts += _pack(second, max_bytes)
+        for group in archive_groups():
+            parts += _pack(group, max_bytes)
     return [{"name": f"AmbientSynth-library-{version}-part{i + 1}.zip", "files": p} for i, p in enumerate(parts)]
 
 
@@ -102,7 +140,7 @@ def ensure_release(tag, version, summary):
         return
     notes = (f"Sample library {version}: {summary}. Draft, not published: the preset packs that use it are "
              "being rebuilt. Each archive unpacks into the AmbientSynth folder (Textures/, FieldRecordings/, "
-             "Wavetables/, Impulses/); "
+             "Wavetables/, Impulses/, Archive/); "
              f"AmbientSynth-library-{version}-manifest.json lists every part with its SHA-256 and files.")
     gh("release", "create", tag, "--draft", "--title", f"AmbientSynth sample library {version}", "--notes", notes)
 
@@ -140,7 +178,7 @@ def main():
     a = ap.parse_args()
 
     parts = plan(a.version, a.max_part_mb * 1024 * 1024, extras=not a.no_extras)
-    kinds = FOLDERS if a.no_extras else FOLDERS + EXTRA_FOLDERS
+    kinds = FOLDERS if a.no_extras else FOLDERS + EXTRA_FOLDERS + ARCHIVE_FOLDERS
     counts = {k: sum(1 for p in parts for f in p["files"] if f[0] == k) for k in kinds}
     total = sum(f[2] for p in parts for f in p["files"])
     summary = ", ".join(f"{n} {k}" for k, n in counts.items()) + f", {total / 1e9:.1f} GB in {len(parts)} archives"
@@ -160,8 +198,11 @@ def main():
         # but it may never change one that is already on the release, because the manifest a
         # downloaded installer carries names it by its hash. So the old plan has to be a prefix of
         # the new one: same archives, same files, in the same order, with more after them.
-        old = [p["files"] for p in state["parts"]]
-        now = [p["files"] for p in parts]
+        # Compared by name, not by size: a text file beside the recordings (Archive/SOURCES.md)
+        # grows with every addition to the archive, and the copy in the part that already went up
+        # stays what it was -- the current one is in git. The audio is never rewritten in place.
+        old = [[f[:2] for f in p["files"]] for p in state["parts"]]
+        now = [[f[:2] for f in p["files"]] for p in parts]
         if old != now[:len(old)]:
             sys.exit(f"the library changed since the upload began ({state_path}); not mixing two states")
         if len(now) > len(old):

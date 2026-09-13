@@ -187,6 +187,11 @@ def main():
         # instrument's own, and the renderer has to know them before anything can ask it for one.
         if run([py, os.path.join(HERE, "write_builtins.py"), "--packs", stage], a.dry_run):
             return 1
+        # The twelve routes name built-in presets, and the built-ins were just renamed: rewritten
+        # from the new metadata, or the selftest at the end of this pipeline fails on every route
+        # (it did, 13.09.2026: forty-four failures, all "route preset parses").
+        if run([py, os.path.join(HERE, "make_routes.py")], a.dry_run):
+            return 1
         if run(["cmake", "--build", "build", "--config", "Release"], a.dry_run):
             return 1
         # The layout is thrown away here; what is kept is the built-ins' measurements and their

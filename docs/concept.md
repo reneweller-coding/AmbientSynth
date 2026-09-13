@@ -3316,6 +3316,28 @@ of 11.09. already lights the blend at its fractional place, and now the
 frame count says "3.4 / 8" rather than a whole number, and the flat Harmonic
 picture blends with the slot's Transport, the way the engine reads the table.
 
+**The offline render cut where the instrument crossfades**, which turned out
+to be worse than it sounded. `ambient_render --journey` had one engine, so a
+step applied the next preset to the engine that was playing -- and that engine
+keeps its sounding voices, its conductor's cluster and its tails. Measured
+between two presets forty decibels apart (Nomad Wind at -16.8 dBFS, Grid
+Expanse at -59.5): after the cut the render sat at -20 dB for the rest of its
+length. It had not arrived at the next preset at all; it was playing the old
+preset's voices through the new preset's parameters, which is exactly the
+"ninety-three switches flipped at half way" that made a preset change a
+crossfade of two engines in the plugin in the first place. The render tool now
+does the same as the plugin: the preset that is leaving plays on the engine it
+is on while the next is built on a second engine -- reset, the live state
+copied in so `--set` survives, the preset applied over it, its rooms and clips
+read, the conductor's cluster and the foreground's state handed over -- and the
+two are mixed under a sine/cosine pair, with the same eight-second head start
+that waits for a slow attack to speak. The same journey now ends at -60 dB,
+where the preset itself measures. A fade of zero is still a cut, a fade longer
+than what is left to render is shortened, and a render without a journey never
+builds the second engine, so every measurement of the library is the single
+engine it always was (checked: four presets re-measured against the night run's
+cache, identical to three decimals).
+
 ## Roadmap
 
 1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow

@@ -34,6 +34,7 @@
 #include <sstream>
 #include <chrono>
 #include <algorithm>
+#include <memory>
 #include <filesystem>
 
 using namespace ambient;
@@ -472,6 +473,22 @@ static int runOnce(int argc, char** argv)
     std::vector<int> notes;
     std::string sclPath;
     Engine engine;
+    // A journey's steps are crossfaded rather than cut, as they are in the instrument: the preset
+    // that is leaving keeps playing on the engine it is on, with everything it had, while the next
+    // one is built on a second engine, and the two are mixed under a sine/cosine pair so the sum
+    // keeps its power all the way across. Nothing is interpolated -- two presets that share no
+    // parameter still meet in the air, which is the whole reason a preset change became a
+    // crossfade of two engines in the plugin (13.09.2026; before this the offline render cut, and
+    // a journey rendered to a file sounded nothing like the same journey played).
+    //
+    // The second engine is built the first time a journey actually crosses, so every other render
+    // -- every measurement of the library, every --preset -- is one engine, exactly as before.
+    std::unique_ptr<Engine> engineB;
+    Engine* liveEngine = &engine;      // the one the instrument is
+    Engine* fadingEngine = nullptr;    // the one on its way out, or none
+    double fadePos = 0.0;              // 0 .. 1 across the crossfade
+    double fadeSeconds = 0.0, fadeHead = 0.0;
+    auto live = [&]() -> Engine& { return *liveEngine; };
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -753,7 +770,7 @@ static int runOnce(int argc, char** argv)
     // index, because a journey brings up one preset after another while the render runs; the rooms
     // go straight into the engine then (it has been prepared), where the first preset's are
     // collected here and set after prepare like an --ir.
-    auto loadPresetMedia = [&](int index, bool roomsNow) {
+    auto loadPresetMedia = [&](Engine& engine, int index, bool roomsNow) {
         const char* tex = presetFilePath(index, 0);
         const char* tab = presetFilePath(index, 1);
         std::vector<float> mono; int rate = 0;
@@ -809,7 +826,7 @@ static int runOnce(int argc, char** argv)
             } else std::fprintf(stderr, "preset impulse B missing: %s\n", impB);
         }
     };
-    if (presetIndex >= 0) loadPresetMedia(presetIndex, false);
+    if (presetIndex >= 0) loadPresetMedia(engine, presetIndex, false);
     // A journey begins on its first step's preset: applied here like --preset, so its media is
     // read before the render starts; the steps after it are brought up in the loop.
     JourneyPlayer journeyPlayer;
@@ -820,7 +837,7 @@ static int runOnce(int argc, char** argv)
             int idx = -1;
             for (int p = 0; p < numPresets(); ++p) if (st.preset == preset(p).name) { idx = p; break; }
             if (idx < 0) { std::fprintf(stderr, "the journey's first preset is not in the library: %s\n", st.preset.c_str()); return 2; }
-            engine.applyPreset(idx); presetIndex = idx; loadPresetMedia(idx, false);
+            engine.applyPreset(idx); presetIndex = idx; loadPresetMedia(engine, idx, false);
             std::printf("journey step 1: %s (%s)\n", st.preset.c_str(), Journey::timeText(journeyPlayer.remaining()).c_str());
         }
         if (!secondsGiven) seconds = std::min(journey.meanLength(), 4.0 * 3600.0);
@@ -889,11 +906,64 @@ static int runOnce(int argc, char** argv)
     // The measurement wants them too, though it writes no files: the near / far / room / cosmos
     // energies are how wet a preset stands, which is the spatial model's own axis on the map.
     double stemE[Engine::kNumStems] = {};
-    if (!stemPrefix.empty() || measure) {
+    const bool wantStems = !stemPrefix.empty() || measure;
+    if (wantStems) {
         for (int c = 0; c < Engine::kNumStems * 2; ++c)
             stemPtr[c] = stemChunk.data() + static_cast<size_t>(c) * static_cast<size_t>(block);
         engine.setStemBuffers(stemPtr);
     }
+
+    // The next step of a journey, brought up on the other engine and crossfaded in -- what
+    // beginTransition does in the plugin, with the same handover. A fade of nothing (or one that
+    // would not fit in what is left to render) is a cut on the engine that is playing, which is
+    // what this tool always did.
+    std::vector<float> fadeL(static_cast<size_t>(block)), fadeR(static_cast<size_t>(block));
+    auto beginJourneyStep = [&](int idx, double fade) {
+        Engine& out = live();
+        if (fade < 0.05) { out.applyPreset(idx); loadPresetMedia(out, idx, true); return; }
+        // Only ever two engines: a step whose fade is still running arrives on the one that is
+        // going out, so the fade in flight is finished here rather than abandoned half way.
+        if (fadingEngine != nullptr) { fadingEngine->allNotesOff(); fadingEngine->reset(); fadingEngine = nullptr; }
+        if (engineB == nullptr) engineB = std::make_unique<Engine>();
+        Engine& in = (liveEngine == &engine) ? *engineB : engine;
+        in.allNotesOff();
+        in.reset();
+        // Everything the instrument stands at now, and the preset's own on top of it: a parameter
+        // the new preset does not name keeps the value it has, which is what applying a preset to
+        // the engine that is playing did, and is how --set survives a step.
+        for (int i = 0; i < kNumParams; ++i) in.setParam(static_cast<ParamId>(i), out.getParam(static_cast<ParamId>(i)));
+        in.applyPreset(idx);
+        in.setClockHourOverride(clockHour);
+        in.prepare(sr, block);
+        // After prepare, in this order: the command line's room (the convolver's buffers exist
+        // now), then the preset's own over it, as the setup above does for the first preset.
+        if (!irChannels.empty())
+            in.setImpulse(irChannels[0].data(), irChannels.size() > 1 ? irChannels[1].data() : nullptr, static_cast<int>(irChannels[0].size()), irRate);
+        if (!irBChannels.empty())
+            in.setImpulseB(irBChannels[0].data(), irBChannels.size() > 1 ? irBChannels[1].data() : nullptr, static_cast<int>(irBChannels[0].size()), irBRate);
+        loadPresetMedia(in, idx, true);
+        // The conductor takes the chord over from the one it is replacing: a crossfade is meant to
+        // change the instrument and not the music. With nothing to inherit it fills instead.
+        {
+            int cn[ClusterBrain::kSlots]; float cv[ClusterBrain::kSlots];
+            for (int which = 0; which < 2; ++which) {
+                const bool second = which == 1;
+                const int n = out.soundingCluster(cn, cv, second);
+                if (n > 0) in.adoptCluster(cn, cv, n, second);
+                else if (!second) in.requestBrainFill();
+            }
+            in.adoptNear(out.nearState());
+        }
+        for (int n : notes) in.noteOn(n, 0.8f);   // a chord held by hand is held on the new one too
+        // The stems follow the instrument, so they are the new engine's from here; the one going
+        // out would otherwise add its own into the same buffers under no gain at all.
+        if (wantStems) { in.setStemBuffers(stemPtr); out.setStemBuffers(nullptr); }
+        liveEngine = &in;
+        fadingEngine = &out;
+        fadePos = 0.0;
+        fadeHead = 0.0;
+        fadeSeconds = fade;
+    };
 
     // --skip: play this much first and throw it away, then measure what follows. A preset is
     // described by its FIRST minute otherwise, and the 2.0 library has a median attack of eighteen
@@ -926,36 +996,64 @@ static int runOnce(int argc, char** argv)
 
     for (long done = 0; done < total; done += block) {
         const int n = static_cast<int>(std::min<long>(block, total - done));
-        if (!routeText.empty()) { float rx, ry, rr; engine.routeStep(static_cast<double>(n) / sr, rx, ry, rr); }
+        if (!routeText.empty()) { float rx, ry, rr; live().routeStep(static_cast<double>(n) / sr, rx, ry, rr); }
         if (haveSet) {
             const double t0 = static_cast<double>(done) / sr, t1 = static_cast<double>(done + n) / sr;
             setFile.step(t0, t1, [&](const TimelineEvent& e) {
                 switch (e.type) {
-                case TimelineEvent::Type::Param:   engine.setParam(static_cast<ParamId>(e.a), e.v); break;
-                case TimelineEvent::Type::NoteOn:  engine.noteOn(e.a, e.v); break;
-                case TimelineEvent::Type::NoteOff: engine.noteOff(e.a); break;
+                case TimelineEvent::Type::Param:   live().setParam(static_cast<ParamId>(e.a), e.v); break;
+                case TimelineEvent::Type::NoteOn:  live().noteOn(e.a, e.v); break;
+                case TimelineEvent::Type::NoteOff: live().noteOff(e.a); break;
                 }
             });
         }
         if (haveScore)
             score.step(static_cast<double>(n) / sr,
-                       [&](ParamId id) { return engine.getParam(id); },
-                       [&](ParamId id, float v) { engine.setParam(id, v); });
-        if (haveJourney) {   // the next step, when its time has come: a cut here, a crossfade in the plugin
+                       [&](ParamId id) { return live().getParam(id); },
+                       [&](ParamId id, float v) { live().setParam(id, v); });
+        if (haveJourney) {   // the next step, when its time has come, crossfaded in as in the plugin
             JourneyStep st; double fade = 0.0;
             if (journeyPlayer.advance(static_cast<double>(n) / sr, st, fade)) {
                 int idx = -1;
                 for (int p = 0; p < numPresets(); ++p) if (st.preset == preset(p).name) { idx = p; break; }
                 if (idx >= 0) {
-                    engine.applyPreset(idx);
-                    loadPresetMedia(idx, true);
+                    // Never longer than what is left to render: a two-minute fade at the end of a
+                    // ten-minute render would leave the file on the crossfade rather than on the
+                    // step, which is not what the journey says.
+                    const double left = static_cast<double>(total - done) / sr;
+                    beginJourneyStep(idx, std::min(fade, std::max(0.0, left - 1.0)));
                     std::printf("journey step %d at %s: %s (fade %s, %s)\n", journeyPlayer.step() + 1, Journey::timeText(static_cast<double>(done) / sr).c_str(),
                                 st.preset.c_str(), Journey::timeText(fade).c_str(), Journey::timeText(journeyPlayer.remaining()).c_str());
                 } else std::fprintf(stderr, "journey: preset not in the library, kept the last: %s\n", st.preset.c_str());
             }
         }
-        engine.process(L.data(), R.data(), n);
-        if (done >= total / 2) { voiceSum += engine.activeVoices(); ++voiceBlocks; }
+        live().process(L.data(), R.data(), n);
+        if (fadingEngine != nullptr) {
+            // The ramp waits for the arriving preset to be audible, up to eight seconds, exactly as
+            // the plugin's does: the library's median attack is eighteen seconds, and a fade that
+            // began while the new engine was still silent would be over before it spoke.
+            const double t0 = fadePos;
+            bool ramping = t0 > 0.0;
+            if (!ramping) {
+                double e = 0.0;
+                for (int i = 0; i < n; ++i) e += static_cast<double>(L[static_cast<size_t>(i)]) * L[static_cast<size_t>(i)]
+                                              + static_cast<double>(R[static_cast<size_t>(i)]) * R[static_cast<size_t>(i)];
+                fadeHead += n / sr;
+                ramping = std::sqrt(e / (2.0 * n)) > 1.0e-3 || fadeHead >= 8.0;
+            }
+            const double t1 = ramping ? std::min(1.0, t0 + n / (sr * std::max(fadeSeconds, 0.25))) : 0.0;
+            fadingEngine->process(fadeL.data(), fadeR.data(), n);
+            for (int i = 0; i < n; ++i) {
+                const double t = t0 + (t1 - t0) * (i + 1.0) / n;
+                const float gIn = static_cast<float>(std::sin(1.5707963267948966 * t));
+                const float gOut = static_cast<float>(std::cos(1.5707963267948966 * t));
+                L[static_cast<size_t>(i)] = L[static_cast<size_t>(i)] * gIn + fadeL[static_cast<size_t>(i)] * gOut;
+                R[static_cast<size_t>(i)] = R[static_cast<size_t>(i)] * gIn + fadeR[static_cast<size_t>(i)] * gOut;
+            }
+            fadePos = t1;
+            if (t1 >= 1.0) { fadingEngine->allNotesOff(); fadingEngine->reset(); fadingEngine = nullptr; }
+        }
+        if (done >= total / 2) { voiceSum += live().activeVoices(); ++voiceBlocks; }
         if (!stemPrefix.empty())
             for (int c = 0; c < Engine::kNumStems * 2; ++c)
                 stemOut[static_cast<size_t>(c)].insert(stemOut[static_cast<size_t>(c)].end(), stemPtr[c], stemPtr[c] + n);
@@ -975,7 +1073,7 @@ static int runOnce(int argc, char** argv)
             if (++secCount >= sr) {
                 if (stats) std::printf("%d, %.1f, %.1f, %.3f, %d, %d, %.2f\n", sec,
                     10.0 * std::log10(secSq[0] / secCount + 1e-20), 10.0 * std::log10(secSq[1] / secCount + 1e-20),
-                    secPeak, engine.activeVoices(), engine.brainRoot(), engine.arcValue());
+                    secPeak, live().activeVoices(), live().brainRoot(), live().arcValue());
                 secSq[0] = secSq[1] = 0; secCount = 0; secPeak = 0.0f; ++sec;
             }
         }
@@ -983,11 +1081,11 @@ static int runOnce(int argc, char** argv)
 
     const double rmsL = std::sqrt(sumSq[0] / std::max<long>(total, 1)), rmsR = std::sqrt(sumSq[1] / std::max<long>(total, 1));
     std::printf("rendered %.1f s @ %d Hz: rms %.1f / %.1f dBFS, peak %.3f, non-finite %ld, voices at end %d\n",
-                seconds, sr, 20.0 * std::log10(rmsL + 1e-20), 20.0 * std::log10(rmsR + 1e-20), peak, nans, engine.activeVoices());
+                seconds, sr, 20.0 * std::log10(rmsL + 1e-20), 20.0 * std::log10(rmsR + 1e-20), peak, nans, live().activeVoices());
     if (loudness) {
         // The engine's own meter, which has seen every sample of the render rather than a window
         // of it. Its own line, so nothing that parses the measure line has to learn a new field.
-        const LoudnessReading ld = engine.loudness();
+        const LoudnessReading ld = live().loudness();
         // Sones as well as LUFS. The two disagree whenever the spectrum changes, which for an
         // instrument that makes beds rather than tracks is most of the time, and the sone figure
         // is the one that says whether a preset will feel loud after an hour of it.
@@ -1015,7 +1113,7 @@ static int runOnce(int argc, char** argv)
     if (measure) {   // descriptors straight from the buffer: no temporary file at all
         std::vector<float> ml(wav.size() / 2), mr(wav.size() / 2);
         for (size_t k = 0; k + 1 < wav.size(); k += 2) { ml[k / 2] = wav[k]; mr[k / 2] = wav[k + 1]; }
-        printMeasurements(ml, mr, sr, voiceBlocks > 0 ? voiceSum / voiceBlocks : engine.activeVoices(), stemE);
+        printMeasurements(ml, mr, sr, voiceBlocks > 0 ? voiceSum / voiceBlocks : live().activeVoices(), stemE);
         return nans == 0 ? 0 : 1;
     }
     if (!writeWav(out, wav, 2, sr)) { std::fprintf(stderr, "cannot write %s\n", out.c_str()); return 1; }

@@ -33,6 +33,8 @@ import sys
 import urllib.request
 import zipfile
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 ARCHIVE = os.path.join(ROOT, "Library", "Archive")
@@ -65,21 +67,87 @@ COLLECTIONS = {
                   "Joe Smith, the copyright holder, donated the recordings to the Library of Congress and agreed to "
                   "make the material free to use and reuse with proper attribution; interviews with performances of "
                   "songs still in copyright were excluded."),
-    "musicbox": ("MusicBox", "loc.gov_musicbox",
-                 "Dyann and Rick Arthur, the original copyright holders of the MusicBox Project, relinquished all "
-                 "ownership and copyright of the collection to the American Folklife Center in 2010, with the "
-                 "performers' release forms."),
-    "jukebox-opera": ("Jukebox-Opera", "loc.gov_national-jukebox-opera",
-                      "Under the Music Modernization Act, items published prior to 1923 entered the public domain on "
-                      "January 1, 2022."),
-    "jukebox-classical": ("Jukebox-Classical", "loc.gov_national-jukebox-classical",
-                          "Under the Music Modernization Act, items published prior to 1923 entered the public domain "
-                          "on January 1, 2022."),
-    "jukebox-folk-songs": ("Jukebox-Folk-Songs", "loc.gov_national-jukebox-folk-songs",
-                           "Under the Music Modernization Act, items published prior to 1923 entered the public domain "
-                           "on January 1, 2022."),
+    # Not the MusicBox Project nor the National Jukebox's opera, classical and folk songs: they are
+    # music, and the near layer wanted voices (Rene, 13.09.: "Wir wollten aber nur Sprache").
 }
 CREDIT = "Citizen DJ Project, Library of Congress"
+
+
+# ------------------------------------------------------------------ speech, not music
+# The packs are mixed -- Edison's companies recorded rags and monologues alike -- and what the
+# near layer wants is the voice. The classic discriminators (Scheirer & Slaney, 1997), measured
+# on the packs themselves: interviews against opera and chamber music. Speech has more silence
+# (frames under half the mean level: 0.39 against 0.15), a zero-crossing rate that jumps between
+# vowels and fricatives (its spread 0.83 against 0.35), the syllable's four hertz on the subband
+# envelopes (0.21 against 0.12), and fewer voiced windows than singing or an instrument (0.61
+# against 0.85). Weighted into one score, every interview stood above zero and 93 % of the
+# chamber music below it; the cut is at 0.5, with the voicing capped, so that a sung number with
+# a piano under it stays out too.
+SPEECH_SR = 16000
+SPEECH_HOP = 0.01
+
+
+def decode16k(path):
+    r = subprocess.run([FFMPEG, "-v", "error", "-i", path, "-ac", "1", "-ar", str(SPEECH_SR), "-f", "f32le", "-"],
+                       capture_output=True)
+    return np.frombuffer(r.stdout, dtype="<f4").astype(np.float64) if r.returncode == 0 else np.zeros(0)
+
+
+def speech_features(x, sr=SPEECH_SR, hop=SPEECH_HOP):
+    n = int(sr * hop)
+    m = len(x) // n
+    if m < 100:
+        return None
+    fr = x[:m * n].reshape(m, n)
+    rms = np.sqrt(np.mean(fr * fr, axis=1)) + 1e-9
+    low_e = float(np.mean(rms < 0.5 * rms.mean()))
+    zcr = np.mean(np.abs(np.diff(np.sign(fr), axis=1)) > 0, axis=1)
+    zcr_v = float(np.std(zcr) / (np.mean(zcr) + 1e-9))
+    spec = np.abs(np.fft.rfft(fr * np.hanning(n), axis=1)) ** 2
+    fq = np.fft.rfftfreq(n, 1.0 / sr)
+    mod4 = []
+    for lo, hi in ((200, 600), (600, 1500), (1500, 3500), (3500, 7000)):
+        env = np.log(spec[:, (fq >= lo) & (fq < hi)].sum(axis=1) + 1e-9)
+        env = (env - env.mean()) * np.hanning(len(env))
+        es = np.abs(np.fft.rfft(env)) ** 2
+        ef = np.fft.rfftfreq(len(env), d=hop)
+        mod4.append(es[(ef >= 3) & (ef <= 6)].sum() / (es[ef >= 0.5].sum() + 1e-12))
+    w = int(0.05 * sr)
+    thr = np.median(rms) * 10 ** (-6.0 / 20.0)
+    lo, hi = int(sr / 1000), int(sr / 70)
+    voiced, windows = 0, 0
+    for i in range(0, len(x) - w, w):
+        seg = x[i:i + w] - x[i:i + w].mean()
+        windows += 1
+        if np.sqrt(np.mean(seg * seg)) < thr:
+            continue
+        ac = np.correlate(seg, seg, "full")[w - 1:]
+        k = lo + int(np.argmax(ac[lo:hi]))
+        if ac[k] > 0.4 * ac[0]:
+            voiced += 1
+    return dict(low_e=low_e, zcr_v=zcr_v, mod4=float(np.mean(mod4)), voiced=voiced / max(1, windows))
+
+
+def speech_score(f):
+    return (f["low_e"] - 0.25) * 3.0 + (f["zcr_v"] - 0.5) * 1.0 + (f["mod4"] - 0.12) * 6.0 - (f["voiced"] - 0.75) * 3.0
+
+
+# What the measurement lets through and should not: a brass band's march (its staccato is
+# silence, its beat's subdivision sits right at the syllable rate) and a sung number with clear
+# words. The pack's file names carry the catalogue titles, and a catalogue of 1910 says what a
+# thing is -- "march", "rag", "polka", "with orchestra" -- so the title is asked first.
+MUSIC_TITLE = re.compile(
+    r"(?<![A-Za-z])(rag|rhapsod\w*|march|polka|waltz|overture|medley|selection|fox-?trot|one-?step|two-?step|tango|"
+    r"mazurka|serenade|hymn|chorus|orchestra|band|quartet|quartette|trio|baritone|tenor|soprano|contralto|Messiah|"
+    r"blues|symphony|sonata|aria|intermezzo|gavotte|minuet|nocturne|prelude|fantasi[ae]|caprice|elegie|berceuse|"
+    r"cornet|violin|piano|banjo|xylophone|accordion|instrumental|vocal|song|songs|ballad|lullaby|carol|anthem)(?![A-Za-z])", re.I)
+
+
+def is_speech(path):
+    if MUSIC_TITLE.search(os.path.basename(path)):
+        return False
+    f = speech_features(decode16k(path))
+    return f is not None and speech_score(f) > 0.5 and f["voiced"] <= 0.8
 
 
 def safe_name(s):
@@ -148,9 +216,10 @@ def note_sources(slug, folder, statement, count, total):
     which are the pack's own and run to thousands."""
     path = os.path.join(ARCHIVE, "SOURCES.md")
     lines = ["", "## LoC/%s" % folder, "",
-             "Library of Congress, Citizen DJ sample pack [%s](%sloc-%s/use/): %d of its %d clips (spread across "
-             "the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps "
-             "the pack's name (item title, item id, cut number, start time)." % (slug, SITE, slug, count, total),
+             "Library of Congress, Citizen DJ sample pack [%s](%sloc-%s/use/): %d of its %d clips -- the ones that "
+             "measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit "
+             "WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name "
+             "(item title, item id, cut number, start time)." % (slug, SITE, slug, count, total),
              "Rights, in the Library's words: %s" % statement,
              "Suggested credit: %s." % CREDIT]
     with open(path, "a", encoding="utf-8", newline="\n") as f:
@@ -165,6 +234,8 @@ def main():
     ap.add_argument("--per-collection", type=int, default=250,
                     help="clips kept per pack, spread across it (the packs hold thousands; 0 = all)")
     ap.add_argument("--mp3", action="store_true", help="the 192 kbps packs instead of the WAV ones (a fifth of the download)")
+    ap.add_argument("--all-sounds", dest="speech_only", action="store_false",
+                    help="keep the music as well; by default only clips that measure as speech are taken")
     a = ap.parse_args()
     slugs = a.only or list(COLLECTIONS)
     for slug in slugs:
@@ -195,16 +266,25 @@ def main():
             excerpts = [m for m in members if m.replace("\\", "/").lower().startswith("excerpts/")]
             if excerpts:
                 members = excerpts
-            chosen = spread(members, a.per_collection)
-            print("  %d clips in the pack%s, %d taken" % (len(members), " (excerpts)" if excerpts else "", len(chosen)), flush=True)
             src_dir = os.path.join(WORK, pack)
             os.makedirs(src_dir, exist_ok=True)
-            for m in chosen:
+            unpacked = []
+            for m in members:
                 target = os.path.join(src_dir, os.path.basename(m))
                 if not os.path.exists(target):
                     with z.open(m) as s, open(target, "wb") as f:
                         f.write(s.read())
-                extracted.append(target)
+                unpacked.append(target)
+            # The voice, not the band: every excerpt is judged before the choice is made.
+            if a.speech_only:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, a.jobs)) as ex:
+                    verdicts = list(ex.map(is_speech, unpacked))
+                speech = [p for p, ok in zip(unpacked, verdicts) if ok]
+            else:
+                speech = unpacked
+            extracted = spread(speech, a.per_collection)
+            print("  %d clips in the pack%s, %d speech, %d taken"
+                  % (len(members), " (excerpts)" if excerpts else "", len(speech), len(extracted)), flush=True)
         names, jobs = [], []
         for src in sorted(extracted):
             stem = safe_name(os.path.splitext(os.path.basename(src))[0])

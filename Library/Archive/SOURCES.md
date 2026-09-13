@@ -221,54 +221,30 @@ Cut into phrases by `Tools/library/slice_speech.py` (band 350-3200 Hz, saturatio
 
 ## LoC/Edison
 
-Library of Congress, Citizen DJ sample pack [edison](https://citizen-dj.labs.loc.gov/loc-edison/use/): 250 of its 265 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
+Library of Congress, Citizen DJ sample pack [edison](https://citizen-dj.labs.loc.gov/loc-edison/use/): 65 of its 265 clips -- the ones that measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name (item title, item id, cut number, start time).
 Rights, in the Library's words: All recordings made by the companies of Thomas A. Edison between 1890 and 1929 are in the public domain because the assets of Edison Records were transferred to the National Park Service, a federal agency, in the 1950s.
 Suggested credit: Citizen DJ Project, Library of Congress.
 
 ## LoC/Variety-Stage
 
-Library of Congress, Citizen DJ sample pack [variety-stage](https://citizen-dj.labs.loc.gov/loc-variety-stage/use/): 77 of its 77 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
+Library of Congress, Citizen DJ sample pack [variety-stage](https://citizen-dj.labs.loc.gov/loc-variety-stage/use/): 25 of its 77 clips -- the ones that measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name (item title, item id, cut number, start time).
 Rights, in the Library's words: Edison recordings of the variety stage, 1890s-1920s: the same transfer to the National Park Service puts them in the public domain.
 Suggested credit: Citizen DJ Project, Library of Congress.
 
 ## LoC/Screening-Room
 
-Library of Congress, Citizen DJ sample pack [national-screening-room](https://citizen-dj.labs.loc.gov/loc-national-screening-room/use/): 201 of its 201 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
+Library of Congress, Citizen DJ sample pack [national-screening-room](https://citizen-dj.labs.loc.gov/loc-national-screening-room/use/): 163 of its 201 clips -- the ones that measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name (item title, item id, cut number, start time).
 Rights, in the Library's words: A subset of films from the National Screening Room that were identified to have been created by the U.S. government, thus in the public domain.
 Suggested credit: Citizen DJ Project, Library of Congress.
 
 ## LoC/Tony-Schwartz
 
-Library of Congress, Citizen DJ sample pack [tony-schwartz](https://citizen-dj.labs.loc.gov/loc-tony-schwartz/use/): 250 of its 272 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
+Library of Congress, Citizen DJ sample pack [tony-schwartz](https://citizen-dj.labs.loc.gov/loc-tony-schwartz/use/): 221 of its 272 clips -- the ones that measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name (item title, item id, cut number, start time).
 Rights, in the Library's words: In 2007 Tony Schwartz's entire body of work was acquired by the Library of Congress, which makes his recordings available for reuse; Citizen DJ excludes the ones with embedded material he did not own.
 Suggested credit: Citizen DJ Project, Library of Congress.
 
 ## LoC/Joe-Smith
 
-Library of Congress, Citizen DJ sample pack [joe-smith](https://citizen-dj.labs.loc.gov/loc-joe-smith/use/): 250 of its 378 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
+Library of Congress, Citizen DJ sample pack [joe-smith](https://citizen-dj.labs.loc.gov/loc-joe-smith/use/): 250 of its 378 clips -- the ones that measure as speech rather than music, spread across the pack -- cut by the Library, taken as 16-bit WAV and stored as FLAC without loss (at most twenty seconds each); each file keeps the pack's name (item title, item id, cut number, start time).
 Rights, in the Library's words: Joe Smith, the copyright holder, donated the recordings to the Library of Congress and agreed to make the material free to use and reuse with proper attribution; interviews with performances of songs still in copyright were excluded.
-Suggested credit: Citizen DJ Project, Library of Congress.
-
-## LoC/MusicBox
-
-Library of Congress, Citizen DJ sample pack [musicbox](https://citizen-dj.labs.loc.gov/loc-musicbox/use/): 250 of its 259 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
-Rights, in the Library's words: Dyann and Rick Arthur, the original copyright holders of the MusicBox Project, relinquished all ownership and copyright of the collection to the American Folklife Center in 2010, with the performers' release forms.
-Suggested credit: Citizen DJ Project, Library of Congress.
-
-## LoC/Jukebox-Opera
-
-Library of Congress, Citizen DJ sample pack [jukebox-opera](https://citizen-dj.labs.loc.gov/loc-jukebox-opera/use/): 250 of its 346 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
-Rights, in the Library's words: Under the Music Modernization Act, items published prior to 1923 entered the public domain on January 1, 2022.
-Suggested credit: Citizen DJ Project, Library of Congress.
-
-## LoC/Jukebox-Classical
-
-Library of Congress, Citizen DJ sample pack [jukebox-classical](https://citizen-dj.labs.loc.gov/loc-jukebox-classical/use/): 250 of its 267 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
-Rights, in the Library's words: Under the Music Modernization Act, items published prior to 1923 entered the public domain on January 1, 2022.
-Suggested credit: Citizen DJ Project, Library of Congress.
-
-## LoC/Jukebox-Folk-Songs
-
-Library of Congress, Citizen DJ sample pack [jukebox-folk-songs](https://citizen-dj.labs.loc.gov/loc-jukebox-folk-songs/use/): 250 of its 393 clips (spread across the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps the pack's name (item title, item id, cut number, start time).
-Rights, in the Library's words: Under the Music Modernization Act, items published prior to 1923 entered the public domain on January 1, 2022.
 Suggested credit: Citizen DJ Project, Library of Congress.

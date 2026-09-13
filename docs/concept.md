@@ -3146,17 +3146,24 @@ The larger store of such voices is the Library of Congress's own sampling
 project, Citizen DJ: audio from the Library's collections that it has
 identified as free to use, already cut into clips of a few seconds, each pack
 with a statement of why it is free. `Tools/library/fetch_loc_samples.py` takes
-nine of the packs -- Edison's cylinders, the variety stage, the government
+five of the packs -- Edison's cylinders, the variety stage, the government
 films of the National Screening Room, Tony Schwartz's New York, Joe Smith's
-interviews, the MusicBox Project, and the National Jukebox's opera, chamber
-music and folk songs of before 1923 -- two hundred and fifty clips of each,
-spread across the pack, as FLAC under `Archive/LoC/`, with the Library's
-statement in `SOURCES.md`. Not taken, and why: the Jukebox's popular songs,
-jazz, blues and musical theatre (free in the United States since 2022, but
-many of their composers died after 1955 and are still protected in Europe),
-the dialect interviews (private people; the Library asks for care, and a
-voice at the ear is not the place), and the Free Music Archive subset (music,
-not the near layer's material). A rule learned the same night, for the films
+interviews -- and of each only what is a voice: the packs are mixed, a rag
+beside a monologue, and the near layer wanted speech. The catalogue title is
+asked first (a "march", a "polka", "with orchestra" is music by its own
+account), then the clip is measured with the classic discriminators of
+Scheirer and Slaney, calibrated on the packs themselves, interviews against
+opera and chamber music: speech has more silence, a zero-crossing rate that
+jumps between vowel and fricative, the syllable's four hertz on the subband
+envelopes, and fewer voiced windows than singing. Seven hundred and twenty-four
+clips remained, spread across the packs, at most twenty seconds each, as
+FLAC under `Archive/LoC/`, with the Library's statement in `SOURCES.md`. Not
+taken, and why: the National Jukebox and the MusicBox Project (music), the
+Jukebox's popular songs in particular (free in the United States since 2022,
+but many of their composers died after 1955 and are still protected in
+Europe), the dialect interviews (private people; the Library asks for care,
+and a voice at the ear is not the place), and the Free Music Archive subset
+(music). A rule learned the same night, for the films
 of the 1950s and 60s that are "public domain" in the United States for want
 of a copyright notice: that status does not travel. A package published from
 Germany is under German law, seventy years after the death of director,

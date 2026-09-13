@@ -861,9 +861,52 @@ the Quest ran every decaying reverb tail into denormals.
 **Voices.** A voice is rendered only while its envelope is not idle; release ends at level 1e-4
 (-80 dB). The allocator takes a free voice, else the quietest releasing one, else the oldest.
 
-**Not done, deliberately.** No SIMD: the partial bank is already a flat `float` array per strand
-(structure of arrays) and the compiler vectorises it, but nothing is hand-written against SSE or
-NEON, and the core stays framework-free so `juce::FloatVectorOperations` is not available to it.
+**SIMD, in one place.** The partial bank is a flat `float` array per strand (structure of
+arrays), and the compiler vectorises parts of it -- but not the reduction, because floating-point
+addition is not associative and it may not reorder a sum on its own. That one loop is written by
+hand in `Core/include/ambient/Simd.h`, AVX2 and NEON beside a scalar path that every other
+platform compiles (median 39 to 52 times realtime when it was written). The scalar and the
+vectorised path are the same arithmetic in a different order; the difference between them is the
+last bit or two of the sum.
+
+**Measured again, 13.09.2026, and it found what the header had left behind.** The bank has three
+inner loops and only the mono one was ever vectorised. Timed on the same patch -- one additive
+source, 32 partials, six strands, every effect shut, the fixed cost of starting the process
+removed by taking the slope of two render lengths:
+
+| the bank's inner loop | of a core, scalar | vectorised | against the mono one |
+| --- | --- | --- | --- |
+| mono, hand-written AVX2 | -- | 4.9 % | -- |
+| stereo (Partial Spread above 0) | 10.3 % | 5.6 % | +111 % -> +15 % |
+| feedback FM (To Pitch above 0) | 16.7 % | 6.4 % | +241 % -> +31 % |
+
+Both were the vectorised loop plus a little: the stereo has two accumulators instead of one, the
+FM adds a phase term and a Newton renormalisation. 2332 presets of the library carry Partial
+Spread and 1038 carry feedback FM -- about a quarter of it between them -- and for those the voice
+had been costing two to three and a half times what it needed to. Both are written out now, AVX2
+and NEON, so the Quest gets them too; the plain loop got the NEON path it had never had, having
+been AVX-only since it was written. A whole-preset measurement puts it in scale: the dearest
+preset of the library (Umbra Drift) went from 19.9 % of a core to 16.4 %, the cheapest (Wire Span)
+stayed at 3.0 % because it uses neither.
+
+`Tests/BankChecks.h` holds all three to the definition, worked out in double, at lengths that land
+on a lane boundary and lengths that leave a tail on eight lanes, on four, or on both; the self test
+runs them and `ambient_banktest` runs them once per vector path (AVX2, NEON through the x86 shim,
+scalar), the way the convolver's checks have been run since the Room was built. Writing that test
+cost two mistakes worth keeping: a double-precision reference run ALONGSIDE a single-precision
+recurrence diverges -- the Newton correction pulls each onto its own circle -- and failed all three
+paths including the scalar one that had not been touched, which is the tell that an oracle is
+measuring itself rather than the code; and a sum of partials that cancel is near zero, so the error
+of a reordered sum has to be measured against the sum of the terms' MAGNITUDES and not against the
+sum, or a correct vector path fails for arithmetic nobody got wrong.
+
+A profiler was not needed for any of it, and would have been the slower way round: what said
+where to look was the disassembly of the release build (797 packed against 756 scalar float
+instructions in the sources object, but four against thirty-one inside `renderAdditive`) and then
+the source itself. `renderAdditive` turned out to be the wrong suspect -- it runs once a block
+over at most 32 partials and calls the real loop -- which is the reason to read the code the
+instruction counts point at rather than trusting the count.
+
 No fast-math: the offline render is the determinism oracle of the self test, and reassociation
 makes it drift. LTO is an option (`AMBIENT_LTO`), off by default -- measured on MSVC it changed
 nothing (1.05-1.16 s either way).

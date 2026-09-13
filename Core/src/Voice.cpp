@@ -827,18 +827,9 @@ void Voice::render(float* nearL, float* nearR, float* farL, float* farR, int n, 
                     // rotation by tan = t, clamped, followed by two Newton steps of 1/sqrt so the
                     // phasor stays on the unit circle within 1e-4 per sample). The clamp makes deep
                     // modulation saturate softly on the high partials instead of tearing.
-                    for (int h = 0; h < act; ++h) {
-                        sum += amp[h] * ps[h];
-                        const float nc = pc[h] * rc[h] - ps[h] * rs[h];
-                        const float ns = ps[h] * rc[h] + pc[h] * rs[h];
-                        const float t  = clampv(th * kHf.v[h], -kFmMaxStep, kFmMaxStep);
-                        const float c2 = nc - ns * t, s2 = ns + nc * t;
-                        const float r2 = c2 * c2 + s2 * s2;
-                        float fix = 1.5f - 0.5f * r2;
-                        fix *= 1.5f - 0.5f * r2 * fix * fix;
-                        pc[h] = c2 * fix; ps[h] = s2 * fix;
-                        amp[h] += step[h];
-                    }
+                    // Written out in Simd.h since 13.09.2026: it was the dearest of the bank's
+                    // three loops and the only one still scalar on every platform.
+                    sum = phasorBankStepFm(pc, ps, rc, rs, amp, step, act, kHf.v, th, kFmMaxStep);
                 } else if (spreadAmt_ > 0.0f) {
                     float sumL, sumR;
                     phasorBankStepStereo(pc, ps, rc, rs, amp, step, act, s.wL, s.wR, sumL, sumR);

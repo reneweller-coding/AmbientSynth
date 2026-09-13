@@ -44,3 +44,12 @@ inline float32x4_t vmlaq_f32(float32x4_t a, float32x4_t b, float32x4_t c)
 
 inline float32x4_t vmlsq_f32(float32x4_t a, float32x4_t b, float32x4_t c)
 { for (int i = 0; i < 4; ++i) a.lane[i] -= b.lane[i] * c.lane[i]; return a; }
+
+// Lane-wise minimum and maximum, for the clamp in the FM bank (Simd.h). AArch64's vminq/vmaxq
+// return the second operand when either is a NaN; nothing here feeds them one, and std::fmin
+// would differ exactly there, so they are written as the plain comparison the hardware does.
+inline float32x4_t vminq_f32(float32x4_t a, float32x4_t b)
+{ for (int i = 0; i < 4; ++i) a.lane[i] = a.lane[i] < b.lane[i] ? a.lane[i] : b.lane[i]; return a; }
+
+inline float32x4_t vmaxq_f32(float32x4_t a, float32x4_t b)
+{ for (int i = 0; i < 4; ++i) a.lane[i] = a.lane[i] > b.lane[i] ? a.lane[i] : b.lane[i]; return a; }

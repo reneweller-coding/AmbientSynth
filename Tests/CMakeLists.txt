@@ -60,6 +60,43 @@ foreach(t ${AMBIENT_CONVTEST_TARGETS})
     endif()
 endforeach()
 
+# The partial bank's checks, once per vector path, the same way the convolver's are. The bank is a
+# header (Core/include/ambient/Simd.h), so the variants need no second source file -- only the
+# right defines and, for the shim, the fake <arm_neon.h> in front of the real include path.
+add_executable(ambient_banktest banktest.cpp)
+target_include_directories(ambient_banktest PRIVATE ${CMAKE_SOURCE_DIR}/Core/include)
+target_compile_features(ambient_banktest PRIVATE cxx_std_20)
+if(ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    target_compile_definitions(ambient_banktest PRIVATE AMBIENT_EXPECT_PATH="neon")
+endif()
+add_test(NAME banktest COMMAND ambient_banktest)
+set(AMBIENT_BANKTEST_TARGETS ambient_banktest)
+if(NOT ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|AMD64|x64)")
+    # The AVX2 one needs the flag in its own right: this target does not link AmbientCore.
+    target_compile_definitions(ambient_banktest PRIVATE AMBIENT_EXPECT_PATH="avx2")
+    if(MSVC)
+        target_compile_options(ambient_banktest PRIVATE /arch:AVX2)
+    else()
+        target_compile_options(ambient_banktest PRIVATE -mavx2)
+    endif()
+    foreach(variant neon scalar)
+        add_executable(ambient_banktest_${variant} banktest.cpp)
+        target_include_directories(ambient_banktest_${variant} PRIVATE ${CMAKE_SOURCE_DIR}/Core/include)
+        target_compile_features(ambient_banktest_${variant} PRIVATE cxx_std_20)
+        add_test(NAME banktest_${variant} COMMAND ambient_banktest_${variant})
+        list(APPEND AMBIENT_BANKTEST_TARGETS ambient_banktest_${variant})
+    endforeach()
+    target_include_directories(ambient_banktest_neon BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/neonshim)
+    target_compile_definitions(ambient_banktest_neon PRIVATE AMBIENT_NEON_SHIM=1 AMBIENT_EXPECT_PATH="neon-shim")
+    target_compile_definitions(ambient_banktest_scalar PRIVATE AMBIENT_EXPECT_PATH="scalar")
+endif()
+foreach(t ${AMBIENT_BANKTEST_TARGETS})
+    if(MSVC)
+        target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
+        target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+endforeach()
+
 # The convolution room's cost, by hand: CPU per second of audio and the worst callback, for impulse
 # lengths up to a minute. Nothing in it passes or fails, so it is not registered with ctest.
 add_executable(ambient_convbench convbench.cpp)

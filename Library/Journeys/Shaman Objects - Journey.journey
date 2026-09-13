@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Shaman Objects: Journey
+cyclic on
+Juniper Circle | 5:00-10:00 | 0:30-1:30
+Totem Vigil | 5:00-10:00 | 0:30-1:30
+Juniper Drift | 5:00-10:00 | 0:30-1:30
+Smudge Bloom | 5:00-10:00 | 0:30-1:30
+Totem Veil | 5:00-10:00 | 0:30-1:30
+Arroyo Objects | 5:00-10:00 | 0:30-1:30
+Rawhide Vigil | 5:00-10:00 | 0:30-1:30
+Canyon Bed | 5:00-10:00 | 0:30-1:30
+Adobe Vigil | 5:00-10:00 | 0:30-1:30
+Turquoise Fire | 5:00-10:00 | 0:30-1:30
+Coyote Ceremony | 5:00-10:00 | 0:30-1:30
+Feather Reach | 5:00-10:00 | 0:30-1:30

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Machine Depths: Night
+cyclic on
+Sludge Descent | 8:00-15:00 | 1:00-2:00
+Pumphouse Interval | 8:00-15:00 | 1:00-2:00
+Sluicegate Hollow | 8:00-15:00 | 1:00-2:00
+Conduit Span | 8:00-15:00 | 1:00-2:00
+Gasket Expanse | 8:00-15:00 | 1:00-2:00
+Drain Interval | 8:00-15:00 | 1:00-2:00
+Drain Hollow | 8:00-15:00 | 1:00-2:00
+Flue Pit | 8:00-15:00 | 1:00-2:00
+Kiln Threshold | 8:00-15:00 | 1:00-2:00
+Manifold Basin | 8:00-15:00 | 1:00-2:00
+Manifold Span | 8:00-15:00 | 1:00-2:00
+Silo Depth | 8:00-15:00 | 1:00-2:00

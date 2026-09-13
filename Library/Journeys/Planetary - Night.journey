@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Planetary: Night
+cyclic on
+Celestial Descent | 8:00-15:00 | 1:00-2:00
+Prism Bed | 8:00-15:00 | 1:00-2:00
+Celestial Light | 8:00-15:00 | 1:00-2:00
+Meridian Signal | 8:00-15:00 | 1:00-2:00
+Precession Veil | 8:00-15:00 | 1:00-2:00
+Gaia Bed | 8:00-15:00 | 1:00-2:00
+Solstice Reach | 8:00-15:00 | 1:00-2:00
+Zodiac Basin | 8:00-15:00 | 1:00-2:00
+Firmament Arc | 8:00-15:00 | 1:00-2:00
+Aeon Interval | 8:00-15:00 | 1:00-2:00
+Eclipse Circle | 8:00-15:00 | 1:00-2:00
+Axis Signal | 8:00-15:00 | 1:00-2:00

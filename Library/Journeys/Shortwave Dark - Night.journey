@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Shortwave Dark: Night
+cyclic on
+Wavetrap Interval | 8:00-15:00 | 1:00-2:00
+Squelch Call | 8:00-15:00 | 1:00-2:00
+Heterodyne Signal | 8:00-15:00 | 1:00-2:00
+Sideband Bed | 8:00-15:00 | 1:00-2:00
+Shortwave Interval | 8:00-15:00 | 1:00-2:00
+Shortwave Bed | 8:00-15:00 | 1:00-2:00
+Morse Station | 8:00-15:00 | 1:00-2:00
+Morse Expanse | 8:00-15:00 | 1:00-2:00
+Skip Basin | 8:00-15:00 | 1:00-2:00
+Heterodyne Descent | 8:00-15:00 | 1:00-2:00
+Morse Fade | 8:00-15:00 | 1:00-2:00
+Numbers Burst | 8:00-15:00 | 1:00-2:00

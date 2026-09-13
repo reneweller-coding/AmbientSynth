@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Luminous: Crossing
+cyclic on
+Degrade Hollow | 5:00-10:00 | 0:45-1:30
+Hush Passage | 5:00-10:00 | 0:45-1:30
+Lantern System | 5:00-10:00 | 0:45-1:30
+Degrade Loop | 5:00-10:00 | 0:45-1:30
+Dimmer Decrescendo | 5:00-10:00 | 0:45-1:30
+Quiet Expanse | 5:00-10:00 | 0:45-1:30
+Bitrot Descent | 5:00-10:00 | 0:45-1:30
+Drowsy Bed | 5:00-10:00 | 0:45-1:30
+Chalkline Signal | 5:00-10:00 | 0:45-1:30
+Degrade Expanse | 5:00-10:00 | 0:45-1:30
+Largo Drift | 5:00-10:00 | 0:45-1:30
+Weather Bed | 5:00-10:00 | 0:45-1:30

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Atom Space: Journey
+cyclic on
+Atom Bed | 5:00-10:00 | 0:30-1:30
+Cathode Bloom | 5:00-10:00 | 0:30-1:30
+Crater Vigil | 5:00-10:00 | 0:30-1:30
+Positron Core | 5:00-10:00 | 0:30-1:30
+Tritium Veil | 5:00-10:00 | 0:30-1:30
+Reactor Signal | 5:00-10:00 | 0:30-1:30
+Muon Bloom | 5:00-10:00 | 0:30-1:30
+Lepton Sequence | 5:00-10:00 | 0:30-1:30
+Reactor Veil | 5:00-10:00 | 0:30-1:30
+Gamma Pulse | 5:00-10:00 | 0:30-1:30
+Gamma Flux | 5:00-10:00 | 0:30-1:30
+Positron Space | 5:00-10:00 | 0:30-1:30

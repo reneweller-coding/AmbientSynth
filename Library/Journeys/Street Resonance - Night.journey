@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Street Resonance: Night
+cyclic on
+Concourse Bed | 8:00-15:00 | 1:00-2:00
+Hoarding Resonance | 8:00-15:00 | 1:00-2:00
+Terminus Traffic | 8:00-15:00 | 1:00-2:00
+Hoarding Walk | 8:00-15:00 | 1:00-2:00
+Siding Descent | 8:00-15:00 | 1:00-2:00
+Underpass Bed | 8:00-15:00 | 1:00-2:00
+Scaffold Descent | 8:00-15:00 | 1:00-2:00
+Platform Reach | 8:00-15:00 | 1:00-2:00
+Concourse Bloom | 8:00-15:00 | 1:00-2:00
+Siding Hour | 8:00-15:00 | 1:00-2:00
+Kerb Walk | 8:00-15:00 | 1:00-2:00
+Turnstile Drift | 8:00-15:00 | 1:00-2:00

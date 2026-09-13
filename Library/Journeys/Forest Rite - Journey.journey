@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Forest Rite: Journey
+cyclic on
+Wolfden Threshold | 5:00-10:00 | 0:30-1:30
+Resin Bloom | 5:00-10:00 | 0:30-1:30
+Spruce Bed | 5:00-10:00 | 0:30-1:30
+Spruce Dusk | 5:00-10:00 | 0:30-1:30
+Wolfden Fire | 5:00-10:00 | 0:30-1:30
+Fen Interval | 5:00-10:00 | 0:30-1:30
+Spruce Hollow | 5:00-10:00 | 0:30-1:30
+Lichen Field | 5:00-10:00 | 0:30-1:30
+Cairn Basin | 5:00-10:00 | 0:30-1:30
+Root Interval | 5:00-10:00 | 0:30-1:30
+Deadfall Basin | 5:00-10:00 | 0:30-1:30
+Cairn Vigil | 5:00-10:00 | 0:30-1:30

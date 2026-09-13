@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Weather Station: Night
+cyclic on
+Front Record | 8:00-15:00 | 1:00-2:00
+Pylon Veil | 8:00-15:00 | 1:00-2:00
+Barometer Threshold | 8:00-15:00 | 1:00-2:00
+Barometer Span | 8:00-15:00 | 1:00-2:00
+Cyclone Veil | 8:00-15:00 | 1:00-2:00
+Downdraft Passage | 8:00-15:00 | 1:00-2:00
+Anemometer Report | 8:00-15:00 | 1:00-2:00
+Front Report | 8:00-15:00 | 1:00-2:00
+Transformer Basin | 8:00-15:00 | 1:00-2:00
+Mast Span | 8:00-15:00 | 1:00-2:00
+Lightning Signal | 8:00-15:00 | 1:00-2:00
+Static Reading | 8:00-15:00 | 1:00-2:00

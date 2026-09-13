@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Slow Unfolding: Journey
+cyclic on
+Sediment Drift | 5:00-10:00 | 0:30-1:30
+Sediment Field | 5:00-10:00 | 0:30-1:30
+Coldstore Vigil | 5:00-10:00 | 0:30-1:30
+Silt Unfolding | 5:00-10:00 | 0:30-1:30
+Tarnish Unfolding | 5:00-10:00 | 0:30-1:30
+Silt Drift | 5:00-10:00 | 0:30-1:30
+Quay Vigil | 5:00-10:00 | 0:30-1:30
+Tarnish Bed | 5:00-10:00 | 0:30-1:30
+Anchorage Distance | 5:00-10:00 | 0:30-1:30
+Silt Reach | 5:00-10:00 | 0:30-1:30
+Slate Descent | 5:00-10:00 | 0:30-1:30
+Cinder Veil | 5:00-10:00 | 0:30-1:30

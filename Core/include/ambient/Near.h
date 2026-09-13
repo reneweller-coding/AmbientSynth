@@ -327,12 +327,12 @@ private:
     float trajectory(double q) const
     {
         const double a = std::fabs(static_cast<double>(approach_));
-        float far = 0.0f;
+        float outward = 0.0f;
         if (a > 0.0) {
-            if (q < a) far = static_cast<float>(1.0 - q / a);
-            else if (q > 1.0 - a) far = static_cast<float>((q - (1.0 - a)) / a);
+            if (q < a) outward = static_cast<float>(1.0 - q / a);
+            else if (q > 1.0 - a) outward = static_cast<float>((q - (1.0 - a)) / a);
         }
-        return home_ + (1.0f - home_) * far;
+        return home_ + (1.0f - home_) * outward;
     }
 
     template <class FreqFn, class ConsFn, class EmitFn>

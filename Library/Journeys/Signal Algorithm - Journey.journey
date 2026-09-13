@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Signal Algorithm: Journey
+cyclic on
+Integer Grid | 5:00-10:00 | 0:30-1:30
+Genome Span | 5:00-10:00 | 0:30-1:30
+Sputnik Code | 5:00-10:00 | 0:30-1:30
+Lattice Code | 5:00-10:00 | 0:30-1:30
+Photon Vigil | 5:00-10:00 | 0:30-1:30
+Photon Code | 5:00-10:00 | 0:30-1:30
+Photon Bed | 5:00-10:00 | 0:30-1:30
+Cipher Expanse | 5:00-10:00 | 0:30-1:30
+Quantum Reach | 5:00-10:00 | 0:30-1:30
+Parity Wave | 5:00-10:00 | 0:30-1:30
+Algorithm Expanse | 5:00-10:00 | 0:30-1:30
+Parity Field | 5:00-10:00 | 0:30-1:30

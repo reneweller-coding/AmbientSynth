@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Field Recordings: Night
+cyclic on
+Gannet Recording | 8:00-15:00 | 1:00-2:00
+Tundra Colony | 8:00-15:00 | 1:00-2:00
+Kelp Veil | 8:00-15:00 | 1:00-2:00
+Moor Interval | 8:00-15:00 | 1:00-2:00
+Whalesong Bed | 8:00-15:00 | 1:00-2:00
+Sealion Threshold | 8:00-15:00 | 1:00-2:00
+Plover Basin | 8:00-15:00 | 1:00-2:00
+Tideline Descent | 8:00-15:00 | 1:00-2:00
+Whalesong Colony | 8:00-15:00 | 1:00-2:00
+Birdsong Signal | 8:00-15:00 | 1:00-2:00
+Gannet Expanse | 8:00-15:00 | 1:00-2:00
+Estuary Migration | 8:00-15:00 | 1:00-2:00

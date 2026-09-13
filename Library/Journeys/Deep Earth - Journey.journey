@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Deep Earth: Journey
+cyclic on
+Abyssal Weight | 5:00-10:00 | 0:30-1:30
+Seismic Passage | 5:00-10:00 | 0:30-1:30
+Chthonic Threshold | 5:00-10:00 | 0:30-1:30
+Fumarole Bed | 5:00-10:00 | 0:30-1:30
+Ossuary Basin | 5:00-10:00 | 0:30-1:30
+Obsidian Fault | 5:00-10:00 | 0:30-1:30
+Tectonic Vigil | 5:00-10:00 | 0:30-1:30
+Crypt Interval | 5:00-10:00 | 0:30-1:30
+Basalt Chamber | 5:00-10:00 | 0:30-1:30
+Chthonic Basin | 5:00-10:00 | 0:30-1:30
+Seismic Drift | 5:00-10:00 | 0:30-1:30
+Seismic Bloom | 5:00-10:00 | 0:30-1:30

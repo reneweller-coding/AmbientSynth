@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Ritual: Crossing
+cyclic on
+Lever Shift | 5:00-10:00 | 0:45-1:30
+Threnody Veil | 5:00-10:00 | 0:45-1:30
+Shroud Prayer | 5:00-10:00 | 0:45-1:30
+Hammer Loop | 5:00-10:00 | 0:45-1:30
+Delirium Expanse | 5:00-10:00 | 0:45-1:30
+Nave Passage | 5:00-10:00 | 0:45-1:30
+Piston Litany | 5:00-10:00 | 0:45-1:30
+Reverie Night | 5:00-10:00 | 0:45-1:30
+Lament Choir | 5:00-10:00 | 0:45-1:30
+Rivet Bed | 5:00-10:00 | 0:45-1:30
+Oneiric Bloom | 5:00-10:00 | 0:45-1:30
+Shroud Hymn | 5:00-10:00 | 0:45-1:30

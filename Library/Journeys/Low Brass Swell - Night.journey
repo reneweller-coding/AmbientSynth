@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Low Brass Swell: Night
+cyclic on
+Fathom Passage | 8:00-15:00 | 1:00-2:00
+Octave Vigil | 8:00-15:00 | 1:00-2:00
+Embouchure Signal | 8:00-15:00 | 1:00-2:00
+Lowland Interval | 8:00-15:00 | 1:00-2:00
+Undertone Drone | 8:00-15:00 | 1:00-2:00
+Octave Threshold | 8:00-15:00 | 1:00-2:00
+Didgeridoo Reach | 8:00-15:00 | 1:00-2:00
+Lowland Field | 8:00-15:00 | 1:00-2:00
+Embouchure Descent | 8:00-15:00 | 1:00-2:00
+Tuba Threshold | 8:00-15:00 | 1:00-2:00
+Embouchure Bloom | 8:00-15:00 | 1:00-2:00
+Furrow Threshold | 8:00-15:00 | 1:00-2:00

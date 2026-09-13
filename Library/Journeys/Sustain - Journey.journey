@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Sustain: Journey
+cyclic on
+Even Veil | 5:00-10:00 | 0:30-1:30
+Stilled Basin | 5:00-10:00 | 0:30-1:30
+Long Hum | 5:00-10:00 | 0:30-1:30
+Plain Bed | 5:00-10:00 | 0:30-1:30
+Single Veil | 5:00-10:00 | 0:30-1:30
+Unmoving Bloom | 5:00-10:00 | 0:30-1:30
+Unbroken Vigil | 5:00-10:00 | 0:30-1:30
+Endless Tone | 5:00-10:00 | 0:30-1:30
+Single Vigil | 5:00-10:00 | 0:30-1:30
+Patient Hum | 5:00-10:00 | 0:30-1:30
+Constant Hour | 5:00-10:00 | 0:30-1:30
+Plain Passage | 5:00-10:00 | 0:30-1:30

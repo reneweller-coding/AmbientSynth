@@ -301,6 +301,8 @@ enum class ParamId : int {
     // the output past every reverb and delay: a rattle twenty centimetres from the nose, a click
     // that no room may soften.
     ForeDistance, ForeDry,
+    // Whether a sound preset of a pack brings its own foreground (the artist's table, NearAuto.inc).
+    ForeAuto,
     // How long the far reverb takes to come back after the foreground has ducked it. It came back
     // in 1.2 seconds since the unmask was built, and that stays the default; a foreground that
     // speaks and then lets the horizon return over five to ten seconds makes the return itself a

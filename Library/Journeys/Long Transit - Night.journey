@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Long Transit: Night
+cyclic on
+Tether Silence | 8:00-15:00 | 1:00-2:00
+Perihelion Span | 8:00-15:00 | 1:00-2:00
+Payload Transit | 8:00-15:00 | 1:00-2:00
+Tether Bed | 8:00-15:00 | 1:00-2:00
+Telemetry Descent | 8:00-15:00 | 1:00-2:00
+Starboard Span | 8:00-15:00 | 1:00-2:00
+Voyager Log | 8:00-15:00 | 1:00-2:00
+Relay Silence | 8:00-15:00 | 1:00-2:00
+Payload Passage | 8:00-15:00 | 1:00-2:00
+Payload Field | 8:00-15:00 | 1:00-2:00
+Probe Field | 8:00-15:00 | 1:00-2:00
+Module Interval | 8:00-15:00 | 1:00-2:00

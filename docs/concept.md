@@ -3198,6 +3198,37 @@ per event is choose its sends into Delay 2 or the Cosmos: it takes the mix of
 whatever sound is playing, and Distance and Dry were the two that covered
 most of the list without giving each event a mixer of its own.
 
+**Auto, and the journeys (the same morning).** Two things Rene asked for once
+the foreground existed. *Auto*: a sound preset from a pack brings its own
+foreground. Rene wrote a table per artist -- what share of the artist's
+presets get one at all, which near presets they draw from and with what
+weight, and a class per group (often, now and then, seldom) that scales the
+near preset's Every -- and `Tools/make_near_auto.py` compiles it into the
+instrument keyed by pack (`NearAuto.inc`). The draw is a hash of the preset's
+name, so a preset brings the same foreground every time it is chosen and its
+neighbour in the pack brings another; a near preset chosen by hand switches
+Auto off and stays, and Auto switched on draws for the preset that is
+playing. The render tool keeps Auto off unless asked (`--near-auto`), because
+the library is measured, mapped and rated without a foreground, and must be.
+
+*Journeys*: presets in a row, each held for a while drawn from a range, each
+crossfaded into the next over a drawn fade, round and round when cyclic -- an
+evening that plays itself, and never the same way twice. A plain text file
+(`*.journey`, one preset a line with its dwell and its fade, and optionally the
+foreground it wants), a player in the plugin that advances on the preset pump
+and asks the transition for the drawn fade, the box in the Morph section that
+starts one, `+ now` and `Save...` to write one's own into
+`Documents/AmbientSynth/Journeys`, and `--journey` in the render tool (which
+cuts where the plugin crossfades). The templates the instrument ships,
+`Tools/make_journeys.py` makes from the library's own measurement: for every
+pack a *Journey* of twelve presets spread across the pack's space (farthest
+points on the standardised descriptors, then chained by nearest neighbour so
+every crossfade is a small step) and a *Night* of its twelve stillest, and for
+every family of artists a *Crossing* that walks from pack to pack, each step
+the nearest neighbour under another name. The neighbour in that space is a
+preset that measures alike, which is the promise of a gentle crossfade and not
+of a good evening; the good ones are Rene's own, written beside these.
+
 **Slot roles** came with it, for the sound presets: each slot may sound in
 every note, or only in the lowest, an inner or the highest note of what its
 owner is sounding -- the cello under the chord, the chime on top -- re-read

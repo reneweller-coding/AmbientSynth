@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Loop Studio: Night
+cyclic on
+Splice Veil | 8:00-15:00 | 1:00-2:00
+Echo Signal | 8:00-15:00 | 1:00-2:00
+Oscillator Signal | 8:00-15:00 | 1:00-2:00
+Oscillator Room | 8:00-15:00 | 1:00-2:00
+Signal Vigil | 8:00-15:00 | 1:00-2:00
+Patchbay Veil | 8:00-15:00 | 1:00-2:00
+Leader Field | 8:00-15:00 | 1:00-2:00
+Headstock Take | 8:00-15:00 | 1:00-2:00
+Relay Bed | 8:00-15:00 | 1:00-2:00
+Echo Bloom | 8:00-15:00 | 1:00-2:00
+Leader Basin | 8:00-15:00 | 1:00-2:00
+Signal Loop | 8:00-15:00 | 1:00-2:00

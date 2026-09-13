@@ -44,6 +44,13 @@ private:
     bool updateNearCells();     // the same for the Near Source's type; true if a cell changed
     int  cellForParam(ambient::ParamId id) const;
     int  tableCell_ = -1, impulseCell_ = -1, impulseBCell_ = -1, nearClipCell_ = -1;
+    bool autoSeen_ = true;   // the near layer's Auto as the timer last saw it (a rising edge draws anew)
+    // Journeys: the box of files, the status label, and the files behind the box's ids.
+    juce::ComboBox* journeyBox_ = nullptr;
+    juce::Label*    journeyStatus_ = nullptr;
+    juce::Array<juce::File> journeyFiles_;
+    void fillJourneyBox();
+    void saveJourneyAs();
     int  textureCell_[ambient::kSlots] = { -1, -1, -1, -1 };   // a Texture... button in every source section
     void buildCells();
     void colourCellsByGroup();

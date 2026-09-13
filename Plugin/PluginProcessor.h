@@ -6,6 +6,7 @@
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
 #include "ambient/Timeline.h"
+#include "ambient/Journey.h"
 #include <array>
 #include <atomic>
 
@@ -82,6 +83,11 @@ public:
     // The near layer (13.09.2026): like the Cosmos, kept across sound presets. A near preset may
     // name a clip of the library's archive for its source; the player may open one by hand.
     void applyNearPreset(int index);
+    // Auto: the foreground a pack preset brings (the artist's table); applied with the sound
+    // preset while fore_auto is on, and again when it is switched on for the preset playing.
+    void applyNearAuto(int soundIndex);
+    void nearAutoNow() { applyNearAuto(soundIndex_); }
+    void setNearAuto(bool on) { setParam(ambient::ParamId::ForeAuto, on ? 1.0f : 0.0f); }
     bool loadNearClipFile(const juce::File& file);
     bool loadNearClipFolder(const juce::File& dir);   // a pool: every event plays one of its recordings, at random
     void clearNearClip();
@@ -118,6 +124,23 @@ public:
     void setMorphOnSelect(bool on) { morphOnSelect_ = on; }
     float morphSelectSeconds() const { return morphSelectSeconds_.load(std::memory_order_relaxed); }
     void setMorphSelectSeconds(float s) { morphSelectSeconds_ = juce::jlimit(0.5f, 600.0f, s); }
+
+    // Journeys (13.09.2026): presets in a row, each held for a while drawn from its range, each
+    // crossfaded into the next over a drawn fade, round and round when cyclic -- an evening that
+    // plays itself. A journey names presets, not indices, and skips a name the library no longer
+    // has. The player advances on the preset pump; the editor asks for the status.
+    bool startJourney(const juce::File& file);        // false if the file does not parse
+    bool startJourney(const ambient::Journey& j);
+    void stopJourney();
+    bool journeyRunning() const { return journeyPlayer_.running(); }
+    juce::String journeyStatus() const;               // "<name>  3/12  4:12" while one runs, else empty
+    const ambient::Journey& journey() const { return journey_; }
+    void journeyAddCurrent(double dwellLo, double dwellHi, double fadeLo, double fadeHi);   // the sound preset playing, appended
+    void journeyClear() { journey_ = ambient::Journey(); }
+    bool saveJourney(const juce::File& file);
+    static juce::File userJourneyFolder();            // Documents/AmbientSynth/Journeys, made if need be
+    static juce::Array<juce::File> journeyFiles();    // the templates beside the library and the user's own
+    void journeyTick();                               // message thread, from the pump
     // Which preset the instrument is travelling towards, -1 when it is not, and how far it has
     // come (0..1) -- the browser draws both.
     // What the map draws as the travelling line: where the sound is coming from, where it is
@@ -244,10 +267,13 @@ private:
     // and read files, which is not work for the audio thread.
     struct PresetPump : juce::Timer {
         explicit PresetPump(AmbientSynthProcessor& p) : proc(p) {}
-        void timerCallback() override { proc.servePresetRequests(); proc.servePendingPreset(); }
+        void timerCallback() override { proc.servePresetRequests(); proc.servePendingPreset(); proc.journeyTick(); }
         AmbientSynthProcessor& proc;
     };
     PresetPump presetPump_ { *this };
+    ambient::Journey       journey_;
+    ambient::JourneyPlayer journeyPlayer_;
+    double                 journeyLastTick_ = 0.0;   // seconds (the hi-res counter) at the last tick
     ambient::EventQueue presetEvents_;   // OSC preset changes, waiting for the message thread
 public:
     void servePendingPreset();        // message thread; does nothing until an engine is free
@@ -314,7 +340,7 @@ private:
     int        nearClipCount_ = 0;
     // The names, not the indices: a pack added or removed between two sessions renumbers every
     // preset behind it, and an index would then name a different sound.
-    juce::String soundName_, cosmosName_;
+    juce::String soundName_, cosmosName_, nearName_;
     static juce::PropertySet* standaloneSettings();
     void timerCallback() override;             // session recall: save when the state has changed
     bool sessionRecall_ = true;

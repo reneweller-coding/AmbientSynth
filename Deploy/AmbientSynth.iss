@@ -121,6 +121,10 @@ Source: "{#Stage}\AmbientSynth.vst3\*"; DestDir: "{autocf}\VST3\AmbientSynth.vst
 ; Documents\AmbientSynth\Packs (see Core/src/PresetPacks.cpp).
 Source: "{#Stage}\Packs\*.ambientpack"; DestDir: "{code:LibDir}\Packs"; \
     Components: packs; Flags: ignoreversion
+; The journey templates (presets in a row, Core/include/ambient/Journey.h), beside the packs;
+; the player's own go to Documents\AmbientSynth\Journeys and are never touched.
+Source: "{#Stage}\Journeys\*.journey"; DestDir: "{code:LibDir}\Journeys"; \
+    Components: packs; Flags: ignoreversion skipifsourcedoesntexist
 #if HaveContent
 ; The sample library: fetched by the [Code] section below (which can survive a failure), checked
 ; against its hash on the way in, and unpacked here into the library folder beside the packs --
@@ -150,6 +154,7 @@ Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\FieldRecordings"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Wavetables"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Impulses"
 Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Archive"
+Type: filesandordirs; Name: "{commonappdata}\AmbientSynth\Journeys"
 Type: dirifempty;     Name: "{commonappdata}\AmbientSynth"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Packs"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Textures"
@@ -157,6 +162,7 @@ Type: filesandordirs; Name: "{localappdata}\AmbientSynth\FieldRecordings"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Wavetables"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Impulses"
 Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Archive"
+Type: filesandordirs; Name: "{localappdata}\AmbientSynth\Journeys"
 Type: dirifempty;     Name: "{localappdata}\AmbientSynth"
 
 [Code]

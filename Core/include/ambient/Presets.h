@@ -77,7 +77,9 @@ const char* nearPresetFamily(int family);
 inline bool isCosmosParam(ParamId id) { return sectionOf(id) == ParamSection::Cosmos; }
 inline bool isZPlaneParam(ParamId id) { return sectionOf(id) == ParamSection::ZPlane; }
 inline bool isStrikeParam(ParamId id) { return sectionOf(id) == ParamSection::Strike; }
-inline bool isNearParam(ParamId id)   { const ParamSection s = sectionOf(id); return s == ParamSection::NearSource || s == ParamSection::NearEvents; }
+// Auto is the one Near Events control that is not part of a near preset: it decides whether a
+// sound preset brings its own foreground, and a near preset chosen by hand must not switch it on.
+inline bool isNearParam(ParamId id)   { const ParamSection s = sectionOf(id); return (s == ParamSection::NearSource || s == ParamSection::NearEvents) && id != ParamId::ForeAuto; }
 inline bool isMorphParam(ParamId id)  { return sectionOf(id) == ParamSection::Morph; }
 inline bool isMacroParam(ParamId id)  { return sectionOf(id) == ParamSection::Macros; }
 inline bool isMapParam(ParamId id)    { return sectionOf(id) == ParamSection::Map; }
@@ -121,6 +123,19 @@ int  loadDefaultPresetPacks();
 void clearPresetPacks();
 int  numPresetPacks();
 const char* presetPackName(int pack);
+// The pack a preset came from, or -1 for a built-in.
+int  presetPack(int presetIndex);
+// The near layer's Auto (13.09.2026): the foreground a sound preset of a pack brings with it.
+// Rene's table per artist (Tools/library/near_by_artist.json, compiled to NearAuto.inc): a share
+// of the pack's presets get one at all, drawn by weight from the artist's list, and the near
+// preset's Every scaled by a factor of its class (often, now and then, seldom). Deterministic:
+// the draw is a hash of the preset's name, so a preset brings the same foreground every time.
+// Returns the near preset's index (0 = Near Off for the presets that get none), or -1 when the
+// pack has no table; `rateFactor` is what to multiply the near preset's Every by.
+int  nearAutoPick(const char* packName, const char* presetName, float& rateFactor);
+// The folders the library may lie in, in the order resolveLibraryFile searches them: for anything
+// that lists a library folder (the journeys under <root>/Journeys, say) rather than one file.
+int  libraryRoots(char* buf, int cap);   // ';'-separated into buf; returns how many
 // Absolute path of the file a pack preset names, or an empty string.
 // `which`: 0 texture, 1 wavetable, 2 impulse, 3 impulse B.
 constexpr int kPresetFiles = 4;

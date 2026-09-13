@@ -684,7 +684,14 @@ void AmbientSynthEditor::buildCells()
         nb->setTooltip("The foreground on its own: what is played close to the ear, how it is shaped, and how often. A layer like the Cosmos -- it stays while sound presets change under it -- and it touches nothing outside the two Near sections.");
         nb->onChange = [this] {
             const int idx = nearPresetBox_->getSelectedId() - 1;
-            if (idx >= 0) { pushUndo("near preset"); proc_.applyNearPreset(idx); }
+            if (idx >= 0) {
+                pushUndo("near preset");
+                // A foreground chosen by hand is pinned: Auto off, so the next sound preset does not
+                // bring its own over it. Auto on again draws for the preset that is playing.
+                proc_.setNearAuto(false);
+                autoSeen_ = false;
+                proc_.applyNearPreset(idx);
+            }
         };
         nearPresetBox_ = nb.get();
         addExtraCell("Near Events", std::move(nb), "Preset", 3);
@@ -720,6 +727,65 @@ void AmbientSynthEditor::buildCells()
     auto setB = std::make_unique<juce::TextButton>("B <- now");
     setB->onClick = [this] { proc_.setMorphSlotFromCurrent(1); morphBBox_->setSelectedId(0, juce::dontSendNotification); };
     addExtraCell("Morph", std::move(setB), "capture", 1);
+    {
+        // Journeys (13.09.2026): presets in a row with dwell and fade ranges, cyclic for an evening.
+        // The templates lie beside the library, the player's own in Documents/AmbientSynth/Journeys.
+        auto jb = std::make_unique<juce::ComboBox>();
+        jb->setTextWhenNothingSelected("Journey");
+        jb->setTooltip("A journey: presets in a row, each held for a while drawn from its range and crossfaded into the next over a drawn fade, round and round when it is cyclic. Choosing one starts it. The files are plain text (*.journey): one preset a line with its dwell and fade, editable by hand.");
+        journeyBox_ = jb.get();
+        fillJourneyBox();
+        jb->onChange = [this] {
+            const int id = journeyBox_->getSelectedId();
+            if (id <= 0 || id > journeyFiles_.size()) return;
+            if (!proc_.startJourney(journeyFiles_[id - 1]))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Journey", "This journey could not be read (a malformed line, or no steps).");
+        };
+        addExtraCell("Morph", std::move(jb), "Journey", 3);
+        auto stop = std::make_unique<juce::TextButton>("Stop");
+        stop->setTooltip("Stops the journey; the preset playing stays.");
+        stop->onClick = [this] { proc_.stopJourney(); journeyBox_->setSelectedId(0, juce::dontSendNotification); };
+        addExtraCell("Morph", std::move(stop), "journey", 1);
+        auto add = std::make_unique<juce::TextButton>("+ now");
+        add->setTooltip("Appends the sound preset that is playing to the journey being written (5-10 minutes, a fade of 30-90 seconds; edit the file for other ranges). Save... writes it.");
+        add->onClick = [this] { proc_.journeyAddCurrent(300.0, 600.0, 30.0, 90.0); };
+        addExtraCell("Morph", std::move(add), "write", 1);
+        auto save = std::make_unique<juce::TextButton>("Save...");
+        save->setTooltip("Writes the journey being written (the presets added with + now) into Documents/AmbientSynth/Journeys under a name, and offers it in the box.");
+        save->onClick = [this] { saveJourneyAs(); };
+        addExtraCell("Morph", std::move(save), "write", 1);
+        auto status = std::make_unique<juce::Label>();
+        status->setJustificationType(juce::Justification::centredLeft);
+        status->setMinimumHorizontalScale(0.7f);
+        journeyStatus_ = status.get();
+        addExtraCell("Morph", std::move(status), "step", 2);
+    }
+}
+
+void AmbientSynthEditor::fillJourneyBox()
+{
+    if (journeyBox_ == nullptr) return;
+    journeyFiles_ = AmbientSynthProcessor::journeyFiles();
+    journeyBox_->clear(juce::dontSendNotification);
+    for (int i = 0; i < journeyFiles_.size(); ++i) journeyBox_->addItem(journeyFiles_[i].getFileNameWithoutExtension(), i + 1);
+}
+
+void AmbientSynthEditor::saveJourneyAs()
+{
+    auto* w = new juce::AlertWindow("Save journey", "A name for the journey being written (" + juce::String(static_cast<int>(proc_.journey().steps.size())) + " steps):", juce::MessageBoxIconType::NoIcon);
+    w->addTextEditor("name", proc_.journey().name.empty() ? "My Journey" : juce::String(proc_.journey().name), "Name");
+    w->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    w->enterModalState(true, juce::ModalCallbackFunction::create([this, w](int result) {
+        std::unique_ptr<juce::AlertWindow> owner(w);
+        if (result != 1) return;
+        const juce::String name = juce::File::createLegalFileName(w->getTextEditorContents("name").trim());
+        if (name.isEmpty()) return;
+        const juce::File file = AmbientSynthProcessor::userJourneyFolder().getChildFile(name + ".journey");
+        if (!proc_.saveJourney(file))
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Journey", "Nothing to save: add presets with + now first.");
+        else fillJourneyBox();
+    }), false);
 }
 
 // Which parameter sits under a screen point: the drop target for a dragged modulation source.
@@ -2276,6 +2342,19 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
 void AmbientSynthEditor::timerCallback()
 {
     proc_.engine().soundingNotes(sounding_);
+    {   // Auto switched on (the toggle, or the host): the preset that is playing brings its foreground now.
+        const bool autoOn = proc_.engine().getParam(ParamId::ForeAuto) >= 0.5f;
+        if (autoOn && !autoSeen_) proc_.nearAutoNow();
+        autoSeen_ = autoOn;
+        // The box says what Auto (or a state) put there, without the change counting as a hand's.
+        if (nearPresetBox_ != nullptr && proc_.nearPresetIndex() >= 0 && nearPresetBox_->getSelectedId() != proc_.nearPresetIndex() + 1)
+            nearPresetBox_->setSelectedId(proc_.nearPresetIndex() + 1, juce::dontSendNotification);
+        if (journeyStatus_ != nullptr) {
+            const juce::String s = proc_.journeyRunning() ? proc_.journeyStatus()
+                                 : (proc_.journey().steps.empty() ? juce::String() : juce::String(static_cast<int>(proc_.journey().steps.size())) + " steps written");
+            if (journeyStatus_->getText() != s) journeyStatus_->setText(s, juce::dontSendNotification);
+        }
+    }
     {   // Mark what is moving each knob right now. The matrix, in its source's colour, as before;
         // and everything else that plays a value the knob does not show -- the morph between two
         // presets, the map's blend, a route -- as a neutral arc from the knob's value to the live

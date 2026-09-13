@@ -10,6 +10,7 @@
 #include "ambient/Help.h"
 #include "ambient/Filter.h"
 #include "ambient/Score.h"
+#include "ambient/Journey.h"
 #include "ambient/Gesture.h"
 #include "ambient/Osc.h"
 #include "ambient/Menu.h"
@@ -7936,6 +7937,78 @@ static void testNearLayer()
             std::printf("  [probe] beacon: packet %.4f, gap %.5f, next packet %.4f\n", p1, gap, p2);
             CHECK(p1 > 0.05 && p2 > 0.05 && gap < 0.01 * p1, "a packet, silence, a packet");
         }
+    }
+    // ---- Journeys (13.09.2026): the text form round-trips, the player keeps to the ranges and cycles
+    {
+        Journey j;
+        const char* text =
+            "# a journey\njourney First Night\ncyclic on\n"
+            "Somnus Bed | 5:00-10:00 | 0:30-1:30\n"
+            "Somnus Vigil | 4:00 | 0:20 | near=Quiet, Please\n"
+            "Glacier Bloom | 1:00:00-1:30:00 | 45 | near=keep\n";
+        CHECK(j.parse(text), "a journey's text parses");
+        CHECK(j.name == "First Night" && j.cyclic && j.steps.size() == 3, "with its name, its cycle and its three steps");
+        CHECK(j.steps[0].dwellLo == 300.0 && j.steps[0].dwellHi == 600.0 && j.steps[0].fadeLo == 30.0 && j.steps[0].fadeHi == 90.0, "a range as two times");
+        CHECK(j.steps[1].dwellLo == 240.0 && j.steps[1].dwellHi == 240.0 && j.steps[1].nearPreset == "Quiet, Please", "one time as a fixed value, and the near preset named");
+        CHECK(j.steps[2].dwellLo == 3600.0 && j.steps[2].dwellHi == 5400.0 && j.steps[2].fadeLo == 45.0 && j.steps[2].nearPreset == "keep", "hours and plain seconds");
+        Journey back;
+        CHECK(back.parse(j.text().c_str()) && back.text() == j.text() && back.steps.size() == 3 && back.steps[1].nearPreset == "Quiet, Please", "and writes itself back the same");
+        Journey bad;
+        CHECK(!bad.parse("journey x\nSomnus Bed | five minutes | 0:30\n"), "a time that is not one is refused");
+        // The player: every step in turn, dwell inside its range, the fade inside its range, round
+        // again when cyclic, and the same run for the same seed.
+        JourneyPlayer p, q;
+        p.start(j, 7u); q.start(j, 7u);
+        int begun = 0; bool inRange = true, same = true;
+        double t = 0.0;
+        std::vector<int> order;
+        for (int tick = 0; tick < 20000; ++tick) {
+            JourneyStep sp, sq; double fp = 0.0, fq = 0.0;
+            const bool bp = p.advance(1.0, sp, fp), bq = q.advance(1.0, sq, fq);
+            if (bp != bq || (bp && (sp.preset != sq.preset || fp != fq))) same = false;
+            if (!bp) { t += 1.0; continue; }
+            ++begun; order.push_back(p.step());
+            const JourneyStep& st = j.steps[static_cast<size_t>(p.step())];
+            if (p.remaining() < st.dwellLo - 1.0e-9 || p.remaining() > st.dwellHi + 1.0e-9) inRange = false;
+            if (fp < st.fadeLo - 1.0e-9 || fp > st.fadeHi + 1.0e-9) inRange = false;
+        }
+        std::printf("  [probe] journey: %d steps begun in 20000 s, order", begun);
+        for (size_t i = 0; i < std::min<size_t>(order.size(), 8); ++i) std::printf(" %d", order[i] + 1);
+        std::printf(", passes %d\n", p.passes());
+        CHECK(begun >= 6 && p.passes() >= 1, "the journey goes round");
+        CHECK(order.size() >= 6 && order[0] == 0 && order[1] == 1 && order[2] == 2 && order[3] == 0, "in its order, and again from the first");
+        CHECK(inRange, "every dwell and every fade inside its range");
+        CHECK(same, "and the same run for the same seed");
+        Journey once = j; once.cyclic = false;
+        JourneyPlayer o; o.start(once, 3u);
+        int n = 0; for (int tick = 0; tick < 20000 && o.running(); ++tick) { JourneyStep s; double f; if (o.advance(1.0, s, f)) ++n; }
+        CHECK(n == 3 && !o.running(), "a journey that is not cyclic ends after its last step");
+    }
+    // ---- Auto (13.09.2026): the foreground a pack preset brings, from the artist's table, by name
+    {
+        float f1 = 0.0f, f2 = 0.0f, f3 = 0.0f;
+        const int a = nearAutoPick("Sleep Concert", "Somnus Bed", f1);
+        const int b = nearAutoPick("Sleep Concert", "Somnus Bed", f2);
+        const int c = nearAutoPick("No Such Pack", "Somnus Bed", f3);
+        CHECK(a == b && f1 == f2, "the same preset brings the same foreground every time");
+        CHECK(c == -1, "a pack without a table brings nothing");
+        // Over many names: the share of presets with a foreground near the table's share (0.7 for
+        // Robert Rich's pack), every pick a real near preset, every factor inside 0.6 .. 4.
+        int with = 0, bad = 0;
+        std::vector<int> counts(static_cast<size_t>(numNearPresets()), 0);
+        for (int i = 0; i < 400; ++i) {
+            char name[32]; std::snprintf(name, sizeof(name), "Preset %d of the night", i);
+            float f = 0.0f;
+            const int pick = nearAutoPick("Sleep Concert", name, f);
+            if (pick < 0 || pick >= numNearPresets()) { ++bad; continue; }
+            if (pick > 0) { ++with; ++counts[static_cast<size_t>(pick)]; if (f < 0.6f || f > 4.0f) ++bad; }
+        }
+        int distinct = 0;
+        for (int n : counts) if (n > 0) ++distinct;
+        std::printf("  [probe] near auto: %d of 400 names bring a foreground (share 0.7), %d different near presets, %d bad picks\n", with, distinct, bad);
+        CHECK(bad == 0, "every pick is a near preset with a factor of its class");
+        CHECK(with > 240 && with < 320, "about the table's share of them get one");
+        CHECK(distinct >= 12, "drawn from the artist's whole list, not one of it");
     }
     // ---- Distance and Dry (13.09.2026): where an event sits, and what goes past the room
     {

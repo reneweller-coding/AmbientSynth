@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Silk Road Space: Night
+cyclic on
+Mosaicwork Drift | 8:00-15:00 | 1:00-2:00
+Nomad Garden | 8:00-15:00 | 1:00-2:00
+Oasis Threshold | 8:00-15:00 | 1:00-2:00
+Qanat Bed | 8:00-15:00 | 1:00-2:00
+Mosaicwork Threshold | 8:00-15:00 | 1:00-2:00
+Starlit Expanse | 8:00-15:00 | 1:00-2:00
+Cardamom Dream | 8:00-15:00 | 1:00-2:00
+Indigo Expanse | 8:00-15:00 | 1:00-2:00
+Pistachio Vigil | 8:00-15:00 | 1:00-2:00
+Henna Road | 8:00-15:00 | 1:00-2:00
+Starlit Field | 8:00-15:00 | 1:00-2:00
+Tapestry Passage | 8:00-15:00 | 1:00-2:00

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Cold: Crossing
+cyclic on
+Skerry Signal | 5:00-10:00 | 0:45-1:30
+Plover Veil | 5:00-10:00 | 0:45-1:30
+Squall Passage | 5:00-10:00 | 0:45-1:30
+Groove Voice | 5:00-10:00 | 0:45-1:30
+Embankment Veil | 5:00-10:00 | 0:45-1:30
+Lasting Span | 5:00-10:00 | 0:45-1:30
+Termite Drift | 5:00-10:00 | 0:45-1:30
+Gale Basin | 5:00-10:00 | 0:45-1:30
+Rime Plain | 5:00-10:00 | 0:45-1:30
+Plover Chorus | 5:00-10:00 | 0:45-1:30
+Understory Veil | 5:00-10:00 | 0:45-1:30
+Floe Vigil | 5:00-10:00 | 0:45-1:30

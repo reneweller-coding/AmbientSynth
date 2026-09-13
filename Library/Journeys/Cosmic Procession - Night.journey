@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Cosmic Procession: Night
+cyclic on
+Colossus Descent | 8:00-15:00 | 1:00-2:00
+Halcyon Vigil | 8:00-15:00 | 1:00-2:00
+Halcyon Storm | 8:00-15:00 | 1:00-2:00
+Magellan Vigil | 8:00-15:00 | 1:00-2:00
+Monument Signal | 8:00-15:00 | 1:00-2:00
+Oceanid Descent | 8:00-15:00 | 1:00-2:00
+Colossus Procession | 8:00-15:00 | 1:00-2:00
+Tempest Drums | 8:00-15:00 | 1:00-2:00
+Primeval Crossing | 8:00-15:00 | 1:00-2:00
+Primeval Basin | 8:00-15:00 | 1:00-2:00
+Meteor Interval | 8:00-15:00 | 1:00-2:00
+Galaxy Threshold | 8:00-15:00 | 1:00-2:00

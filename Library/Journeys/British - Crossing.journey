@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey British: Crossing
+cyclic on
+Zoetrope Expanse | 5:00-10:00 | 0:45-1:30
+Pin Ring | 5:00-10:00 | 0:45-1:30
+Watercolour Hollow | 5:00-10:00 | 0:45-1:30
+Mulch Span | 5:00-10:00 | 0:45-1:30
+Dust Interior | 5:00-10:00 | 0:45-1:30
+Culvert Scrape | 5:00-10:00 | 0:45-1:30
+Patchbay Span | 5:00-10:00 | 0:45-1:30
+Dew Hollow | 5:00-10:00 | 0:45-1:30
+Harmonium Drift | 5:00-10:00 | 0:45-1:30
+Backwater Stone | 5:00-10:00 | 0:45-1:30
+Pith Expanse | 5:00-10:00 | 0:45-1:30
+Sheepbell Turn | 5:00-10:00 | 0:45-1:30

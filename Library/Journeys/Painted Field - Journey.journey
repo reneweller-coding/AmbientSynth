@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Painted Field: Journey
+cyclic on
+Sepia Bed | 5:00-10:00 | 0:30-1:30
+Willow Shore | 5:00-10:00 | 0:30-1:30
+Buttercup Reach | 5:00-10:00 | 0:30-1:30
+Lantern Study | 5:00-10:00 | 0:30-1:30
+Ochre Span | 5:00-10:00 | 0:30-1:30
+Parchment Fold | 5:00-10:00 | 0:30-1:30
+Hedgerow Descent | 5:00-10:00 | 0:30-1:30
+Hedgerow Shore | 5:00-10:00 | 0:30-1:30
+Ochre Bed | 5:00-10:00 | 0:30-1:30
+Rushes Garden | 5:00-10:00 | 0:30-1:30
+Buttercup Air | 5:00-10:00 | 0:30-1:30
+Sepia Span | 5:00-10:00 | 0:30-1:30

@@ -1,0 +1,16 @@
+# AmbientSynth journey: <preset> | <dwell m:ss or a range> | <fade> [| near=<near preset, auto or keep>]
+# Made by Tools/make_journeys.py from the library's measurement; edit freely, or write your own beside it.
+journey Signal Algorithm: Night
+cyclic on
+Quantum Cell | 8:00-15:00 | 1:00-2:00
+Integer Matrix | 8:00-15:00 | 1:00-2:00
+Microbe Matrix | 8:00-15:00 | 1:00-2:00
+Photon Sequence | 8:00-15:00 | 1:00-2:00
+Neuron Sequence | 8:00-15:00 | 1:00-2:00
+Photon Reach | 8:00-15:00 | 1:00-2:00
+Vector Threshold | 8:00-15:00 | 1:00-2:00
+Protein Basin | 8:00-15:00 | 1:00-2:00
+Integer Sequence | 8:00-15:00 | 1:00-2:00
+Photon Code | 8:00-15:00 | 1:00-2:00
+Photon Veil | 8:00-15:00 | 1:00-2:00
+Photon Vigil | 8:00-15:00 | 1:00-2:00

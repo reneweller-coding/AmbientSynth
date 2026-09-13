@@ -3142,6 +3142,28 @@ item's licence tag go into `SOURCES.md`; an item whose tag forbids
 derivatives is refused unless the matter has been looked at, because a phrase
 cut out of a recording is one.
 
+The larger store of such voices is the Library of Congress's own sampling
+project, Citizen DJ: audio from the Library's collections that it has
+identified as free to use, already cut into clips of a few seconds, each pack
+with a statement of why it is free. `Tools/library/fetch_loc_samples.py` takes
+nine of the packs -- Edison's cylinders, the variety stage, the government
+films of the National Screening Room, Tony Schwartz's New York, Joe Smith's
+interviews, the MusicBox Project, and the National Jukebox's opera, chamber
+music and folk songs of before 1923 -- two hundred and fifty clips of each,
+spread across the pack, as FLAC under `Archive/LoC/`, with the Library's
+statement in `SOURCES.md`. Not taken, and why: the Jukebox's popular songs,
+jazz, blues and musical theatre (free in the United States since 2022, but
+many of their composers died after 1955 and are still protected in Europe),
+the dialect interviews (private people; the Library asks for care, and a
+voice at the ear is not the place), and the Free Music Archive subset (music,
+not the near layer's material). A rule learned the same night, for the films
+of the 1950s and 60s that are "public domain" in the United States for want
+of a copyright notice: that status does not travel. A package published from
+Germany is under German law, seventy years after the death of director,
+writer and composer, and the German-American copyright treaty of 1892 (the
+Federal Court of Justice's *Tarzan* ruling of 2014) keeps the shorter American
+term from applying -- so those films stay out.
+
 **Slot roles** came with it, for the sound presets: each slot may sound in
 every note, or only in the lowest, an inner or the highest note of what its
 owner is sounding -- the cello under the chord, the chime on top -- re-read

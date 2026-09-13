@@ -83,9 +83,18 @@ CREDIT = "Citizen DJ Project, Library of Congress"
 
 
 def safe_name(s):
+    """A file name that keeps what makes the pack's name unique. The packs name a clip
+    <title>_<item id>_<cut>_<hh-mm-ss>, titles run to a hundred characters, and a plain cut at
+    ninety took the id, the cut and the time off the long ones -- the Variety Stage lost 97 of
+    its 250 clips to names that had become the same. The title is what gets shortened."""
     s = re.sub(r"[^A-Za-z0-9 _\-\.]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip(" .")
-    return s[:90]
+    if len(s) <= 90:
+        return s
+    m = re.match(r"^(.*)_([A-Za-z0-9\-]+_\d+_\d\d-\d\d-\d\d)$", s)
+    if m:
+        return m.group(1)[:90 - len(m.group(2)) - 1].rstrip(" .-_") + "_" + m.group(2)
+    return s[:60].rstrip(" .-_") + "~" + s[-29:]
 
 
 def remote_size(url):
@@ -111,23 +120,39 @@ def download(url, dest):
     return dest, size
 
 
-def to_flac(src, dst):
-    """16-bit WAV to 16-bit FLAC, the samples untouched (a 16-bit file gains nothing from 24)."""
+def to_flac(src, dst, max_seconds=20.0):
+    """16-bit WAV to 16-bit FLAC, the samples untouched (a 16-bit file gains nothing from 24) --
+    except that an excerpt longer than max_seconds ends there, faded out over its last four
+    tenths: the Library cuts up to thirty seconds, and a clip at the ear is a phrase, not a
+    reel (Rene: twenty seconds at the very most)."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    r = subprocess.run([FFMPEG, "-v", "error", "-y", "-i", src, "-c:a", "flac", "-compression_level", "8", dst],
-                       capture_output=True)
+    fade = "afade=t=out:st=%.2f:d=0.4" % (max_seconds - 0.4)
+    r = subprocess.run([FFMPEG, "-v", "error", "-y", "-i", src, "-t", "%.2f" % max_seconds, "-af", fade,
+                        "-c:a", "flac", "-compression_level", "8", dst], capture_output=True)
     return r.returncode == 0
 
 
-def note_sources(slug, folder, statement, count, names):
+def spread(items, n):
+    """n of them, evenly across the sorted run: the packs hold thousands of cuts (four thousand of
+    Edison alone, several per item), and a spread by name keeps every item represented where the
+    first n would be the first few items over and over."""
+    if n <= 0 or n >= len(items):
+        return list(items)
+    if n == 1:
+        return [items[len(items) // 2]]
+    return [items[round(i * (len(items) - 1) / (n - 1))] for i in range(n)]
+
+
+def note_sources(slug, folder, statement, count, total):
+    """Archive/SOURCES.md: the pack, the count, the Library's statement -- not the file names,
+    which are the pack's own and run to thousands."""
     path = os.path.join(ARCHIVE, "SOURCES.md")
     lines = ["", "## LoC/%s" % folder, "",
-             "Library of Congress, Citizen DJ sample pack [%s](%sloc-%s/use/): %d clips, cut by the Library, "
-             "taken as 16-bit WAV and stored as FLAC without loss." % (slug, SITE, slug, count),
+             "Library of Congress, Citizen DJ sample pack [%s](%sloc-%s/use/): %d of its %d clips (spread across "
+             "the pack), cut by the Library, taken as 16-bit WAV and stored as FLAC without loss; each file keeps "
+             "the pack's name (item title, item id, cut number, start time)." % (slug, SITE, slug, count, total),
              "Rights, in the Library's words: %s" % statement,
-             "Suggested credit: %s." % CREDIT, ""]
-    for n in names:
-        lines.append("- `%s`" % n)
+             "Suggested credit: %s." % CREDIT]
     with open(path, "a", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -137,6 +162,8 @@ def main():
     ap.add_argument("--only", action="append", default=[], help="a slug of COLLECTIONS (repeatable)")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--per-collection", type=int, default=250,
+                    help="clips kept per pack, spread across it (the packs hold thousands; 0 = all)")
     ap.add_argument("--mp3", action="store_true", help="the 192 kbps packs instead of the WAV ones (a fifth of the download)")
     a = ap.parse_args()
     slugs = a.only or list(COLLECTIONS)
@@ -160,11 +187,19 @@ def main():
         out_dir = os.path.join(ARCHIVE, "LoC", folder)
         extracted = []
         with zipfile.ZipFile(dest) as z:
-            members = [m for m in z.namelist() if m.lower().endswith((".wav", ".mp3")) and not m.startswith("__MACOSX")]
-            print("  %d clips in the pack" % len(members), flush=True)
+            members = sorted(m for m in z.namelist() if m.lower().endswith((".wav", ".mp3")) and not m.startswith("__MACOSX"))
+            # A pack holds every clip twice: under excerpts/ as a few seconds of the recording, and
+            # under one_shots/ as the same cut trimmed to a hit for a drum machine. The excerpts are
+            # the near layer's material; the same names in both folders were the other half of the
+            # collisions.
+            excerpts = [m for m in members if m.replace("\\", "/").lower().startswith("excerpts/")]
+            if excerpts:
+                members = excerpts
+            chosen = spread(members, a.per_collection)
+            print("  %d clips in the pack%s, %d taken" % (len(members), " (excerpts)" if excerpts else "", len(chosen)), flush=True)
             src_dir = os.path.join(WORK, pack)
             os.makedirs(src_dir, exist_ok=True)
-            for m in members:
+            for m in chosen:
                 target = os.path.join(src_dir, os.path.basename(m))
                 if not os.path.exists(target):
                     with z.open(m) as s, open(target, "wb") as f:
@@ -181,8 +216,16 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, a.jobs)) as ex:
             for ok in ex.map(lambda j: to_flac(*j), jobs):
                 failed += 0 if ok else 1
-        print("  %d converted (%d already there, %d failed) -> Library/Archive/LoC/%s" % (len(jobs) - failed, len(names) - len(jobs), failed, folder), flush=True)
-        note_sources(slug, folder, statement, len(names), names)
+        # What an earlier, wider run left in the folder goes: the folder is the selection, exactly.
+        stale = 0
+        if os.path.isdir(out_dir):
+            keep = set(names)
+            for f in os.listdir(out_dir):
+                if f.lower().endswith(".flac") and f not in keep:
+                    os.remove(os.path.join(out_dir, f)); stale += 1
+        print("  %d converted (%d already there, %d failed, %d stale removed) -> Library/Archive/LoC/%s"
+              % (len(jobs) - failed, len(names) - len(jobs), failed, stale, folder), flush=True)
+        note_sources(slug, folder, statement, len(names), len(members))
         total += len(names)
     if not a.list:
         print("done: %d clips" % total)

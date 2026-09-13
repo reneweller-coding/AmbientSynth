@@ -399,6 +399,43 @@ NEAR = [
                              steps=5, step=0.6, mutation=0.1, scatter=0.4, bloom=0.2, attack=0.01, decay=0.3, sustain=0.3,
                              release=0.1, length=90, rate=600, approach=0.0, level=0.4, clip="Archive/Radio/Quiet-Please/")),
     ]),
+    # The Library of Congress (13.09.): Citizen DJ's sample packs, 250 clips of each under
+    # Archive/LoC/<collection>/ (Tools/library/fetch_loc_samples.py, the Library's own rights
+    # statement in SOURCES.md), each a pool: a cylinder of 1905, the variety stage, a government
+    # film's narrator, Tony Schwartz's New York, an interview, a folk performance, and the
+    # gramophone -- opera, chamber music, a folk song -- coming out of the far reverb.
+    ("Library", [
+        ("Edison Cylinder", near(kind="Note", rate=180, length=8, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                 attack=0.05, release=1.5, cutoff=8000, proximity=0.6, spread=0.3, approach=0.1,
+                                 level=0.5, clip="Archive/LoC/Edison/")),
+        ("Variety Stage", near(kind="Note", rate=240, length=8, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                               attack=0.05, release=1.5, cutoff=8000, proximity=0.5, spread=0.5, approach=0.2,
+                               level=0.45, clip="Archive/LoC/Variety-Stage/")),
+        ("Screening Room", near(kind="Note", rate=300, length=10, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                attack=0.1, release=2.0, cutoff=9000, proximity=0.4, spread=0.4, approach=0.3,
+                                level=0.45, clip="Archive/LoC/Screening-Room/")),
+        ("New York, 1950s", near(kind="Note", rate=200, length=12, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                 attack=0.3, release=2.5, cutoff=10000, proximity=0.3, spread=0.7, approach=0.4,
+                                 level=0.45, clip="Archive/LoC/Tony-Schwartz/")),
+        ("Interview", near(kind="Note", rate=240, length=8, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                           attack=0.05, release=1.5, cutoff=9000, proximity=0.7, spread=0.2, approach=0.0,
+                           level=0.45, clip="Archive/LoC/Joe-Smith/")),
+        ("Music Box", near(kind="Note", rate=300, length=10, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                           attack=0.2, release=2.0, cutoff=10000, proximity=0.4, spread=0.5, approach=0.3,
+                           level=0.4, clip="Archive/LoC/MusicBox/")),
+        ("Opera, 1910", near(kind="Note", rate=360, length=12, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                             attack=0.5, release=3.0, cutoff=6000, proximity=0.2, spread=0.4, approach=0.7,
+                             level=0.4, clip="Archive/LoC/Jukebox-Opera/")),
+        ("Chamber, 1912", near(kind="Note", rate=400, length=14, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                               attack=0.5, release=3.0, cutoff=6000, proximity=0.2, spread=0.4, approach=0.6,
+                               level=0.4, clip="Archive/LoC/Jukebox-Classical/")),
+        ("Folk Song, 1915", near(kind="Note", rate=300, length=10, pitch="Root", type="Clip", follow="Free", pos=0.0,
+                                 attack=0.3, release=2.5, cutoff=7000, proximity=0.3, spread=0.4, approach=0.4,
+                                 level=0.4, clip="Archive/LoC/Jukebox-Folk-Songs/")),
+        ("Cylinder Cut-Up", seq(type="Clip", follow="Free", pos=0.0, cutoff=8000, resonance=0.1, filt="LP 12",
+                                steps=7, step=0.5, mutation=0.12, scatter=0.4, bloom=0.2, attack=0.01, decay=0.3, sustain=0.3,
+                                release=0.1, length=90, rate=600, approach=0.0, level=0.4, clip="Archive/LoC/Edison/")),
+    ]),
     ("Voices", [
         ("Radio Murmur", near(type="Murmur", force=0.5, speed=0.5, pos=0.85, bright=0.5, pos_drift=0.4, octave=-1,
                               rate=240, length=14, attack=0.2, release=1.2, spread=0.7, level=0.5)),

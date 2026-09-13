@@ -281,7 +281,8 @@ private:
     float    distEff_ = 0.0f;    // distance after breathing, refreshed at control rate
     float    gNear_ = 1.0f, gFar_ = 0.0f, gLevel_ = 1.0f;
     float    airGain_ = 0.0f;
-    float    bloomT_ = 0.0f;     // seconds since note start, for Bloom and for each slot's entrance
+    float    bloomT_ = 0.0f;     // seconds since note start on the movement clock, for Bloom
+    float    slotT_  = 0.0f;     // the same on real time, for each slot's entrance (Freeze stops the first, not the second)
     float    slotGain_[kSlots] = { 1.0f, 1.0f, 1.0f, 1.0f };   // each slot's own envelope, at control rate
     // Sustain Loop entrances: how far each slot's clock was set back when the note was let go, so
     // the shape carries on from where it was held; where each shape was read last; and whether the

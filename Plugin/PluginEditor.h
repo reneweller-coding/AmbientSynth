@@ -463,6 +463,7 @@ private:
         int mode = 0;
         juce::TextButton modeClassic{ "Columns" }, modeMap{ "Map" }, star{ "Favourite" };
         juce::ToggleButton onlyFavourites{ "only favourites" };
+        juce::ToggleButton favouritesFirst{ "favourites first" };   // the starred ones at the top, whatever the sort
         // Five thousand presets include some that barely move. Their measurements say so, and
         // this hides them: nothing is deleted, the list simply stops offering them.
         juce::ToggleButton hideDull{ "hide the still ones" };

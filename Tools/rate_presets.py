@@ -66,7 +66,10 @@ def measure(name, seconds, settings="", extra=None):
     # pointed at it explicitly; otherwise a pack preset simply is not found and rates as missing.
     env = dict(os.environ, AMBIENT_PACKS=os.path.join(ROOT, "Library", "Packs"))
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, env=env)
-    lines = (r.stdout + r.stderr).strip().splitlines()
+    # The descriptor line begins with "measure:". It used to be the last line of the output, until
+    # the render tool learned to print the timbre vector after it -- and then every preset of the
+    # library rated as "no render" (13.09.2026, the same trap check_layer_presets.py had fallen into).
+    lines = [l for l in (r.stdout + r.stderr).splitlines() if l.startswith("measure:")]
     if not lines:
         return None
     out = {}
@@ -136,31 +139,53 @@ def main():
     ap.add_argument("--worst", type=int, default=25)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--jobs", type=int, default=4)
+    # The library's own measurement (measure_packs.py, sixty seconds a preset after its warm-up,
+    # and the built-ins measured again from the binary) already holds everything this rating
+    # needs: the six descriptors, the flux, and how far the sound travelled over its minute
+    # (evo_tone, evo_level). Rating used to render every preset twice more to learn the same --
+    # two hours for a library that had just been measured for four (Rene, 13.09.2026: "Warum macht
+    # man das dann nicht gleich mit der Vermessung?"). Now it reads the caches and renders only
+    # what they do not have.
+    ap.add_argument("--cache", action="append", default=None,
+                    help="measurement caches to read (default: build/library-work/packs.json and builtins.json); --no-cache to render everything")
+    ap.add_argument("--no-cache", action="store_true")
     a = ap.parse_args()
     if not os.path.isfile(RENDER):
         sys.exit("build the render tool first")
 
+    cache = {}
+    if not a.no_cache:
+        paths = a.cache or [os.path.join(ROOT, "build", "library-work", "packs.json"),
+                            os.path.join(ROOT, "build", "library-work", "builtins.json")]
+        for p in paths:
+            if os.path.isfile(p):
+                with open(p, encoding="utf-8") as f:
+                    for name, row in json.load(f).items():
+                        if isinstance(row, dict) and "centroid" in row:
+                            cache.setdefault(name, row)
+        print("measurement cache: %d presets" % len(cache))
+
     items = preset_names(a.packs)
     if a.limit:
         items = items[:a.limit]
-    print("rating %d presets, %.0f s each" % (len(items), a.seconds))
+    print("rating %d presets, %.0f s each where not measured" % (len(items), a.seconds))
 
     def rate_one(item):
         name, settings = item
+        row = cache.get(name)
+        if row is not None:
+            whole = dict(row)
+            whole["rms"] = row.get("rms_db", row.get("rms", -120.0))
+            # ALIVE from the minute's own travel: the tone's (0 .. about 1) and the level's (dB),
+            # on scales where a drone that clearly moved scores one. The scales are chosen so the
+            # library sits where the old two-render ALIVE put it (median about 0.3, the top tenth
+            # above 0.6); the score weights were tuned to that.
+            alive = 0.6 * min(1.0, float(row.get("evo_tone", 0.0)) / 0.8) + 0.4 * min(1.0, float(row.get("evo_level", 0.0)) / 8.0)
+            return name, settings, whole, alive
         whole = measure(name, a.seconds, settings)
         early = measure(name, a.seconds * 0.4, settings)
-        return name, settings, whole, early
-
-    rows = []
-    done = 0
-    # Four at a time. The renders are CPU-bound and short; four leaves the machine usable, which
-    # matters when the library takes five thousand of them.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as pool:
-      for name, settings, whole, early in pool.map(rate_one, items):
-        done += 1
         if whole is None or early is None:
-            print("  no render: %s" % name)
-            continue
+            return name, settings, None, 0.0
         # ALIVE: how far the descriptors travel between the early window and the whole.
         alive = 0.0
         for f in FIELDS:
@@ -169,6 +194,21 @@ def main():
                      "bass": 0.25, "width": 0.25}[f]
             alive += min(1.0, abs(hi - lo) / scale)
         alive /= len(FIELDS)
+        return name, settings, whole, alive
+
+    rows = []
+    done = 0
+    rendered = sum(1 for name, _ in items if name not in cache)
+    if rendered:
+        print("  %d presets are not in the cache and will be rendered" % rendered)
+    # Four at a time. The renders are CPU-bound and short; four leaves the machine usable, which
+    # matters when the library takes five thousand of them.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as pool:
+      for name, settings, whole, alive in pool.map(rate_one, items):
+        done += 1
+        if whole is None:
+            print("  no render: %s" % name)
+            continue
         moving = min(1.0, whole.get("flux", 0.0) / 0.6)
         reach = min(1.0, len(sections_of(settings)) / 12.0)
         rows.append(dict(name=name, alive=alive, moving=moving, reach=reach,

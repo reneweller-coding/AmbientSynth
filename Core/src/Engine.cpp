@@ -141,6 +141,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
     vecDriftX_.init(auxRng_); vecDriftY_.init(auxRng_);
     dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
+    pdcXL_ = pdcXR_ = pdcYL_ = pdcYR_ = 0.0f;
     lastRootPc_ = -1;
     readParams();
     brain_.reset(rng_.fork(), rootNote_ - 12);   // the brain's root lives an octave below the key root
@@ -373,6 +374,30 @@ void Engine::waitForQuiet()
     }
 }
 
+// A recording's offset, taken out where it comes in. A field recording, a rendered texture, a
+// phrase cut from a radio play: a few of them carry a direct current of a few per cent, which no
+// grain window removes and which every long loop downstream -- the far hall above all -- would
+// integrate until the master's clipper rails on it (three presets of the 2.0 library went silent
+// that way). Subtracting the mean changes nothing anyone hears and keeps a seamless clip seamless.
+static void removeOffset(float* p, size_t count, size_t stride)
+{
+    if (p == nullptr || count == 0) return;
+    double sum = 0.0;
+    for (size_t i = 0; i < count; ++i) sum += p[i * stride];
+    const float mean = static_cast<float>(sum / static_cast<double>(count));
+    if (std::fabs(mean) < 1.0e-6f) return;
+    for (size_t i = 0; i < count; ++i) p[i * stride] -= mean;
+}
+
+static void removeOffset(Texture& t)
+{
+    removeOffset(t.mono.data(), t.mono.size(), 1);
+    if (!t.lr.empty()) {
+        removeOffset(t.lr.data(), t.lr.size() / 2, 2);
+        removeOffset(t.lr.data() + 1, t.lr.size() / 2, 2);
+    }
+}
+
 void Engine::setTexture(int slot, const float* L, const float* R, int n, double sampleRate, double baseHz, bool seamless)
 {
     if (R == nullptr) { setTexture(slot, L, n, sampleRate, baseHz, seamless); return; }
@@ -390,6 +415,7 @@ void Engine::setTexture(int slot, const float* L, const float* R, int n, double 
     t.mono = std::move(mono);
     t.lr.assign(static_cast<size_t>(2 * len), 0.0f);
     for (int i = 0; i < len; ++i) { t.lr[static_cast<size_t>(2 * i)] = L[i]; t.lr[static_cast<size_t>(2 * i + 1)] = R[i]; }
+    removeOffset(t);
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.seamless = seamless;
@@ -417,6 +443,7 @@ void Engine::setTexture(int slot, const float* mono, int n, double sampleRate, d
     Texture& t = textures_[slot][target];
     t.mono.assign(mono, mono + std::max(n, 0));
     t.lr.clear();          // this buffer may have held a stereo clip: a mono one is mono again
+    removeOffset(t);
     t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.seamless = seamless;
@@ -452,6 +479,7 @@ Texture Engine::makeTexture(const float* L, const float* R, int n, double sample
         t.lr.assign(static_cast<size_t>(2 * len), 0.0f);
         for (int i = 0; i < len; ++i) { t.lr[static_cast<size_t>(2 * i)] = L[i]; t.lr[static_cast<size_t>(2 * i + 1)] = R[i]; }
     }
+    removeOffset(t);
     t.sampleRate = sr;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.seamless = seamless;

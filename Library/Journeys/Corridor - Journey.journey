@@ -3,14 +3,14 @@
 journey Corridor: Journey
 cyclic on
 Archway Signal | 5:00-10:00 | 0:30-1:30
-Undercroft Sleep | 5:00-10:00 | 0:30-1:30
-Balustrade Echo | 5:00-10:00 | 0:30-1:30
+Hallway Veil | 5:00-10:00 | 0:30-1:30
+Hallway Descent | 5:00-10:00 | 0:30-1:30
+Archway Refuge | 5:00-10:00 | 0:30-1:30
 Crevice Hour | 5:00-10:00 | 0:30-1:30
+Undercroft Sleep | 5:00-10:00 | 0:30-1:30
 Recess Hour | 5:00-10:00 | 0:30-1:30
 Landing Vigil | 5:00-10:00 | 0:30-1:30
-Hallway Descent | 5:00-10:00 | 0:30-1:30
-Undercroft Basin | 5:00-10:00 | 0:30-1:30
-Tunnel Stillness | 5:00-10:00 | 0:30-1:30
 Archway Stillness | 5:00-10:00 | 0:30-1:30
+Tunnel Stillness | 5:00-10:00 | 0:30-1:30
+Undercroft Basin | 5:00-10:00 | 0:30-1:30
 Gallery Veil | 5:00-10:00 | 0:30-1:30
-Doorway Vigil | 5:00-10:00 | 0:30-1:30

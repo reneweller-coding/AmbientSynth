@@ -123,6 +123,11 @@ private:
     std::vector<float> pre_, preR_, outR_;                  // the pre-delay, a ring per channel
     int    mask_ = 0, w_ = 0, outMask_ = 0;
     double sr_ = 48000.0;
+    // A one-pole DC blocker on the input, 5 Hz. A network whose loop gain is a hair under one
+    // -- a forty-second tail -- passes an offset with a gain of hundreds: measured, a texture
+    // with -0.1 of offset stood at -2.1 on the far bus after thirty seconds, the Patina's
+    // clipper railed on it and the output DC blocker turned the rail into silence.
+    float  dcInX_[2] = {}, dcInY_[2] = {}, dcR_ = 0.999f;
     float  lenTarget_[kLines] = {}, lenCur_[kLines] = {};
     float  gain_[kLines] = {};
     float  lp_[kLines] = {};
@@ -179,6 +184,7 @@ public:
     void set(float amount, float wow, float hiss, float age);
     void process(float* L, float* R, int n);
     void reset();
+    bool active() const { return amount_ > 0.0f; }   // off at 0, and then not computed at all
 private:
     std::vector<float> bufL_, bufR_;
     int     mask_ = 0, w_ = 0;

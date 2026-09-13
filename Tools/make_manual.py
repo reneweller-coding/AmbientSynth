@@ -6,7 +6,7 @@ them right -- a drawing of a section goes out of date the day the section change
 notices for a year. It also means they only exist while an editor is running, so this is a two
 step job:
 
-    set AMBIENT_PRESET=Recall Grains
+    set AMBIENT_PRESET=Tidal Expanse
     set AMBIENT_MANUAL=docs\\manual
     build\\...\\AmbientSynth.exe            waits five seconds, writes the folder, quits
     python Tools/make_manual.py           folder -> AmbientSynth-Manual.html -> .pdf

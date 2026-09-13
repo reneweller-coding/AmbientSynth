@@ -183,6 +183,12 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--cache", default="", help="JSON of what this run left balanced, so the next one can skip it")
     ap.add_argument("--resume", action="store_true", help="leave alone every preset the cache says is already balanced")
+    # A list of names, and nothing else is looked at. --resume alone cannot narrow a run after the
+    # measurement has been through the packs: its fingerprint covers the whole line, and
+    # measure_packs and map_all rewrite every line (gain, descriptors, positions), so after them
+    # every preset looks new to it. A run meant for six hundred presets started on fourteen thousand
+    # that way (13.09.2026).
+    ap.add_argument("--names-file", default="", help="balance only the presets named in this file, one per line")
     a = ap.parse_args()
 
     if not os.path.exists(a.render):
@@ -209,6 +215,10 @@ def main():
         book = book[::a.every]
     if a.limit:
         book = book[:a.limit]
+    if a.names_file:
+        wanted = {l.strip() for l in open(a.names_file, encoding="utf-8") if l.strip() and not l.startswith("#")}
+        book = [b for b in book if b[2] in wanted]
+        print(f"  {len(book)} of the {len(wanted)} named presets found in the packs")
 
     env = dict(os.environ)
     env.setdefault("AMBIENT_PACKS", os.path.abspath(a.packs))

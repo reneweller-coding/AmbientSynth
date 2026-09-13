@@ -21,7 +21,7 @@ param(
     # introduced it and later installers point back at that one. Hardcoding it in the .iss meant
     # every installer since 1.0.0 asked v1.0.0 for files that had moved -- a 404 in the middle of
     # somebody's install, which is where this was finally noticed.
-    [string]$ContentTag = "v1.12.1",
+    [string]$ContentTag = "library-v5",   # 2.0: the library package (57 archives; Deploy/content-*.iss name them)
     # Code signing. Without it Windows shows "Unknown publisher" on the first run of the setup --
     # SmartScreen has nothing to go on but the file's reputation, and a fresh file has none.
     #   -SignWith "<thumbprint>"   a certificate in the current user's store (signtool /sha1)
@@ -210,7 +210,7 @@ $manualWork = Join-Path $root "Deploy\manual-work"
 if (-not $SkipManual) {
     if (Test-Path $manualWork) { Remove-Item $manualWork -Recurse -Force }
     New-Item -ItemType Directory -Force $manualWork | Out-Null
-    $env:AMBIENT_PRESET = "Recall Grains"
+    $env:AMBIENT_PRESET = "Tidal Expanse"   # four sources (FM, Bow, Harmonic, Wavetable), the Cosmos, a delay and a strike in use
     $env:AMBIENT_MANUAL = $manualWork
     # A clip for the manual's gallery of source types: the Texture and Stretch pictures show it
     # loaded and playing. Any seamless field recording will do; the first one alphabetically is

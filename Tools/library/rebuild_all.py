@@ -29,6 +29,11 @@ hours long, and two at once is how a workstation stops responding (--anyway over
 --work holds everything that is not committed: the measurement caches, the excerpts and the CLAP
 file. Steps are skipped when their output is already there, so an interrupted run continues where
 it stopped; --force redoes them anyway.
+
+A few presets again -- after an engine fix, a hand edit -- is NOT a --from balance run of this: the
+balance's --resume would take the whole library (its fingerprint covers the line the measurement
+rewrote) and the measurement's loudness window would lift every preset still under it once more.
+That is remeasure_presets.py, by name, followed by clap_embed.py --resume and map_all.py.
 """
 import argparse
 import os

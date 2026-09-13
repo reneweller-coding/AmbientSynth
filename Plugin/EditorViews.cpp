@@ -771,7 +771,9 @@ void AmbientSynthEditor::SourceView::paintSource(juce::Graphics& g)
             g.drawText(juce::String(ambient::kTableNames[juce::jlimit(0, ambient::kNumTables - 1, table)]) + "  " + juce::String(frames)
                            + " frames  pos " + juce::String(pos, 2),
                        r.reduced(9, 5), juce::Justification::topRight, false);
-            g.drawText("frame " + juce::String(1 + juce::roundToInt(pos * static_cast<float>(frames - 1))) + " / " + juce::String(frames),
+            // The place between two frames as a number, since the lit cycle is the blend of the
+            // two: "frame 3.4 / 8" and not a count that jumps from 3 to 4 while the sound does not.
+            g.drawText("frame " + juce::String(1.0f + pos * static_cast<float>(frames - 1), 1) + " / " + juce::String(frames),
                        r.reduced(9, 5), juce::Justification::bottomRight, false);
             g.setColour(ui::faint); g.setFont(ui::body(9.5f));
             g.drawText("click: one frame", r.reduced(9, 5), juce::Justification::bottomLeft, false);
@@ -814,7 +816,9 @@ void AmbientSynthEditor::SourceView::paintSource(juce::Graphics& g)
         const ambient::Wavetable* wt = table >= ambient::kNumTables - 1 ? proc.engine().userWavetable()
                                                                         : &ambient::builtinTable(table);
         float spec[ambient::kTablePartials] = {};
-        if (wt != nullptr && wt->frames > 0) wt->spectrumAt(pos, spec);
+        // With the slot's Transport, as the engine reads the table: between two frames the
+        // partials walk along the axis rather than fade, and the picture has to show the same.
+        if (wt != nullptr && wt->frames > 0) wt->spectrumAt(pos, spec, rawParam(proc, (pre + "transport").toRawUTF8()));
         float norm = 0.0f; for (float a : spec) norm += a;
         plotWave([&](float t) {
             float v = 0.0f;

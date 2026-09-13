@@ -498,6 +498,8 @@ void Reverb::prepare(double sampleRate)
     const int outSize = pow2At(static_cast<int>(0.012 * sr_) + 8);
     outR_.assign(static_cast<size_t>(outSize), 0.0f);
     outMask_ = outSize - 1;
+    dcR_ = 1.0f - kTwoPi * 5.0f / static_cast<float>(sr_);
+    dcInX_[0] = dcInX_[1] = dcInY_[0] = dcInY_[1] = 0.0f;
 
     static const float kApMs[kAllpasses] = { 5.1f, 7.3f, 11.3f, 13.7f };
     for (int k = 0; k < kAllpasses; ++k) apLen_[k] = std::max(1, static_cast<int>(kApMs[k] * sr_ / 1000.0));
@@ -584,8 +586,14 @@ void Reverb::process(float* L, float* R, int n)
         // the tail spreads across the field as it grows; what arrives first keeps its side.
         // Identical channels inject exactly what the mono sum did, and a hard-panned source now
         // excites the hall as strongly as a centred one of the same power (the sum gave it 3 dB less).
-        pre_[static_cast<size_t>(w_ & mask_)] = L[i];
-        preR_[static_cast<size_t>(w_ & mask_)] = R[i];
+        // No direct current into the network (see the header): what a source leaves as an offset
+        // -- a recording that carries one, FM at an integer ratio, an asymmetric saturation --
+        // would be integrated by the loop for the length of the tail. The dry path below keeps it;
+        // the output blocker at the end of the chain takes it there.
+        const float inL = L[i] - dcInX_[0] + dcR_ * dcInY_[0]; dcInX_[0] = L[i]; dcInY_[0] = inL;
+        const float inR = R[i] - dcInX_[1] + dcR_ * dcInY_[1]; dcInX_[1] = R[i]; dcInY_[1] = inR;
+        pre_[static_cast<size_t>(w_ & mask_)] = inL;
+        preR_[static_cast<size_t>(w_ & mask_)] = inR;
         preCur_ += (preTarget_ - preCur_) * glide;
         float xl = ringRead(pre_.data(), mask_, w_, preCur_ + 1.0f);
         float xr = ringRead(preR_.data(), mask_, w_, preCur_ + 1.0f);

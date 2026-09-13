@@ -108,6 +108,9 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     toB.onClick = [this] { if (selected >= 0) proc.setMorphSlotFromPreset(1, selected); };
     star.onClick = [this] { if (selected >= 0) { proc.setFavourite(selected, !proc.isFavourite(selected)); applyFilter(); } };
     onlyFavourites.onClick = [this] { applyFilter(); };
+    favouritesFirst.setToggleState(proc.favouritesFirst(), juce::dontSendNotification);
+    favouritesFirst.setTooltip("Puts the starred presets at the top of the list, whatever the sort. Remembered with the favourites (Documents\\AmbientSynth\\favourites.txt).");
+    favouritesFirst.onClick = [this] { proc.setFavouritesFirst(favouritesFirst.getToggleState()); applyFilter(); };
     hideDull.onClick = [this] { applyFilter(); };
     hideDull.setTooltip("Hides presets that measured as barely moving and barely wide -- the dull tail of a generated library");
     for (auto* b : { &load, &toA, &toB, &star }) addAndMakeVisible(*b);
@@ -132,6 +135,7 @@ AmbientSynthEditor::BrowseView::BrowseView(AmbientSynthProcessor& p) : proc(p), 
     similar.setTooltip("Narrow the list to the presets that measured most like the selected one, and zoom the map onto them");
     addAndMakeVisible(similar);
     addAndMakeVisible(onlyFavourites);
+    addAndMakeVisible(favouritesFirst);
     addAndMakeVisible(hideDull);
     addAndMakeVisible(info2);
     // Choosing a preset as a journey. On by default: an instrument that plays for hours has no
@@ -325,6 +329,9 @@ void AmbientSynthEditor::BrowseView::applyFilter()
     };
     if (s == 2) std::sort(filtered.begin(), filtered.end(), [](int a, int b) { return juce::String(preset(a).name).compareIgnoreCase(preset(b).name) < 0; });
     else if (s >= 3) std::stable_sort(filtered.begin(), filtered.end(), [&](int a, int b) { return key(a) < key(b); });
+    // The stars to the top, in the order the sort left them (Rene, 13.09.2026).
+    if (favouritesFirst.getToggleState())
+        std::stable_partition(filtered.begin(), filtered.end(), [this](int i) { return proc.isFavourite(i); });
     list.updateContent();
     info.setText(juce::String(static_cast<int>(filtered.size())) + " of " + juce::String(numPresets()) + " presets" +
                  (numPresetMeta() == 0 ? "   (map not measured yet: run Tools/library/map_all.py)" : ""), juce::dontSendNotification);
@@ -462,7 +469,11 @@ void AmbientSynthEditor::BrowseView::listBoxItemClicked(int row, const juce::Mou
 {
     if (row < 0 || row >= static_cast<int>(filtered.size())) return;
     selected = filtered[static_cast<size_t>(row)];
-    if (e.x >= 16 && e.x < 36) { proc.setFavourite(selected, !proc.isFavourite(selected)); list.repaint(); return; }   // the star
+    if (e.x >= 16 && e.x < 36) {   // the star
+        proc.setFavourite(selected, !proc.isFavourite(selected));
+        if (favouritesFirst.getToggleState()) applyFilter(); else { list.repaint(); map.repaint(); }
+        return;
+    }
     if (e.getNumberOfClicks() >= 2 || e.mods.isLeftButtonDown()) proc.selectPreset(selected, morphOnSelect.getToggleState());
     if (mapActive.getToggleState()) {   // the cursor jumps to the preset's point
         const PresetMeta& m = presetMeta(selected);
@@ -540,6 +551,7 @@ void AmbientSynthEditor::BrowseView::resized()
     if (mode == 1) { family.setBounds(top.removeFromLeft(150)); top.removeFromLeft(6); }
     sort.setBounds(top.removeFromLeft(150)); top.removeFromLeft(12);
     onlyFavourites.setBounds(top.removeFromLeft(130));
+    favouritesFirst.setBounds(top.removeFromLeft(130));
     similar.setBounds(top.removeFromLeft(150));
     hideDull.setBounds(top.removeFromLeft(160));
     area.removeFromTop(8);
@@ -740,6 +752,20 @@ void AmbientSynthEditor::BrowseView::MapView::paint(juce::Graphics& g)
         }
     }
     g.drawImageAt(cloud, 0, 0);
+    // The favourites, ringed in the star's gold, live over the cloud: a star is set with a click
+    // and the cloud must not be drawn again for that. Only those the filter lets through, so the
+    // map and the list agree.
+    if (owner.proc.favouriteCount() > 0) {
+        g.setColour(juce::Colour(0xffe0c070).withAlpha(0.9f));
+        for (int i : owner.filtered) {
+            if (i >= shown || !owner.proc.isFavourite(i)) continue;
+            const PresetMeta& m = presetMeta(i);
+            const auto s = toScreen(m.x, m.y);
+            if (!screen.contains(s)) continue;
+            const float size = juce::jmax(2.0f, (6.0f + 6.0f * m.density) * dotScale);
+            g.drawEllipse(s.x - size / 2 - 2.0f, s.y - size / 2 - 2.0f, size + 4.0f, size + 4.0f, 1.2f);
+        }
+    }
     // The chosen preset's own ring is live: picking one in the list must not redraw the cloud.
     if (owner.selected >= 0 && owner.selected < shown && owner.selected != current) {
         const PresetMeta& m = presetMeta(owner.selected);

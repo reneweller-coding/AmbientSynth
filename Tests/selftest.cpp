@@ -596,6 +596,79 @@ void testPurityFreezeSleep()
         const double moving = spectralWobble(false), frozen = spectralWobble(true);
         CHECK(frozen < 0.25 * moving + 1e-6, "freeze holds the partials still while shimmer would move them");
     }
+    {   // ...but not the entrances. A slot's Delay is an envelope, and Freeze holds the spectrum
+        // and the pitch, not the envelopes. Read off the movement clock -- which Freeze stops --
+        // a delayed slot never entered, and a preset with Freeze on and every slot delayed or
+        // shaped was silent for good (five of the 2.0 library's were).
+        auto entered = [&](bool freeze) {
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f); e.setParam(ParamId::Attack, 0.05f);
+            e.setParam(ParamId::Src1Type, 0.0f);                       // slot 1 off: only the delayed slot can sound
+            e.setParam(ParamId::Src2Type, 5.0f); e.setParam(ParamId::Src2Level, 0.6f); e.setParam(ParamId::Src2Delay, 0.5f);   // 5 = Additive
+            e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::FarLevel, 0.0f); e.setParam(ParamId::NearMix, 0.0f);
+            e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.setParam(ParamId::Freeze, freeze ? 1.0f : 0.0f);
+            e.prepare(sr, 256);
+            e.noteOn(57, 0.8f);
+            const Stats before = render(e, 0.3);
+            const Stats after = render(e, 1.5);
+            return std::make_pair(before.rms, after.rms);
+        };
+        const auto moving = entered(false), frozen = entered(true);
+        std::printf("  [probe] delayed slot, frozen: %.5f before the delay, %.5f after (moving: %.5f / %.5f)\n",
+                    frozen.first, frozen.second, moving.first, moving.second);
+        CHECK(moving.first < 1e-4 && moving.second > 1e-3, "a delayed slot is silent before its delay and sounds after it");
+        CHECK(frozen.second > 0.5 * moving.second, "a delayed slot enters while Freeze is on");
+    }
+    {   // An offset must not kill a preset. Three of the 2.0 library's died exactly to zero after
+        // fifteen to thirty seconds while every stem played on: a texture with a few per cent of
+        // direct current, a far hall of forty seconds integrating it to -2.1, the Patina's clipper
+        // railing on that and the output DC blocker turning the rail into silence. Three things
+        // stand against it now, each checked on its own: the hall blocks an offset at its input, a
+        // texture loses its mean as it is loaded, and the Patina's clipper has a blocker ahead of it.
+        {   // the hall: a constant in, and the tail carries no offset
+            Reverb rv;
+            rv.prepare(sr);
+            rv.set(1.6f, 40.0f, 0.0f, 0.0f, false, 1.0f);
+            rv.setSpace(0.0f, 20000.0f);
+            std::vector<float> L(256), R(256);
+            double mean = 0.0; long count = 0;
+            for (int b = 0; b < sr * 12 / 256; ++b) {
+                std::fill(L.begin(), L.end(), 0.3f); std::fill(R.begin(), R.end(), 0.3f);
+                rv.process(L.data(), R.data(), 256);
+                if (b >= sr * 10 / 256) { for (float v : L) mean += v; count += 256; }
+            }
+            mean /= std::max<long>(count, 1);
+            std::printf("  [probe] a constant 0.3 into a forty-second hall: the tail's mean after ten seconds %.4f\n", mean);
+            CHECK(std::fabs(mean) < 0.05, "the hall integrates no direct current");
+        }
+        {   // a texture: the mean is taken out as it is loaded
+            std::vector<float> buf(static_cast<size_t>(sr));
+            for (int i = 0; i < sr; ++i) buf[static_cast<size_t>(i)] = 0.4f + 0.3f * std::sin(static_cast<float>(kTwoPi * 220.0 * i / sr));
+            const Texture t = Engine::makeTexture(buf.data(), nullptr, sr, sr, 220.0, true);
+            double mean = 0.0;
+            for (float v : t.mono) mean += v;
+            mean /= std::max<size_t>(t.mono.size(), 1);
+            CHECK(std::fabs(mean) < 1e-3, "a loaded texture carries no offset");
+        }
+        {   // and the whole: the offending recipe, thirty seconds, still audible at the end
+            Engine e;
+            e.setParam(ParamId::BrainOn, 0.0f); e.setParam(ParamId::Attack, 0.05f);
+            e.setParam(ParamId::Src1Type, 3.0f);                        // 3 = Texture
+            e.setParam(ParamId::PatinaAmount, 0.4f);
+            e.setParam(ParamId::FarLevel, 1.0f); e.setParam(ParamId::FarDecay, 40.0f);
+            e.setParam(ParamId::Air, 0.0f); e.setParam(ParamId::NearMix, 0.0f); e.setParam(ParamId::DelayMix, 0.0f); e.setParam(ParamId::EnsembleMix, 0.0f);
+            e.prepare(sr, 256);
+            std::vector<float> buf(static_cast<size_t>(2 * sr));
+            for (int i = 0; i < 2 * sr; ++i) buf[static_cast<size_t>(i)] = 0.4f + 0.3f * std::sin(static_cast<float>(kTwoPi * 220.0 * i / sr));
+            e.setTexture(0, buf.data(), 2 * sr, sr, 220.0, true);
+            e.noteOn(57, 0.8f);
+            render(e, 28.0);
+            const Stats end = render(e, 2.0);
+            std::printf("  [probe] a texture with an offset through a forty-second hall and the Patina: rms %.5f after thirty seconds\n", end.rms);
+            CHECK(end.rms > 1e-3, "an offset in a texture no longer silences the instrument");
+        }
+    }
     {   // Sleep: after two silent seconds the engine sleeps; a note wakes it.
         Engine e;
         e.setParam(ParamId::BrainOn, 0.0f); e.setParam(ParamId::Release, 0.1f); e.setParam(ParamId::FarDecay, 1.0f); e.setParam(ParamId::NearDecay, 0.2f);

@@ -155,6 +155,7 @@ void Voice::noteOn(int note, double freqHz, float velocity, int owner, float dis
         proxLoL_ = proxLoR_ = proxHiL_ = proxHiR_ = 0.0f;
         // An inherited note has been sounding: its Bloom is open and its sources have entered.
         bloomT_ = ageSeconds;
+        slotT_  = ageSeconds;
         for (float& s : slotShift_) s = 0.0f;
         slotHeld_ = false;
         prevDist_ = distance_;
@@ -358,13 +359,22 @@ void Voice::control(int blockLen, const VoiceParams& p)
     // Each slot's own entrance, from this note. A preset that says nothing about it -- no delay
     // and no shape -- gets a gain of exactly one and is not touched, which is what every preset
     // written before these parameters existed relies on.
+    //
+    // On real time, not the movement clock: an entrance is an envelope, and Freeze holds the
+    // spectrum and the pitch still, not the envelopes (Help says so, and the amp envelope above
+    // keeps its time). Read from bloomT_, which Freeze stops, a slot with a delay or a shape of
+    // its own never entered while Freeze was on -- and a preset that had Freeze on from the
+    // start (the 2.0 library writes it into six per cent of them) with every slot delayed or
+    // shaped was silent for good. Five of the fourteen thousand were, and four more had only
+    // their undelayed slot left.
+    slotT_ += dtReal;
     {
         const bool held = env_.isActive() && !env_.isReleasing();
         for (int k = 0; k < kSlots; ++k) {
             const SlotParams& sp = p.slot[k];
             slotEnvT_[k] = -1.0f;
             if (sp.delaySec <= 0.0f && sp.envIndex < 0 && !sp.ownEnv) { slotGain_[k] = 1.0f; continue; }
-            const float t = bloomT_ - sp.delaySec;
+            const float t = slotT_ - sp.delaySec;
             if (t <= 0.0f) { slotGain_[k] = 0.0f; continue; }
             // A shape: the slot's own, or one of the six borrowed. The own one may be a single
             // point -- a level -- where a borrowed one needs two to be a contour at all.

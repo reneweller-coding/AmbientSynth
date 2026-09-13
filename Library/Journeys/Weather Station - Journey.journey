@@ -4,13 +4,13 @@ journey Weather Station: Journey
 cyclic on
 Anemometer Threshold | 5:00-10:00 | 0:30-1:30
 Whirlwind Reading | 5:00-10:00 | 0:30-1:30
-Blizzard Report | 5:00-10:00 | 0:30-1:30
-Cyclone Record | 5:00-10:00 | 0:30-1:30
+Static Reading | 5:00-10:00 | 0:30-1:30
+Cyclone Report | 5:00-10:00 | 0:30-1:30
 Downdraft Hollow | 5:00-10:00 | 0:30-1:30
-Front Weather | 5:00-10:00 | 0:30-1:30
-Hail Reach | 5:00-10:00 | 0:30-1:30
-Whirlwind Signal | 5:00-10:00 | 0:30-1:30
-Storm Span | 5:00-10:00 | 0:30-1:30
+Pylon Log | 5:00-10:00 | 0:30-1:30
 Mast Span | 5:00-10:00 | 0:30-1:30
+Storm Span | 5:00-10:00 | 0:30-1:30
+Whirlwind Signal | 5:00-10:00 | 0:30-1:30
+Blizzard Report | 5:00-10:00 | 0:30-1:30
 Storm Field | 5:00-10:00 | 0:30-1:30
 Cyclone Station | 5:00-10:00 | 0:30-1:30

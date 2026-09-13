@@ -12,6 +12,7 @@
 #include "ambient/Tuning.h"
 #include "ambient/Presets.h"
 #include <cstdlib>
+#include <unordered_map>
 #include <cstdio>       // the crash log writes with C file I/O: no allocation in a broken process
 #include <exception>    // std::set_terminate
 #include <mutex>        // std::call_once
@@ -117,6 +118,7 @@ AmbientSynthProcessor::AmbientSynthProcessor()
     for (auto& c : ccMap_) c.store(-1);
     // Preset packs (thousands of presets as text files) before anything reads the preset list.
     loadDefaultPresetPacks();
+    loadFavourites();   // by name, so after the packs: the names have to be there to be found
     // The map's parameter vectors for those presets, on a thread of its own: a second of work
     // that only the map needs, and nothing should wait for it to open a window or start playing.
     PresetMap::warmupAsync();
@@ -1078,6 +1080,57 @@ bool AmbientSynthProcessor::saveJourney(const juce::File& file)
     return journey_.save(file.getFullPathName().toRawUTF8());
 }
 
+// ---------------------------------------------------------------- favourites
+
+juce::File AmbientSynthProcessor::favouritesFile()
+{
+    const juce::File dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("AmbientSynth");
+    dir.createDirectory();
+    return dir.getChildFile("favourites.txt");
+}
+
+void AmbientSynthProcessor::loadFavourites()
+{
+    favourites_.clear();
+    favouriteNames_.clear();
+    favouritesFirst_ = false;
+    const juce::File f = favouritesFile();
+    if (!f.existsAsFile()) return;
+    // Name to index once, not a scan of fourteen thousand names per line. The first preset of a
+    // name wins, which is what the preset boxes do with a name as well.
+    std::unordered_map<std::string, int> index;
+    for (int i = 0; i < numPresets(); ++i) index.emplace(preset(i).name, i);
+    juce::StringArray lines;
+    f.readLines(lines);
+    for (const juce::String& raw : lines) {
+        const juce::String line = raw.trim();
+        if (line.isEmpty() || line.startsWith("#")) continue;
+        if (line.startsWithIgnoreCase("first ")) { favouritesFirst_ = line.substring(6).trim().equalsIgnoreCase("on"); continue; }
+        favouriteNames_.addIfNotAlreadyThere(line);
+        const auto it = index.find(line.toStdString());
+        if (it != index.end()) favourites_.setBit(it->second, true);
+    }
+}
+
+void AmbientSynthProcessor::saveFavourites() const
+{
+    juce::String text;
+    text << "# AmbientSynth favourites: one preset name a line. A name whose preset is not installed is kept.\n"
+         << "first " << (favouritesFirst_ ? "on" : "off") << "\n";
+    for (const juce::String& n : favouriteNames_) text << n << "\n";
+    favouritesFile().replaceWithText(text);
+}
+
+void AmbientSynthProcessor::setFavourite(int index, bool on)
+{
+    if (index < 0 || index >= numPresets()) return;
+    favourites_.setBit(index, on);
+    const juce::String name(preset(index).name);
+    if (on) favouriteNames_.addIfNotAlreadyThere(name);
+    else    favouriteNames_.removeString(name);
+    saveFavourites();
+}
+
 juce::File AmbientSynthProcessor::userJourneyFolder()
 {
     const juce::File dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("AmbientSynth").getChildFile("Journeys");
@@ -1228,6 +1281,14 @@ void AmbientSynthProcessor::beginTransition(int index)
     // is heard, so it is filled in here as well.
     for (int i = 0; i < kNumParams; ++i)
         in.setParam(static_cast<ParamId>(i), raw_[static_cast<size_t>(i)]->load());
+    // A change that came within the burst window of the one before it had its files put off to
+    // the pump (see setCurrentProgram). A transition cannot have that: the engine is built here
+    // and only then made the instrument, and its samples are part of the build. Put off, they
+    // were read a quarter of a second later into whichever engine was live by then -- the right
+    // one when the audio thread had already swapped, the one on its way out when it had not (a
+    // host with the transport stopped, the host test's two changes 0.2 s of wall time apart) --
+    // and a preset made of textures arrived with nothing to play.
+    if (pendingFiles_.exchange(-1, std::memory_order_acq_rel) == index) loadPresetFiles(index);
     // The conductor takes the chord over from the one it is replacing. A crossfade is meant to
     // change the instrument and not the music: picking its own notes made it two pieces of music
     // at once for the length of the fade, and picking them at its own event rate -- ninety-nine
@@ -1339,7 +1400,8 @@ void AmbientSynthProcessor::getStateInformation(juce::MemoryBlock& destData)
         }
         state.setProperty("modEnvs", envs, nullptr);
     }
-    if (!favourites_.isZero()) state.setProperty("favourites", favourites_.toString(16), nullptr);
+    // The favourites are no longer in the state (by index, which a regenerated library renumbers);
+    // they live by name in the player's own file. An old state's property is read no more.
     if (routeText_.isNotEmpty()) state.setProperty("route", routeText_, nullptr);
     // One property per slot. An older state carries a single "textureFile", which is read below
     // as "the same clip in every slot" -- the only thing it could have meant at the time.
@@ -1407,7 +1469,6 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
             juce::String texPaths[ambient::kSlots];
             for (int k = 0; k < ambient::kSlots; ++k) texPaths[k] = tree.getProperty("textureFile" + juce::String(k + 1)).toString();
             const juce::String tabPath = tree.getProperty("wavetableFile").toString();
-            const juce::String favs = tree.getProperty("favourites").toString();
             const juce::String irPath = tree.getProperty("impulseFile").toString();
             const juce::String irBPath = tree.getProperty("impulseBFile").toString();
             // Which presets the two boxes should say are loaded. Looked up by name, and simply
@@ -1450,7 +1511,6 @@ void AmbientSynthProcessor::setStateInformation(const void* data, int sizeInByte
                     else live().setSrcEnvShape(i - ambient::kNumModEnvs, parts[i].toRawUTF8());
                 }
             }
-            if (favs.isNotEmpty()) favourites_.parseString(favs, 16);
             if (route.isNotEmpty()) setRouteText(route);
             tree.removeProperty("route", nullptr);
             tree.removeProperty("textureFile", nullptr);

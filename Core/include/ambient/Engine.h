@@ -760,6 +760,7 @@ private:
     bool     midiHeld_[128] = {};
     Smoother masterSmooth_;
     float    dcXL_ = 0.0f, dcXR_ = 0.0f, dcYL_ = 0.0f, dcYR_ = 0.0f;   // output DC blocker
+    float    pdcXL_ = 0.0f, pdcXR_ = 0.0f, pdcYL_ = 0.0f, pdcYR_ = 0.0f;   // the same ahead of the Patina's clipper
     // Per-sample smoothing of the level-type parameters in the effect chain (20 ms), so
     // automation, gestures, morph and map blend never step a gain by a whole block.
     Smoother smDelayMix_, smDelayToFar_, smDelay2Mix_, smDelay2ToFar_, smCloudSend_, smCosmosSend_, smCosmosReturn_, smCosmosToFar_, smFarLevel_, smFarWidth_;

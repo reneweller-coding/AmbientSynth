@@ -191,10 +191,18 @@ public:
     juce::String routeText() const { return routeText_; }
     void clearRoute() { live().clearRoute(); routeText_.clear(); }
     bool addRoutePoint(const ambient::Waypoint& w) { if (!live().addRoutePoint(w)) return false; char buf[4096]; live().writeRoute(buf, sizeof(buf)); routeText_ = buf; return true; }
-    // Favourite presets (browser stars), kept in the plugin state.
+    // Favourite presets (the browser's stars). By name, in a file of the player's own
+    // (Documents\AmbientSynth\favourites.txt, one name a line), so they survive a library that is
+    // generated again under the same names and are the same in the standalone and in every DAW.
+    // The plugin state used to carry them by index, and the 2.0 library renumbered every index.
     // juce::BigInteger grows on demand, so the library's size is not a limit here.
     bool isFavourite(int preset) const { return preset >= 0 && favourites_[preset]; }
-    void setFavourite(int preset, bool on) { if (preset >= 0) favourites_.setBit(preset, on); }
+    void setFavourite(int preset, bool on);
+    int  favouriteCount() const { return favourites_.countNumberOfSetBits(); }
+    // The browser's "favourites first": the starred presets at the top of the list, whatever the
+    // sort. Remembered in the same file.
+    bool favouritesFirst() const { return favouritesFirst_; }
+    void setFavouritesFirst(bool on) { favouritesFirst_ = on; saveFavourites(); }
 
     // Bumped whenever any parameter changes, from wherever. A display that draws nothing but
     // parameters -- the filter response, an envelope, the vector square -- has no business
@@ -319,6 +327,11 @@ private:
     int        layoutMode_ = 0;
     void       applyLevelMatch(int presetIndex);
     juce::BigInteger favourites_;
+    juce::StringArray favouriteNames_;   // the file's names, in its order -- kept even for presets that are not installed
+    bool favouritesFirst_ = false;
+    static juce::File favouritesFile();
+    void loadFavourites();
+    void saveFavourites() const;
     juce::String routeText_;
     // set timeline (recording appends on the audio thread; save/load on the message thread while stopped)
     ambient::SetTimeline setRec_, setPlay_;

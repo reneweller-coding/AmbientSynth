@@ -890,13 +890,25 @@ void Engine::renderChunk(float* L, float* R, int n)
     midSide_.process(L, R, n);
     if (subOn)
         for (int i = 0; i < n; ++i) { L[i] += subL[i]; R[i] += subR[i]; }
-    // The master's age, before the gain and the clipper: tape wow, lost highs, a noise floor.
-    patina_.process(L, R, n);
     // Output DC blocker at 4 Hz, below the lowest sub the Foundation can reach. Several paths
     // can leave an offset behind -- FM at an integer ratio, the asymmetric tape term, a granular
     // window over a clip that carries one, the shimmer's pitch shifter -- and an offset costs
     // headroom in the soft clipper without ever being heard. One filter at the end covers them all.
     const float dcR = 1.0f - kTwoPi * 4.0f / static_cast<float>(sr_);
+    // ...all but the Patina's own clipper, which sits before it. An offset that has grown past the
+    // clipper's knee -- the far hall integrated one to -2.1 in thirty seconds -- leaves the music
+    // riding on a rail the clipper flattens, and the blocker at the end then takes the rail away
+    // and leaves nothing: three presets of the 2.0 library died that way, exactly to zero, while
+    // every one of their stems played on. The same filter ahead of the Patina, and only while the
+    // Patina is on, so a preset without it is rendered sample for sample as before.
+    if (patina_.active()) {
+        for (int i = 0; i < n; ++i) {
+            const float yl = L[i] - pdcXL_ + dcR * pdcYL_; pdcXL_ = L[i]; pdcYL_ = yl; L[i] = yl;
+            const float yr = R[i] - pdcXR_ + dcR * pdcYR_; pdcXR_ = R[i]; pdcYR_ = yr; R[i] = yr;
+        }
+    }
+    // The master's age, before the gain and the clipper: tape wow, lost highs, a noise floor.
+    patina_.process(L, R, n);
     // Subsonic: four cascaded one-pole high-passes, 24 dB/oct, on top of the 4 Hz DC blocker.
     // Off at zero, and zero is the default -- this instrument's Foundation reaches lower than the
     // frequency a mastering engineer cuts at, so the cut has to be the player's decision.

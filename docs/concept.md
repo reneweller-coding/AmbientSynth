@@ -3235,6 +3235,87 @@ owner is sounding -- the cello under the chord, the chime on top -- re-read
 as the cluster changes and faded over a second and a half. Every preset ever
 written has every slot on All, so nothing already measured moved.
 
+## What the release build found (13.09.2026)
+
+The 2.0 release is built twice over, in the configuration that ships, and
+its host test failed in that configuration on a check that had passed all
+day in the working build: *when the old preset is gone the new one is already
+audible*. The arriving preset was silent -- exactly zero, nine voices sounding
+nothing. Three faults came out of that one failure, none of them in the
+release build.
+
+**A transition within the burst window.** A program change that arrives
+within 300 ms of the one before it has its files -- the clips, the wavetable,
+the rooms -- put off to the preset pump, so a host automating the program
+number does not read a sixth of a second of disk per step. The host test's two
+changes are two seconds of audio apart and, on a fast machine, a fifth of a
+second of wall time: the second one counted as a burst, its textures were
+deferred, and the pump that would have read them never runs in a test. In a
+host it does run, a quarter of a second later, into whichever engine is live
+by then -- the right one once the audio thread has swapped, the one on its way
+out when it has not (a transport that is stopped). A transition now reads its
+files as part of building the incoming engine, before that engine is made the
+instrument, whatever the clock says; the deferral stays for program sweeps.
+
+**Freeze stopped the entrances.** Five presets of the fourteen thousand
+measured as silence in the night run, and four more had only one slot left.
+All of them had *Freeze* on and every slot delayed or shaped. Each slot's
+entrance was read off the voice's movement clock, the clock Freeze stops --
+so a delayed slot never entered while Freeze was on, and a preset frozen from
+its first sample with nothing but delayed slots was silent for good. The
+entrance is an envelope, and the rule on the page above says the envelopes
+keep their time: it now runs on a clock of its own that Freeze does not touch,
+and the self test holds a frozen voice with a delayed slot and waits for it.
+The generator writes Freeze into six per cent of the library, and 559 of
+those presets carry a delayed or shaped slot: their minute was measured with
+that slot missing, so they are measured again (`remeasure_presets.py`, which
+does for a list of names what `measure_packs.py` does for the library, and
+leaves every other preset's gain where the night run put it -- a second full
+pass would have lifted the three thousand presets under the loudness window by
+another six decibels).
+
+**An offset, integrated.** The other three silent presets (Azimuth Circle,
+Etching Bed, Tapehead Expanse) played for fifteen to thirty seconds and then
+stopped, exactly to zero, while every one of their stems played on. Finding
+that took a wrong turn first: a bisection that dropped each of a preset's 240
+keys in turn and measured the render's RMS reported every variant alive,
+because a preset that dies at fifteen seconds still averages to a healthy
+level over twenty-four -- the measured window has to begin *after* the death
+(`--skip`), and the rating's descriptors would have hidden the same thing
+had the night run not skipped its warm-up. With the window in the right place
+one key came up in all three: *Patina*, and then only its amount, not its
+wow, hiss or age. The stems told the rest. The far bus of Tapehead Expanse
+carried a direct current that grew from nothing to -2.1 in thirty seconds
+while its music stayed at 0.4 peak: a texture with a few per cent of offset
+(the near bus already stood at -0.12), and a hall whose loop gain is a hair
+under one -- a forty-second tail -- integrating it with a gain of hundreds.
+The Patina's soft clipper railed on the offset and flattened the music
+riding on it; the output DC blocker, one stage later, took the rail away and
+left nothing. Three answers, each with its own check: the hall blocks direct
+current at its input (a constant 0.3 in, a tail mean under 0.05 after ten
+seconds), a texture loses its mean as it is loaded (a recording's offset is
+never wanted, and subtracting a constant keeps a seamless clip seamless), and
+the Patina has the output blocker's twin ahead of its clipper, computed only
+while the Patina is on so every preset without it renders sample for sample as
+before. The whole recipe -- an offset texture, a forty-second hall, the Patina
+at 0.4 -- is rendered for thirty seconds in the self test and has to be
+audible at the end.
+
+**Two small things Rene asked for while that ran.** Favourites had been kept
+in the plugin state by preset index; the 2.0 library renumbered every index,
+so every star pointed at a stranger. They are now a file of names in
+Documents\AmbientSynth\favourites.txt (one a line, a name whose preset is not
+installed is kept), the same in the standalone and in every DAW, and the
+browser gained *favourites first* -- the starred presets to the top of the
+list in whatever order the sort left them (a stable partition, so "by
+brightness, favourites first" means what it says) -- remembered in the same
+file, and the map rings the favourites in the star's gold. The other was the
+table pictures: the installed 1.12.1 lit whole frames, and its lit cycle
+jumped to the next frame while the sound blended between them; the depth view
+of 11.09. already lights the blend at its fractional place, and now the
+frame count says "3.4 / 8" rather than a whole number, and the flat Harmonic
+picture blends with the slot's Transport, the way the engine reads the table.
+
 ## Roadmap
 
 1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow

@@ -1533,7 +1533,7 @@ again:
   rather than one function: a parameter set from the message thread reaches
   the display on the next timer tick, not in the same call.
 * **The presets chapter explains the groups**: the twelve families of the
-  built-in presets and all thirty-four packs, each in a sentence -- who it is
+  built-in presets and all fifty-six packs, each in a sentence -- who it is
   written in the spirit of and what corner of the repertoire it covers --
   rather than the list of numbers it was.
 

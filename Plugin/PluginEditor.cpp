@@ -2322,7 +2322,8 @@ void AmbientSynthEditor::HelpView::FlowDiagram::paint(juce::Graphics& g)
     // The left margin is left clear: the feedback's return runs down it.
     g.setColour(F.withAlpha(0.35f)); g.drawRoundedRectangle(148.0f, 344.0f, 308.0f, 118.0f, 8.0f, 1.0f);
     g.setColour(F); g.setFont(ui::title(10.0f));
-    g.drawText("NEAR LAYER  --  its own bank of 108", 156, 347, 300, 13, juce::Justification::centredLeft, false);
+    // The label is as long as the box is wide: "presets" spelled out past this runs off the edge.
+    g.drawText("NEAR LAYER  --  its own 108 presets", 156, 347, 300, 13, juce::Justification::centredLeft, false);
     auto ne = node(156, 362, 144, 30, "Near Events\na second conductor, waiting", F, 8.5f);
     auto ns = node(308, 362, 142, 30, "Near Source\nany slot may hold one", F, 8.5f);
     // What it may be set to is the legend at the top right; what is its own is the kind of event.

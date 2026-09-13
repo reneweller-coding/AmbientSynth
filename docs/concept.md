@@ -892,7 +892,17 @@ stayed at 3.0 % because it uses neither.
 `Tests/BankChecks.h` holds all three to the definition, worked out in double, at lengths that land
 on a lane boundary and lengths that leave a tail on eight lanes, on four, or on both; the self test
 runs them and `ambient_banktest` runs them once per vector path (AVX2, NEON through the x86 shim,
-scalar), the way the convolver's checks have been run since the Room was built. Writing that test
+scalar), the way the convolver's checks have been run since the Room was built.
+
+The same round found the grain ring (`GrainRing.h`, the loop the Cloud and the Memory share) with
+an AVX2 path and no NEON one at all: the Quest rendered every grain of both of them scalar. It has
+one now, written like the texture source's -- four lanes for the window, the level and the two
+accumulations, the interpolation left scalar because NEON has no gather and four places in a ring
+are four loads however they are spelled. The selftest had been holding that loop's vector path
+against its scalar one since the Cloud was built and had been green throughout, which it would
+have been with no vector path at all: a check of the form "the two agree" is worth nothing until
+something says there are two. `ringGrainPath()` says which one was compiled, and banktest holds it
+to the path its variant was built for. Writing that test
 cost two mistakes worth keeping: a double-precision reference run ALONGSIDE a single-precision
 recurrence diverges -- the Newton correction pulls each onto its own circle -- and failed all three
 paths including the scalar one that had not been touched, which is the tell that an oracle is

@@ -98,6 +98,60 @@ inline void ringGrainBody(const float* ring, int cap, RingGrain& g, float* oL, f
         _mm256_store_ps(lastS, vws);
         wc = lastC[0]; ws = lastS[0];
     }
+#elif AMBIENT_HAS_NEON
+    // The Quest (13.09.2026: it had none, and the Cloud's and the Memory's grains were the only
+    // thing left running scalar there). Four lanes, and the interpolation stays scalar because
+    // NEON has no gather -- four places in the ring are four loads however they are written --
+    // exactly as the texture source's own grain loop has it in Sources.cpp. What vectorises is
+    // the window, the level and the two accumulations: most of the arithmetic, none of the memory.
+    if (VEC && count >= 4) {
+        float wcL[4], wsL[4];
+        {
+            float c = wc, sn = ws;
+            for (int k = 0; k < 4; ++k) {
+                wcL[k] = c; wsL[k] = sn;
+                const float nc = c * rc - sn * rs;
+                sn = sn * rc + c * rs;
+                c = nc;
+            }
+        }
+        const float c2 = rc * rc - rs * rs, s2 = 2.0f * rc * rs;   // r^2
+        const float c4 = c2 * c2 - s2 * s2, s4 = 2.0f * c2 * s2;   // r^4, which turns all four lanes
+        float32x4_t vwc = vld1q_f32(wcL), vws = vld1q_f32(wsL);
+        const float32x4_t vc4 = vdupq_n_f32(c4), vs4 = vdupq_n_f32(s4);
+        const float32x4_t vgl = vdupq_n_f32(gl), vgr = vdupq_n_f32(gr);
+        const float32x4_t vhalf = vdupq_n_f32(0.5f);
+        for (; i + 4 <= count; i += 4) {
+            float laneL[4], laneR[4];
+            for (int k = 0; k < 4; ++k) {
+                const double p = base + rate * (i + k);
+                int i0 = static_cast<int>(p);
+                const float f = static_cast<float>(p - i0);
+                if (i0 >= cap) i0 -= cap;      // into the ring, by a subtract: a ring need not be a power of two
+                int i1 = i0 + 1;
+                if (i1 >= cap) i1 -= cap;
+                const float l0 = ring[CH * i0], l1 = ring[CH * i1];
+                laneL[k] = l0 + f * (l1 - l0);
+                if constexpr (CH == 2) {
+                    const float r0 = ring[2 * i0 + 1], r1 = ring[2 * i1 + 1];
+                    laneR[k] = r0 + f * (r1 - r0);
+                } else {
+                    laneR[k] = laneL[k];
+                }
+            }
+            const float32x4_t vL = vld1q_f32(laneL), vR = vld1q_f32(laneR);
+            const float32x4_t w = vmlsq_f32(vhalf, vhalf, vwc);   // the Hann window: 0.5 - 0.5 cos
+            vst1q_f32(oL + i, vmlaq_f32(vld1q_f32(oL + i), vmulq_f32(vL, w), vgl));
+            vst1q_f32(oR + i, vmlaq_f32(vld1q_f32(oR + i), vmulq_f32(vR, w), vgr));
+            const float32x4_t nc = vmlsq_f32(vmulq_f32(vwc, vc4), vws, vs4);
+            vws = vmlaq_f32(vmulq_f32(vws, vc4), vwc, vs4);
+            vwc = nc;
+        }
+        float lastC[4], lastS[4];
+        vst1q_f32(lastC, vwc);
+        vst1q_f32(lastS, vws);
+        wc = lastC[0]; ws = lastS[0];
+    }
 #endif
     (void) sizeof(VEC);
     for (; i < count; ++i) {
@@ -137,6 +191,20 @@ inline void renderRingGrain(const float* ring, int cap, int channels, RingGrain&
 {
     if (channels == 2) detail::ringGrainBody<2, true>(ring, cap, g, oL, oR, count);
     else               detail::ringGrainBody<1, true>(ring, cap, g, oL, oR, count);
+}
+
+// Which path renderRingGrain was compiled to. A test that holds the vector path against the
+// scalar one passes for nothing at all when there is no vector path to hold: this is how it says
+// so. The Quest had none here until 13.09.2026 and the check had been green throughout.
+inline const char* ringGrainPath()
+{
+#if AMBIENT_HAS_AVX && defined(__AVX2__)
+    return "avx2";
+#elif AMBIENT_HAS_NEON
+    return "neon";
+#else
+    return "scalar";
+#endif
 }
 
 // The same arithmetic without the vector path, so the self test can hold the two against each other.

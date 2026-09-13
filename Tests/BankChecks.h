@@ -19,9 +19,11 @@
 // Include after a CHECK(cond, msg) macro is defined.
 #pragma once
 #include "ambient/Simd.h"
+#include "ambient/GrainRing.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace bankchecks {
 
@@ -183,6 +185,43 @@ inline void bankChecks()
     }
 }
 
+// The grain loop the Cloud and the Memory share (GrainRing.h), whose vector path is the other one
+// that is written by hand: the same grain rendered through the vector path and through the scalar
+// one, mono and stereo, across the seam of a ring whose length is not a power of two. The selftest
+// has held these two against each other since the Cloud was built, but only ever on the path the
+// host compiles; run from banktest it covers the NEON one as well, which until 13.09.2026 did not
+// exist at all -- the Quest rendered every grain of the Cloud and the Memory scalar.
+inline void grainRingChecks()
+{
+    for (int ch = 1; ch <= 2; ++ch) {
+        const int cap = 10007, len = 3000;                 // a prime: the fold cannot be a mask
+        std::vector<float> ring(static_cast<size_t>(cap * ch));
+        ambient::Rng r; r.seed(11);
+        for (auto& v : ring) v = r.bipolar();
+        ambient::RingGrain a;
+        a.pos = cap - 700.25; a.rate = 1.37; a.len = len; a.gl = 0.8f; a.gr = 0.6f;
+        ambient::phasorFrom(1.0 / len, a.rc, a.rs);
+        ambient::RingGrain b = a;
+        std::vector<float> aL(len, 0.0f), aR(len, 0.0f), bL(len, 0.0f), bR(len, 0.0f);
+        // Block sizes that leave a tail on four lanes and on eight, so both bodies and both tails run.
+        const int blocks[] = { 64, 13, 8, 7, 4, 3 };
+        int p = 0, k = 0;
+        while (p < len) {
+            const int m = std::min(blocks[k++ % 6], len - p);
+            ambient::renderRingGrain(ring.data(), cap, ch, a, aL.data() + p, aR.data() + p, m);
+            ambient::renderRingGrainScalar(ring.data(), cap, ch, b, bL.data() + p, bR.data() + p, m);
+            p += m;
+        }
+        double err = 0.0, sig = 0.0;
+        for (size_t i = 0; i < aL.size(); ++i) {
+            err += static_cast<double>(aL[i] - bL[i]) * (aL[i] - bL[i]) + static_cast<double>(aR[i] - bR[i]) * (aR[i] - bR[i]);
+            sig += static_cast<double>(aL[i]) * aL[i] + static_cast<double>(aR[i]) * aR[i];
+        }
+        CHECK(sig > 0.0 && err < 1.0e-10 * sig, "ring grain: the vector path and the scalar one agree, across the ring's seam");
+        CHECK(std::fabs(a.pos - b.pos) < 1.0e-9 && a.pos < cap, "ring grain: both end at the same place, folded back into the ring");
+    }
+}
+
 }   // namespace bankchecks
 
-inline void bankChecks() { bankchecks::bankChecks(); }
+inline void bankChecks() { bankchecks::bankChecks(); bankchecks::grainRingChecks(); }

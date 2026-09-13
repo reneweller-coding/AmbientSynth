@@ -7,6 +7,7 @@
 // The bank lives entirely in a header, so unlike the convolver's test there is no .cpp to compile
 // beside it: the variants differ only in what they are allowed to define and include.
 #include "ambient/Simd.h"
+#include "ambient/GrainRing.h"
 #include <cstdio>
 #include <cstring>
 
@@ -28,9 +29,13 @@ int main()
 #else
     const char* path = "scalar";
 #endif
-    std::printf("partial bank path: %s\n", path);
+    std::printf("partial bank path: %s, grain ring: %s\n", path, ringGrainPath());
 #ifdef AMBIENT_EXPECT_PATH
     CHECK(std::strcmp(path, AMBIENT_EXPECT_PATH) == 0, "the build runs the vector path it was made for");
+    // The grain ring says which path IT took as well: its check holds the vector path against the
+    // scalar one, and that passes for nothing at all when the two are the same code.
+    const char* want = std::strcmp(AMBIENT_EXPECT_PATH, "neon-shim") == 0 ? "neon" : AMBIENT_EXPECT_PATH;
+    CHECK(std::strcmp(ringGrainPath(), want) == 0, "and the grain ring runs it too");
 #endif
     bankChecks();
     if (failures == 0) std::printf("banktest: all checks passed\n");

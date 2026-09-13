@@ -41,7 +41,7 @@ private:
     };
     void frame(Channel& c);
     Channel ch_[2];
-    Fft     fft_{ kN };
+    RealFft fft_{ kN };
     std::vector<float> window_;
     std::vector<int>   peaks_;
     double  ratio_ = 2.0;

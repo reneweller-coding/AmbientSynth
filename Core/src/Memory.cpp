@@ -437,13 +437,12 @@ void Memory::fingerprint(const float* x, float* chroma, float& rms)
     double sq = 0.0;
     for (int i = 0; i < kSeg; ++i) {
         fftRe_[static_cast<size_t>(i)] = x[i] * window_[static_cast<size_t>(i)];
-        fftIm_[static_cast<size_t>(i)] = 0.0f;
         sq += static_cast<double>(x[i]) * x[i];
     }
     rms = static_cast<float>(std::sqrt(sq / kSeg));
     for (int j = 0; j < 12; ++j) chroma[j] = 0.0f;
     if (rms < 1.0e-6f) return;
-    fft_.transform(fftRe_.data(), fftIm_.data(), false);
+    fft_.forward(fftRe_.data(), fftRe_.data(), fftIm_.data());
     for (int b = 1; b < kSeg / 2; ++b) {
         const int pc = binPc_[static_cast<size_t>(b)];
         if (pc < 0) continue;

@@ -279,14 +279,14 @@ void SourceSlot::prepare(double sampleRate, uint64_t seed)
     (void)builtinCycleTable(0);
 }
 
-const Fft& SourceSlot::stretchFft(int n)
+const RealFft& SourceSlot::stretchFft(int n)
 {
     // One transform per size, shared by every slot of every voice: the tables are read-only once
     // built, and building them in prepare() keeps the allocation off the audio thread.
-    static std::vector<std::unique_ptr<Fft>> table;
+    static std::vector<std::unique_ptr<RealFft>> table;
     static std::vector<int> sizes;
     for (size_t i = 0; i < sizes.size(); ++i) if (sizes[i] == n) return *table[i];
-    table.push_back(std::make_unique<Fft>(n));
+    table.push_back(std::make_unique<RealFft>(n));
     sizes.push_back(n);
     return *table.back();
 }
@@ -1191,12 +1191,10 @@ void SourceSlot::stretchFrame(const SlotParams& p, const Texture* tex, double ra
     // The window, read around the analysis position at the pitch's rate.
     const double centre = clampv(static_cast<double>(p.position), 0.0, 1.0) * loopLen + zone + st_.advance;
     const double start = centre - 0.5 * N * rate;
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < N; ++i)
         st_.re[static_cast<size_t>(i)] = read(start + i * rate) * st_.win[static_cast<size_t>(i)];
-        st_.im[static_cast<size_t>(i)] = 0.0f;
-    }
-    const Fft& fft = stretchFft(N);
-    fft.transform(st_.re.data(), st_.im.data(), false);
+    const RealFft& fft = stretchFft(N);
+    fft.forward(st_.re.data(), st_.re.data(), st_.im.data());
     // Keep the magnitudes, draw the phases: what makes it a continuum rather than a loop.
     for (int k = 0; k <= N / 2; ++k) {
         const float m = std::sqrt(st_.re[static_cast<size_t>(k)] * st_.re[static_cast<size_t>(k)] + st_.im[static_cast<size_t>(k)] * st_.im[static_cast<size_t>(k)]);
@@ -1206,7 +1204,9 @@ void SourceSlot::stretchFrame(const SlotParams& p, const Texture* tex, double ra
         if (k > 0 && k < N / 2) { st_.re[static_cast<size_t>(N - k)] = r; st_.im[static_cast<size_t>(N - k)] = -q; }
     }
     st_.im[0] = 0.0f; st_.im[static_cast<size_t>(N / 2)] = 0.0f;
-    fft.transform(st_.re.data(), st_.im.data(), true);
+    // The scratch is the imaginary half itself: this transform is shared by every slot of
+    // every voice, so it must not write into itself (see RealFft).
+    fft.inverse(st_.re.data(), st_.im.data(), st_.re.data(), st_.im.data());
     // Overlap-add at a quarter of the window. 1.3 is the Nebula's measured unity constant for
     // random-phase resynthesis at this hop with Hann in and out; the clip's own gain brings a
     // quiet recording to the level the other types normalise themselves to.

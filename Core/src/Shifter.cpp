@@ -52,11 +52,9 @@ void SpectralShifter::frame(Channel& c)
 {
     constexpr int K = kN / 2;
     const int inMask = kN - 1, outMask = 2 * kN - 1;
-    for (int i = 0; i < kN; ++i) {
+    for (int i = 0; i < kN; ++i)
         c.re[static_cast<size_t>(i)] = c.in[static_cast<size_t>((c.inPos - kN + i) & inMask)] * window_[static_cast<size_t>(i)];
-        c.im[static_cast<size_t>(i)] = 0.0f;
-    }
-    fft_.transform(c.re.data(), c.im.data(), false);
+    fft_.forward(c.re.data(), c.re.data(), c.im.data());
     float top = 0.0f;
     for (int k = 0; k <= K; ++k) {
         const float p = c.re[static_cast<size_t>(k)] * c.re[static_cast<size_t>(k)] + c.im[static_cast<size_t>(k)] * c.im[static_cast<size_t>(k)];
@@ -128,7 +126,7 @@ void SpectralShifter::frame(Channel& c)
         c.re[static_cast<size_t>(kN - k)] = c.accRe[static_cast<size_t>(k)];
         c.im[static_cast<size_t>(kN - k)] = -c.accIm[static_cast<size_t>(k)];
     }
-    fft_.transform(c.re.data(), c.im.data(), true);
+    fft_.inverse(c.re.data(), c.im.data(), c.re.data());
     for (int i = 0; i < kN; ++i)
         c.out[static_cast<size_t>((c.outPos + i) & outMask)] += c.re[static_cast<size_t>(i)] * window_[static_cast<size_t>(i)] * kOverlapGain;
 }

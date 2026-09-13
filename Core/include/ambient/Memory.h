@@ -151,7 +151,7 @@ private:
     int       qHead_ = 0, qTail_ = 0;
     std::vector<float> fftRe_, fftIm_, window_;
     std::vector<signed char> binPc_;        // each FFT bin's pitch class, -1 outside what is listened to
-    Fft       fft_{ kSeg };
+    RealFft   fft_{ kSeg };
     float     scaleChroma_[12] = {}, inputChroma_[12] = {};
     float     inputLevel_ = 0.0f;
     std::vector<float> inBuf_;

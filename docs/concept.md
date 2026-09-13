@@ -3415,6 +3415,43 @@ Sonar Ping and the Echo Sounder answer themselves down the long chain, the
 Krell's circuits and the Deep Space Beacon go into the Cosmos, the Number
 Station and the Lost Transmission carry down the delay.
 
+### The FFT, which was doing twice its work (13.09.2026)
+
+With the bank's loops written out, a profiler on the dearest preset of the library put
+`Fft::transform` at 2.16 seconds of processor against 0.32 for the next thing on the list -- seven
+times the second item, and more than a third of the whole render. It serves the Nebula, the
+spectral shifter, the Memory's chroma, the spectral source and the Room.
+
+It is a textbook radix-2 transform and there was nothing wrong with it. What was wrong was what it
+was being asked to do: every caller had just written a row of zeros into the imaginary half. A
+real signal's spectrum costs a COMPLEX transform of half the length plus one rotation per bin --
+the samples are read in pairs as `z[k] = x[2k] + i x[2k+1]`, and the even and odd spectra come
+apart again afterwards. Going back the other way the same applies, and here it was already spelled
+out in the callers: the Nebula and the spectral source build a conjugate-symmetric spectrum on
+purpose, bin by bin, and then asked for a full complex inverse of it.
+
+`RealFft` does both. Measured on the same preset and the same thirty seconds: the transform's own
+time fell from 2.16 s to 1.00 s, with 0.12 s for the untangling on top. Across both rounds -- the
+bank's two scalar loops and this -- the dearest preset of the library went from 19.9 % of a core
+to 12.9 %, and the FFT-heavy ones with it.
+
+Two things it is worth knowing about the implementation. The inverse needs a scratch half, because
+its last step interleaves two half-length arrays into one and that shuffle cannot be done in place
+by walking it in either direction: writing the pair for index k lands on the imaginary part that
+index 2k - m has still to read. The round trip came back 1, 5, 3, 7, 5, 7, 7, 8 for 1 to 8 before
+that was understood -- every odd sample taken from two places further on. And because the spectral
+source shares one transform between every slot of every voice, the scratch can be handed in rather
+than kept in the object; an instance that writes into itself and is shared is a race waiting for
+the day somebody renders two voices at once. The `im` array itself serves, every write landing on
+a bin the step has already read.
+
+`Tests/FftChecks.h` holds the real transform against the complex one at seven lengths on seven
+signals -- an impulse, a constant, noise, a ramp, and a single frequency at the middle bin and its
+two neighbours, where k and n/2-k are the same bin and the pair formula degenerates -- then the
+round trip, then the inverse against the complex inverse on a Hermitian spectrum built the way the
+Nebula builds one, so the check does not only ever see spectra the forward has just made, and last
+the aliasing both directions rely on.
+
 ## Roadmap
 
 1. **Sound** — done since v0.2: spectral freeze (Nebula), head-shadow

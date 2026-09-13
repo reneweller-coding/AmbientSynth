@@ -59,6 +59,7 @@ static int failures = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { std::printf("FAIL: %s (%s:%d)\n", msg, __FILE__, __LINE__); ++failures; } } while (0)
 #include "ConvolverChecks.h"   // the convolver's checks, shared with ambient_convtest
 #include "BankChecks.h"        // the partial bank's, shared with ambient_banktest
+#include "FftChecks.h"         // the real-input FFT against the complex one
 
 namespace {
 
@@ -943,6 +944,8 @@ void testRoom()
     // The partial bank's three inner loops (Tests/BankChecks.h, which ambient_banktest runs
     // once per vector path): every one of them against the definition worked out in double.
     bankChecks();
+    // The real-input FFT against the complex one it replaces (Tests/FftChecks.h).
+    fftChecks();
     const int sr = 48000;
     {   // In the engine: Room level 0 costs nothing and changes nothing; level 1 adds a tail after the note.
         auto tailEnergy = [&](float level) {

@@ -219,6 +219,96 @@ void Fft::transform(float* re, float* im, bool inverse) const
     if (inverse) { const float inv = 1.0f / static_cast<float>(n_); for (int i = 0; i < n_; ++i) { re[i] *= inv; im[i] *= inv; } }
 }
 
+// ---------------------------------------------------------------- RealFft
+
+RealFft::RealFft(int n) : n_(n), half_(n / 2)
+{
+    const int m = n / 2;
+    tc_.resize(static_cast<size_t>(m + 1));
+    ts_.resize(static_cast<size_t>(m + 1));
+    for (int k = 0; k <= m; ++k) {
+        tc_[static_cast<size_t>(k)] = static_cast<float>(std::cos(kTwoPi * k / n));
+        ts_[static_cast<size_t>(k)] = static_cast<float>(std::sin(kTwoPi * k / n));
+    }
+    work_.assign(static_cast<size_t>(m), 0.0f);
+}
+
+void RealFft::forward(const float* x, float* re, float* im) const
+{
+    const int m = n_ / 2;
+    // The pairs, read forward so that writing re[k] cannot reach a sample not yet taken: it wants
+    // x[2k] and x[2k+1], and 2k >= k.
+    for (int k = 0; k < m; ++k) {
+        const float a = x[2 * k], b = x[2 * k + 1];
+        re[k] = a; im[k] = b;
+    }
+    half_.transform(re, im, false);
+    // Apart again. k and m-k are done together because each needs the other's value, so the loop
+    // runs to m/2 and the two ends are written in one step; the middle bin (k = m/2, where k and
+    // m-k are the same bin) and the two ends fall out of the same formula.
+    const float z0r = re[0], z0i = im[0];
+    for (int k = 1; k <= m / 2; ++k) {
+        const int j = m - k;
+        const float akr = re[k], aki = im[k], bkr = re[j], bki = im[j];
+        // Fe = (Z[k] + conj(Z[m-k])) / 2,  Fo = -i (Z[k] - conj(Z[m-k])) / 2
+        const float er = 0.5f * (akr + bkr), ei = 0.5f * (aki - bki);
+        const float or_ = 0.5f * (aki + bki), oi = -0.5f * (akr - bkr);
+        const float wc = tc_[static_cast<size_t>(k)], ws = -ts_[static_cast<size_t>(k)];   // e^(-2 pi i k / n)
+        // X[k] = Fe + W * Fo
+        const float xr = er + (or_ * wc - oi * ws), xi = ei + (or_ * ws + oi * wc);
+        // X[m-k] is the same with W at m-k, which is the conjugate of the rotation at k reflected:
+        // e^(-2 pi i (m-k) / n) = -conj(e^(-2 pi i k / n)). Fe and Fo at m-k are the conjugates.
+        const float er2 = er, ei2 = -ei, or2 = or_, oi2 = -oi;
+        const float wc2 = -wc, ws2 = ws;
+        const float yr = er2 + (or2 * wc2 - oi2 * ws2), yi = ei2 + (or2 * ws2 + oi2 * wc2);
+        re[k] = xr; im[k] = xi;
+        re[j] = yr; im[j] = yi;
+    }
+    // The ends: X[0] and X[n/2] are both real, and both come out of Z[0] alone.
+    re[0] = z0r + z0i; im[0] = 0.0f;
+    re[m] = z0r - z0i; im[m] = 0.0f;
+    // The conjugate mirror, so the array reads like the one Fft leaves behind.
+    for (int k = 1; k < m; ++k) { re[n_ - k] = re[k]; im[n_ - k] = -im[k]; }
+}
+
+void RealFft::inverse(const float* re, const float* im, float* x, float* scratch) const
+{
+    const int m = n_ / 2;
+    // Z's real parts go into x[0 .. m-1] and its imaginary parts into the scratch half, which is
+    // what lets x be the caller's own `re` array: every write at k or m-k lands on a bin this
+    // step has already read.
+    float* zi = scratch;
+    const float x0 = re[0], xm = re[m];
+    for (int k = 1; k < m - k; ++k) {
+        const int j = m - k;
+        const float akr = re[k], aki = im[k], bkr = re[j], bki = im[j];
+        // Fe = (X[k] + conj(X[m-k])) / 2
+        const float er = 0.5f * (akr + bkr), ei = 0.5f * (aki - bki);
+        // Fo = (X[k] - conj(X[m-k])) / 2 * e^(+2 pi i k / n), undoing the rotation the forward put on
+        const float dr = 0.5f * (akr - bkr), di = 0.5f * (aki + bki);
+        const float wc = tc_[static_cast<size_t>(k)], ws = ts_[static_cast<size_t>(k)];
+        const float fr = dr * wc - di * ws, fi = dr * ws + di * wc;
+        // Z[k] = Fe + i Fo,  Z[m-k] = conj(Fe) + i conj(Fo)
+        x[k] = er - fi;   zi[k] = ei + fr;
+        x[j] = er + fi;   zi[j] = fr - ei;
+    }
+    // Z[0], out of the two bins that are real: X[0] = Re Z0 + Im Z0, X[n/2] = Re Z0 - Im Z0.
+    x[0] = 0.5f * (x0 + xm); zi[0] = 0.5f * (x0 - xm);
+    // The middle bin, where k and m-k are the same one and the pair above would write it twice:
+    // the forward leaves X[m/2] = conj(Z[m/2]), so this is its own inverse.
+    if (m > 1 && (m & 1) == 0) {
+        const int k = m / 2;
+        x[k] = re[k]; zi[k] = -im[k];
+    }
+    half_.transform(x, zi, true);
+    // z[k] -> x[2k], x[2k+1], backward: the write at 2k is past every x[k'] with k' < k still to
+    // be read, and the imaginary parts come from the scratch, which nothing here writes.
+    for (int k = m - 1; k >= 0; --k) {
+        const float a = x[k];
+        x[2 * k] = a; x[2 * k + 1] = zi[k];
+    }
+}
+
 // ---------------------------------------------------------------- Nebula
 
 void Nebula::prepare(double, uint64_t seed)
@@ -253,11 +343,12 @@ void Nebula::set(float smear)
 void Nebula::frame(Channel& c)
 {
     const int inMask = kN - 1, outMask = 2 * kN - 1;
-    for (int i = 0; i < kN; ++i) {
+    // The windowed frame, written into the buffer the spectrum will take its place in: the real
+    // transform reads and writes the same array (13.09.2026 -- this was a complex transform on a
+    // signal whose imaginary half was a row of zeros, and the row had to be written first).
+    for (int i = 0; i < kN; ++i)
         c.re[static_cast<size_t>(i)] = c.in[static_cast<size_t>((c.inPos - kN + i) & inMask)] * window_[static_cast<size_t>(i)];
-        c.im[static_cast<size_t>(i)] = 0.0f;
-    }
-    fft_.transform(c.re.data(), c.im.data(), false);
+    fft_.forward(c.re.data(), c.re.data(), c.im.data());
     for (int k = 0; k <= kN / 2; ++k) {
         const float m = std::sqrt(c.re[static_cast<size_t>(k)] * c.re[static_cast<size_t>(k)] + c.im[static_cast<size_t>(k)] * c.im[static_cast<size_t>(k)]);
         c.mag[static_cast<size_t>(k)] += alpha_ * (m - c.mag[static_cast<size_t>(k)]);
@@ -270,7 +361,9 @@ void Nebula::frame(Channel& c)
         if (k > 0 && k < kN / 2) { c.re[static_cast<size_t>(kN - k)] = r; c.im[static_cast<size_t>(kN - k)] = -q; }
     }
     c.im[0] = 0.0f; c.im[kN / 2] = 0.0f;
-    fft_.transform(c.re.data(), c.im.data(), true);
+    // The spectrum above is built conjugate symmetric on purpose, so the way back is the real
+    // inverse; the mirror it writes above kN/2 is read by nothing and could be left out.
+    fft_.inverse(c.re.data(), c.im.data(), c.re.data());
     for (int i = 0; i < kN; ++i)
         c.out[static_cast<size_t>((c.outPos + i) & outMask)] += c.re[static_cast<size_t>(i)] * window_[static_cast<size_t>(i)] * 1.3f;   // measured: unity level for random-phase resynthesis
 }

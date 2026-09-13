@@ -295,7 +295,7 @@ private:
     void renderClip(float* outL, int n, double hz, double speed, const SlotParams& p, const Texture* tex, float dt);
     void renderSpectral(float* out, int n, double transpose, const SlotParams& p, const Texture* tex, float dt);
     void stretchFrame(const SlotParams& p, const Texture* tex, double rate, int N);
-    static const Fft& stretchFft(int n);   // shared, read-only after prepare(): one per size
+    static const RealFft& stretchFft(int n);   // shared, read-only after prepare(): one per size
 
     // Wavetable: phasor bank like Voice::Strand.
     static constexpr int kBank = kTablePartials * kSlotUnison;

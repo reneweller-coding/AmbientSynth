@@ -362,6 +362,19 @@ NEAR = [
                              rate=150, length=90, attack=0.5, release=4, level=0.5)),
         ("Rain In A Bowl", near(type="Drops", density=8, pos=0.7, bright=0.7, pos_drift=0.8, follow="Free",
                                 rate=300, length=25, attack=1, release=6, approach=0.3, level=0.45)),
+        # The sonar (Rene, 13.09.): one sine, an octave over the highest voice, struck in three
+        # milliseconds, a core of a hundred and fifty, and a tail of ten seconds that the far
+        # reverb of whatever sound is playing takes over. Nothing held: a ping is over before the
+        # conductor could get in its way.
+        ("Sonar Ping", near(type="Additive", partials=1, pitch="Highest", octave=2, rate=75, length=0.5,
+                            attack=0.003, decay=0.15, sustain=0.12, release=10, cutoff=18000, resonance=0.0,
+                            spread=0.15, proximity=0.3, hold="off", level=0.5)),
+        ("Echo Sounder", near(type="Additive", partials=1, pitch="Highest", octave=2, rate=40, length=0.5,
+                              attack=0.002, decay=0.08, sustain=0.05, release=5, cutoff=18000, resonance=0.0,
+                              spread=0.1, proximity=0.2, hold="off", level=0.42)),
+        ("Deep Sonar", near(type="Additive", partials=1, pitch="Highest", octave=1, rate=140, length=0.5,
+                            attack=0.004, decay=0.3, sustain=0.2, release=14, cutoff=18000, resonance=0.0,
+                            spread=0.25, proximity=0.5, hold="off", level=0.55)),
     ]),
     ("Voices", [
         ("Radio Murmur", near(type="Murmur", force=0.5, speed=0.5, pos=0.85, bright=0.5, pos_drift=0.4, octave=-1,
@@ -528,9 +541,10 @@ def main():
     # as written on the page pointed at nothing, silently. Fatal, not a warning: a bank entry
     # that loads no clip plays Source 4's instead, which is the wrong recording, not silence.
     library = os.path.join(ROOT, "Library")
+    # A clip ending in a slash is a folder of recordings: the near source plays one of them per event.
     missing = [kw["__clip__"] for _, ps in NEAR for _, kw in ps
                if kw.get("__clip__") and os.path.isdir(os.path.join(library, "Archive"))
-               and not os.path.isfile(os.path.join(library, kw["__clip__"]))]
+               and not (os.path.isfile(os.path.join(library, kw["__clip__"])) or os.path.isdir(os.path.join(library, kw["__clip__"])))]
     if missing:
         sys.exit("near bank: %d clip(s) not found under Library/:\n  %s" % (len(missing), "\n  ".join(missing)))
     def fmt_clip(kw):

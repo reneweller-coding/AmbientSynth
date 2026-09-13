@@ -248,8 +248,17 @@ std::string resolveLibraryFile(const char* relative)
 #endif
     roots.push_back("Library");
     roots.push_back(".");
+    // A name ending in a slash is a folder of recordings (the near layer plays one of them at
+    // random per event), and is resolved to the folder itself rather than to a file in it.
+    const std::string rel(relative);
+    const bool folder = rel.back() == '/' || rel.back() == '\\';
     for (const std::string& root : roots) {
-        const std::string candidate = (std::filesystem::path(root) / relative).string();
+        const std::string candidate = (std::filesystem::path(root) / rel).string();
+        if (folder) {
+            std::error_code ec;
+            if (std::filesystem::is_directory(candidate, ec)) return candidate;
+            continue;
+        }
         const std::string got = resolveAudioFile(candidate.c_str());
         if (!got.empty()) return got;
     }

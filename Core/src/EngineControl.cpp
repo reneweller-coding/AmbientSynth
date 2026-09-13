@@ -1291,9 +1291,12 @@ void Engine::readParams()
         vpNear_.fmAmount    = 0.0f;
         vpNear_.partialSpread = 0.0f;
         vpNear_.lowCut      = 0.0f;
-        {   // The near source's own clip in its slot, or Source 4's where it has none.
-            const int a = nearTextureActive_.load(std::memory_order_acquire);
-            if (a >= 0 && !nearTextures_[a].empty()) vpNear_.texture[kSlots - 1] = &nearTextures_[a];
+        {   // The near source's own clip in its slot -- the event's pick of the pool -- or Source 4's where it has none.
+            const int a = nearPoolActive_.load(std::memory_order_acquire);
+            if (a >= 0 && !nearPools_[a].empty()) {
+                const std::vector<Texture>& pool = nearPools_[a];
+                vpNear_.texture[kSlots - 1] = &pool[std::min(static_cast<size_t>(std::max(0, nearPick_)), pool.size() - 1)];
+            }
         }
     }
     const int seed = static_cast<int>(std::lround(g(ParamId::Seed)));

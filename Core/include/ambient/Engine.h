@@ -128,18 +128,31 @@ public:
     // model with it rather than measuring the same clip a second time.
     void setTexture(int slot, const Texture& src);
     void clearTexture(int slot);
-    // The near source's own clip (13.09.2026): what a near event plays when its type reads a
-    // recording -- a voice off a radio loop, a launch, the wind on Mars. Its own buffer, so the
-    // near layer's presets carry their clips and the sound preset's four slots keep theirs; a
-    // near source with no clip of its own reads Source 4's. Double-buffered like the slots'.
+    // The near source's own clips (13.09.2026): what a near event plays when its type reads a
+    // recording -- a voice off a radio loop, a launch, the wind on Mars. A pool rather than one
+    // clip, because a preset may name a folder of phrases and every event then takes one of
+    // them, at random and never the one just played; a single clip is a pool of one. Its own
+    // buffers, so the near layer's presets carry their clips and the sound preset's four slots
+    // keep theirs; a near source with no clip of its own reads Source 4's. Double-buffered like
+    // the slots' clips: the message thread fills the pool that is not active and flips the index.
+    static Texture makeTexture(const float* L, const float* R, int n, double sampleRate, double baseHz = 261.6256,
+                               bool seamless = false, double maxSeconds = 120.0);
     void setNearTexture(const float* L, const float* R, int n, double sampleRate, double baseHz = 261.6256, bool seamless = false);
     void setNearTexture(const Texture& src);
-    void clearNearTexture() { nearTextureActive_.store(-1, std::memory_order_release); }
-    bool hasNearTexture() const { return nearTextureActive_.load(std::memory_order_relaxed) >= 0; }
-    const Texture* displayNearTexture() const
+    void setNearTextures(std::vector<Texture> pool);   // the whole pool at once, moved in
+    void clearNearTexture() { nearPoolActive_.store(-1, std::memory_order_release); }
+    bool hasNearTexture() const { return displayNearPool() != nullptr; }
+    int  nearTextureCount() const { const std::vector<Texture>* p = displayNearPool(); return p != nullptr ? static_cast<int>(p->size()) : 0; }
+    const std::vector<Texture>* displayNearPool() const
     {
-        const int a = nearTextureActive_.load(std::memory_order_relaxed);
-        return a >= 0 ? &nearTextures_[a] : nullptr;
+        const int a = nearPoolActive_.load(std::memory_order_relaxed);
+        return a >= 0 && !nearPools_[a].empty() ? &nearPools_[a] : nullptr;
+    }
+    const Texture* displayNearTexture() const   // the clip the current (or next) event plays
+    {
+        const std::vector<Texture>* p = displayNearPool();
+        if (p == nullptr) return nullptr;
+        return &(*p)[std::min(static_cast<size_t>(std::max(0, nearPick_)), p->size() - 1)];
     }
     bool hasTexture(int slot = 0) const
     { return textureActive_[slot < 0 ? 0 : (slot >= kSlots ? kSlots - 1 : slot)].load(std::memory_order_relaxed) >= 0; }
@@ -646,8 +659,10 @@ private:
     // Texture: two buffers per slot, the audio thread reads the active one and publishes which.
     Texture           textures_[kSlots][2];
     std::atomic<int>  textureActive_[kSlots] = { -1, -1, -1, -1 };
-    Texture           nearTextures_[2];         // the near source's own clip, the same way
-    std::atomic<int>  nearTextureActive_{ -1 };
+    std::vector<Texture> nearPools_[2];         // the near source's own clips, the same way
+    std::atomic<int>     nearPoolActive_{ -1 };
+    int                  nearPick_ = 0;         // which of them the current event plays (audio thread)
+    uint32_t             nearPickRng_ = 0x9E3779B9u;
     // Blocks begun and blocks finished. Two counters rather than one, because the question a
     // loader has to answer is not "how many have gone by" but "is anything still holding what it
     // picked up before I looked" -- and those differ exactly while a block is in flight. Reading

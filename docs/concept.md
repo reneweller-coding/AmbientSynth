@@ -3125,6 +3125,23 @@ the user's and the installer's folders, the source tree's `Library`), and
 the bank's *Archive* family plays them: "Houston, We've Had a Problem" every
 seven minutes, "Wind on Mars" arriving out of the horizon.
 
+A preset may name a folder instead of a file (`Archive/Radio/Quiet-Please/`):
+the near source then holds a pool of its recordings, and every event plays one
+of them, drawn at random and never the one just played -- a voice that says
+something else each time, at the moments the scheduler chooses by its rules,
+not a loop. Phrases, not beds: a clip of the pool is kept to twenty seconds,
+and the ones the slicer makes are two to six. The pool is cut by
+`Tools/library/slice_speech.py`: it takes an item of the Internet Archive or a
+recording on disk, cuts the speech at its pauses (a frame is speech twelve
+decibels over the recording's own floor, a pause three hundred milliseconds
+without; what does not move at the rate of syllables, three to nine a second,
+is the organ sting and is dropped), and gives each phrase the sound of the set
+it came out of: a band of 350 to 3200 Hz, a little saturation, the hiss, and
+the breath of the squelch as the carrier drops. Every file's origin and the
+item's licence tag go into `SOURCES.md`; an item whose tag forbids
+derivatives is refused unless the matter has been looked at, because a phrase
+cut out of a recording is one.
+
 **Slot roles** came with it, for the sound presets: each slot may sound in
 every note, or only in the lowest, an inner or the highest note of what its
 owner is sounding -- the cello under the chord, the chime on top -- re-read

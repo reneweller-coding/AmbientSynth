@@ -55,10 +55,18 @@ def referenced():
     if os.path.exists(NEAR_BANK):
         import re
         with open(NEAR_BANK, encoding="utf-8") as f:
-            for field in re.findall(r'"((?:%s)/[^"]+\.(?:wav|flac))"' % "|".join(KINDS), f.read()):
+            for field in re.findall(r'"((?:%s)/[^"]+)"' % "|".join(KINDS), f.read()):
                 src = os.path.normpath(os.path.join(LIBRARY, field))
                 kind, _, rest = field.partition("/")
-                want[(kind, rest)] = src
+                if os.path.isdir(src):
+                    # A folder of recordings (the near layer plays one of them per event): all of it travels.
+                    for base, _, names in os.walk(src):
+                        for name in sorted(names):
+                            if name.lower().endswith((".wav", ".flac")):
+                                p = os.path.join(base, name)
+                                want[(kind, os.path.relpath(p, os.path.join(LIBRARY, kind)).replace(os.sep, "/"))] = p
+                elif field.lower().endswith((".wav", ".flac")):
+                    want[(kind, rest)] = src
     for name in sorted(os.listdir(PACKS)):
         if not name.endswith(".ambientpack"):
             continue

@@ -7798,6 +7798,51 @@ static void testNearLayer()
         CHECK(toneInside > 1.0e-4, "and the clip is heard on the near plane while it runs");
         CHECK(toneInside > 0.5 * allInside, "as the plane's main content");
         CHECK(toneAfter < 0.01 * toneInside, "and once, not looped: nothing of it after its two seconds");
+
+        // A pool: three clips, a different tone each. Over the events that follow the near source
+        // plays more than one of them and never the same one twice in a row -- a folder of
+        // phrases is meant to be a voice that says something else each time.
+        {
+            const double hzs[3] = { 1000.0, 1500.0, 2000.0 };
+            std::vector<Texture> pool;
+            for (double h : hzs) {
+                std::vector<float> c(static_cast<size_t>(clipLen));
+                for (int i = 0; i < clipLen; ++i) c[static_cast<size_t>(i)] = 0.5f * std::sin(static_cast<float>(kTwoPi * h * i / sr));
+                pool.push_back(Engine::makeTexture(c.data(), nullptr, clipLen, sr));
+            }
+            e.setNearTextures(std::move(pool));
+            CHECK(e.nearTextureCount() == 3, "the pool holds three");
+            std::vector<int> picks;
+            double pw[3] = { 0.0, 0.0, 0.0 }, evStart = 0.0;
+            bool inEvent = false;
+            const int blocks2 = static_cast<int>(120.0 * sr / 256.0);
+            for (int b = 0; b < blocks2; ++b) {
+                const bool was = e.nearActive();
+                e.process(L.data(), R.data(), 256);
+                const double t = b * 256.0 / sr;
+                if (!was && e.nearActive()) { inEvent = true; evStart = t; pw[0] = pw[1] = pw[2] = 0.0; }
+                if (!inEvent) continue;
+                if (t - evStart >= 0.3 && t - evStart < 1.6) for (int k = 0; k < 3; ++k) pw[k] += powerAt(nl.data(), 256, hzs[k]);
+                if (t - evStart >= 1.6) {
+                    inEvent = false;
+                    int best = 0;
+                    for (int k = 1; k < 3; ++k) if (pw[k] > pw[best]) best = k;
+                    picks.push_back(best);
+                }
+            }
+            int distinct = 0, repeats = 0;
+            bool seen[3] = { false, false, false };
+            for (size_t i = 0; i < picks.size(); ++i) {
+                if (!seen[static_cast<size_t>(picks[i])]) { seen[static_cast<size_t>(picks[i])] = true; ++distinct; }
+                if (i > 0 && picks[i] == picks[i - 1]) ++repeats;
+            }
+            std::printf("  [probe] near clip pool: %d events in two minutes, picks", static_cast<int>(picks.size()));
+            for (int p : picks) std::printf(" %d", p);
+            std::printf("; %d distinct, %d immediate repeats\n", distinct, repeats);
+            CHECK(picks.size() >= 5, "enough events to tell");
+            CHECK(distinct >= 2, "more than one clip of the pool is played");
+            CHECK(repeats == 0, "and never the same one twice in a row");
+        }
         e.setStemBuffers(nullptr);
     }
 

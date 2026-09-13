@@ -690,7 +690,7 @@ void AmbientSynthEditor::buildCells()
         addExtraCell("Near Events", std::move(nb), "Preset", 3);
         // The near source's own clip: what its Clip, Texture, Stretch and Spectral types read.
         auto clip = std::make_unique<juce::TextButton>("Clip...");
-        clip->setTooltip("A recording for the near source -- a near preset brings its own from the library's archive; this opens any file. With none, the near source reads Source 4's clip.");
+        clip->setTooltip("A recording for the near source -- a near preset brings its own from the library's archive (a single one, or a folder of phrases, one of them at random per event); this opens any file. With none, the near source reads Source 4's clip.");
         clip->onClick = [this] { chooseNearClipFile(); };
         nearClipCell_ = addExtraCell("Near Source", std::move(clip), "Source 4's clip", 2);
     }

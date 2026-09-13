@@ -726,8 +726,9 @@ void AmbientSynthProcessor::applyNearPreset(int index)
     // not find a voice in its slot.
     if (pr.texture != nullptr && *pr.texture != 0) {
         const std::string got = ambient::resolveLibraryFile(pr.texture);
-        if (!got.empty()) loadNearClipFile(juce::File(juce::String(juce::CharPointer_UTF8(got.c_str()))));
-        else clearNearClip();
+        const juce::File f(juce::String(juce::CharPointer_UTF8(got.c_str())));
+        // A folder is a pool of recordings, a file one clip; nothing found leaves no clip.
+        if (got.empty() || !(f.isDirectory() ? loadNearClipFolder(f) : loadNearClipFile(f))) clearNearClip();
     } else clearNearClip();
 }
 
@@ -739,6 +740,32 @@ bool AmbientSynthProcessor::loadNearClipFile(const juce::File& file)
     target().setNearTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
                            base > 0.0 ? base : 261.6256, ambient::loopFromName(file.getFileName().toRawUTF8()));
     nearClipFile_ = file;
+    nearClipCount_ = 1;
+    return true;
+}
+
+bool AmbientSynthProcessor::loadNearClipFolder(const juce::File& dir)
+{
+    // A folder of recordings: up to kNearPoolMax of them, sorted by name so the same folder gives
+    // the same pool, each kept to twenty seconds -- these are phrases, not beds. Which of them an
+    // event plays is the engine's draw.
+    juce::Array<juce::File> files = dir.findChildFiles(juce::File::findFiles, false, "*.flac;*.wav;*.aif;*.aiff;*.ogg;*.mp3");
+    files.sort();
+    std::vector<ambient::Texture> pool;
+    for (const juce::File& f : files) {
+        if (static_cast<int>(pool.size()) >= kNearPoolMax) break;
+        std::vector<float> l, r; double rate = 0.0;
+        if (!readStereo(f, l, r, rate)) continue;
+        const double base = baseHzFromName(f.getFileName().toRawUTF8());
+        ambient::Texture t = ambient::Engine::makeTexture(l.data(), r.empty() ? nullptr : r.data(), static_cast<int>(l.size()), rate,
+                                                          base > 0.0 ? base : 261.6256, ambient::loopFromName(f.getFileName().toRawUTF8()), 20.0);
+        if (!t.empty()) pool.push_back(std::move(t));
+    }
+    if (pool.empty()) return false;
+    const int n = static_cast<int>(pool.size());
+    target().setNearTextures(std::move(pool));
+    nearClipFile_ = dir;
+    nearClipCount_ = n;
     return true;
 }
 
@@ -746,6 +773,7 @@ void AmbientSynthProcessor::clearNearClip()
 {
     target().clearNearTexture();
     nearClipFile_ = juce::File();
+    nearClipCount_ = 0;
 }
 
 juce::AudioProcessorEditor* AmbientSynthProcessor::createEditor()
@@ -1010,9 +1038,8 @@ void AmbientSynthProcessor::carryUserData(ambient::Engine& e)
         if (const ambient::Texture* t = from.displayTexture(k))
             if (!t->empty())
                 e.setTexture(k, *t);
-    if (const ambient::Texture* t = from.displayNearTexture())   // the near layer's clip survives the change too
-        if (!t->empty())
-            e.setNearTexture(*t);
+    if (const std::vector<ambient::Texture>* pool = from.displayNearPool())   // the near layer's clips survive the change too
+        e.setNearTextures(*pool);
     // The impulse responses are the one thing the engine cannot hand over -- it keeps them as
     // spectra, not as samples -- so a room the player opened is read from its file again. A
     // generated room needs nothing: a new engine makes its own.

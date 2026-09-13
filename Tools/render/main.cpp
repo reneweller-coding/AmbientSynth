@@ -32,10 +32,48 @@
 #include <cctype>
 #include <sstream>
 #include <chrono>
+#include <algorithm>
+#include <filesystem>
 
 using namespace ambient;
 
 namespace {
+
+// The near source's clip from a file, or a pool of them from a folder (sorted by name, up to 48,
+// each kept to twenty seconds -- phrases, not beds): the render's twin of the plugin's loader.
+bool loadNearClips(Engine& engine, const std::string& path)
+{
+    std::error_code ec;
+    if (std::filesystem::is_directory(path, ec)) {
+        std::vector<std::string> files;
+        for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
+            if (!entry.is_regular_file()) continue;
+            std::string ext = entry.path().extension().string();
+            for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext == ".flac" || ext == ".wav" || ext == ".aif" || ext == ".aiff") files.push_back(entry.path().string());
+        }
+        std::sort(files.begin(), files.end());
+        std::vector<Texture> pool;
+        for (const std::string& f : files) {
+            if (pool.size() >= 48) break;
+            std::vector<std::vector<float>> ch; int rate = 0;
+            if (!readWavChannels(f.c_str(), ch, rate) || ch.empty()) continue;
+            Texture t = Engine::makeTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                                            261.6256, loopFromName(f.c_str()), 20.0);
+            if (!t.empty()) pool.push_back(std::move(t));
+        }
+        if (pool.empty()) return false;
+        std::printf("near clips: %d of %s\n", static_cast<int>(pool.size()), path.c_str());
+        engine.setNearTextures(std::move(pool));
+        return true;
+    }
+    std::vector<std::vector<float>> ch; int rate = 0;
+    if (!readWavChannels(path.c_str(), ch, rate) || ch.empty()) return false;
+    engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
+                          261.6256, loopFromName(path.c_str()));
+    std::printf("near clip: %s\n", path.c_str());
+    return true;
+}
 
 bool writeWav(const std::string& path, const std::vector<float>& interleaved, int channels, int sampleRate)
 {
@@ -617,25 +655,16 @@ static int runOnce(int argc, char** argv)
             if (found < 0) { std::fprintf(stderr, "unknown near preset '%s'\n", name.c_str()); return 2; }
             engine.applyNearPreset(found);
             std::printf("near preset: %s\n", name.c_str());
-            // Its clip, if it names one, from the library's archive.
+            // Its clip, if it names one, from the library's archive -- a file, or a folder of them.
             const Preset& np = nearPreset(found);
             if (np.texture != nullptr && *np.texture != 0) {
                 const std::string got = resolveLibraryFile(np.texture);
-                std::vector<std::vector<float>> ch; int rate = 0;
-                if (!got.empty() && readWavChannels(got.c_str(), ch, rate) && !ch.empty()) {
-                    engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
-                                          261.6256, loopFromName(got.c_str()));
-                    std::printf("near clip: %s\n", got.c_str());
-                } else std::fprintf(stderr, "near preset's clip not found: %s\n", np.texture);
+                if (got.empty() || !loadNearClips(engine, got)) std::fprintf(stderr, "near preset's clip not found: %s\n", np.texture);
             }
         }
-        else if (a == "--near-clip") {   // a clip for the near source, by file
+        else if (a == "--near-clip") {   // a clip for the near source: a file, or a folder of them (one per event, at random)
             const std::string file = next();
-            std::vector<std::vector<float>> ch; int rate = 0;
-            if (!readWavChannels(file.c_str(), ch, rate) || ch.empty()) { std::fprintf(stderr, "cannot read %s\n", file.c_str()); return 2; }
-            engine.setNearTexture(ch[0].data(), ch.size() > 1 ? ch[1].data() : nullptr, static_cast<int>(ch[0].size()), rate,
-                                  261.6256, loopFromName(file.c_str()));
-            std::printf("near clip: %s\n", file.c_str());
+            if (!loadNearClips(engine, file)) { std::fprintf(stderr, "cannot read %s\n", file.c_str()); return 2; }
         }
         else if (a == "--list-near-presets") {
             for (int p = 0; p < numNearPresets(); ++p) std::printf("%-28s %s\n", nearPreset(p).name, nearPresetFamily(nearPresetCategory(p)));

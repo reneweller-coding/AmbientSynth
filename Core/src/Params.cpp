@@ -786,7 +786,7 @@ const std::array<ParamDesc, kNumParams> kTable = {{
     F(ParamId::ForeInharm,       "fore_inharmonic",    "Inharmonic",   "Near Source", 0.f,   1.f,   0.f,   1.f,  ""),
     F(ParamId::ForeDrift,        "fore_drift",         "Drift",        "Near Source", 0.f,   30.f,  0.f,   0.6f, "ct"),
     C(ParamId::ForeTable,        "fore_table",         "Table",        "Near Source", kTableNames, kNumTables, 0),
-    F(ParamId::ForeAttack,       "fore_attack",        "Attack",       "Near Source", 0.005f, 10.f, 0.3f,  0.4f, "s"),
+    F(ParamId::ForeAttack,       "fore_attack",        "Attack",       "Near Source", 0.001f, 10.f, 0.3f,  0.4f, "s"),   // down to a millisecond: a sonar ping is struck, not breathed
     F(ParamId::ForeDecay,        "fore_decay",         "Decay",        "Near Source", 0.01f, 30.f,  1.f,   0.4f, "s"),
     F(ParamId::ForeSustain,      "fore_sustain",       "Sustain",      "Near Source", 0.f,   1.f,   1.f,   1.f,  ""),
     F(ParamId::ForeRelease,      "fore_release",       "Release",      "Near Source", 0.03f, 30.f,  2.f,   0.4f, "s"),

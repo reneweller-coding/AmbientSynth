@@ -135,7 +135,9 @@ void Engine::prepare(double sampleRate, int maxBlockSize)
     blur_.prepare(sr_, 0x5EED5EEDull);
     auxRng_.seed(0xA5A5A5A5ull);
     strikeRng_.seed(0x57A1CEull);
-    near_.reset(0x4E454152ull + static_cast<uint64_t>(seed_ + 1));   // its own stream, from the seed
+    near_.reset(0x4E454152ull + static_cast<uint64_t>(seed_ + 1));
+    nearPickRng_ = 0x9E3779B9u ^ (static_cast<uint32_t>(seed_ + 1) * 2654435761u);   // the pool's draw, never zero
+    if (nearPickRng_ == 0u) nearPickRng_ = 0x9E3779B9u;   // its own stream, from the seed
     tideDrift_.init(auxRng_); rotDrift_.init(auxRng_);
     vecDriftX_.init(auxRng_); vecDriftY_.init(auxRng_);
     dcXL_ = dcXR_ = dcYL_ = dcYR_ = 0.0f;
@@ -154,6 +156,8 @@ void Engine::reset()
     strikeRng_.seed(0x57A1CEull);   // its own stream, so a reset gives the same piece back
     strikeExcAvg_ = 0.0;
     near_.reset(0x4E454152ull + static_cast<uint64_t>(seed_ + 1));
+    nearPickRng_ = 0x9E3779B9u ^ (static_cast<uint32_t>(seed_ + 1) * 2654435761u);   // the pool's draw, never zero
+    if (nearPickRng_ == 0u) nearPickRng_ = 0x9E3779B9u;
 }
 
 bool Engine::applyPreset(int index)
@@ -436,39 +440,57 @@ void Engine::clearTexture(int slot)
     textureActive_[slot].store(-1, std::memory_order_release);
 }
 
-void Engine::setNearTexture(const float* L, const float* R, int n, double sampleRate, double baseHz, bool seamless)
+Texture Engine::makeTexture(const float* L, const float* R, int n, double sampleRate, double baseHz, bool seamless, double maxSeconds)
 {
-    if (L == nullptr || n <= 0) return;
-    // A recording of a rover driving for sixteen minutes is a bed, not an event: the near source
-    // keeps at most two minutes of a clip, from its start.
-    const int len = std::min(n, static_cast<int>(120.0 * (sampleRate > 0.0 ? sampleRate : 48000.0)));
-    std::vector<float> mono(static_cast<size_t>(len), 0.0f);
-    for (int i = 0; i < len; ++i) mono[static_cast<size_t>(i)] = R != nullptr ? 0.5f * (L[i] + R[i]) : L[i];
-    waitForQuiet();
-    const int active = nearTextureActive_.load(std::memory_order_acquire);
-    const int target = active < 0 ? 0 : 1 - active;
-    Texture& t = nearTextures_[target];
-    t.mono = std::move(mono);
-    t.lr.clear();
+    Texture t;
+    if (L == nullptr || n <= 0) return t;
+    const double sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+    const int len = std::min(n, static_cast<int>(std::max(1.0, maxSeconds) * sr));
+    t.mono.assign(static_cast<size_t>(len), 0.0f);
+    for (int i = 0; i < len; ++i) t.mono[static_cast<size_t>(i)] = R != nullptr ? 0.5f * (L[i] + R[i]) : L[i];
     if (R != nullptr) {
         t.lr.assign(static_cast<size_t>(2 * len), 0.0f);
         for (int i = 0; i < len; ++i) { t.lr[static_cast<size_t>(2 * i)] = L[i]; t.lr[static_cast<size_t>(2 * i + 1)] = R[i]; }
     }
-    t.sampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    t.sampleRate = sr;
     t.baseHz = baseHz > 0.0 ? baseHz : 261.6256;
     t.seamless = seamless;
     t.measure();
-    nearTextureActive_.store(target, std::memory_order_release);
+    return t;
+}
+
+void Engine::setNearTexture(const float* L, const float* R, int n, double sampleRate, double baseHz, bool seamless)
+{
+    // A recording of a rover driving for sixteen minutes is a bed, not an event: the near source
+    // keeps at most two minutes of a clip, from its start.
+    Texture t = makeTexture(L, R, n, sampleRate, baseHz, seamless, 120.0);
+    if (t.empty()) return;
+    std::vector<Texture> pool;
+    pool.push_back(std::move(t));
+    setNearTextures(std::move(pool));
 }
 
 void Engine::setNearTexture(const Texture& src)
 {
     if (src.empty()) return;
+    std::vector<Texture> pool;
+    pool.push_back(src);
+    setNearTextures(std::move(pool));
+}
+
+void Engine::setNearTextures(std::vector<Texture> pool)
+{
+    pool.erase(std::remove_if(pool.begin(), pool.end(), [](const Texture& t) { return t.empty(); }), pool.end());
+    if (pool.empty()) { clearNearTexture(); return; }
+    // The pool that is not active is free to overwrite once every block begun before now has
+    // ended: the block in flight may still read the other one, and the next call waits again
+    // before touching that. The pick is not reset here -- it is the audio thread's, and it is
+    // clamped to the pool wherever it is read.
     waitForQuiet();
-    const int active = nearTextureActive_.load(std::memory_order_acquire);
+    const int active = nearPoolActive_.load(std::memory_order_acquire);
     const int target = active < 0 ? 0 : 1 - active;
-    nearTextures_[target] = src;
-    nearTextureActive_.store(target, std::memory_order_release);
+    nearPools_[target] = std::move(pool);
+    nearPoolActive_.store(target, std::memory_order_release);
 }
 
 // Where Match would put partial h: on the degree of the current scale nearest to it, counted in
@@ -762,6 +784,22 @@ void Engine::updatePlaces()
 void Engine::startNearNote(const NearNote& e)
 {
     if (e.note < 0 || e.note > 127) return;
+    // The event's clip: one of the pool, and never the one just played where there is a choice.
+    // Chosen here, before the voice begins, and written into the near voice parameters at once,
+    // so the first block of the note already reads it (readParams sets the same pointer again
+    // at every control block after this).
+    {
+        const int a = nearPoolActive_.load(std::memory_order_acquire);
+        if (a >= 0 && nearPools_[a].size() > 1) {
+            const int n = static_cast<int>(nearPools_[a].size());
+            nearPickRng_ ^= nearPickRng_ << 13; nearPickRng_ ^= nearPickRng_ >> 17; nearPickRng_ ^= nearPickRng_ << 5;
+            const int last = std::min(std::max(0, nearPick_), n - 1);
+            int pick = static_cast<int>(nearPickRng_ % static_cast<uint32_t>(n - 1));
+            if (pick >= last) ++pick;
+            nearPick_ = pick;
+            vpNear_.texture[kSlots - 1] = &nearPools_[a][static_cast<size_t>(pick)];
+        }
+    }
     Voice* v = allocate(e.note, OwnerNear);
     v->order = ++order_;
     v->setPlace(true, true);

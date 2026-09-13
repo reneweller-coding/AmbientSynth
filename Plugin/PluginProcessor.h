@@ -83,8 +83,15 @@ public:
     // name a clip of the library's archive for its source; the player may open one by hand.
     void applyNearPreset(int index);
     bool loadNearClipFile(const juce::File& file);
+    bool loadNearClipFolder(const juce::File& dir);   // a pool: every event plays one of its recordings, at random
     void clearNearClip();
-    juce::String nearClipName() const { return nearClipFile_.existsAsFile() ? nearClipFile_.getFileNameWithoutExtension() : juce::String(); }
+    juce::String nearClipName() const
+    {
+        if (nearClipFile_.existsAsFile()) return nearClipFile_.getFileNameWithoutExtension();
+        if (nearClipFile_.isDirectory()) return nearClipFile_.getFileName() + " (" + juce::String(nearClipCount_) + ")";
+        return {};
+    }
+    static constexpr int kNearPoolMax = 48;
     int  zPresetIndex() const { return zIndex_; }
     int  strikePresetIndex() const { return strikeIndex_; }
     int  nearPresetIndex() const { return nearIndex_; }
@@ -303,7 +310,8 @@ private:
     std::atomic<int> pendingFiles_ { -1 };
     double lastProgramAt_ = -1.0e9;
     int soundIndex_ = 0, cosmosIndex_ = 0, zIndex_ = 0, strikeIndex_ = 0, nearIndex_ = 0;
-    juce::File nearClipFile_;
+    juce::File nearClipFile_;        // a file, or the folder of a pool
+    int        nearClipCount_ = 0;
     // The names, not the indices: a pack added or removed between two sessions renumbers every
     // preset behind it, and an index would then name a different sound.
     juce::String soundName_, cosmosName_;
